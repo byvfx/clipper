@@ -112,11 +112,19 @@ def keyframe_before(stream_dir: Path, src: Path, t: float) -> float:
     return kf[max(0, bisect.bisect_right(kf, t + 1e-3) - 1)]
 
 
-def stream_offsets(path: Path) -> dict[str, float]:
+def stream_entry(path: Path, entry: str) -> dict[str, float]:
     out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,start_time",
+        ["ffprobe", "-v", "error", "-show_entries", f"stream=codec_type,{entry}",
          "-of", "csv=p=0", str(path)], check=True, capture_output=True, text=True).stdout
     return {kind: float(t) for kind, t in (l.split(",") for l in out.splitlines() if l)}
+
+
+def stream_offsets(path: Path) -> dict[str, float]:
+    return stream_entry(path, "start_time")
+
+
+def stream_durations(path: Path) -> dict[str, float]:
+    return stream_entry(path, "duration")
 
 
 def copy_cut(stream_dir: Path, src: Path, dst: Path, start: float, end: float,
@@ -124,9 +132,17 @@ def copy_cut(stream_dir: Path, src: Path, dst: Path, start: float, end: float,
     """Lossless cut starting on the keyframe at or before `start`.
     Returns that start and the number of bleeped spans."""
     k = keyframe_before(stream_dir, src, start)
-    # A hair past the keyframe: seeking lands on it, and no earlier one gets pulled in.
-    n = ffmpeg_cut(src, dst, k + 0.005, end, "copy", 0, bleep=bleep)
+    # ffmpeg backs an input seek off by 3/23 s when the video has B-frames (Kick's does).
+    # MPEG-TS then lands on the keyframe at or after that point, so a hair past k is right;
+    # indexed containers (the recorder's .mkv) land on the one at or before it, so the seek
+    # has to clear the back-off or it copies a whole extra GOP ahead of the audio.
+    n = ffmpeg_cut(src, dst, k + (0.005 if src.suffix == ".ts" else 0.15), end, "copy", 0,
+                   bleep=bleep)
     check_sync(dst)
+    got = stream_durations(dst).get("video", 0)
+    if abs(got - (end - k)) > 0.5:
+        raise SystemExit(f"{dst.name}: {got:.1f}s of video for {end - k:.1f}s from keyframe "
+                         f"{k}; the seek missed it")
     return k, n
 
 
@@ -134,7 +150,7 @@ def check_sync(path: Path) -> None:
     # ~0.1 s of video offset is normal (B-frame delay, covered by the MP4 edit list).
     off = stream_offsets(path)
     if abs(off.get("video", 0) - off.get("audio", 0)) > 0.25:
-        print(f"  warning: {path.name} audio/video start {off}")
+        raise SystemExit(f"{path.name}: audio/video start {off}; the cut is out of sync")
 
 
 def write_sidecar(path: Path, data: dict) -> None:

@@ -37,6 +37,11 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   Log: `streams/kick-131151926/recut_profanity.log`.
 
 ## To do next
+0. **Republish re-cut videos to Kitsu (user said not yet, 2026-10-19).** Segments + compilations of
+   kick-132733064, -133040747, -133095550, -133112185 were re-cut (seek fix, see Gotchas) and SRTs
+   rewritten; Kitsu still has the old previews with the silent 2-4 s head (132733064: 24 wfa,
+   1 approved, 1 retake; 133112185: 10 wfa; 133095550: published just before the re-cut;
+   133040747 is a DSP test show, never published). Thumbnails and meta text were not redone.
 1. ~~Clear upload state for the videos the user deleted on YouTube~~ — done 2026-10-17: kick-132380636
    c04_t49/c05_t14/c06_t32 and kick-131151926 c01_t20 (verified gone via API) reset to scheduled,
    Kitsu "YouTube URL" blanked, `clipper schedule` rerun. Backup: `schedule.before_reset_2026-10-17.json`.
@@ -184,6 +189,13 @@ reviewed, then posted ASAP**.
   429 with Retry-After: 0 → adaptive limiter.
 - Stream-copy cuts must start on a keyframe (every ~4 s) or audio drifts; `.ts` seeking for re-encodes
   needs keyframe seek + output trim (cut.py handles both).
+- ffmpeg backs input seeks off by 3/23 s when video has B-frames. `.ts` then lands on the keyframe
+  at/after the target, `.mkv` (NAS recorder) on the one at/before it, so `copy_cut` seeks k+0.005 for
+  .ts and k+0.15 otherwise (fixed 2026-10-19). Before that, every .mkv segment carried one extra GOP
+  (2-4 s) of silent video at the head (bleeped audio started late) and SRTs/chapters ran early.
+  Affected: kick-132733064, kick-133040747, kick-133095550, kick-133112185; all re-cut 2026-10-19
+  (`clipper cut <id> segments compilations` + `clipper meta <id> --captions-only`, no model cost).
+  `copy_cut` now fails the cut on a sync gap or wrong length instead of printing a warning.
 - ffmpeg 8.1 NVENC needs NVIDIA driver 610+ (laptop has 596.72) → use `h264_qsv` locally.
 - Bleeping uses asendcmd + a .cmd file (one big volume expression breaks past ~dozens of spans);
   spans ending before the cut point must be dropped.
