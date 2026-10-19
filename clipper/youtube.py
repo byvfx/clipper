@@ -12,7 +12,8 @@ playlist is created on first use.
 Custom thumbnails need a phone-verified channel (youtube.com/verify); until then the
 video uploads without one, and `clipper upload --thumbnails` sets them afterwards. Each upload is private with publishAt = its slot, so
 YouTube releases it on time; the entry is then marked uploaded with its video id, and
-the link goes into the Kitsu "YouTube URL" column.
+the link goes into the Kitsu "YouTube URL" column. A pre-show placed "asap" by
+`clipper schedule` is always due and goes up public at once (no publishAt).
 
 Until the Cloud project passes the YouTube API audit, YouTube keeps API uploads private
 regardless of publishAt; publish those by hand in YouTube Studio meanwhile.
@@ -264,7 +265,9 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
         if e.get("status") != "scheduled":
             continue
         when = datetime.fromisoformat(e["publish_at"])
-        if when <= now + timedelta(minutes=yc["min_lead_minutes"]):
+        if e.get("source") == "asap":  # a pre-show: published as soon as it's uploaded
+            due.append(e)
+        elif when <= now + timedelta(minutes=yc["min_lead_minutes"]):
             missed.append(e)
         elif when <= horizon:
             due.append(e)
@@ -291,15 +294,18 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     for e in due:
         m = metadata(e, cfg)
         publish_utc = datetime.fromisoformat(e["publish_at"]).astimezone(UTC)
+        at_once = publish_utc <= datetime.now(UTC) + timedelta(minutes=yc["min_lead_minutes"])
         body = {
             "snippet": {"title": m["title"], "description": m["description"], "tags": m["tags"],
                         "categoryId": yc["category_id"], "defaultLanguage": yc["language"],
                         "defaultAudioLanguage": yc["language"]},
-            "status": {"privacyStatus": "private",
-                       "publishAt": publish_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                       "selfDeclaredMadeForKids": yc["made_for_kids"]},
+            "status": {"privacyStatus": "public"} if at_once else {
+                "privacyStatus": "private", "publishAt": publish_utc.strftime("%Y-%m-%dT%H:%M:%SZ")},
         }
-        print(f"uploading {e['key']} -> {publish_utc.astimezone(tz):%a %m-%d %H:%M}: {m['title']}",
+        body["status"]["selfDeclaredMadeForKids"] = yc["made_for_kids"]
+        print(f"uploading {e['key']} -> "
+              + ("public now" if at_once else f"{publish_utc.astimezone(tz):%a %m-%d %H:%M}")
+              + f": {m['title']}",
               flush=True)
         t = time.time()
         vid = upload_video(yt, Path(e["file"]), body, yc["notify_subscribers"])

@@ -9,8 +9,9 @@ run.json existed (a stream processed by hand) counts as done when its output is 
 
 `clipper worker` (the GPU machine, deploy/worker) polls paths.streams for recordings the
 NAS recorder finished (live/state.json status "done") and runs them. paths.streams is
-the NAS share, so nothing is copied. <stream>/.run.lock (with a heartbeat in run.json)
-keeps two workers off the same stream.
+the NAS share, so nothing is copied. It also runs pre-shows the bot grabbed from YouTube
+(streams/yt-<id>, clipper/preshow.py) with [preshow] stages instead.
+<stream>/.run.lock (with a heartbeat in run.json) keeps two workers off the same stream.
 """
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .config import show_of_channel
+from . import preshow
+from .config import for_stream, show_of_channel
 
 log = logging.getLogger("clipper.worker")
 
@@ -165,11 +167,19 @@ class Run:
         return any((self.d / m).exists() for m in DONE_MARKERS[stage])
 
 
+def default_stages(cfg: dict, stream_dir: Path) -> list[str]:
+    """A pre-show (one whole video, no chat) skips signals, scoring and Shorts."""
+    if preshow.is_preshow(stream_dir):
+        return for_stream(cfg, stream_dir)["preshow"]["stages"]
+    return cfg["worker"]["stages"]
+
+
 def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
                stages: list[str] | None = None, force: bool = False) -> bool:
     """Run the stages that aren't done yet. False when a stage failed (run.json has why)."""
     wc = cfg["worker"]
-    order = [s for s in STAGES if s in (stages or wc["stages"])]
+    wanted = default_stages(cfg, stream_dir)
+    order = [s for s in STAGES if s in (stages or wanted)]
     run = Run(stream_dir, wc)
     run.acquire()
     keep_awake(True)
@@ -212,7 +222,7 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
             st["status"] = "done"
             log.info("%s: %s done in %ds", name, stage, st["seconds"])
             run.save()
-        complete = all(run.done(s) for s in STAGES if s in wc["stages"])
+        complete = all(run.done(s) for s in STAGES if s in wanted)
         run.data.update(status="done" if complete else "partial", error="")
         if complete:
             run.data["finished"] = now_iso()
@@ -232,7 +242,7 @@ def pending(cfg: dict) -> list[Path]:
     """Finished recordings whose run isn't done, oldest first, minus ones to wait on."""
     wc = cfg["worker"]
     root: Path = cfg["paths"]["streams"]
-    out = []
+    ready = []
     for state_path in sorted(root.glob("*/live/state.json")):
         d = state_path.parent.parent
         state = read_json(state_path)
@@ -242,6 +252,11 @@ def pending(cfg: dict) -> list[Path]:
             continue
         if cfg["shows"] and not show_of_channel(cfg, state.get("channel", "")):
             continue  # recorded only: add a [shows.<key>] profile for the channel to clip it
+        ready.append(d)
+    # Grabbed pre-shows: meta.json is written once the download is complete.
+    ready += [m.parent for m in sorted(root.glob(f"{preshow.PREFIX}*/meta.json"))]
+    out = []
+    for d in ready:
         run = read_json(d / "run.json")
         if run.get("status") in ("done", "skip"):
             continue

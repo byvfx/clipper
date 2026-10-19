@@ -17,6 +17,8 @@ Every [discord] refresh_minutes the bot also re-reads Kitsu for streams with pos
 and edits cards whose status, hold, pin, title or schedule changed outside Discord
 (clipper/cardsync.py). It logs to paths.bot_log as well as the console, and only one bot
 runs per streams folder (a lock file). deploy/discord/bot-task.ps1 runs it at logon.
+Every [preshow] poll_minutes it runs `clipper preshow check --run`: new pre-shows on the
+shows' YouTube channels are grabbed and put through the pipeline (clipper/preshow.py).
 
 There is no bulk approve and no upload from Discord: every release needs its own
 Approve, and `clipper upload` stays a separate job. Slash commands are registered on
@@ -39,7 +41,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord import app_commands
 
-from . import actions, cardsync, notify, retake, schedule
+from . import actions, cardsync, notify, preshow, retake, schedule
 from .config import _root
 
 log = logging.getLogger("clipper.bot")
@@ -163,6 +165,7 @@ class Bot(discord.Client):
         self.upload_proc: asyncio.subprocess.Process | None = None
         self.last_upload = 0.0
         self.analytics_proc: asyncio.subprocess.Process | None = None
+        self.preshow_proc: asyncio.subprocess.Process | None = None
         self.last_analytics = 0.0
         register_commands(self)
 
@@ -173,6 +176,8 @@ class Bot(discord.Client):
         await self.tree.sync(guild=guild)
         if self.cfg["discord"]["refresh_minutes"] > 0:
             self.loop.create_task(self.refresh_cards())
+        if preshow.watched(self.cfg) and self.cfg["preshow"]["poll_minutes"] > 0:
+            self.loop.create_task(self.preshow_loop())
 
     async def on_ready(self) -> None:
         log.info(f"clipper bot ready as {self.user} in guild {self.guild_id}; "
@@ -212,6 +217,15 @@ class Bot(discord.Client):
                     self.start_retake()
             except Exception:
                 log.exception("retake check failed")
+            await asyncio.sleep(every)
+
+    async def preshow_loop(self) -> None:
+        """Grab new pre-shows from the shows' YouTube feeds and run them, every poll_minutes."""
+        await self.wait_until_ready()
+        every = self.cfg["preshow"]["poll_minutes"] * 60
+        while not self.is_closed():
+            if not (self.preshow_proc and self.preshow_proc.returncode is None):
+                self.loop.create_task(self._clipper_bg("preshow", ["preshow", "check", "--run"]))
             await asyncio.sleep(every)
 
     def start_retake(self) -> None:

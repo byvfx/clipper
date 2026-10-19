@@ -25,7 +25,8 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Thumbnails: `[thumbnail] style = "enquirer"` (1990s tabloid: KINO CASINO masthead, no "THE NEW" roundel,
   no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v2` (face = headline subject).
 - Avoid the word "hosts" in viewer-facing text → `[scoring] house_style` rules, appended to all viewer-facing prompts.
-  Put future style notes there. Co-hosts are **Andy (Warski)** and **Ashton**.
+  Put future style notes there. Co-hosts are **Andy (Warski)** and **PPP**. Never call PPP by any other name (user,
+  2026-10-19; Kick bio says "Andy Warski and PPP"). Who-looks-like-what is in [shows.kino.scoring] stream_context.
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
 
@@ -44,7 +45,7 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 2. Post Blade compilation's Discord card (it was skipped): `clipper review notify kick-131151926 --keys comp-blade-in-vegas` (confirm with user first).
 3. Optionally rerun `clipper meta kick-131151926` (~$0.90) so titles follow house_style; publish only
    overwrites Kitsu columns nobody edited.
-4. ~~Add Andy and Ashton to `[scoring] stream_context`~~ (done 2026-10-17; per-stream notes like
+4. ~~Add Andy and PPP to `[scoring] stream_context`~~ (done 2026-10-17; per-stream notes like
    costumes go in `CLIPPER_SCORING_STREAM_CONTEXT` for that run, not the file);
    ~~re-pick s17~~ (done 2026-10-18 via the first retake: Jasko's face).
 5. Nice-to-have: daily "post kit" folder (video + cover + paste-ready title/description) for manual posting.
@@ -67,6 +68,42 @@ Worker skips recordings of channels no show claims. `clipper.404.toml` is gone (
 - dsp / blade stream_context were written from Kick bios + VOD titles only: review after a first run.
 - NAS copy of clipper.toml (deploy/record/deploy.sh) doesn't need shows for recording, but any NAS
   stage that runs segments needs `prompts/segments_v2.md` + `compilation_v2.md` (default is v2 now).
+
+## Pre-shows (built 2026-10-19)
+Kino posts a pre-recorded pre-show on its YouTube channel "The Kino Casino" (@TheKinoCasinoIncognito,
+UCy58OcrZ-Y6ebDYKcJAHyxw; the older @TheKinoCasino stopped in Aug): Mon/Wed/Fri, 7-25 min, published
+11:45-14:45 PT (once 18:47, once the next morning). The same video opens the Kick stream (~0:05-0:35),
+where segments marks it kind "intro" and skips it. User wants it uploaded **whole, no clips/Shorts,
+reviewed, then posted ASAP**.
+- clipper/preshow.py + `clipper preshow check [--run] | list | fetch <url>`; `[preshow]` config, per show
+  `[shows.kino.preshow] youtube_channel`. Feed = YouTube RSS (no API quota). Grabs into
+  `streams/yt-<video id>/` (source.mp4 720p60 + meta.json kind "preshow", channel = Kick slug).
+- Stages `[preshow] stages`: transcribe, segments (one segment `s00`, Sonnet writes title/description,
+  prompts/preshow_v1.md, ~$0.02), cut, meta (credit = [preshow] credit, playlist "{show} Pre-shows"),
+  thumbs, review. Whole run ~5 min, ~$0.25. Kitsu: lands in that day's episode ("2026-10-19").
+- **The bot polls** every `[preshow] poll_minutes` (5): `clipper preshow check --run`. The worker
+  only processes yt-* streams it finds (no worker task is installed on this laptop).
+- Schedule: approved pre-show -> source "asap", publish_at = time of the schedule run, outside slots
+  and spacing; moves with each replan until uploaded. `clipper upload` treats asap entries as due and
+  uploads them **public at once** (no publishAt). Uploads are still manual.
+- Covers for a one-video stream (no siblings to tease): band = [preshow] band ("Pre-show M/D!"),
+  side boxes = its own teaser + chapter titles that don't repeat the headline/band (thumbs.own_context).
+- yt-dlp needs deno for YouTube now (else 403 mid-download): pyproject uses `yt-dlp[default,deno]`;
+  on this laptop deno was added with `uv pip install deno` (uv sync can't replace clipper.exe while
+  the bot runs).
+- First one: yt-RGPltEFULV0 (10/19). User fixed the cover by hand: main photo PPP at 170.5 s (hands on
+  head), inset = Jer from Don's kick-133095550 c02 cover (copied in as
+  thumbs/.../ext_jer_kick-133095550_c02.jpg), text "PPP STUNNED BY JER!", band "Pre-show 10/19!".
+  The model had mixed up Andy and PPP (stream_context now describes both).
+  **Posted 2026-10-19 15:24: https://youtu.be/eaKnICCK_Ps** (public, captions, playlist "Kino Casino
+  Pre-shows"; cover set after the user phone-verified the channel, so custom thumbnails work now).
+  Its Discord card still shows the first cover.
+  **Blocked the same day**: YouTube made it unavailable and the only option Studio offered was to
+  delete it, so the user deleted it (~16:30). Most likely a Content ID match on The Kino Casino's
+  own upload of the same video (a full re-upload). Until that is sorted (e.g. Kino whitelisting Lolcow
+  Cinema), uploading pre-shows will be blocked again. schedule.json still lists it as uploaded.
+- Bot restarted 15:03 on this code. Upload with `clipper upload --max 1` to send only the pre-show
+  (plain `clipper upload` also sends everything else due within 48 h).
 
 ## Channel 404 News test stream (kick-132548228, Oct 16 VOD, 5.27 h)
 - transcribe → thumbs DONE 2026-10-18 (~$3.10). 16 segments, 5 picks, compilations The Quartering
@@ -148,3 +185,7 @@ Worker skips recordings of channels no show claims. `clipper.404.toml` is gone (
 - `schtasks /End /TN clipper-bot` leaves the supervisor's bot process alive (lock in streams/.bot.lock);
   to restart the bot, also stop the old bot-supervisor.ps1 powershell and its clipper.exe children.
 - schedule: a compilation approved as its own Kitsu item needs segment_keys (fixed 2026-10-18).
+- The bot runs `schedule.run` in-process (replan after a decision): scheduler changes need a bot restart.
+- Retake planner can't edit cover layout; a note about the cover's boxes comes back "unsupported".
+
+- Older Kino drafts/Kitsu titles that say "Ashton" stay as they are (user, 2026-10-19); PPP from now on.

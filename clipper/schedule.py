@@ -5,6 +5,9 @@ What gets scheduled, across every stream with review decisions:
     short        approved vertical Short of a pick (`clipper shorts`)
     segment      approved topic segment
     compilation  a topic compilation whose segments are all approved
+A pre-show (clipper/preshow.py) is a segment too; with [preshow] publish = "asap" it is
+placed at the moment of this run as soon as it is approved, outside the slots and spacing
+rules, and moves along with each rerun until `clipper upload` publishes it.
 Held items (Kitsu "Hold") are skipped. "Publish at" in Kitsu ("2026-10-20 15:00", or a
 date for that day's first slot) pins an item; everything else fills the [schedule]
 slots: clip/short/segment/compilation days and times, at most max_per_day releases,
@@ -43,8 +46,10 @@ def parse_when(text: str, tz: ZoneInfo, first_time: str) -> datetime | None:
     return None
 
 
-def candidates(streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[list[dict], list[dict]]:
+def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[list[dict], list[dict]]:
     """Approved, un-held items from every stream, plus why the others were left out."""
+    from .config import for_stream
+
     items, skipped = [], []
     for review_path in sorted(streams_dir.glob("*/review.json")):
         sdir = review_path.parent
@@ -53,6 +58,11 @@ def candidates(streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[list[dict], l
         meta = json.loads((sdir / "meta.json").read_text(encoding="utf-8"))
         started = datetime.fromisoformat(meta["started_at"])
         earliest = started + timedelta(seconds=meta["duration_s"], hours=sc["kick_first_hours"])
+        # A pre-show is already public on the show's own channel: no Kick-first wait.
+        asap = (meta.get("kind") == "preshow"
+                and for_stream(cfg, sdir)["preshow"]["publish"] == "asap")
+        if meta.get("kind") == "preshow":
+            earliest = started
         approved_segments = set()
         for key, r in review.items():
             kind = KINDS[r["kind"]]
@@ -62,7 +72,7 @@ def candidates(streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[list[dict], l
                     "title": fields.get("YouTube title") or key,
                     "score": float(fields.get("Score") or 0), "stream_start": started,
                     "earliest": earliest, "entity": (ENTITY[kind], state[key]["entity_id"]),
-                    "override_text": fields.get("Publish at") or ""}
+                    "override_text": fields.get("Publish at") or "", "asap": asap}
             if r["decision"] != "approved":
                 skipped.append({"key": item["key"], "reason": r["decision"]})
             elif truthy(fields.get("Hold")):
@@ -129,7 +139,7 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
         for state in sorted(streams_dir.glob("*/review_state.json")):
             review.sync(state.parent, cfg)
 
-    items, skipped = candidates(streams_dir, sc, tz)
+    items, skipped = candidates(cfg, streams_dir, sc, tz)
     old, platforms = {}, {}
     if out_path.exists():
         prev_sched = json.loads(out_path.read_text(encoding="utf-8"))
@@ -142,6 +152,7 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
     placed: dict[str, dict] = {}
 
     def place(it: dict, when: datetime, source: str) -> None:
+        when = when.replace(second=0, microsecond=0)
         taken.append(when)
         placed[it["key"]] = {"key": it["key"], "stream": it["stream"], "kind": it["kind"],
                              "id": it["id"], "title": it["title"], "file": it["file"],
@@ -173,6 +184,10 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
             if not fits(when, taken, sc):
                 print(f"  note: {it['key']} pinned at {when:%a %m-%d %H:%M} breaks the spacing rules")
             place(it, when, "pinned")
+    # 1b. Pre-shows: out as soon as they are approved (the next upload publishes them).
+    for it in items:
+        if it["key"] not in placed and it.get("asap") and not it.get("bad"):
+            place(it, max(now, it["earliest"]), "asap")
     # 2. Keep earlier assignments that are still ahead of us (or already uploaded).
     for it in items:
         prev = old.get(it["key"])

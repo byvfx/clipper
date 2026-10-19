@@ -94,3 +94,12 @@ Add a `[shows.<key>]` table to clipper.toml (see the end of clipper.example.toml
 screen layouts into `[shows.<key>.shorts.layouts.<name>]` (panels of the frame, as fractions).
 Add the slug to `[record] channels` to record it live. `clipper shows` lists every show and
 its streams; the show's Kitsu production is created on its first publish.
+
+If the show posts a pre-show on YouTube, add `[shows.<key>.preshow] youtube_channel =
+"UC..."` (the channel id: the `channel_id` in `yt-dlp -J <any video url>`, or the
+`channelId` in the channel page's source). `clipper preshow list` should then list its
+recent pre-shows, and `clipper doctor` checks the feed. The bot polls it ([preshow]
+poll_minutes) and runs new pre-shows on the bot's machine, transcribe included, so the
+bot's machine needs the GPU extra (or `[transcribe] device = "cpu"`); set poll_minutes = 0
+on a bot that shouldn't. yt-dlp needs deno for YouTube; `uv sync` installs it (yt-dlp's
+`deno` extra). Without it YouTube answers downloads with HTTP 403 partway through.

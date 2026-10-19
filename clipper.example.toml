@@ -59,6 +59,21 @@ max_attempts = 3           # a failed run is retried this many times in all...
 retry_minutes = 60         # ...this long apart; alerts go where [record] alerts go
 stale_minutes = 10         # a run with no heartbeat this long is taken over
 
+[preshow]
+# `clipper preshow`: a show's pre-recorded pre-show, grabbed from its own YouTube channel
+# and run as ONE whole video (no clips, no Shorts): transcribe, one segment, cut, meta,
+# thumbs, review. The bot checks the feeds every poll_minutes. Set youtube_channel per show
+# ([shows.<key>.preshow]); `clipper preshow list` shows what the feed has.
+title_pattern = "(?i)pre.?show"   # uploads whose title matches are grabbed
+max_age_hours = 36         # older feed entries are left alone; `clipper preshow fetch <url>` for those
+poll_minutes = 5           # `clipper bot` checks the feeds this often and runs new ones; 0 = off
+stages = ["transcribe", "segments", "cut", "meta", "thumbs", "review"]
+model = "claude-sonnet-5-5"  # writes the segment's title/description (~$0.03 each)
+publish = "asap"           # asap: approved -> next `clipper upload` publishes it at once | slots
+band = "Pre-show {date}!"  # the cover's green band, {date} = M/D; "" = the model's own line
+playlist = "{show} Pre-shows"   # one playlist for all of them; "" = the model's pick
+credit = "The {show} pre-show from {date}, first posted on their YouTube channel: {url}"
+
 [transcribe]
 model = "large-v3"
 language = "en"
@@ -89,7 +104,7 @@ stream_context = ""
 # Style rules appended to every prompt that writes viewer-facing text (titles,
 # descriptions, hooks, chapters, thumbnails). Add your own notes as more lines.
 house_style = [
-  'Use the word "hosts" rarely; it reads as machine-written. Name the person (Andy, Ashton, Jer...) or make the subject the actor ("Nobody buys it").',
+  'Use the word "hosts" rarely; it reads as machine-written. Name the person (Andy, PPP, Jer...) or make the subject the actor ("Nobody buys it").',
 ]
 # Other creators' video/stream audio in a clip (Content ID risk):
 #   "reject"           any clip whose payoff or setup needs more than a few seconds of it
@@ -385,6 +400,10 @@ intro, and chat emotes starting with "kinocasinogaming" are the channel's own em
 Neither means gambling. Regulars and frequent topics include Jer, DSP, Blade, Geezer, \
 Mr. Morrow and other online creators the show covers."""
 known_figures = "Jer, DSP, Blade, Geezer, Mr. Morrow"
+
+[shows.kino.preshow]
+# "The Kino Casino" (@TheKinoCasinoIncognito): pre-shows Mon/Wed/Fri, usually 11:45-14:45 PT
+youtube_channel = "UCy58OcrZ-Y6ebDYKcJAHyxw"
 
 # [shows.<key>.thumbnail], [shows.<key>.discord] etc. work the same way, e.g. a
 # different masthead or review channel for one show.

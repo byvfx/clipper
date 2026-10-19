@@ -580,7 +580,7 @@ def teaser_box(img: Image.Image, tc: dict, box: tuple[int, int, int, int], bg, i
         ty += int(size * 0.98)
 
 
-def cover_context(key: str, state: dict, stream_dir: Path, tc: dict) -> dict:
+def cover_context(key: str, state: dict, stream_dir: Path, tc: dict, own_band: str = "") -> dict:
     """The band story and three side teasers for one cover, from the episode's other
     videos: different topics first, compilations and segments before clips."""
     me = state[key]
@@ -609,7 +609,41 @@ def cover_context(key: str, state: dict, stream_dir: Path, tc: dict) -> dict:
         path = stream_dir / "thumbs" / k / e["frames"][e["frame"] - 1]["path"]
         side.append({"text": e["teaser"], "topic": e.get("topic") or "", "frame": path,
                      "face": e["face"]})
+    if not others:
+        return own_context(key, me, stream_dir, own_band)
     return {"band": band, "side": side}
+
+
+FILLER = {"the", "and", "for", "but", "was", "are", "his", "her", "its", "with", "from", "that",
+          "this", "just", "into", "out", "over", "plus", "all", "you", "not", "has", "had"}
+
+
+def own_context(key: str, me: dict, stream_dir: Path, own_band: str = "") -> dict:
+    """A cover with no other videos in its stream (a pre-show): its own band line (or
+    own_band, e.g. "Pre-show 10/19!"), and text-only side teasers from its own teaser
+    and chapter titles."""
+    band = ({"band_kicker": "", "band_headline": own_band} if own_band
+            else {"band_kicker": me["band_kicker"], "band_headline": me["band_headline"]}
+            if me.get("band_headline") else None)
+    texts = [me["teaser"]] if me.get("teaser") else []
+    draft = stream_dir / "metadata" / f"{key}.json"
+    if draft.exists():
+        chapters = json.loads(draft.read_text(encoding="utf-8")).get("chapters") or []
+        texts += [clean_text(c["title"], 12) for c in chapters]
+
+    def words(t: str) -> set[str]:
+        return {w for w in re.findall(r"[a-z0-9]+", t.lower()) if len(w) > 2 and w not in FILLER}
+
+    # Skip stories the headline or band already tell, and titles too long for a box.
+    told = [words(me.get("text") or " ".join(me.get("headline") or [])), words(me.get("subhead") or "")]
+    if band:
+        told.append(words(band["band_headline"]))
+    side = []
+    for t in texts:
+        if t and len(t.split()) <= 10 and all(len(words(t) & w) < 2 for w in told):
+            side.append({"text": t, "topic": "", "frame": None, "face": None})
+            told.append(words(t))
+    return {"band": band, "side": side[:3]}
 
 
 def compose_enquirer(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, date: str,
@@ -642,10 +676,15 @@ def compose_enquirer(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, d
     # Green band: another story from the episode.
     band = ctx["band"] or {"band_kicker": "Exclusive:", "band_headline": " ".join(e["headline"])}
     d.rectangle((568, 8, W - 8, 118), fill=GREEN, outline=BLK, width=3)
-    d.text((584, 14), band["band_kicker"], font=fit_font(lambda s: cond_font(tc, s),
-                                                         band["band_kicker"], W - 610, 28), fill=YEL)
-    bf = fit_font(lambda s: head_font(tc, s), band["band_headline"], W - 8 - 600, 64)
-    d.text((584, 44), band["band_headline"], font=bf, fill=WHT, stroke_width=2, stroke_fill=BLK)
+    if band["band_kicker"]:
+        d.text((584, 14), band["band_kicker"], font=fit_font(lambda s: cond_font(tc, s),
+                                                             band["band_kicker"], W - 610, 28), fill=YEL)
+        bf = fit_font(lambda s: head_font(tc, s), band["band_headline"], W - 8 - 600, 64)
+        d.text((584, 44), band["band_headline"], font=bf, fill=WHT, stroke_width=2, stroke_fill=BLK)
+    else:  # one line, centred in the band
+        bf = fit_font(lambda s: head_font(tc, s), band["band_headline"], W - 8 - 600, 84)
+        d.text((584, 63), band["band_headline"], font=bf, fill=WHT, stroke_width=2, stroke_fill=BLK,
+               anchor="lm")
 
     # Side teasers.
     styles = [(YEL, RED, None, None, None), (PINK, BLK, "CAN YOU BELIEVE IT?", YEL, BLK),
@@ -657,7 +696,8 @@ def compose_enquirer(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, d
             s = ctx["side"][i]
             if label == "":
                 label = s["topic"].upper()[:22] or "EXCLUSIVE"
-            photo = face_crop(s["frame"], s["face"], (int(300 * 0.44), h - (30 if label else 0) - 12))
+            photo = (face_crop(s["frame"], s["face"], (int(300 * 0.44), h - (30 if label else 0) - 12))
+                     if s["frame"] else None)
             teaser_box(img, tc, (8, y, 300, h), bg, ink, label, lbg, lin, s["text"], photo)
         else:
             d.rectangle((8, y, 308, y + h), fill=bg, outline=BLK, width=3)
@@ -827,11 +867,17 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
                 state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
     meta_path = stream_dir / "meta.json"
-    started = json.loads(meta_path.read_text(encoding="utf-8")).get("started_at", "") if meta_path.exists() else ""
+    smeta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    started = smeta.get("started_at", "")
+    own_band = ""
     try:
         from datetime import datetime
+        from zoneinfo import ZoneInfo
         dt = datetime.fromisoformat(started)
         date = f"{dt:%b} {dt.day}, {dt.year}".upper()
+        if smeta.get("kind") == "preshow":  # the green band names the pre-show and its air date
+            local = dt.astimezone(ZoneInfo(cfg["schedule"]["timezone"]))
+            own_band = cfg["preshow"]["band"].format(date=f"{local.month}/{local.day}")
     except ValueError:
         date = ""
     tc_enq = {**tc, "_masthead": (tc["masthead"] or cfg["meta"]["show_name"] or "").upper(),
@@ -852,7 +898,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
             grab(x["video"], e["t"], frame)
         if e.get("style") == "enquirer":
             size = compose_enquirer(stream_dir, asset_key(x), e,
-                                    cover_context(asset_key(x), state, stream_dir, tc),
+                                    cover_context(asset_key(x), state, stream_dir, tc, own_band),
                                     tc_enq, date, x["video"], x["video"].with_suffix(".jpg"))
         else:
             size = compose(frame, e, tc, x["video"].with_suffix(".jpg"))

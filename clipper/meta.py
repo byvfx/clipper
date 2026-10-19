@@ -176,7 +176,9 @@ def credit_line(meta: dict, mc: dict, cfg: dict) -> str:
         date = f"{dt:%b} {dt.day}, {dt.year}"
     except ValueError:
         date = ""
-    return mc["credit"].format(show=mc["show_name"], date=date, channel=cfg["kick"]["channel"])
+    fmt = cfg["preshow"]["credit"] if meta.get("kind") == "preshow" else mc["credit"]
+    return fmt.format(show=mc["show_name"], date=date, channel=cfg["kick"]["channel"],
+                      url=meta.get("url", ""))
 
 
 def description(lead: str, body: str, chapters: list[dict], credit: str,
@@ -265,6 +267,8 @@ def run(stream_dir: Path, cfg: dict) -> list[dict]:
             chapters[x["id"]] = ch
 
     credit = credit_line(meta, mc, cfg)
+    playlist = (cfg["preshow"]["playlist"].format(show=mc["show_name"])
+                if meta.get("kind") == "preshow" else "")
     results = []
     for x in assets:
         g = by_id.get(x["id"])
@@ -278,7 +282,7 @@ def run(stream_dir: Path, cfg: dict) -> list[dict]:
                "title": bleeper.mask(g["title"].strip()), "title_original": x["title"],
                "description": desc, "lead": g["lead"].strip(), "body": g["body"] or x["body"],
                "chapters": ch, "credit": credit, "hashtags": tags, "tags": g["tags"],
-               "playlist": g["playlist"].strip(), "duration_s": round(duration(x), 1),
+               "playlist": playlist or g["playlist"].strip(), "duration_s": round(duration(x), 1),
                "srt": x["video"].with_suffix(".srt").name,
                "model": mc["model"], "prompt_version": mc["prompt_version"]}
         problems = []

@@ -26,13 +26,21 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 Everything is a `clipper <stage>` subcommand. `clipper run` does every stage a stream still
 needs, and `clipper worker` does that for each recording as it finishes.
 
+**Pre-shows.** A show can also post a pre-recorded pre-show on its own YouTube channel (Kino
+Casino does, on show days around midday PT). With `[shows.<key>.preshow] youtube_channel`
+set, the bot checks that channel's feed every few minutes, grabs each new pre-show into
+`streams/yt-<video id>/` and runs it as **one whole video**: transcribe, one segment, cut,
+meta, thumbs, review. No clips and no Shorts. Once approved, `clipper schedule` places it
+"asap", outside the release slots, and the next `clipper upload` publishes it at once.
+`clipper preshow list` shows the feed; `clipper preshow fetch <url>` grabs an older one.
+
 ## Roles
 
 | Role | Runs | Where |
 |---|---|---|
 | Recorder | `clipper record watch` | Docker on a NAS, see `deploy/record` |
 | GPU worker | `clipper worker` | a machine with an NVIDIA GPU (8 GB+) or Apple Silicon |
-| Bot | `clipper bot` | any always-on machine: Discord review cards, retakes, the war room |
+| Bot | `clipper bot` | any always-on machine: Discord review cards, retakes, the war room, pre-show grabs |
 
 All roles share one streams folder (a NAS share). One machine can do more than one role.
 
@@ -87,3 +95,4 @@ HANDOFF.md            running notes between work sessions
 
 Python 3.12, [uv](https://docs.astral.sh/uv/), ffmpeg with libass (the "full" builds), an
 Anthropic API key, a Kitsu instance, and a Discord bot if you want cards in Discord.
+YouTube downloads (pre-shows) need a JavaScript runtime; `uv sync` installs deno for yt-dlp.

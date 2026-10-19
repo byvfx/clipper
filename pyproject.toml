@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Stream clipping pipeline: ingest, transcribe, score, render, review, publish"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "yt-dlp[default]>=2026.10.10",
+    "yt-dlp[default,deno]>=2026.10.10",  # deno: YouTube needs a JS runtime (clipper preshow)
     "numpy>=2.0",
     "scipy>=1.13",
     "pyarrow>=17",

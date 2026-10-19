@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -91,7 +92,8 @@ def prompt_files(cfg: dict) -> list[str]:
              f"segments_{cfg['segments']['prompt_version']}",
              f"compilation_{cfg['segments']['prompt_version']}",
              f"meta_{cfg['meta']['prompt_version']}", f"chapters_{cfg['meta']['prompt_version']}",
-             f"retake_{cfg['retake']['prompt_version']}"]
+             f"retake_{cfg['retake']['prompt_version']}",
+             f"preshow_{cfg['preshow']['prompt_version']}"]
     tc = cfg["thumbnail"]
     names.append(f"thumbnail_enquirer_{tc['enquirer_prompt_version']}" if tc["style"] == "enquirer"
                  else f"thumbnail_{tc['prompt_version']}")
@@ -286,6 +288,17 @@ def check_online(cfg: dict, role: str) -> None:
                                    "" if r.ok else "reset the bot token in the Developer Portal")
         except (Exception, SystemExit) as e:  # noqa: BLE001
             fail("online", f"Discord: {e}")
+    if role in ("all", "gpu"):  # the worker grabs pre-shows
+        from . import preshow
+        for key, sc in preshow.watched(_root(cfg)):
+            ch = sc["preshow"]["youtube_channel"]
+            try:
+                hits = [e for e in preshow.feed(ch, sc["kick"]["user_agent"])
+                        if re.search(sc["preshow"]["title_pattern"], e["title"])]
+                ok("online", f"pre-show feed for {key} ({ch}): {len(hits)} recent pre-shows")
+            except Exception as e:  # noqa: BLE001
+                fail("online", f"pre-show feed for {key} ({ch}): {e}",
+                     "check [shows.<key>.preshow] youtube_channel (a UC... channel id)")
     chans = [c for s in _root(cfg)["shows"].values() for c in s["channels"]] or [cfg["kick"]["channel"]]
     chans = [c for c in chans if c]
     if chans:

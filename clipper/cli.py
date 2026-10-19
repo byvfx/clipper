@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -45,6 +46,26 @@ def cmd_record(cfg: dict, args: argparse.Namespace) -> None:
         raise SystemExit("record: no channels; set [record] channels in clipper.toml")
     once = args.action == "now"
     record.Watcher(cfg, chans, max_s=getattr(args, "max_s", None), once=once).run(until_done=once)
+
+
+def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
+    from . import preshow
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if args.action == "list":
+        preshow.show_list(cfg)
+    elif args.action == "check":
+        got = preshow.check(cfg)
+        print(f"{len(got)} new: {', '.join(d.name for d in got)}" if got else "nothing new")
+        if args.run:
+            preshow.run_pending(cfg, config_path(args))
+    else:
+        keys = [k for k, _ in preshow.watched(cfg)]
+        key = cfg["show"]["key"] or (keys[0] if len(keys) == 1 else "")
+        if not key:
+            raise SystemExit(f"preshow fetch: say which show with --show ({', '.join(cfg['shows'])})")
+        d = preshow.fetch(cfg, args.url, key)
+        print(f"{d.name}: grabbed; the worker runs it, or: clipper run {d.name}")
 
 
 def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
@@ -284,6 +305,15 @@ def main() -> None:
     r.add_argument("--max-s", type=float, help="stop after this many seconds and finalize")
     r = rsub.add_parser("finalize", help="join an interrupted recording's parts and write its files")
     r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+
+    p = sub.add_parser("preshow", help="grab a show's pre-show from its YouTube channel, as one whole video")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_preshow)
+    r = rsub.add_parser("check", help="grab new uploads matching [preshow] title_pattern (the bot does this)")
+    r.add_argument("--run", action="store_true", help="then run the pipeline on grabbed pre-shows not done yet")
+    rsub.add_parser("list", help="recent pre-shows in the feeds, and which are grabbed")
+    r = rsub.add_parser("fetch", help="grab one video by url, any age")
+    r.add_argument("url")
 
     p = sub.add_parser("transcribe", help="WhisperX -> words.jsonl")
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")

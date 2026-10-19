@@ -201,7 +201,11 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
 
 def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None:
     cfg = for_stream(cfg, stream_dir)
-    data = json.loads((stream_dir / "candidates.json").read_text(encoding="utf-8"))
+    path = stream_dir / "candidates.json"
+    if not path.exists():  # not scored, e.g. a pre-show: no picks by design
+        print("no candidates.json: no picks to cut")
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
     by_id = {r["id"]: r for r in data["pass_a"]}
     src = source_file(stream_dir)
     out_dir = stream_dir / "clips"

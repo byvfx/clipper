@@ -75,6 +75,23 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "retry_minutes": 60,      # ...this long apart
         "stale_minutes": 10,      # a run with no heartbeat this long is taken over
     },
+    "preshow": {
+        # `clipper preshow`: whole videos a show posts on its own YouTube channel (Kino
+        # Casino's pre-recorded pre-show). Set youtube_channel per show, in [shows.<key>.preshow].
+        "youtube_channel": "",    # channel id (UC...) whose uploads feed is watched; "" = off
+        "title_pattern": r"(?i)pre.?show",  # uploads whose title matches are grabbed
+        "max_age_hours": 36,      # feed entries older than this are left alone (fetch by hand)
+        "poll_minutes": 5,        # `clipper bot` checks the feeds this often, then runs new ones; 0 = off
+        "format": "bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
+        "stages": ["transcribe", "segments", "cut", "meta", "thumbs", "review"],  # no clips/Shorts
+        "model": "claude-sonnet-5-5",  # writes the one segment's title/description
+        "effort": "medium",
+        "prompt_version": "v1",   # prompts/preshow_<v>.md
+        "publish": "asap",        # asap: out as soon as it is approved and uploaded | slots
+        "band": "Pre-show {date}!",  # cover's green band ({date} = M/D aired); "" = the model's line
+        "playlist": "{show} Pre-shows",  # YouTube playlist for every pre-show; "" = the model's pick
+        "credit": "The {show} pre-show from {date}, first posted on their YouTube channel: {url}",
+    },
     "record": {
         # `clipper record watch`: Kick slugs, or tables {slug = "...", <key below> = override}
         "channels": [],
@@ -351,7 +368,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # Style rules appended to every prompt that writes viewer-facing text (titles,
         # descriptions, hooks, chapters, thumbnails). Add your own notes here.
         "house_style": [('Use the word "hosts" rarely; it reads as machine-written. Name the '
-                         'person (Andy, Ashton, Jer...) or make the subject the actor '
+                         'person (Andy, PPP, Jer...) or make the subject the actor '
                          '("Nobody buys it").')],
         "third_party_audio": "reject",  # or "allow_reactions"; v3+ prompts
         "max_source_audio_s": 5,  # allow_reactions: most source audio a Short may carry
