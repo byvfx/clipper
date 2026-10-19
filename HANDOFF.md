@@ -6,6 +6,7 @@ Repo: `C:\clipper`, remote https://github.com/byvfx/clipper (private, pushed 202
 Plan doc: https://claude.ai/code/artifact/a9bb9e38-ced0-4455-8d8e-18a78122f45f
 Keys are Windows **User** env vars (ANTHROPIC_API_KEY, KITSU_TOKEN); agent shells must load them, e.g.
 `export KITSU_TOKEN="$(powershell.exe -NoProfile -Command "[Environment]::GetEnvironmentVariable('KITSU_TOKEN','User')" | tr -d '\r')"`.
+README.md (what it is) and CLAUDE.md (conventions for agents) were added 2026-10-19.
 Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read MEMORY.md first.
 
 ## Pipeline (one stream = `streams/<id>/`, test stream `kick-131151926`)

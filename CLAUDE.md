@@ -1,0 +1,57 @@
+# clipper: notes for Claude Code
+
+Read HANDOFF.md first: it is the running log between sessions (what was built, what the
+user decided, what is waiting on them). README.md says what the project is, SETUP.md how
+to install it. Keep HANDOFF.md current at the end of a session; keep README and SETUP true
+whenever behaviour changes.
+
+## Shape
+
+- Every pipeline stage is a `clipper <stage>` subcommand, wired in `clipper/cli.py`,
+  one module per stage in `clipper/`. New functionality is a subcommand or a flag on one,
+  never a loose script.
+- A stream is `streams/<id>/`; stages read and write files there and are idempotent, so
+  `clipper run` can skip what is done. Review state is `review.json`, retakes `retakes.json`.
+- Config: defaults in `clipper/config.py` < `clipper.toml` < `CLIPPER_<SECTION>_<KEY>` env.
+  `config.for_stream(cfg, sdir)` resolves the show from the stream's `meta.json` channel;
+  use it rather than the base config whenever a stream is known.
+- Shows: `[shows.<key>]` tables; a show's sub-tables override base sections. Each show has
+  its own Kitsu production. Everything uploads to one YouTube channel.
+- Prompts are `prompts/<name>_<version>.md`; the version in use is a config key. Add a new
+  version rather than editing one that produced reviewed output.
+
+## Rules
+
+- No machine-specific values in `config.py` defaults: no IPs, hostnames, user ids, local
+  paths. They go in `clipper.toml` (gitignored) or env vars, with a placeholder in
+  `clipper.example.toml`. `clipper doctor` should fail with a fix when a required one is unset.
+- Secrets are env vars (`ANTHROPIC_API_KEY`, `KITSU_TOKEN`, `DISCORD_BOT_TOKEN`) or files
+  under `secrets/`. Never write them into tracked files, logs, or messages.
+- Anything a new check or install step needs belongs in `clipper doctor` and SETUP.md, not
+  only in a chat answer.
+- Kitsu is the record for review decisions. Bot buttons and the war room act through
+  `clipper/actions.py`; do not write decisions anywhere else.
+- Uploads are manual until the user turns on `[youtube] auto_upload_minutes`. Do not run
+  `clipper upload` or `clipper review publish` without being asked.
+- Generated titles, descriptions and thumbnail text should avoid the word "hosts"; the
+  user finds it reads as machine-written.
+
+## Running things here
+
+- Windows dev machine: the venv is `.venv` (uv). Run commands as `.venv/Scripts/clipper.exe ...`
+  or `uv run clipper ...`. There is no `python` on PATH outside the venv.
+- Keys are Windows *user* environment variables, which agent shells do not inherit. Load
+  them first, for example in PowerShell:
+  `$env:KITSU_TOKEN = [Environment]::GetEnvironmentVariable("KITSU_TOKEN","User")`.
+- The Discord bot and GPU worker run as scheduled tasks (`deploy/discord`, `deploy/worker`).
+  Stopping the task does not stop the supervised process; see the gotchas in HANDOFF.md.
+- The NAS recorder is deployed with `bash deploy/record/deploy.sh`, only when no show is live:
+  the restart starts a new recording part.
+- Model calls cost money. Say what a rerun of `score`, `segments`, `meta` or `thumbs` will
+  cost before doing it on a long stream.
+
+## Checks
+
+- `clipper doctor --role gpu --offline` after changing config, ffmpeg, fonts or dependencies.
+- Try risky changes on the test stream `kick-131151926` before a real one.
+- `uvx ruff check clipper` before committing (ruff is not in the venv; the rule set is the user-level ruff config, not pyproject). It has existing findings, mostly unused noqa and datetime.utc; do not add new ones. Avoid `uv run` while the bot is up: it re-syncs and cannot replace the running clipper.exe.
