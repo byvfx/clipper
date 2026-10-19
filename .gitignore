@@ -1,0 +1,23 @@
+# environments and caches
+.venv/
+__pycache__/
+.ruff_cache/
+
+# data: streams live on the NAS share or a local folder, never in git
+streams/
+rumble/
+smoke/
+logs/
+*.log
+
+# machine-specific config and secrets
+clipper.toml
+clipper.*.toml
+!clipper.example.toml
+secrets/
+deploy/kitsu/env.local
+deploy/record/env.local
+
+# run state (upload schedule, analytics)
+schedule*.json
+analytics.json

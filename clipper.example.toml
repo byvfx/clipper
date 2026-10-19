@@ -1,0 +1,390 @@
+# Copy to clipper.toml and edit. Every key can also be set with an env var
+# named CLIPPER_<SECTION>_<KEY>, e.g. CLIPPER_TRANSCRIBE_DEVICE=cpu.
+
+[paths]
+# Relative paths resolve against this file's directory.
+streams = "streams"
+prompts = "prompts"
+schedule = "schedule.json"
+youtube_client_secret = "secrets/youtube_client_secret.json"
+youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sign-in
+discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
+bot_log = "logs/bot.log"                       # clipper bot log, rotated; "" = console only
+rumble = "rumble"                              # clipper rumble upload folders
+
+[kick]
+channel = ""               # set per show ([shows.<key>] channels); a stream uses its own
+max_height = 1080          # best HLS variant at or below this height
+download_fragments = 8     # parallel HLS fragment downloads
+chat_workers = 4           # parallel chat-history pagers
+chat_rps = 3.0             # total request rate across workers; Kick 429s above ~3-4/s
+
+[record]
+# `clipper record watch` (Docker on the NAS, deploy/record): record each channel's live
+# streams with real-time chat into streams/kick-<livestream id>/, then finalize them into
+# source.mkv + chat.jsonl + meta.json + audio.wav, as `clipper fetch` would leave them.
+# One-off: `clipper record now <slug> [--max-s 300]`.
+channels = ["kinocasinogaming"]   # Kick slugs; or tables, e.g.
+                                  # {slug = "dspgamingreal", max_height = 720, enabled = false}
+poll_s = 60                # live-status check per channel
+max_height = 1080          # best variant at or below this height; 0 = best
+end_grace_s = 300          # after the stream goes offline, wait this long for a restart
+stall_alert_s = 60         # alert when no video arrives this long while live
+container = "mkv"          # final source.<container>: mkv (stream-copy remux) or ts
+keep_parts = false         # keep live/partNNN.ts after joining them
+extract_audio = true       # audio.wav, so `clipper signals` runs before transcribe
+backfill_chat = true       # fill chat-socket outages from Kick's chat-history API
+backfill_min_s = 5
+chat_tail_s = 15           # chat kept past a part's end (chat trails the video)
+on_finish = ""             # shell command per finished recording: {stream_id} {stream_dir} {channel}
+# Alerts (recording started/finished, video drops, stalls, crashes) always go to the log;
+# also to Discord via a webhook URL in $CLIPPER_ALERT_WEBHOOK, or the review bot's token
+# posting into alert_channel_id.
+alert_webhook_env = "CLIPPER_ALERT_WEBHOOK"
+alert_channel_id = ""
+alert_mention = ""         # prepended to warnings, e.g. "<@123456789012345678>"
+
+[worker]
+# `clipper worker` on the GPU machine (deploy/worker/worker-task.ps1): every poll_s it
+# looks for recordings the NAS recorder finished (streams/<id>/live/state.json "done")
+# and runs `clipper run <id>`: signals, transcribe, score, segments, cut, meta, thumbs,
+# review publish. Progress in <id>/run.json, logs in <id>/run_<stage>.log; a failed or
+# interrupted run resumes at its first unfinished stage. paths.streams must be the NAS
+# share the recorder writes to. `clipper worker --status` lists runs.
+poll_s = 300
+stages = ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts", "review"]
+notify = true              # review stage posts Discord cards (needs [discord] enabled)
+channels = []              # only recordings of these Kick slugs; [] = all
+max_attempts = 3           # a failed run is retried this many times in all...
+retry_minutes = 60         # ...this long apart; alerts go where [record] alerts go
+stale_minutes = 10         # a run with no heartbeat this long is taken over
+
+[transcribe]
+model = "large-v3"
+language = "en"
+compute_type = "float16"   # int8_float16 if VRAM is tight
+batch_size = 8
+device = "cuda"
+
+[scoring]
+# Needs ANTHROPIC_API_KEY (or an `ant auth login` profile) in the environment.
+# A key not scoped to a workspace also needs the workspace id (wrkspc_...), here or
+# in $ANTHROPIC_WORKSPACE_ID.
+workspace_id = ""
+model_a = "claude-haiku-5-5"    # Pass A, one call per window + the stream summary
+model_b = "claude-sonnet-5-5"   # Pass B, one call per stream
+effort_a = "medium"
+effort_b = "high"
+prompt_version = "v4"           # prompts/<name>_<version>.md
+concurrency = 4
+lead_in_s = 120                 # transcript before each window, for context
+max_picks = 10
+channel_name = "a clips channel"
+audience = "people who enjoy streamer commentary and drama"
+tone = "unfiltered, chaotic, funny"
+# Facts the models can't infer from a transcript (show name, regulars, channel emotes):
+# set per show in [shows.<key>.scoring] stream_context, at the end of this file.
+stream_context = ""
+
+# Style rules appended to every prompt that writes viewer-facing text (titles,
+# descriptions, hooks, chapters, thumbnails). Add your own notes as more lines.
+house_style = [
+  'Use the word "hosts" rarely; it reads as machine-written. Name the person (Andy, Ashton, Jer...) or make the subject the actor ("Nobody buys it").',
+]
+# Other creators' video/stream audio in a clip (Content ID risk):
+#   "reject"           any clip whose payoff or setup needs more than a few seconds of it
+#   "allow_reactions"  keep reaction clips the streamer's commentary carries, with at most
+#                      max_source_audio_s seconds of source audio in the Short
+third_party_audio = "reject"
+max_source_audio_s = 5
+
+# Who the clips are for, which sets what "needs context" means (v4+ prompts):
+#   "strangers"  never seen the show; rejects anything that needs to know the people
+#   "fans"       know the regulars in known_figures and their running drama; rejects only
+#                moments that depend on something earlier in the same stream
+audience_knowledge = "strangers"
+known_figures = ""
+
+# Transcript-first candidates: the Pass A model scans each 15-minute block for moments
+# carried by the hosts' own words, added to the chat-heat windows (scan prompt, v4+).
+transcript_scan = true
+scan_max_per_block = 3
+scan_pad_s = 30
+scan_max_overlap = 0.5     # skip scanned moments a chat window already covers this much
+
+[segments]
+# Topic segments ("the DSP segment") as long horizontal uploads: one call over the
+# whole transcript (~100k tokens for an 8 h stream).
+model = "claude-opus-5-5"
+effort = "medium"
+prompt_version = "v2"          # prompts/segments_<version>.md and compilation_<version>.md
+min_aside_s = 180              # fold shorter asides into the surrounding segment
+min_s = 180                    # only cut segments between min_s and max_s seconds
+max_s = 3600
+skip_kinds = ["intro", "break", "ad_read", "outro", "gambling"]
+source_share = ["none", "some", "most"]   # drop "most" to skip watch-along segments
+compile_min_segments = 2       # topics with this many segments also get one long video
+
+[cut]
+# Segments and compilations are always stream-copied (lossless; start on a keyframe).
+clip_codec = "libx264"          # picks: libx264 | h264_qsv | h264_nvenc (driver 610+) | h264_vaapi
+crf = 20                       # quality for re-encodes
+
+[bleep]
+# Cover slurs in cut audio (`clipper cut`) and mask them in captions and metadata text.
+mode = "bleep"                # off | bleep (1 kHz tone) | mute
+pad_s = 0.08                   # cover this much either side of the word timing
+tone_hz = 1000
+tone_level = 0.25
+# Regexes matched against whole lowercased words, punctuation stripped.
+patterns = [
+  'n[i1]gg(?:a|as|az|er|ers|uh|uhs)', 'f[a@]g(?:s|got|gots|gy)?', 'retard(?:s|ed)?',
+  'tr[a@]nn(?:y|ies)', 'k[i1]kes?', 'spics?', 'chinks?', 'wetbacks?',
+]
+profanity = false               # also cover swearing below, not just slurs
+profanity_patterns = [
+  '(?:mother)?f+u+c+k+\w*',     # fuck, fucking, fuckin', motherfucker
+]
+
+[meta]
+# Upload metadata drafts (`clipper meta`): SEO titles, descriptions, chapters, tags, SRT.
+model = "claude-opus-5-5"
+effort = "medium"
+prompt_version = "v1"          # prompts/meta_<v>.md and chapters_<v>.md
+show_name = ""
+title_format = "{SHOW} | {title}"   # KINO CASINO | <title>; {show} keeps its case
+credit = "Clipped from {show}, streamed live on Kick {date}: https://kick.com/{channel}"
+chapters_min_s = 900           # segments at least this long get chapters from the transcript
+min_chapters = 3
+max_chapters = 8
+chapter_min_gap_s = 60
+srt_line_chars = 42
+srt_max_s = 6
+
+[thumbnail]
+# `clipper thumbs`: candidate frames around each asset's key moments -> Claude picks the
+# frame, a zoom crop and 2-4 words -> <video>.jpg (1280x720, under max_bytes) beside the
+# video, used by `clipper upload` and shown in Kitsu. Choices go to thumbnails.json: edit
+# a "text" / "highlight" / "position" there, then `clipper thumbs <id> --compose-only`.
+model = "claude-opus-5-5"
+effort = "medium"
+prompt_version = "v1"          # prompts/thumbnail_<version>.md
+concurrency = 4
+clip_frames = 8                # candidates per clip, around its hook and payoff
+even_frames = 5                # segments/compilations: evenly spaced candidates...
+heat_frames = 5                # ...plus their hottest chat moments
+min_gap_s = 20
+min_brightness = 28            # skip darker frames (mean luma 0-255)
+min_sharpness = 150.0          # skip blurrier frames (variance of the Laplacian)
+min_crop = 0.4                 # most zoom allowed: a 16:9 box this share of the frame wide
+max_words = 4
+# Brand look. font: a bold TTF/OTF; empty = the first of `fonts` that exists
+# (Impact on Windows/macOS, DejaVu Sans Bold on Linux).
+font = ""
+uppercase = true
+text_color = "#ffffff"
+accent_color = "#ffd400"       # highlight word, badge, bottom stripe
+outline_color = "#000000"
+outline_px = 10
+shadow_px = 8
+text_height = 0.17             # cap height per line, share of the frame height
+max_lines = 2
+margin_px = 48
+shade = 0.55                   # darken behind the text (0-1)
+saturation = 1.15
+contrast = 1.08
+badge_text = ""                # small fixed label top-left, e.g. "KINO CASINO"
+logo = ""                      # PNG top-left instead of badge_text
+stripe_px = 10                 # accent stripe along the bottom; 0 = none
+max_bytes = 2000000            # YouTube's limit
+kitsu = true                   # attach to each item's Kitsu revision and set it as its thumbnail
+
+# Thumbnail look: "classic" (frame + big text) or "enquirer" (1990s tabloid cover:
+# masthead, teaser band and boxes plugging the episode's other videos, big face, inset).
+style = "classic"
+enquirer_prompt_version = "v2"   # prompts/thumbnail_enquirer_<v>.md
+masthead = ""                  # empty = meta.show_name
+masthead_tagline = "LARGEST CIRCULATION OF ANY STREAM ON KICK"
+masthead_price = "$1.39"
+badge_kicker = "AS SEEN ON"
+badge_channel = ""             # empty = scoring.channel_name
+
+[shorts]
+# `clipper shorts`: each pick's short window (short_in_s..short_out_s from scoring) as a
+# 1080x1920 video in shorts/: snapped to word gaps, a layout crop (panels of the source
+# stacked top to bottom), burned-in captions with the spoken word highlighted, bleeps,
+# loudness normalized. Layouts are per show: [shows.<key>.shorts.layouts.<name>] with
+# description (what the layout picker looks for), caption_y and panels = [{src = [x, y,
+# w, h] (fractions of the frame), h = px tall, focus = [fx, fy]}, ...]; "center" (a 9:16
+# crop of the middle) always exists. Change one Short's layout with --layout, the Kitsu
+# "Layout" column or shorts.json, then rerun `clipper shorts` and `clipper review publish`.
+codec = ""                     # empty = cut.clip_codec
+crf = 20
+window = "clip"                # clip: the pick's in/out | short: scoring's 15-60 s window
+min_s = 90                     # widen shorter windows by whole transcript lines (setup first)
+max_s = 179                    # longest Short; YouTube files vertical videos up to 3:00 as Shorts
+pad_s = 0.15                   # room before the first and after the last word
+lufs = -14.0                   # loudness target
+default_layout = "center"
+layout_model = "claude-haiku-5-5"
+caption_font = "Impact"        # a font family libass can find; or caption_fontsdir = "fonts"
+caption_size = 96
+caption_highlight = "#ffd400"
+caption_max_words = 3
+hashtag = "#Shorts"
+
+[review]
+# Kitsu review server (deploy/kitsu). Token: a Kitsu bot token in $KITSU_TOKEN.
+host = "http://<kitsu-host>:8090/api"   # your Kitsu URL + /api
+token_env = "KITSU_TOKEN"
+project = ""                   # Kitsu project; empty = [meta] show_name
+episode_name = "{date}"        # one episode per stream; {date} {stream_id} {title}
+include = ["segments", "picks", "shorts"]    # compilations become Kitsu playlists of their segments
+preview_height = 720
+preview_fps = 30
+preview_codec = ""             # empty = cut.clip_codec
+preview_quality = 28
+max_upload_mb = 480            # Kitsu's proxy rejects bigger uploads; longer previews re-encode to fit
+normalize = false              # true = Kitsu re-encodes uploads on the NAS
+
+[discord]
+# Review from Discord: `clipper review publish` posts one card per item (preview, title,
+# hook, Kitsu link) in a thread per stream; `clipper bot` answers the cards' buttons
+# (approve, reject, changes, hold, reopen, pin, retitle) and /status /pending /item
+# /schedule /post. Everything writes to Kitsu, which stays the record.
+# Token: $DISCORD_BOT_TOKEN, or the file at [paths] discord_token. Ids: Discord >
+# Settings > Advanced > Developer Mode, then right-click > Copy ID.
+enabled = false                # post cards at the end of `clipper review publish`
+token_env = "DISCORD_BOT_TOKEN"
+guild_id = ""                  # your server; slash commands are registered there only
+review_channel_id = ""         # text or forum channel; one thread (or post) per stream
+allowed_user_ids = []          # e.g. ["123456789012345678"]; nobody else can use the bot
+thread_name = "{show} {date}"  # {show} {date} {stream_id} {title}
+max_upload_mb = 10             # this server's upload limit: 10, or 50 / 100 with boosts
+preview_height = 480
+max_video_kbps = 1500          # cap for previews that fit easily
+min_video_kbps = 350           # below this an item gets only its first excerpt_s seconds
+excerpt_s = 60
+replan = true                  # rerun `clipper schedule` after each decision from Discord
+refresh_minutes = 10           # `clipper bot` updates cards for decisions made in Kitsu or the CLI; 0 = off
+refresh_days = 30              # ...on streams started within this many days (0 = all)
+
+[warroom]
+# `clipper warroom`: a local dashboard at http://127.0.0.1:8765/ with which shows are live,
+# each stream's pipeline, the review queue (approve / changes / reject / hold / pin / edit),
+# the schedule and retakes. The Discord bot serves it too (with_bot), so it's up whenever
+# the bot runs. To open it to other machines: host = "0.0.0.0" plus a token.
+host = "127.0.0.1"
+port = 8765
+token = ""
+with_bot = true
+
+[retake]
+# A "retake" note in Kitsu or Discord -> clipper re-cuts / re-thumbnails the item and sends
+# it back for review (clipper retake; the bot runs it on its own).
+auto = true
+model = "claude-sonnet-5-5"
+
+[schedule]
+# Release planning for `clipper schedule` -> schedule.json (the upload step reads it).
+# In Kitsu: "Hold" skips an item, "Publish at" pins it ("2026-10-20 15:00", or a date for
+# that day's first slot), "Scheduled" shows the slot clipper assigned.
+timezone = "America/Los_Angeles"
+start = ""                     # earliest date to fill (YYYY-MM-DD); empty = tomorrow
+horizon_days = 21
+clip_days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+clip_times = ["12:00", "18:00"]
+segment_days = ["mon", "tue", "wed", "thu", "fri"]
+segment_times = ["16:00"]
+compilation_days = ["sat"]
+compilation_times = ["14:00"]
+short_days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+short_times = ["10:00"]          # Shorts count toward max_per_day and min_gap_minutes too
+max_per_day = 6                # YouTube upload quota guard, all kinds together
+min_gap_minutes = 90
+kick_first_hours = 24          # nothing goes out until this long after the stream ended
+clip_order = "score"           # score (best first) or stream (oldest stream first)
+
+[youtube]
+# `clipper upload`: one-time `clipper upload --sign-in`, then uploads due schedule.json
+# entries as private with publishAt. Client secret/token paths are in [paths].
+auto_upload_minutes = 0        # the Discord bot runs `clipper upload` this often (e.g. 60); 0 = by hand
+upload_ahead_hours = 48        # upload entries whose slot is within this window
+min_lead_minutes = 30          # publishAt must still be this far in the future
+max_per_run = 6                # quota guard per run
+category_id = "24"             # Entertainment
+language = "en"
+made_for_kids = false
+notify_subscribers = true
+captions = true                # upload the .srt beside each video
+thumbnails = true              # set the .jpg beside each video (custom thumbnails need a
+                               # phone-verified channel; then `clipper upload --thumbnails`)
+add_to_playlist = true         # the metadata draft's playlist, created on first use
+playlist_privacy = "public"
+
+[rumble]
+# `clipper rumble <stream>`: Rumble has no upload API and its terms forbid automating the
+# site, so this writes one folder per scheduled item under [paths] rumble: the video (hard
+# link), thumbnail.jpg (from `clipper thumbs`) and upload.txt with every form field.
+# --open opens the folder and the upload page; then `clipper rumble --done s02 --url ...`
+# (or the Kitsu "Rumble URL" column) records it in schedule.json.
+upload_url = "https://rumble.com/upload.php"
+kinds = ["segment", "compilation", "clip"]  # schedule.json kinds to prepare
+# Licensing on the form. "Rumble Only" is non-exclusive and removable, so the YouTube copy
+# stays yours. "Video Management" is exclusive for 50 years and Content-ID-claims the
+# YouTube copy; "Video Management Excluding YouTube" bars monetizing it anywhere else.
+license = "Rumble Only"
+category = "Entertainment"
+visibility = "public"          # public | unlisted
+schedule = "youtube"           # youtube: same slot as YouTube (+ offset_minutes) | now
+offset_minutes = 0
+footer = ""                    # appended to descriptions; {youtube_url} once it's on YouTube
+max_tags = 0                   # 0 = every tag in the metadata draft
+max_title_chars = 100
+max_description_chars = 5000
+link = "hardlink"              # hardlink (no extra disk; copies across drives) | copy
+kitsu = true                   # Kitsu "Rumble" (ready/uploaded) and "Rumble URL" columns
+
+[signals]
+chat_lag_s = 6             # shift chat earlier: stream delay + typing time
+baseline_s = 300           # rolling median baseline
+smooth_s = 10
+z_cap = 8.0                # clip each signal so one can't dominate
+w_chat = 1.0               # unique chatters per second
+w_react = 0.8              # messages matching react_regex (emote names included)
+w_clip = 1.0               # messages matching clip_regex
+w_loud = 0.4               # audio RMS
+react_regex = '(?i)lol|lmao|lmfao|kek|lul|haha|rofl|laugh|dead|omg|wtf|💀|😂|🤣'
+clip_regex = '(?i)\bclip'
+min_heat = 1.0
+min_gap_s = 45             # minimum spacing between peaks
+window_pre_s = 120         # setup before the peak
+window_post_s = 30
+max_window_s = 240         # overlapping windows merge up to this length
+top_n = 30
+
+
+# ---------- shows ----------
+# One table per show. A stream belongs to the show whose `channels` include the Kick
+# channel in its meta.json (recordings and `clipper fetch` both write it), and that
+# show's sub-tables override the sections above for it: [shows.<key>.<section>] takes any
+# key of [<section>]. Each show gets its own Kitsu production (named after meta.show_name
+# unless review.project is set) and its own Discord threads; all shows share the YouTube
+# channel and release schedule above. `clipper shows` lists them; `--show <key>` forces
+# one. `clipper worker` skips recordings of channels no show claims.
+
+[shows.kino]
+channels = ["kinocasinogaming"]
+
+[shows.kino.meta]
+show_name = "Kino Casino"
+
+[shows.kino.scoring]
+stream_context = """The show is called Kino Casino; "Welcome to the Kino Casino" is its \
+intro, and chat emotes starting with "kinocasinogaming" are the channel's own emotes. \
+Neither means gambling. Regulars and frequent topics include Jer, DSP, Blade, Geezer, \
+Mr. Morrow and other online creators the show covers."""
+known_figures = "Jer, DSP, Blade, Geezer, Mr. Morrow"
+
+# [shows.<key>.thumbnail], [shows.<key>.discord] etc. work the same way, e.g. a
+# different masthead or review channel for one show.

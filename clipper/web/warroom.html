@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clipper War Room</title>
+<style>
+:root {
+  --bg: #0b0d10; --panel: #12161b; --panel2: #171c22; --line: #232a33; --text: #e6e9ee;
+  --dim: #8b95a3; --faint: #5b6574; --accent: #ffd400; --red: #ff3b4e; --green: #2fd17c;
+  --blue: #4da3ff; --amber: #ffad33; --violet: #a88bff; --pink: #ff6fae;
+  --clip: #4da3ff; --short: #ff6fae; --segment: #2fd17c; --compilation: #ffad33;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 var(--sans); }
+button { font: inherit; color: inherit; cursor: pointer; }
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 10px 18px; background: #0e1115ee; border-bottom: 1px solid var(--line); backdrop-filter: blur(6px); }
+.brand { font: 700 15px var(--mono); letter-spacing: .14em; white-space: nowrap; }
+.brand b { color: var(--accent); }
+.clock { font: 600 13px var(--mono); color: var(--dim); }
+.lives { display: flex; gap: 8px; flex-wrap: wrap; }
+.live { display: flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 99px;
+  font-size: 12px; color: var(--dim); background: var(--panel); }
+.live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.live.on { color: var(--text); border-color: #ff3b4e88; background: #2a0e13; }
+.live.on .dot { background: var(--red); box-shadow: 0 0 0 0 #ff3b4e; animation: pulse 1.6s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 #ff3b4e99; } 70% { box-shadow: 0 0 0 8px #ff3b4e00; } 100% { box-shadow: 0 0 0 0 #ff3b4e00; } }
+.counters { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.counter { padding: 4px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); text-align: center; min-width: 74px; }
+.counter b { display: block; font: 700 18px var(--mono); }
+.counter span { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+.counter.hot b { color: var(--accent); }
+.counter.warn b { color: var(--amber); }
+.tools { display: flex; gap: 6px; }
+.btn { padding: 6px 11px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel2); font-size: 13px; }
+.btn:hover { border-color: #3a4552; }
+.btn.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+.btn.good { background: #123524; border-color: #1f6b44; color: #7ff0b2; }
+.btn.bad { background: #3a1218; border-color: #7a2230; color: #ff98a3; }
+.btn.warn { background: #3a2a10; border-color: #7a5520; color: #ffcf85; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+main { display: grid; grid-template-columns: 300px minmax(0, 1fr) 340px; gap: 14px; padding: 14px 18px; }
+@media (max-width: 1250px) { main { grid-template-columns: 1fr; } }
+section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.panel h2 { margin: 0; padding: 10px 14px; font: 700 12px var(--mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--dim); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.panel h2 .sp { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--faint); }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.stream { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.stream:last-child { border-bottom: 0; }
+.stream .top { display: flex; gap: 8px; align-items: baseline; }
+.tag { font: 600 10px var(--mono); padding: 1px 6px; border-radius: 4px; background: #222a33; color: var(--dim); text-transform: uppercase; white-space: nowrap; }
+.stream .t { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.stages { display: flex; gap: 3px; margin-top: 7px; }
+.stage { flex: 1; height: 6px; border-radius: 3px; background: #262e38; position: relative; }
+.stage.done { background: var(--green); }
+.stage.running { background: var(--accent); animation: blink 1s infinite alternate; }
+.stage.failed { background: var(--red); }
+.stage.skipped { background: #3a4552; }
+@keyframes blink { from { opacity: 1; } to { opacity: .45; } }
+.stream .meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); margin-top: 4px; }
+
+.feed { max-height: 360px; overflow: auto; }
+.ev { padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.ev .w { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+.ev q { color: var(--dim); display: block; margin: 3px 0; quotes: "\201C" "\201D"; }
+.ev .r-applied { color: var(--green); } .ev .r-unsupported { color: var(--amber); } .ev .r-error { color: var(--red); }
+.health { padding: 10px 14px; font-size: 12px; color: var(--dim); display: grid; gap: 5px; }
+.health .ok { color: var(--green); } .health .bad { color: var(--red); } .health .mid { color: var(--amber); }
+
+.queue-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+.tab { padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line); background: transparent; font-size: 12px; color: var(--dim); }
+.tab.on { background: var(--text); color: #111; border-color: var(--text); font-weight: 600; }
+.tab .n { font-family: var(--mono); opacity: .7; margin-left: 4px; }
+.sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+input.search, select { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 5px 9px; font: inherit; font-size: 12px; }
+input.search { margin-left: auto; width: 180px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; padding: 14px; }
+.card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .15s, transform .15s; }
+.card:hover { border-color: #3a4552; transform: translateY(-1px); }
+.card.busy { opacity: .55; pointer-events: none; }
+.thumb { position: relative; aspect-ratio: 16/9; background: #05070a; cursor: pointer; overflow: hidden; }
+.thumb img, .thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb.vertical video { object-fit: contain; }
+.thumb .kind { position: absolute; top: 7px; left: 7px; }
+.kind { font: 700 10px var(--mono); padding: 2px 7px; border-radius: 4px; color: #111; text-transform: uppercase; letter-spacing: .05em; }
+.kind.pick { background: var(--clip); } .kind.short { background: var(--short); } .kind.segment { background: var(--segment); } .kind.compilation { background: var(--compilation); }
+.thumb .dur { position: absolute; bottom: 7px; right: 7px; font: 600 11px var(--mono); background: #000c; padding: 1px 6px; border-radius: 4px; }
+.thumb .state { position: absolute; top: 7px; right: 7px; font: 700 10px var(--mono); padding: 2px 7px; border-radius: 4px; background: #000c; }
+.state.changes_requested { color: var(--amber); } .state.approved { color: var(--green); } .state.rejected { color: var(--red); } .state.pending { color: var(--dim); }
+.card .body { padding: 9px 11px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.card .title { font-weight: 600; font-size: 13px; line-height: 1.3; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card .sub { font-size: 11px; color: var(--faint); display: flex; gap: 6px; flex-wrap: wrap; }
+.card .hook { font-size: 12px; color: var(--dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card .note { font-size: 11px; color: var(--amber); }
+.card .acts { display: flex; gap: 5px; padding: 0 11px 11px; }
+.card .acts .btn { flex: 1; padding: 5px 0; font-size: 12px; }
+.empty { padding: 40px; text-align: center; color: var(--faint); }
+
+.day { border-bottom: 1px solid var(--line); }
+.day h3 { margin: 0; padding: 8px 14px 4px; font: 700 11px var(--mono); color: var(--dim); letter-spacing: .08em; text-transform: uppercase; display: flex; }
+.day h3 .n { margin-left: auto; color: var(--faint); }
+.day.today h3 { color: var(--accent); }
+.day.past { opacity: .5; }
+.slot { display: grid; grid-template-columns: 46px 6px 1fr; gap: 8px; padding: 5px 14px; align-items: center; cursor: pointer; }
+.slot:hover { background: var(--panel2); }
+.slot .tm { font: 600 12px var(--mono); color: var(--dim); }
+.slot .bar { width: 4px; height: 30px; border-radius: 2px; }
+.slot .bar.clip { background: var(--clip); } .slot .bar.short { background: var(--short); } .slot .bar.segment { background: var(--segment); } .slot .bar.compilation { background: var(--compilation); }
+.slot .tt { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot .ss { font-size: 11px; color: var(--faint); }
+.slot .up { color: var(--green); }
+.sched { max-height: calc(100vh - 140px); overflow: auto; }
+
+dialog { width: min(1100px, 96vw); max-height: 94vh; padding: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); }
+dialog::backdrop { background: #000b; }
+.m-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.m-head .x { margin-left: auto; background: none; border: 0; font-size: 22px; color: var(--dim); }
+.m-body { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; padding: 16px; overflow: auto; max-height: calc(94vh - 60px); }
+@media (max-width: 900px) { .m-body { grid-template-columns: 1fr; } }
+.player video { width: 100%; max-height: 62vh; background: #000; border-radius: 8px; }
+.player img { width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid var(--line); }
+.form label { display: block; font: 600 11px var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin: 10px 0 4px; }
+.form input, .form textarea { width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 7px 9px; font: inherit; font-size: 13px; }
+.form textarea { min-height: 70px; resize: vertical; }
+.form .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.form .hint { font-size: 11px; color: var(--faint); margin-top: 3px; }
+.kv { font-size: 12px; color: var(--dim); display: grid; grid-template-columns: 90px 1fr; gap: 3px 10px; margin-top: 6px; }
+.kv b { color: var(--faint); font-weight: 500; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; z-index: 50; box-shadow: 0 8px 30px #000a; font-size: 13px; max-width: 80vw; }
+.toast.err { border-color: #7a2230; color: #ff98a3; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">CLIPPER <b>//</b> WAR ROOM</div>
+  <div class="clock" id="clock"></div>
+  <div class="lives" id="lives"></div>
+  <div class="counters" id="counters"></div>
+  <div class="tools">
+    <button class="btn" id="syncBtn" title="Read decisions and edits from Kitsu now">⟳ Sync Kitsu</button>
+    <button class="btn" id="replanBtn" title="Rerun clipper schedule">Replan</button>
+  </div>
+</header>
+
+<main>
+  <div class="col">
+    <section class="panel"><h2>Pipeline <span class="sp" id="pipeSub"></span></h2><div id="streams"></div></section>
+    <section class="panel"><h2>Retakes <span class="sp" id="retakeSub"></span></h2><div class="feed" id="retakes"></div></section>
+    <section class="panel"><h2>Health</h2><div class="health" id="health"></div></section>
+  </div>
+
+  <section class="panel">
+    <h2>Review queue <span class="sp" id="queueSub"></span></h2>
+    <div class="queue-bar" id="queueBar"></div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Schedule <span class="sp" id="schedSub"></span></h2>
+    <div class="sched" id="schedule"></div>
+  </section>
+</main>
+
+<dialog id="modal"></dialog>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const KIND = { pick: "Clip", short: "Short", segment: "Segment", compilation: "Comp" };
+const DEC = { pending: "waiting", changes_requested: "changes", approved: "approved", rejected: "rejected" };
+let STATE = null, TAB = "waiting", SHOW = "", KINDF = "", Q = "", BUSY = new Set(), OPEN = null;
+
+function mmss(s) { if (s == null) return ""; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; }
+function ago(iso) { if (!iso) return ""; const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 90) return "just now"; if (s < 5400) return Math.round(s / 60) + " min ago"; if (s < 129600) return Math.round(s / 3600) + " h ago"; return Math.round(s / 86400) + " d ago"; }
+function toast(msg, err) { const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), err ? 7000 : 3500); }
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  const j = await r.json().catch(() => ({ error: r.statusText }));
+  if (!r.ok || j.error) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+function tick() {
+  const tz = STATE?.timezone || undefined;
+  $("#clock").textContent = new Date().toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+setInterval(tick, 1000);
+
+async function refresh() {
+  try { STATE = await api("/api/overview"); render(); }
+  catch (e) { toast("Refresh failed: " + e.message, true); }
+}
+async function refreshLive() {
+  try { const live = await api("/api/live"); $("#lives").innerHTML = live.map(l =>
+    `<span class="live ${l.live ? "on" : ""}" title="${esc(l.title || (l.live ? "" : "offline"))}"><span class="dot"></span>${esc(l.show_name)}${l.live ? ` · LIVE${l.viewers != null ? " · " + l.viewers.toLocaleString() : ""}` : ""}</span>`).join(""); }
+  catch (e) { /* Kick unreachable: keep the last state */ }
+}
+
+function render() {
+  const s = STATE, c = s.counts;
+  $("#counters").innerHTML = [
+    ["Waiting", c.pending, c.pending ? "hot" : ""], ["Changes", c.changes || 0, c.changes ? "warn" : ""],
+    ["Approved", c.approved || 0, ""], ["Unslotted", c.approved_unscheduled, c.approved_unscheduled ? "warn" : ""],
+    ["Next 7 d", c.scheduled_7d, ""], ["Uploaded", c.uploaded, ""],
+  ].map(([l, n, k]) => `<div class="counter ${k}"><b>${n}</b><span>${l}</span></div>`).join("");
+  renderStreams(); renderRetakes(); renderHealth(); renderQueue(); renderSchedule(); tick();
+  if (OPEN) { const r = s.items.find(i => i.ref === OPEN); if (r && !$("#modal").contains(document.activeElement)) fillModalState(r); }
+}
+
+function renderStreams() {
+  const st = STATE.streams;
+  $("#pipeSub").textContent = st.filter(x => x.run_status === "running").length ? "running" : "";
+  $("#streams").innerHTML = st.slice(0, 10).map(x => {
+    const done = STATE.stages.filter(g => x.stages[g] === "done").length;
+    const status = x.recording && x.recording !== "done" ? `● ${x.recording}` : x.run_status === "running" ? "running"
+      : x.run_status === "failed" ? "failed" : done === STATE.stages.length ? "done" : x.published ? "in review" : `${done}/${STATE.stages.length}`;
+    return `<div class="stream" title="${esc(x.run_error)}">
+      <div class="top"><span class="tag">${esc(x.show_name || x.channel)}</span><b style="font-size:12px">${esc(x.started_at.slice(0, 10))}</b>
+        <span style="margin-left:auto;font-size:11px;color:${x.run_status === "failed" ? "var(--red)" : x.run_status === "running" ? "var(--accent)" : "var(--faint)"}">${esc(status)}</span></div>
+      <div class="t">${esc(x.title)}</div>
+      <div class="stages">${STATE.stages.map(g => `<div class="stage ${x.stages[g]}" title="${g}: ${x.stages[g] || "not yet"}"></div>`).join("")}</div>
+      <div class="meta"><span>${esc(x.id)}</span><span>${x.duration_s ? (x.duration_s / 3600).toFixed(1) + " h" : ""}</span></div></div>`;
+  }).join("") || `<div class="empty">No streams yet</div>`;
+}
+
+function renderRetakes() {
+  const r = STATE.retakes;
+  $("#retakeSub").textContent = STATE.health.retake_running ? "working…" : "";
+  $("#retakes").innerHTML = r.map(h => `<div class="ev">
+      <div class="w">${esc(ago(h.at))} · ${esc(h.stream)}/${esc(h.key.split("_")[0])}</div>
+      <q>${esc(h.comment)}</q>
+      <div class="r-${esc(h.result)}">${h.result === "applied" ? "✓ " + esc(h.summary || h.applied.join("; "))
+        : h.result === "unsupported" ? "⚠ " + esc(h.unsupported || "not applied") : h.result === "error" ? "✕ " + esc(h.error) : esc(h.result)}</div></div>`).join("")
+    || `<div class="empty">No retakes yet. Set an item to retake with a note and clipper re-cuts it.</div>`;
+}
+
+function renderHealth() {
+  const h = STATE.health, botAge = h.bot_log_age_s;
+  const bot = !h.bot_lock ? ["bad", "not running"] : botAge != null && botAge > 1800 ? ["mid", `quiet ${Math.round(botAge / 60)} min`] : ["ok", "running"];
+  $("#health").innerHTML = `
+    <div>Discord bot: <span class="${bot[0]}">${bot[1]}</span></div>
+    <div>Retakes: <span class="${h.retake_running ? "mid" : "ok"}">${h.retake_running ? "working" : "idle"}</span></div>
+    <div>Kitsu sync: <span class="${h.sync.error ? "bad" : h.sync.running ? "mid" : "ok"}">${h.sync.running ? "syncing…" : h.sync.error ? esc(h.sync.error) : h.sync.last ? ago(h.sync.last) : "via bot"}</span></div>
+    <div>YouTube uploads: <span class="${h.auto_upload_minutes ? "ok" : "mid"}">${h.auto_upload_minutes ? "automatic, every " + h.auto_upload_minutes + " min" : "by hand (clipper upload)"}</span></div>
+    <div>Schedule: ${STATE.schedule_generated_at ? "planned " + ago(STATE.schedule_generated_at) : "never planned"}</div>
+    <div style="color:var(--faint);font-family:var(--mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(h.bot_last)}">${esc(h.bot_last)}</div>`;
+  $("#syncBtn").disabled = h.sync.running;
+}
+
+function filtered() {
+  let items = STATE.items;
+  if (SHOW) items = items.filter(i => i.show === SHOW);
+  if (KINDF) items = items.filter(i => i.kind === KINDF);
+  if (Q) { const q = Q.toLowerCase(); items = items.filter(i => (i.title + " " + i.hook + " " + i.ref).toLowerCase().includes(q)); }
+  return items;
+}
+const TABS = { waiting: i => i.decision === "pending", changes: i => i.decision === "changes_requested",
+  approved: i => i.decision === "approved" && !i.uploaded, live: i => i.uploaded, rejected: i => i.decision === "rejected", all: () => true };
+const TAB_LABEL = { waiting: "Waiting", changes: "Changes", approved: "Approved", live: "Uploaded", rejected: "Rejected", all: "All" };
+
+function renderQueue() {
+  const base = filtered();
+  const shows = STATE.shows;
+  $("#queueBar").innerHTML = Object.keys(TABS).map(t => `<button class="tab ${TAB === t ? "on" : ""}" data-tab="${t}">${TAB_LABEL[t]}<span class="n">${base.filter(TABS[t]).length}</span></button>`).join("")
+    + `<span class="sep"></span><select id="showSel"><option value="">All shows</option>${shows.map(s => `<option value="${s.key}" ${SHOW === s.key ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
+       <select id="kindSel"><option value="">All kinds</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}" ${KINDF === k ? "selected" : ""}>${v}s</option>`).join("")}</select>
+       <input class="search" id="q" placeholder="Search titles…" value="${esc(Q)}">`;
+  const items = base.filter(TABS[TAB]).sort((a, b) => (b.date || "").localeCompare(a.date || "") || a.ref.localeCompare(b.ref));
+  $("#queueSub").textContent = `${items.length} shown`;
+  $("#grid").innerHTML = items.map(card).join("") || `<div class="empty">Nothing here${TAB === "waiting" ? " — all caught up" : ""}.</div>`;
+}
+
+function card(i) {
+  const vertical = i.kind === "short";
+  const media = i.thumbnail_url ? `<img loading="lazy" src="${i.thumbnail_url}" alt="">`
+    : i.video_url ? `<video muted preload="metadata" src="${i.video_url}#t=3"></video>` : "";
+  const sched = i.scheduled ? `⏱ ${new Date(i.scheduled).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : i.publish_at ? `📌 ${esc(i.publish_at)}` : "";
+  return `<div class="card ${BUSY.has(i.ref) ? "busy" : ""}" data-ref="${esc(i.ref)}">
+    <div class="thumb ${vertical ? "vertical" : ""}" data-open="${esc(i.ref)}">${media}
+      <span class="kind ${i.kind}">${KIND[i.kind] || i.kind}</span>
+      <span class="state ${i.decision}">${DEC[i.decision] || i.decision}${i.hold ? " · held" : ""}</span>
+      <span class="dur">${mmss(i.duration_s)}</span></div>
+    <div class="body">
+      <div class="title" data-open="${esc(i.ref)}">${esc(i.title)}</div>
+      <div class="sub"><span>${esc(i.show_name)}</span><span>${esc(i.date)}</span><span>${esc(i.short.split("/")[1])}</span>${i.score ? `<span>★ ${esc(i.score)}</span>` : ""}${sched ? `<span>${sched}</span>` : ""}</div>
+      ${i.hook ? `<div class="hook">${esc(i.hook)}</div>` : ""}
+      ${i.decision === "changes_requested" && i.comment ? `<div class="note">✎ ${esc(i.comment)}</div>` : ""}
+    </div>
+    <div class="acts">
+      ${i.decision !== "approved" ? `<button class="btn good" data-act="approve" data-ref="${esc(i.ref)}">✓ Approve</button>` : `<button class="btn" data-act="reopen" data-ref="${esc(i.ref)}">↺ Reopen</button>`}
+      <button class="btn warn" data-act="changes" data-ref="${esc(i.ref)}">✎ Changes</button>
+      <button class="btn bad" data-act="reject" data-ref="${esc(i.ref)}">✕</button>
+    </div></div>`;
+}
+
+function renderSchedule() {
+  const tz = STATE.timezone, days = {};
+  const dayKey = d => new Date(d).toLocaleDateString("en-CA", { timeZone: tz });
+  const today = dayKey(new Date());
+  for (const e of STATE.schedule) (days[dayKey(e.publish_at)] ??= []).push(e);
+  for (let k = 0; k < 14; k++) { const d = new Date(Date.now() + k * 864e5); days[dayKey(d)] ??= []; }
+  $("#schedSub").textContent = `${STATE.counts.scheduled_7d} in 7 days`;
+  $("#schedule").innerHTML = Object.keys(days).sort().map(d => {
+    const label = new Date(d + "T12:00:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    return `<div class="day ${d === today ? "today" : d < today ? "past" : ""}"><h3>${d === today ? "Today · " : ""}${label}<span class="n">${days[d].length || ""}</span></h3>
+      ${days[d].map(e => `<div class="slot" data-open="${esc(e.key)}">
+        <span class="tm">${new Date(e.publish_at).toLocaleTimeString([], { timeZone: tz, hour: "2-digit", minute: "2-digit" })}</span>
+        <span class="bar ${e.kind}"></span>
+        <span><div class="tt">${esc(e.title)}</div><div class="ss">${esc(e.show_name || "")} · ${e.kind}${e.status === "uploaded" ? ` · <span class="up">uploaded</span>` : e.source === "pinned" ? " · pinned" : ""}</div></span></div>`).join("")
+      || `<div class="slot" style="cursor:default"><span></span><span></span><span class="ss">—</span></div>`}</div>`;
+  }).join("");
+}
+
+// ---------- actions ----------
+
+async function act(ref, action, extra = {}) {
+  BUSY.add(ref); renderQueue();
+  try {
+    const r = await api("/api/action", { ref, action, ...extra });
+    const i = STATE.items.findIndex(x => x.ref === ref);
+    if (i >= 0) STATE.items[i] = { ...STATE.items[i], ...r.row };
+    toast(`${{ approve: "Approved", reject: "Rejected", changes: "Changes requested for", reopen: "Reopened", hold: extra.on ? "Held" : "Released", pin: extra.text ? "Pinned" : "Unpinned", edit: "Saved", thumbtext: "New thumbnail words for" }[action]} ${ref.split("/")[1].split("_")[0]}${r.note ? " — " + r.note : ""}`);
+    if (OPEN === ref) fillModalState(STATE.items.find(x => x.ref === ref));
+    refresh();
+  } catch (e) { toast(e.message, true); }
+  finally { BUSY.delete(ref); renderQueue(); }
+}
+function ask(label, required) { const t = prompt(label); if (t === null) return null; if (required && !t.trim()) { toast("That needs some text.", true); return null; } return t.trim(); }
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-tab],[data-act],[data-open]");
+  if (!t) return;
+  if (t.dataset.tab) { TAB = t.dataset.tab; renderQueue(); return; }
+  if (t.dataset.act) {
+    const ref = t.dataset.ref, a = t.dataset.act;
+    if (a === "changes") { const n = ask("What should change? clipper will re-cut / re-thumbnail it from this note:", true); if (n) act(ref, "changes", { text: n }); }
+    else if (a === "reject") { const n = ask("Why reject it? (kept as a scoring example)", true); if (n) act(ref, "reject", { text: n }); }
+    else act(ref, a);
+    return;
+  }
+  if (t.dataset.open) openModal(t.dataset.open);
+});
+document.addEventListener("change", e => {
+  if (e.target.id === "showSel") { SHOW = e.target.value; renderQueue(); }
+  if (e.target.id === "kindSel") { KINDF = e.target.value; renderQueue(); }
+});
+document.addEventListener("input", e => { if (e.target.id === "q") { Q = e.target.value; const pos = e.target.selectionStart; renderQueue(); const q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); } });
+$("#syncBtn").onclick = async () => { try { await api("/api/sync", {}); toast("Syncing from Kitsu…"); setTimeout(refresh, 4000); } catch (e) { toast(e.message, true); } };
+$("#replanBtn").onclick = async () => { try { await api("/api/replan", {}); toast("Schedule replanned"); refresh(); } catch (e) { toast(e.message, true); } };
+
+// ---------- modal ----------
+
+function openModal(ref) {
+  const i = STATE.items.find(x => x.ref === ref);
+  if (!i) { toast("Not published to Kitsu yet"); return; }
+  OPEN = ref;
+  const m = $("#modal");
+  const hist = STATE.retakes.filter(h => `${h.stream}/${h.key}` === ref);
+  m.innerHTML = `
+    <div class="m-head"><span class="kind ${i.kind}">${KIND[i.kind]}</span><b>${esc(i.short)}</b><span class="tag">${esc(i.show_name)}</span>
+      <span id="mState" class="state ${i.decision}" style="position:static"></span>
+      <button class="x" onclick="closeModal()">×</button></div>
+    <div class="m-body">
+      <div class="player">
+        ${i.video_url ? `<video controls preload="metadata" src="${i.video_url}"></video>` : `<div class="empty">No preview file</div>`}
+        ${i.thumbnail_url ? `<img src="${i.thumbnail_url}" alt="thumbnail">` : ""}
+        <div class="kv">
+          <b>Length</b><span>${mmss(i.duration_s)}</span>
+          <b>Stream</b><span>${esc(i.stream)} · ${esc(i.date)}</span>
+          ${i.score ? `<b>Score</b><span>${esc(i.score)} · ${esc(i.category)} · ${esc(i.found_by)}</span>` : ""}
+          <b>Revision</b><span>${esc(i.revision)} ${i.synced_at ? "· synced " + ago(i.synced_at) : ""}</span>
+          <b>Links</b><span><a href="${esc(i.kitsu_url)}" target="_blank">Kitsu</a>${i.youtube_url ? ` · <a href="${esc(i.youtube_url)}" target="_blank">YouTube</a>` : ""}</span>
+        </div>
+        ${hist.length ? `<div class="form"><label>Retakes</label>${hist.map(h => `<div class="ev" style="padding:6px 0"><div class="w">${esc(ago(h.at))}</div><q>${esc(h.comment)}</q><div class="r-${esc(h.result)}">${esc(h.summary || h.unsupported || h.error)}</div></div>`).join("")}</div>` : ""}
+      </div>
+      <div class="form">
+        <div class="row" id="mActs"></div>
+        <label>Ask for changes (clipper does the retake)</label>
+        <textarea id="fChanges" placeholder="e.g. start 5 s earlier · the thumbnail shows the back of his head · use the cams layout"></textarea>
+        <div class="row"><button class="btn warn" id="bChanges">✎ Send retake note</button><button class="btn bad" id="bReject">✕ Reject with this as the reason</button></div>
+        <label>YouTube title</label><input id="fTitle" maxlength="100">
+        <label>Description</label><textarea id="fDesc" style="min-height:120px"></textarea>
+        <label>Hashtags</label><input id="fTags">
+        <div class="row"><button class="btn" id="bSave">Save title / description / hashtags</button></div>
+        ${i.kind !== "short" ? `<label>Thumbnail words</label><input id="fThumb" maxlength="40"><div class="row"><button class="btn" id="bThumb">Re-render thumbnail</button></div>` : ""}
+        <label>Pin release time</label><input id="fPin" type="datetime-local">
+        <div class="hint" id="pinHint"></div>
+        <div class="row"><button class="btn" id="bPin">Pin</button><button class="btn" id="bUnpin">Unpin</button></div>
+      </div>
+    </div>`;
+  fillModalState(i, true);
+  $("#bChanges").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write what should change.", true); act(ref, "changes", { text: n }); $("#fChanges").value = ""; };
+  $("#bReject").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write the reason in the box first.", true); act(ref, "reject", { text: n }); };
+  $("#bSave").onclick = () => {
+    const cur = STATE.items.find(x => x.ref === ref), values = {};
+    if ($("#fTitle").value.trim() !== cur.title) values["YouTube title"] = $("#fTitle").value;
+    if ($("#fDesc").value.trim() !== (cur.description || "").trim()) values["YouTube description"] = $("#fDesc").value;
+    if ($("#fTags").value.trim() !== (cur.hashtags || "").trim()) values["Hashtags"] = $("#fTags").value;
+    if (!Object.keys(values).length) return toast("Nothing changed.");
+    act(ref, "edit", { values });
+  };
+  if ($("#bThumb")) $("#bThumb").onclick = () => act(ref, "thumbtext", { text: $("#fThumb").value });
+  $("#bPin").onclick = () => { const v = $("#fPin").value; if (!v) return toast("Pick a date and time.", true); act(ref, "pin", { text: v.replace("T", " ") }); };
+  $("#bUnpin").onclick = () => act(ref, "pin", { text: "" });
+  m.showModal();
+}
+function fillModalState(i, fields) {
+  if (!i || !$("#mActs")) return;
+  $("#mState").className = `state ${i.decision}`; $("#mState").textContent = (DEC[i.decision] || i.decision) + (i.hold ? " · held" : "");
+  $("#mActs").innerHTML = (i.decision !== "approved" ? `<button class="btn good" data-act="approve" data-ref="${esc(i.ref)}">✓ Approve</button>` : `<button class="btn" data-act="reopen" data-ref="${esc(i.ref)}">↺ Reopen</button>`)
+    + `<button class="btn" id="bHold">${i.hold ? "▶ Release hold" : "⏸ Hold"}</button>`;
+  $("#bHold").onclick = () => act(i.ref, "hold", { on: !i.hold });
+  $("#pinHint").textContent = i.scheduled ? `Scheduled ${new Date(i.scheduled).toLocaleString()}${i.publish_at ? " (pinned)" : ""}` : i.decision === "approved" ? "Approved, waiting for a free slot" : "Gets a slot once approved";
+  if (fields) {
+    $("#fTitle").value = i.title || ""; $("#fDesc").value = i.description || ""; $("#fTags").value = i.hashtags || "";
+    if ($("#fThumb")) $("#fThumb").value = i.thumb_text || "";
+    if (i.publish_at) $("#fPin").value = i.publish_at.replace(" ", "T").slice(0, 16);
+  }
+}
+function closeModal() { OPEN = null; const v = $("#modal video"); if (v) v.pause(); $("#modal").close(); }
+$("#modal").addEventListener("close", () => { OPEN = null; const v = $("#modal video"); if (v) v.pause(); });
+
+refresh(); refreshLive();
+setInterval(refresh, 15000);
+setInterval(refreshLive, 60000);
+</script>
+</body>
+</html>

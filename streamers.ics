@@ -1,0 +1,88 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//clipper//streamers//EN
+CALSCALE:GREGORIAN
+X-WR-CALNAME:Streamers (clipper)
+X-WR-TIMEZONE:America/Los_Angeles
+BEGIN:VEVENT
+UID:kino-casino-0@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261019T173000
+DTEND;TZID=America/Los_Angeles:20261020T013000
+RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR
+SUMMARY:Kino Casino live (kick)
+DESCRIPTION:measured\, last 7 streams. kick: kinocasinogaming
+END:VEVENT
+BEGIN:VEVENT
+UID:the-quartering-0@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261019T110000
+DTEND;TZID=America/Los_Angeles:20261019T130000
+RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH
+SUMMARY:The Quartering (Jer) live (rumble)
+DESCRIPTION:posted (2PM ET Mon-Thu\, 1PM ET Fri)\, matches Rumble start times\; length not measured. rumble: https://rumble.com/c/TheQuartering\, youtube: @TheQuartering\, youtube_live: @QuarteringLive\, twitch: thequartering
+END:VEVENT
+BEGIN:VEVENT
+UID:the-quartering-1@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261023T100000
+DTEND;TZID=America/Los_Angeles:20261023T120000
+RRULE:FREQ=WEEKLY;BYDAY=FR
+SUMMARY:The Quartering (Jer) live (rumble)
+DESCRIPTION:posted (2PM ET Mon-Thu\, 1PM ET Fri)\, matches Rumble start times\; length not measured. rumble: https://rumble.com/c/TheQuartering\, youtube: @TheQuartering\, youtube_live: @QuarteringLive\, twitch: thequartering
+END:VEVENT
+BEGIN:VEVENT
+UID:dsp-0@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261019T151000
+DTEND;TZID=America/Los_Angeles:20261019T185200
+RRULE:FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR
+SUMMARY:DSP (DarkSydePhil) live (kick)
+DESCRIPTION:measured\, last 30 Kick streams (about 13 a week\, twice daily). kick: dspgamingreal\, youtube: @DSPGaming
+END:VEVENT
+BEGIN:VEVENT
+UID:dsp-1@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261019T191500
+DTEND;TZID=America/Los_Angeles:20261019T225700
+RRULE:FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR
+SUMMARY:DSP (DarkSydePhil) live (kick)
+DESCRIPTION:measured\, last 30 Kick streams (about 13 a week\, twice daily). kick: dspgamingreal\, youtube: @DSPGaming
+END:VEVENT
+BEGIN:VEVENT
+UID:channel-404-news-0@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261020T170000
+DTEND;TZID=America/Los_Angeles:20261020T221800
+RRULE:FREQ=WEEKLY;BYDAY=TU,TH,SU
+SUMMARY:Channel 404 News (Don Flurgundy) live (kick)
+DESCRIPTION:posted (8pm ET Tue/Thu/Sun)\, matches measured Kick and YouTube starts. kick: donflurgundy\, youtube: @DonFlurgundy\, twitch: channel404news
+END:VEVENT
+BEGIN:VEVENT
+UID:killstream-0@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261019T150000
+DTEND;TZID=America/Los_Angeles:20261019T180000
+RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH
+SUMMARY:Ethan Ralph (Killstream) live (rumble)
+DESCRIPTION:posted on killstream.online/watch (6PM ET Mon-Thu\, 11PM ET Fri-Sat)\; length not measured. rumble: https://rumble.com/c/KillstreamLive
+END:VEVENT
+BEGIN:VEVENT
+UID:killstream-1@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261023T200000
+DTEND;TZID=America/Los_Angeles:20261023T230000
+RRULE:FREQ=WEEKLY;BYDAY=FR,SA
+SUMMARY:Ethan Ralph (Killstream) live (rumble)
+DESCRIPTION:posted on killstream.online/watch (6PM ET Mon-Thu\, 11PM ET Fri-Sat)\; length not measured. rumble: https://rumble.com/c/KillstreamLive
+END:VEVENT
+BEGIN:VEVENT
+UID:melonie-mac-0@clipper
+DTSTAMP:20261016T120000Z
+DTSTART;TZID=America/Los_Angeles:20261021T170000
+DTEND;TZID=America/Los_Angeles:20261021T190000
+RRULE:FREQ=WEEKLY;BYDAY=WE
+SUMMARY:Melonie Mac live (youtube)
+DESCRIPTION:measured\, 2 recent 'Go Boom Live!' streams (weekly). youtube: @MelonieMacGoBoom\, kick: meloniemac\, rumble: https://rumble.com/c/MelonieMac
+END:VEVENT
+END:VCALENDAR

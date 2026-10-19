@@ -1,0 +1,21 @@
+# Live recorder on the NAS. deploy.sh puts this next to .env (from env.local) and the
+# build context; the data dir holds clipper.toml and streams/.
+name: clipper-record
+
+services:
+  record:
+    build: ./src
+    image: clipper-record:latest
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-10}"
+    env_file: .env
+    environment:
+      TZ: ${TZ:-America/Los_Angeles}
+    volumes:
+      - ${CLIPPER_DATA:-/volume1/docker/clipper}:/data
+    stop_grace_period: 60s   # lets the recorder pause cleanly; it resumes on start
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"

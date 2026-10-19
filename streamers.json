@@ -1,0 +1,341 @@
+{
+  "updated": "2026-10-16",
+  "timezone": "America/Los_Angeles",
+  "note": "Public broadcast info only. Except Kino Casino, none of these streamers has given permission to clip or monetize their streams.",
+  "streamers": [
+    {
+      "name": "Kino Casino",
+      "slug": "kino-casino",
+      "role": "source show (permission granted)",
+      "main": "kick",
+      "channels": {
+        "kick": "kinocasinogaming"
+      },
+      "schedule_pt": [
+        {
+          "days": "MO,WE,FR",
+          "start": "17:30",
+          "hours": 8
+        }
+      ],
+      "schedule_source": "measured, last 7 streams",
+      "measured": {
+        "streams": 7,
+        "window": "2026-10-02 to 2026-10-14",
+        "per_week": 4.1,
+        "usual": [
+          "Mon ~17:28",
+          "Wed ~17:28",
+          "Fri ~17:29"
+        ],
+        "median_hours": 8.0,
+        "last_stream": "2026-10-14 17:29 PT",
+        "days_since_last": 1
+      },
+      "confidence": "high"
+    },
+    {
+      "name": "The Quartering (Jer)",
+      "slug": "the-quartering",
+      "main": "rumble",
+      "channels": {
+        "rumble": "https://rumble.com/c/TheQuartering",
+        "youtube": "@TheQuartering",
+        "youtube_live": "@QuarteringLive",
+        "twitch": "thequartering"
+      },
+      "schedule_pt": [
+        {
+          "days": "MO,TU,WE,TH",
+          "start": "11:00",
+          "hours": 2
+        },
+        {
+          "days": "FR",
+          "start": "10:00",
+          "hours": 2
+        }
+      ],
+      "schedule_source": "posted (2PM ET Mon-Thu, 1PM ET Fri), matches Rumble start times; length not measured",
+      "confidence": "high",
+      "notes": "Kick 'thequartering' unverified, ownership unconfirmed"
+    },
+    {
+      "name": "DSP (DarkSydePhil)",
+      "slug": "dsp",
+      "main": "kick",
+      "channels": {
+        "kick": "dspgamingreal",
+        "youtube": "@DSPGaming"
+      },
+      "schedule_pt": [
+        {
+          "days": "SU,MO,TU,WE,TH,FR",
+          "start": "15:10",
+          "hours": 3.7
+        },
+        {
+          "days": "SU,MO,TU,WE,TH,FR",
+          "start": "19:15",
+          "hours": 3.7
+        }
+      ],
+      "schedule_source": "measured, last 30 Kick streams (about 13 a week, twice daily)",
+      "measured": {
+        "streams": 30,
+        "window": "2026-09-29 to 2026-10-15",
+        "per_week": 13.1,
+        "usual": [
+          "Mon ~15:11",
+          "Tue ~15:22",
+          "Wed ~15:10",
+          "Thu ~15:11",
+          "Fri ~15:13",
+          "Sun ~15:11"
+        ],
+        "median_hours": 3.7,
+        "last_stream": "2026-10-15 19:15 PT",
+        "days_since_last": 0
+      },
+      "confidence": "high",
+      "notes": "an unverified Kick 'darksydephilreal' disputes dspgamingreal; dspgamingreal is Kick-verified and links his YouTube/X"
+    },
+    {
+      "name": "Channel 404 News (Don Flurgundy)",
+      "slug": "channel-404-news",
+      "main": "kick",
+      "channels": {
+        "kick": "donflurgundy",
+        "youtube": "@DonFlurgundy",
+        "twitch": "channel404news"
+      },
+      "schedule_pt": [
+        {
+          "days": "TU,TH,SU",
+          "start": "17:00",
+          "hours": 5.3
+        }
+      ],
+      "schedule_source": "posted (8pm ET Tue/Thu/Sun), matches measured Kick and YouTube starts",
+      "measured": {
+        "streams": 12,
+        "window": "2026-09-20 to 2026-10-15",
+        "per_week": 3.5,
+        "usual": [
+          "Tue ~17:00",
+          "Thu ~17:00",
+          "Sat ~17:01",
+          "Sun ~17:00"
+        ],
+        "median_hours": 5.3,
+        "last_stream": "2026-10-15 17:00 PT",
+        "days_since_last": 0
+      },
+      "confidence": "high"
+    },
+    {
+      "name": "Ethan Ralph (Killstream)",
+      "slug": "killstream",
+      "main": "rumble",
+      "channels": {
+        "rumble": "https://rumble.com/c/KillstreamLive"
+      },
+      "schedule_pt": [
+        {
+          "days": "MO,TU,WE,TH",
+          "start": "15:00",
+          "hours": 3
+        },
+        {
+          "days": "FR,SA",
+          "start": "20:00",
+          "hours": 3
+        }
+      ],
+      "schedule_source": "posted on killstream.online/watch (6PM ET Mon-Thu, 11PM ET Fri-Sat); length not measured",
+      "confidence": "high"
+    },
+    {
+      "name": "Melonie Mac",
+      "slug": "melonie-mac",
+      "main": "youtube",
+      "channels": {
+        "youtube": "@MelonieMacGoBoom",
+        "kick": "meloniemac",
+        "rumble": "https://rumble.com/c/MelonieMac"
+      },
+      "schedule_pt": [
+        {
+          "days": "WE",
+          "start": "17:00",
+          "hours": 2
+        }
+      ],
+      "schedule_source": "measured, 2 recent 'Go Boom Live!' streams (weekly)",
+      "measured": {
+        "streams": 2,
+        "window": "2026-09-30 to 2026-10-07",
+        "per_week": 2.0,
+        "usual": [
+          "Wed ~16:58"
+        ],
+        "median_hours": 2.0,
+        "last_stream": "2026-10-07 16:58 PT",
+        "days_since_last": 8
+      },
+      "confidence": "medium"
+    },
+    {
+      "name": "Blade (OUMB)",
+      "slug": "oumb",
+      "main": "kick",
+      "channels": {
+        "kick": "oumb",
+        "youtube": "@OUMB3rd"
+      },
+      "schedule_pt": [],
+      "schedule_source": "irregular IRL streams; YouTube lives mostly Tue-Fri/Sun ~7-9 PM",
+      "measured": {
+        "streams": 50,
+        "window": "2026-07-02 to 2026-10-14",
+        "per_week": 3.4,
+        "usual": [
+          "Tue ~19:16",
+          "Wed ~20:53",
+          "Thu ~19:05",
+          "Fri ~19:10",
+          "Sun ~20:12"
+        ],
+        "median_hours": 2.3,
+        "last_stream": "2026-10-14 19:37 PT",
+        "days_since_last": 1
+      },
+      "confidence": "high (identity)"
+    },
+    {
+      "name": "Luther Morgan",
+      "slug": "luther-morgan",
+      "main": "youtube",
+      "channels": {
+        "youtube": "@LuthertheWriter",
+        "kick": "lutherthewriter"
+      },
+      "schedule_pt": [],
+      "schedule_source": "about weekly, afternoons ~4-5 PM, no fixed day",
+      "measured": {
+        "streams": 17,
+        "window": "2026-06-16 to 2026-10-14",
+        "per_week": 1.0,
+        "usual": [
+          "Mon ~16:07",
+          "Tue ~17:19",
+          "Wed ~15:49",
+          "Fri ~17:00"
+        ],
+        "median_hours": 2.5,
+        "last_stream": "2026-10-14 15:50 PT",
+        "days_since_last": 1
+      },
+      "confidence": "high"
+    },
+    {
+      "name": "Wings of Redemption",
+      "slug": "wings",
+      "main": "youtube",
+      "channels": {
+        "youtube": "@WingsofRedemption"
+      },
+      "schedule_pt": [],
+      "schedule_source": "irregular, 1-2 a week at varying times",
+      "measured": {
+        "streams": 48,
+        "window": "2026-03-18 to 2026-10-15",
+        "per_week": 1.6,
+        "usual": [
+          "Mon ~15:18",
+          "Tue ~13:42",
+          "Wed ~16:35",
+          "Thu ~11:08",
+          "Fri ~08:00",
+          "Sat ~09:57",
+          "Sun ~11:31"
+        ],
+        "median_hours": 2.4,
+        "last_stream": "2026-10-15 09:54 PT",
+        "days_since_last": 0
+      },
+      "confidence": "high"
+    },
+    {
+      "name": "Review Tech (ReviewTechUSA)",
+      "slug": "reviewtech",
+      "main": "youtube+twitch",
+      "channels": {
+        "youtube": "@ReviewTechUSARTU",
+        "twitch": "rtustreams",
+        "kick": "reviewtechusalive"
+      },
+      "schedule_pt": [],
+      "schedule_source": "about 3 a week, afternoons; latest stream titled 'The Last (Marathon) Stream', possibly winding down",
+      "measured": {
+        "streams": 14,
+        "window": "2026-09-03 to 2026-10-09",
+        "per_week": 2.8,
+        "usual": [
+          "Mon ~14:46",
+          "Thu ~15:45",
+          "Fri ~12:29"
+        ],
+        "median_hours": 6.6,
+        "last_stream": "2026-10-09 11:02 PT",
+        "days_since_last": 6
+      },
+      "confidence": "medium"
+    },
+    {
+      "name": "OG Geezer",
+      "slug": "og-geezer",
+      "main": "rumble",
+      "channels": {
+        "rumble": "https://rumble.com/c/OGGeezer"
+      },
+      "schedule_pt": [],
+      "schedule_source": "irregular Vegas IRL; Kick channel gone",
+      "confidence": "medium (identity)"
+    }
+  ],
+  "uploads_only": [
+    {
+      "name": "Paging Mr. Morrow",
+      "channels": {
+        "youtube": "@PagingMrMorrow"
+      }
+    },
+    {
+      "name": "Victor (All Casino Action)",
+      "channels": {
+        "youtube": "@allcasinoaction"
+      }
+    },
+    {
+      "name": "Jasko",
+      "channels": {
+        "youtube": "@JaskoYouTube",
+        "youtube_2": "@JaskoVlogs"
+      }
+    },
+    {
+      "name": "Liberty Doll",
+      "channels": {
+        "youtube": "@LibertyDoll"
+      }
+    },
+    {
+      "name": "Chris Bores (Irate Gamer / Ghost Doctor)",
+      "channels": {
+        "youtube": "@irategamer",
+        "youtube_2": "@GhostDoctor"
+      }
+    }
+  ]
+}

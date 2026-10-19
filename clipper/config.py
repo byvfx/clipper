@@ -1,0 +1,490 @@
+"""Config loading: built-in defaults < clipper.toml < CLIPPER_<SECTION>_<KEY> env vars.
+
+The file is found via --config, then $CLIPPER_CONFIG, then ./clipper.toml.
+Relative paths in [paths] resolve against the config file's directory.
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+import os
+import tomllib
+from pathlib import Path
+from typing import Any
+
+DEFAULTS: dict[str, dict[str, Any]] = {
+    "paths": {
+        "streams": "streams",
+        "prompts": "prompts",
+        "schedule": "schedule.json",
+        "youtube_client_secret": "secrets/youtube_client_secret.json",  # OAuth Desktop client
+        "youtube_token": "secrets/youtube_token.json",                  # written by --sign-in
+        "discord_token": "secrets/discord_token.txt",  # bot token, if not in [discord] token_env
+        "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
+        "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
+    },
+    "rumble": {
+        # No upload API, so `clipper rumble` prepares folders for the web form.
+        "upload_url": "https://rumble.com/upload.php",
+        "kinds": ["segment", "compilation", "clip"],  # which schedule.json kinds to prepare
+        "license": "Rumble Only", # non-exclusive; Video Management claims the YouTube copy
+        "category": "Entertainment",
+        "visibility": "public",   # public | unlisted
+        "schedule": "youtube",    # youtube: same slot (+ offset_minutes) | now
+        "offset_minutes": 0,
+        "footer": "",             # appended to descriptions; {youtube_url} once on YouTube
+        "max_tags": 0,            # 0 = all of the draft's tags
+        "max_title_chars": 100,
+        "max_description_chars": 5000,
+        "link": "hardlink",       # hardlink (no extra disk, copy across drives) | copy
+        "kitsu": True,            # Rumble / Rumble URL columns
+    },
+    "youtube": {
+        "auto_upload_minutes": 0, # `clipper bot` runs `clipper upload` this often; 0 = only by hand
+        "upload_ahead_hours": 48, # upload entries whose slot is within this window
+        "min_lead_minutes": 30,   # publishAt must still be this far in the future
+        "max_per_run": 6,         # quota guard per run
+        "category_id": "24",      # Entertainment
+        "language": "en",
+        "made_for_kids": False,
+        "notify_subscribers": True,
+        "captions": True,         # upload the .srt beside each video
+        "thumbnails": True,       # set the .jpg beside each video (`clipper thumbs`)
+        "add_to_playlist": True,  # the metadata draft's playlist, created on first use
+        "playlist_privacy": "public",
+    },
+    "kick": {
+        "channel": "",
+        "max_height": 1080,
+        "download_fragments": 8,
+        "chat_workers": 4,
+        "chat_rps": 3.0,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/141.0 Safari/537.36",
+    },
+    "worker": {
+        # `clipper worker` (GPU machine) runs `clipper run` on each recording finished under
+        # paths.streams; `clipper run <stream>` resumes at the first stage not done.
+        "poll_s": 300,
+        "stages": ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts",
+                   "review"],
+        "notify": True,           # review stage posts Discord cards ([discord] enabled too)
+        "channels": [],           # only recordings of these Kick slugs; [] = all
+        "max_attempts": 3,        # failed runs are retried this many times in all...
+        "retry_minutes": 60,      # ...this long apart
+        "stale_minutes": 10,      # a run with no heartbeat this long is taken over
+    },
+    "record": {
+        # `clipper record watch`: Kick slugs, or tables {slug = "...", <key below> = override}
+        "channels": [],
+        "poll_s": 60,             # live-status check per channel
+        "max_height": 1080,       # best variant at or below this height; 0 = best
+        "end_grace_s": 300,       # after it goes offline, wait this long for a restart
+        "stall_alert_s": 60,      # alert when video stops arriving this long while live
+        "segment_retry_s": 20,    # keep retrying a failed segment this long before a gap
+        "container": "mkv",       # final source.<container>: mkv (remux) or ts
+        "keep_parts": False,      # keep live/partNNN.ts after joining them
+        "extract_audio": True,    # write audio.wav so `clipper signals` runs before transcribe
+        "backfill_chat": True,    # fill chat-socket outages from the chat-history API
+        "backfill_min_s": 5,      # ignore outages shorter than this
+        "chat_tail_s": 15,        # keep chat this long past a part's end (chat trails video)
+        "on_finish": "",          # shell command after a recording is finalized;
+                                  # {stream_id} {stream_dir} {channel}
+        "alert_webhook_env": "CLIPPER_ALERT_WEBHOOK",  # env var with a Discord webhook URL
+        "alert_channel_id": "",   # or post alerts with the review bot's token here
+        "alert_mention": "",      # prepended to warnings, e.g. "<@123456789012345678>"
+    },
+    "transcribe": {
+        "backend": "whisperx",    # whisperx (CUDA) | mlx (Apple Silicon, `uv sync --extra mac`)
+        "mlx_model": "mlx-community/whisper-large-v3-turbo",  # Hugging Face repo for mlx
+        "mlx_align": True,        # refine mlx word times with WhisperX alignment if installed
+        "model": "large-v3",
+        "language": "en",
+        "compute_type": "float16",
+        "batch_size": 8,
+        "device": "cuda",
+    },
+    "segments": {
+        "model": "claude-opus-5-5",   # one call over the whole transcript
+        "effort": "medium",
+        "prompt_version": "v2",   # prompts/segments_<v>.md, compilation_<v>.md
+        "min_aside_s": 180,       # fold shorter asides into the surrounding segment
+        "min_s": 180,             # only cut segments between min_s and max_s long
+        "max_s": 3600,
+        "skip_kinds": ["intro", "break", "ad_read", "outro", "gambling"],
+        "source_share": ["none", "some", "most"],  # played-video share allowed in a cut
+        "compile_min_segments": 2,  # topics with this many segments also get one long video
+    },
+    "cut": {
+        # Segments and compilations are always stream-copied (lossless, keyframe starts).
+        "clip_codec": "libx264",  # picks: libx264 | h264_qsv | h264_nvenc | h264_vaapi
+        "crf": 20,                # quality for re-encodes (global_quality / cq / qp)
+    },
+    "bleep": {
+        "mode": "off",            # off | bleep (1 kHz tone) | mute; applied by `clipper cut`
+        "pad_s": 0.08,            # cover this much either side of the word timing
+        "tone_hz": 1000,
+        "tone_level": 0.25,
+        # Regexes matched against whole lowercased words (punctuation stripped).
+        "patterns": [r"n[i1]gg(?:a|as|az|er|ers|uh|uhs)", r"f[a@]g(?:s|got|gots|gy)?",
+                     r"retard(?:s|ed)?", r"tr[a@]nn(?:y|ies)", r"k[i1]kes?", r"spics?",
+                     r"chinks?", r"wetbacks?"],
+        "profanity": False,       # also cover swearing (profanity_patterns), not just slurs
+        "profanity_patterns": [r"(?:mother)?f+u+c+k+\w*"],  # fuck, fucking, fuckin', motherfucker
+    },
+    "meta": {
+        "model": "claude-opus-5-5",
+        "effort": "medium",
+        "prompt_version": "v1",   # prompts/meta_<v>.md, chapters_<v>.md
+        "concurrency": 4,
+        "show_name": "",
+        # Upload titles: {title}, {show} or {SHOW} (upper case). Not applied to a title
+        # it would push past 100 characters, or one already starting with the show name.
+        "title_format": "{title}",
+        "credit": "Clipped from {show}, streamed live on Kick {date}: https://kick.com/{channel}",
+        "chapters_min_s": 900,    # segments at least this long get transcript chapters
+        "min_chapters": 3,
+        "max_chapters": 8,
+        "chapter_min_gap_s": 60,
+        "srt_line_chars": 42,
+        "srt_max_s": 6,
+    },
+    "thumbnail": {
+        # `clipper thumbs`: candidate frames -> Claude picks one and writes the text ->
+        # <video>.jpg beside each video (uploaded by `clipper upload`, shown in Kitsu).
+        "model": "claude-opus-5-5",
+        "effort": "medium",
+        "prompt_version": "v1",   # prompts/thumbnail_<v>.md
+        "concurrency": 4,
+        "clip_frames": 8,         # candidates per clip, around its hook and payoff
+        "even_frames": 5,         # segments/compilations: evenly spaced candidates...
+        "heat_frames": 5,         # ...plus this many chat-heat peaks
+        "min_gap_s": 20,          # between candidate frames of one asset
+        "min_brightness": 28,     # mean luma 0-255; darker frames are skipped
+        "min_sharpness": 150.0,   # variance of the Laplacian; blurrier frames are skipped
+        "min_crop": 0.4,          # the model may zoom in to a 16:9 box this wide (share of the frame)
+        "max_words": 4,
+        "font": "",               # TTF/OTF path; empty = first of fonts that exists
+        "fonts": ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
+                  "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf",
+                  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"],
+        "uppercase": True,
+        "text_color": "#ffffff",
+        "accent_color": "#ffd400",  # the model's highlight word, badge and stripe
+        "outline_color": "#000000",
+        "outline_px": 10,
+        "shadow_px": 8,           # drop shadow offset; 0 = none
+        "text_height": 0.17,      # cap height of one line, as a share of the frame height
+        "max_lines": 2,
+        "margin_px": 48,
+        "shade": 0.55,            # darken behind the text: 0 = none, 1 = black
+        "saturation": 1.15,       # frame grading
+        "contrast": 1.08,
+        "badge_text": "",         # small fixed label top-left, e.g. the show name; empty = none
+        "badge_font": "",         # empty = font
+        "logo": "",               # PNG drawn top-left instead of badge_text; empty = none
+        "stripe_px": 10,          # accent stripe along the bottom edge; 0 = none
+        "max_bytes": 2_000_000,   # YouTube's limit
+        "kitsu": True,            # attach to the published Kitsu revision, and set it as the thumbnail
+        # style = "enquirer": a 1990s supermarket-tabloid cover (masthead, teaser band and
+        # boxes plugging the episode's other videos, big face, yellow headline, inset).
+        "style": "classic",       # classic | enquirer
+        "enquirer_prompt_version": "v2",  # prompts/thumbnail_enquirer_<v>.md
+        "masthead": "",           # empty = meta.show_name
+        "masthead_tagline": "LARGEST CIRCULATION OF ANY STREAM ON KICK",
+        "masthead_price": "$1.39",
+        "badge_kicker": "AS SEEN ON",
+        "badge_channel": "",      # empty = scoring.channel_name; the small badge on the photo
+        "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf",
+                            "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                            "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"],
+        "condensed_variation": "Bold Condensed",  # named instance for variable fonts
+    },
+    "shorts": {
+        # `clipper shorts`: each pick's short window as a vertical video in shorts/.
+        "width": 1080,
+        "height": 1920,
+        "fps": 30,
+        "codec": "",              # final encode; empty = cut.clip_codec
+        "crf": 20,
+        "cut_codec": "",          # the trimmed, bleeped intermediate; empty = cut.clip_codec
+        "cut_crf": 16,
+        "keep_work": False,       # keep shorts/work/ (intermediate cut, .ass captions)
+        "pad_s": 0.15,            # room before the first and after the last word
+        "window": "clip",         # clip: the pick's in/out | short: scoring's 15-60 s short window
+        "min_s": 90,              # widen shorter windows by whole transcript lines to this
+        "max_s": 179,             # longest Short (YouTube files vertical videos up to 3:00 as Shorts)
+        "fade_in_s": 0.05,
+        "fade_out_s": 0.25,
+        "lufs": -14.0,            # loudness target (two-pass loudnorm)
+        "true_peak": -1.5,
+        "lra": 11,
+        # Layouts: name -> {description (for the picker), panels, caption_y}. Each panel
+        # is src = [x, y, w, h] as fractions of the source frame, cropped to its slot's
+        # aspect around focus = [fx, fy] (default the middle) and scaled to the full width;
+        # h = its height in px (panels without h share the rest). Panels stack top to
+        # bottom. caption_y: the captions' centre, as a share of the height. "center" (a
+        # 9:16 crop of the middle) is always there.
+        "layouts": {},
+        "default_layout": "center",
+        "layout_model": "claude-haiku-5-5",  # picks a layout from a few frames per Short
+        "layout_effort": "low",
+        "layout_frames": 3,
+        "captions": True,
+        "caption_font": "Impact",  # a font family the system (libass) can find
+        "caption_fontsdir": "",    # or a folder of font files to look in
+        "caption_size": 96,
+        "caption_color": "#ffffff",
+        "caption_highlight": "#ffd400",  # the word being spoken
+        "caption_pop": 115,        # its scale, in percent
+        "caption_outline": "#000000",
+        "caption_outline_px": 7,
+        "caption_shadow_px": 3,
+        "caption_uppercase": True,
+        "caption_max_words": 3,    # words on screen at once
+        "caption_max_chars": 18,
+        "caption_gap_s": 0.6,      # a pause this long starts a new group
+        "hashtag": "#Shorts",      # first hashtag of each Short's description
+    },
+    "analytics": {
+        # `clipper analytics`: YouTube stats of uploads -> analytics.json -> a hint in Pass B.
+        "auto_hours": 24,         # `clipper bot` refreshes it this often (once there are uploads); 0 = off
+        "min_videos": 5,          # a show needs this many uploads with 7-day numbers first
+        "examples": 4,            # best and worst shown to Pass B
+    },
+    "warroom": {
+        # `clipper warroom`: the local dashboard (schedule, pipeline, review queue, retakes).
+        "host": "127.0.0.1",      # 0.0.0.0 to open it to the LAN (then set token)
+        "port": 8765,
+        "token": "",              # required off localhost: open it as http://host:port/?key=<token>
+        "with_bot": True,         # `clipper bot` serves it too, so it's up whenever the bot runs
+    },
+    "retake": {
+        # `clipper retake`: a "retake" note -> edits (trim, layout, title, thumbnail) ->
+        # a new revision waiting for approval in Kitsu and a fresh Discord card.
+        "auto": True,             # `clipper bot` runs it after card refreshes and Changes buttons
+        "model": "claude-sonnet-5-5",
+        "effort": "medium",
+        "prompt_version": "v1",   # prompts/retake_<v>.md
+        "context_s": 90,          # transcript this far around the cut points
+        "max_per_run": 10,
+    },
+    "review": {
+        "host": "",               # Kitsu API URL + /api, e.g. http://nas:8090/api (required for review)
+        "token_env": "KITSU_TOKEN",   # env var holding a Kitsu bot token
+        "project": "",            # Kitsu project; empty = meta.show_name
+        "episode_name": "{date}", # per stream; {date} {stream_id} {title}
+        "include": ["segments", "picks", "shorts"],  # + "compilations" as items; else playlists
+        "preview_height": 720,
+        "preview_fps": 30,
+        "preview_codec": "",      # empty = cut.clip_codec
+        "preview_quality": 28,
+        "max_upload_mb": 480,     # Kitsu's proxy rejects bigger uploads; longer previews are re-encoded to fit
+        "normalize": False,       # let Kitsu re-encode uploads (slow on the NAS); ours are h264 mp4 already
+    },
+    "discord": {
+        "enabled": False,         # post review cards when `clipper review publish` finishes
+        "token_env": "DISCORD_BOT_TOKEN",  # env var with the bot token; else paths.discord_token
+        "guild_id": "",           # your server's id; slash commands are registered there only
+        "review_channel_id": "",  # text or forum channel; one thread (or post) per stream
+        "allowed_user_ids": [],   # Discord user ids allowed to press buttons and run commands
+        "thread_name": "{show} {date}",  # {show} {date} {stream_id} {title}
+        "max_upload_mb": 10,      # this server's upload limit (10; 50 or 100 with boosts)
+        "preview_height": 480,
+        "max_video_kbps": 1500,   # bitrate cap for previews that fit easily
+        "min_video_kbps": 350,    # below this an item only gets its first excerpt_s seconds
+        "excerpt_s": 60,
+        "replan": True,           # rerun `clipper schedule` after each decision from Discord
+        "refresh_minutes": 10,    # bot re-reads Kitsu and updates cards changed elsewhere; 0 = off
+        "refresh_days": 30,       # ...for streams started within this many days (0 = all)
+    },
+    "schedule": {
+        "timezone": "America/Los_Angeles",
+        "start": "",              # earliest date to fill (YYYY-MM-DD); empty = tomorrow
+        "horizon_days": 21,       # how far ahead to fill slots
+        "clip_days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+        "clip_times": ["12:00", "18:00"],
+        "segment_days": ["mon", "tue", "wed", "thu", "fri"],
+        "segment_times": ["16:00"],
+        "compilation_days": ["sat"],
+        "compilation_times": ["14:00"],
+        "short_days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+        "short_times": ["10:00"],
+        "max_per_day": 6,         # YouTube upload quota guard, across all kinds
+        "min_gap_minutes": 90,    # between any two releases
+        "kick_first_hours": 24,   # nothing goes out until this long after the stream ended
+        "clip_order": "score",    # score (best first) or stream (oldest stream first)
+    },
+    "signals": {
+        "chat_lag_s": 6,          # stream delay + typing time
+        "baseline_s": 300,        # rolling median window
+        "smooth_s": 10,
+        "z_cap": 8.0,
+        "w_chat": 1.0,            # unique chatters/s
+        "w_react": 0.8,           # laugh/shock messages
+        "w_clip": 1.0,            # "clip it" messages
+        "w_loud": 0.4,            # audio RMS
+        "react_regex": r"(?i)lol|lmao|lmfao|kek|lul|haha|rofl|laugh|dead|omg|wtf|💀|😂|🤣",
+        "clip_regex": r"(?i)\bclip",
+        "min_heat": 1.0,
+        "min_gap_s": 45,
+        "window_pre_s": 120,
+        "window_post_s": 30,
+        "max_window_s": 240,
+        "top_n": 30,
+    },
+    "scoring": {
+        "workspace_id": "",       # or $ANTHROPIC_WORKSPACE_ID; needed for unscoped keys
+        "model_a": "claude-haiku-5-5",
+        "model_b": "claude-sonnet-5-5",
+        "effort_a": "medium",
+        "effort_b": "high",
+        "prompt_version": "v4",
+        "concurrency": 4,
+        "lead_in_s": 120,
+        "max_picks": 10,
+        "channel_name": "a clips channel",
+        "audience": "people who enjoy streamer commentary and drama",
+        "tone": "unfiltered, chaotic, funny",
+        "stream_context": "",     # show name, regulars, channel emotes; v2+ prompts
+        # Style rules appended to every prompt that writes viewer-facing text (titles,
+        # descriptions, hooks, chapters, thumbnails). Add your own notes here.
+        "house_style": ['Use the word "hosts" rarely; it reads as machine-written. Name the '
+                        'person (Andy, Ashton, Jer...) or make the subject the actor '
+                        '("Nobody buys it").'],
+        "third_party_audio": "reject",  # or "allow_reactions"; v3+ prompts
+        "max_source_audio_s": 5,  # allow_reactions: most source audio a Short may carry
+        "audience_knowledge": "strangers",  # or "fans" (know known_figures); v4+ prompts
+        "known_figures": "",      # regulars fans are assumed to know, comma-separated
+        "transcript_scan": True,  # also find own-voice moments from the transcript (scan prompt)
+        "scan_max_per_block": 3,  # per 15-minute block
+        "scan_pad_s": 30,         # window padding around a scanned moment
+        "scan_max_overlap": 0.5,  # drop scanned windows overlapping a chat window this much
+    },
+}
+
+
+def _coerce(raw: str, like: Any) -> Any:
+    if isinstance(like, bool):
+        return raw.lower() in ("1", "true", "yes", "on")
+    if isinstance(like, int):
+        return int(raw)
+    if isinstance(like, float):
+        return float(raw)
+    return raw
+
+
+def stream_dir(cfg: dict, ref: str) -> Path:
+    """A stream id under paths.streams, or a stream directory."""
+    p = Path(ref)
+    return p if p.is_dir() else cfg["paths"]["streams"] / ref
+
+
+# Keys of a loaded config that aren't [section] tables: "shows" (the [shows.<key>]
+# profiles), "show" (which one this config is resolved for) and private bookkeeping.
+NOT_SECTIONS = ("shows", "show")
+
+
+def _sections(cfg: dict):
+    return ((s, v) for s, v in cfg.items() if s not in NOT_SECTIONS and not s.startswith("_"))
+
+
+def _apply_env(cfg: dict, only: set[str] | None = None) -> None:
+    for section, values in _sections(cfg):
+        if only is not None and section not in only:
+            continue
+        for key, value in values.items():
+            env = os.environ.get(f"CLIPPER_{section}_{key}".upper())
+            if env is not None:
+                values[key] = _coerce(env, value)
+
+
+def _resolve_paths(paths: dict, base: Path, keys=None) -> None:
+    for key in keys if keys is not None else list(paths):
+        p = Path(paths[key]).expanduser()
+        paths[key] = p if p.is_absolute() else base / p
+
+
+def load(path: str | Path | None = None) -> dict[str, dict[str, Any]]:
+    cfg = copy.deepcopy(DEFAULTS)
+    path = Path(path or os.environ.get("CLIPPER_CONFIG") or "clipper.toml")
+    base = Path.cwd()
+    shows: dict[str, dict] = {}
+    if path.exists():
+        base = path.resolve().parent
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+        shows = data.pop("shows", {})
+        for section, values in data.items():
+            cfg.setdefault(section, {}).update(values)
+    _apply_env(cfg)
+    _resolve_paths(cfg["paths"], base)
+
+    cfg["shows"] = {}
+    for key, show in shows.items():
+        chans = show.get("channels") or ([show["channel"]] if show.get("channel") else [])
+        cfg["shows"][key] = {"channels": [c.lower() for c in chans],
+                             "overrides": {s: v for s, v in show.items()
+                                           if isinstance(v, dict)}}
+    cfg["show"] = {"key": "", "channel": cfg["kick"]["channel"]}
+    cfg["_dir"] = base
+    cfg["_file"] = path.resolve() if path.exists() else None
+    cfg["_resolved"] = {}
+    return cfg
+
+
+# ---------- shows ----------
+# One clipper.toml serves several shows. Each [shows.<key>] table names the show's Kick
+# channels and holds sub-tables that override the same sections for that show's streams,
+# e.g. [shows.kino.meta] show_name = "Kino Casino". A stream belongs to the show whose
+# channels include the "channel" in its meta.json; with no match it keeps the base settings.
+
+def show_of_channel(cfg: dict, channel: str) -> str:
+    channel = (channel or "").lower()
+    return next((k for k, s in _root(cfg)["shows"].items() if channel in s["channels"]), "")
+
+
+def stream_channel(sdir: Path) -> str:
+    try:
+        return json.loads((sdir / "meta.json").read_text(encoding="utf-8")).get("channel") or ""
+    except (OSError, ValueError):
+        return ""
+
+
+def _root(cfg: dict) -> dict:
+    return cfg.get("_root") or cfg
+
+
+def for_show(cfg: dict, key: str, channel: str = "") -> dict:
+    """The config with show `key`'s overrides applied (env vars still win). Cached and
+    safe to call on an already resolved config; "" gives the base config."""
+    root = _root(cfg)
+    if not key:
+        if not channel or channel == root["show"]["channel"]:
+            return root
+    elif key not in root["shows"]:
+        raise SystemExit(f"no [shows.{key}] in the config; shows: {', '.join(root['shows'])}")
+    cache_key = (key, channel)
+    if cache_key in root["_resolved"]:
+        return root["_resolved"][cache_key]
+    out = {k: copy.deepcopy(v) for k, v in root.items() if not k.startswith("_")}
+    overrides = root["shows"][key]["overrides"] if key else {}
+    for section, values in overrides.items():
+        out.setdefault(section, {}).update(copy.deepcopy(values))
+    _apply_env(out, set(overrides))
+    if "paths" in overrides:
+        _resolve_paths(out["paths"], root["_dir"], list(overrides["paths"]))
+    if key and not channel:
+        channel = (root["shows"][key]["channels"] or [""])[0]
+    out["kick"]["channel"] = channel or out["kick"]["channel"]
+    out["show"] = {"key": key, "channel": out["kick"]["channel"]}
+    out["_root"] = root
+    root["_resolved"][cache_key] = out
+    return out
+
+
+def for_stream(cfg: dict, sdir: Path) -> dict:
+    """The config for this stream's show, picked by the Kick channel in its meta.json."""
+    channel = stream_channel(Path(sdir))
+    return for_show(cfg, show_of_channel(cfg, channel), channel)

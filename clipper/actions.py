@@ -1,0 +1,434 @@
+"""Per-item review actions for the CLI and Discord (`clipper review <verb>`, `clipper bot`).
+
+Kitsu stays the record of every decision. Each action writes the item's task status
+(with a comment) or one of its custom columns, then refreshes that item in review.json
+the way `clipper review sync` would, so `clipper schedule` treats it like an edit made
+in Kitsu:
+    approve   status approved
+    reject    status rejected; the reason is the comment (kept for scoring examples)
+    changes   status retake; the comment says what to change
+    reopen    status wfa (waiting for approval), to undo any of the above
+    hold      Hold column on or off (schedule skips held items)
+    pin       Publish at column: "2026-10-20 15:00", a date (that day's first slot), or
+              empty to unpin
+    retitle   YouTube title column
+    description, hashtags, tags, playlist
+              YouTube description / Hashtags / Tags (comma-separated) / Playlist columns;
+              checked against YouTube's limits, never emptied (an empty column falls
+              back to the generated metadata)
+    thumbtext Thumbnail text column (2-4 words); the sync re-renders the .jpg
+Column changes also leave a "[clipper] ..." comment on the task, so Kitsu shows who
+changed what.
+
+Items are named <stream>/<key>, e.g. kick-131151926/c03_t01. The key's first part (c03,
+s02) or any unique prefix works too, with the stream left out when only one stream has
+that item.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from . import review
+from .config import for_stream, stream_dir
+
+OPEN = ("pending", "changes_requested")  # decisions still waiting on you
+
+
+@dataclass
+class Item:
+    stream_dir: Path
+    key: str
+    state: dict  # its review_state.json entry
+
+    @property
+    def ref(self) -> str:
+        return f"{self.stream_dir.name}/{self.key}"
+
+    @property
+    def short(self) -> str:
+        """Stream plus the key's first part (c03, s02); unique within a stream."""
+        return f"{self.stream_dir.name}/{self.key.split('_')[0]}"
+
+
+def review_dirs(cfg: dict) -> list[Path]:
+    """Streams published to Kitsu, oldest first."""
+    return sorted(p.parent for p in cfg["paths"]["streams"].glob("*/review_state.json"))
+
+
+def load_json(path: Path, default=None):
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+
+
+def resolve(cfg: dict, ref: str, stream: str | None = None) -> Item:
+    if "/" in ref:
+        stream, ref = ref.rsplit("/", 1)
+    dirs = [stream_dir(cfg, stream)] if stream else review_dirs(cfg)
+    hits = []
+    for d in dirs:
+        state = load_json(d / "review_state.json", {})
+        keys = ([k for k in state if k == ref] or [k for k in state if k.split("_")[0] == ref]
+                or [k for k in state if k.startswith(ref)])
+        hits += [Item(d, k, state[k]) for k in keys]
+    if not hits:
+        raise SystemExit(f"no review item {ref!r}" + (f" in {stream}" if stream else ""))
+    if len(hits) > 1:
+        raise SystemExit(f"{ref!r} matches {len(hits)} items: "
+                         + ", ".join(h.ref for h in hits[:8]) + "; give more of the name")
+    return hits[0]
+
+
+# ---------- writing to Kitsu ----------
+
+def _comment(gazu, item: Item, status_short: str | None, text: str) -> None:
+    task = gazu.task.get_task(item.state["task_id"])
+    status = (gazu.task.get_task_status_by_short_name(status_short) if status_short
+              else gazu.task.get_task_status(task["task_status_id"]))
+    gazu.task.add_comment(task, status, text)
+
+
+def _set_columns(gazu, cfg: dict, item: Item, values: dict[str, str]) -> None:
+    cfg = for_stream(cfg, item.stream_dir)
+    proj = gazu.project.get_project_by_name(review.project_name(cfg))
+    fmap = review.column_fields(gazu, proj)
+    etype = review.ENTITY[item.state["kind"]]
+    missing = [n for n in values if (etype, n) not in fmap]
+    if missing:
+        raise SystemExit(f"Kitsu has no {etype} column {missing}; run clipper review publish")
+    update = (gazu.shot.update_sequence_data if etype == "Sequence"
+              else gazu.shot.update_shot_data)
+    update(item.state["entity_id"], {fmap[(etype, n)]: v for n, v in values.items()})
+
+
+def _status(cfg: dict, item: Item, short: str, text: str) -> None:
+    cfg = for_stream(cfg, item.stream_dir)
+    _comment(review.connect(cfg["review"]), item, short, text)
+
+
+def _columns(cfg: dict, item: Item, values: dict[str, str], note: str) -> None:
+    cfg = for_stream(cfg, item.stream_dir)
+    gazu = review.connect(cfg["review"])
+    _set_columns(gazu, cfg, item, values)
+    _comment(gazu, item, None, f"{review.NOTE_PREFIX} {note}")
+
+
+def _by(who: str) -> str:
+    return f" ({who})" if who else ""
+
+
+def approve(cfg: dict, item: Item, comment: str = "", who: str = "") -> dict:
+    _status(cfg, item, "approved", comment or f"Approved{_by(who)}")
+    return refresh(cfg, item)
+
+
+def reject(cfg: dict, item: Item, reason: str, who: str = "") -> dict:
+    if not reason.strip():
+        raise SystemExit("reject needs a reason (it becomes a scoring example)")
+    _status(cfg, item, "rejected", reason.strip())
+    return refresh(cfg, item)
+
+
+def changes(cfg: dict, item: Item, what: str, who: str = "") -> dict:
+    if not what.strip():
+        raise SystemExit("say what to change")
+    _status(cfg, item, "retake", what.strip())
+    return refresh(cfg, item)
+
+
+def reopen(cfg: dict, item: Item, who: str = "") -> dict:
+    _status(cfg, item, "wfa", f"Reopened for review{_by(who)}")
+    return refresh(cfg, item)
+
+
+def hold(cfg: dict, item: Item, on: bool = True, who: str = "") -> dict:
+    _columns(cfg, item, {"Hold": "true" if on else "false"},
+             f"Hold {'on' if on else 'off'}{_by(who)}")
+    return refresh(cfg, item)
+
+
+def pin(cfg: dict, item: Item, when: str, who: str = "") -> dict:
+    cfg = for_stream(cfg, item.stream_dir)
+    from .schedule import parse_when
+
+    when = (when or "").strip()
+    sc = cfg["schedule"]
+    if when and not parse_when(when, ZoneInfo(sc["timezone"]), "00:00"):
+        raise SystemExit(f"Publish at must be YYYY-MM-DD HH:MM or YYYY-MM-DD, not {when!r}")
+    _columns(cfg, item, {"Publish at": when},
+             (f"Publish at {when}" if when else "Unpinned") + _by(who))
+    return refresh(cfg, item)
+
+
+def check_title(title: str) -> str:
+    title = " ".join((title or "").split())
+    if not title:
+        raise SystemExit("title is empty")
+    if len(title) > 100:
+        raise SystemExit(f"YouTube titles are at most 100 characters ({len(title)} given)")
+    return title
+
+
+def retitle(cfg: dict, item: Item, title: str, who: str = "") -> dict:
+    return edit_meta(cfg, item, {"YouTube title": title}, who)
+
+
+TAG_BUDGET = 480  # what clipper/youtube.py keeps of YouTube's ~500-character tag limit
+
+
+def _no_empty(name: str, value: str) -> str:
+    if not value:  # publish refills an empty column, and upload falls back to the draft
+        raise SystemExit(f"{name} is empty; an empty column falls back to the generated one")
+    return value
+
+
+def _yt_bytes(text: str) -> int:
+    """Size as uploaded: clipper/youtube.py swaps < and > for 3-byte look-alikes."""
+    return len(text.replace("<", "‹").replace(">", "›").encode("utf-8"))
+
+
+def check_description(text: str) -> str:
+    text = "\n".join(line.rstrip() for line in (text or "").strip().splitlines())
+    size = _yt_bytes(text)
+    if size > 5000:
+        raise SystemExit(f"YouTube descriptions are at most 5000 bytes ({size} given)")
+    return _no_empty("description", text)
+
+
+def check_hashtags(text: str) -> str:
+    return _no_empty("hashtags", review.hashtag_line(text))
+
+
+def check_tags(text: str) -> str:
+    tags = [" ".join(t.split()) for t in (text or "").split(",")]
+    tags = [t for t in tags if t]
+    long = [t for t in tags if len(t) > 100]
+    if long:
+        raise SystemExit(f"a tag is at most 100 characters: {long[0][:40]!r}…")
+    total = sum(len(t) + 1 for t in tags)
+    if total > TAG_BUDGET:
+        raise SystemExit(f"tags come to {total} characters; YouTube allows about 500 and "
+                         f"upload keeps the first {TAG_BUDGET}, so drop some")
+    return _no_empty("tags", ", ".join(tags))
+
+
+def check_playlist(text: str) -> str:
+    return _no_empty("playlist", " ".join((text or "").split()))
+
+
+# Kitsu column: (check, what the "[clipper] ..." note calls it)
+META = {"YouTube title": (check_title, "Retitled"),
+        "YouTube description": (check_description, "Description"),
+        "Hashtags": (check_hashtags, "Hashtags"),
+        "Tags": (check_tags, "Tags"),
+        "Playlist": (check_playlist, "Playlist")}
+
+
+def edit_meta(cfg: dict, item: Item, values: dict[str, str], who: str = "") -> dict:
+    """Write some of the META columns (checked and normalized) in one Kitsu update."""
+    cfg = for_stream(cfg, item.stream_dir)
+    values = {name: META[name][0](v) for name, v in values.items()}
+    if not values:
+        raise SystemExit("nothing to change")
+    if "YouTube description" in values or "Hashtags" in values:
+        row = describe(cfg, item.stream_dir)[item.key]
+        desc = values.get("YouTube description", row["description"])
+        tags_line = values.get("Hashtags", row["hashtags"])
+        size = _yt_bytes(f"{desc}\n\n{tags_line}")
+        if size > 5000:  # upload adds the hashtag line to the description
+            raise SystemExit(f"description plus hashtag line is {size} bytes; "
+                             "YouTube allows 5000")
+    notes = []
+    for name, v in values.items():
+        label = META[name][1]
+        notes.append(f"{label} edited" if "\n" in v or len(v) > 120 else f"{label}: {v}")
+    _columns(cfg, item, values, "; ".join(notes) + _by(who))
+    return refresh(cfg, item)
+
+
+def description(cfg: dict, item: Item, text: str, who: str = "") -> dict:
+    return edit_meta(cfg, item, {"YouTube description": text}, who)
+
+
+def hashtags(cfg: dict, item: Item, text: str, who: str = "") -> dict:
+    return edit_meta(cfg, item, {"Hashtags": text}, who)
+
+
+def tags(cfg: dict, item: Item, text: str, who: str = "") -> dict:
+    return edit_meta(cfg, item, {"Tags": text}, who)
+
+
+def playlist(cfg: dict, item: Item, text: str, who: str = "") -> dict:
+    return edit_meta(cfg, item, {"Playlist": text}, who)
+
+
+def thumbtext(cfg: dict, item: Item, text: str, who: str = "") -> dict:
+    """The refresh's sync sees the new column value and re-renders the thumbnail."""
+    cfg = for_stream(cfg, item.stream_dir)
+    from .thumbs import check_text, video_key
+
+    text = check_text(cfg, " ".join(text.split()))
+    thumbs = load_json(item.stream_dir / "thumbnails.json", {})
+    if video_key(item.stream_dir / item.state["file"].replace("\\", "/")) not in thumbs:
+        raise SystemExit(f"{item.ref} has no thumbnail yet; run clipper thumbs first")
+    _columns(cfg, item, {review.THUMB_COL: text}, f"Thumbnail text: {text}{_by(who)}")
+    return refresh(cfg, item)
+
+
+def refresh(cfg: dict, item: Item) -> dict:
+    """Re-read this one item from Kitsu into review.json; returns its card data."""
+    cfg = for_stream(cfg, item.stream_dir)
+    review.sync(item.stream_dir, cfg, keys=[item.key], quiet=True)
+    return describe(cfg, item.stream_dir)[item.key]
+
+
+# ---------- reading ----------
+
+def schedule_entries(cfg: dict) -> dict[str, dict]:
+    data = load_json(cfg["paths"]["schedule"], {}) or {}
+    return {e["key"]: e for e in data.get("entries", [])}
+
+
+def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
+    """Everything a card or list row shows, per item, from local files (review.json is
+    as of the last sync). Kitsu is only asked for links older publishes didn't save."""
+    cfg = for_stream(cfg, sdir)
+    state = review.ensure_links(sdir, cfg, gazu)
+    decisions = load_json(sdir / "review.json", {})
+    sched = schedule_entries(cfg)
+    try:
+        outputs = {it["key"]: it for it in review.items(sdir, cfg["review"]["include"], cfg)}
+    except FileNotFoundError:
+        outputs = {}
+    meta = load_json(sdir / "meta.json", {})
+    out = {}
+    for key, st in state.items():
+        r = decisions.get(key, {})
+        fields = r.get("fields") or {}
+        proposed = st.get("fields", {})
+        it = outputs.get(key, {})
+        entry = sched.get(f"{sdir.name}/{key}")
+        jpg = (sdir / st["file"].replace("\\", "/")).with_suffix(".jpg")
+        out[key] = {
+            "ref": f"{sdir.name}/{key}", "short": f"{sdir.name}/{key.split('_')[0]}",
+            "stream": sdir.name, "date": meta.get("started_at", "")[:10],
+            "key": key, "kind": st["kind"],
+            "title": fields.get("YouTube title") or proposed.get("YouTube title") or key,
+            "hook": fields.get("Hook") or proposed.get("Hook") or "",
+            "category": fields.get("Category") or proposed.get("Category") or "",
+            "score": fields.get("Score") or proposed.get("Score") or "",
+            "found_by": fields.get("Found by") or proposed.get("Found by") or "",
+            "topic": fields.get("Topic") or proposed.get("Topic") or "",
+            "duration_s": it.get("duration_s"),
+            "decision": r.get("decision", "pending"), "status": r.get("status", "wfa"),
+            "comment": r.get("comment", ""),
+            "hold": str(fields.get("Hold") or "").lower() in ("true", "1", "yes", "on"),
+            "publish_at": fields.get("Publish at") or "",
+            "scheduled": entry["publish_at"] if entry else "",
+            "uploaded": bool(entry and entry.get("status") == "uploaded"),
+            "youtube_url": fields.get("YouTube URL") or "",
+            "kitsu_url": st["kitsu_url"], "episode_url": st["episode_url"],
+            "thumb_text": fields.get(review.THUMB_COL) or proposed.get(review.THUMB_COL) or "",
+            **{k: fields.get(n) or proposed.get(n) or "" for k, n in
+               (("description", "YouTube description"), ("hashtags", "Hashtags"),
+                ("tags", "Tags"), ("playlist", "Playlist"))},
+            "thumbnail": jpg if jpg.exists() else None,
+            "thumb_mtime": jpg.stat().st_mtime if jpg.exists() else None,
+            "file": sdir / st["file"], "preview": sdir / "review" / f"{key}.mp4",
+            "revision": st.get("revision"), "synced_at": r.get("updated_at"),
+        }
+    return out
+
+
+def list_items(cfg: dict, stream: str | None = None, everything: bool = False,
+               sync: bool = True) -> list[dict]:
+    """Items still waiting on a decision (or all of them), oldest stream first."""
+    dirs = [stream_dir(cfg, stream)] if stream else review_dirs(cfg)
+    rows = []
+    for d in dirs:
+        if sync:
+            review.sync(d, cfg, quiet=True)
+        rows += [r for r in describe(cfg, d).values() if everything or r["decision"] in OPEN]
+    return rows
+
+
+def status(cfg: dict, sync: bool = False) -> dict:
+    """Per stream: decision counts; plus what schedule.json has coming up."""
+    streams = []
+    for d in review_dirs(cfg):
+        if sync:
+            review.sync(d, cfg, quiet=True)
+        rows = describe(cfg, d).values()
+        counts: dict[str, int] = {}
+        for r in rows:
+            counts[r["decision"]] = counts.get(r["decision"], 0) + 1
+        meta = load_json(d / "meta.json", {})
+        streams.append({"stream": d.name, "date": meta.get("started_at", "")[:10],
+                        "title": meta.get("title", ""), "counts": counts,
+                        "held": sum(r["hold"] for r in rows),
+                        "episode_url": next(iter(rows))["episode_url"] if rows else ""})
+    data = load_json(cfg["paths"]["schedule"], {}) or {}
+    tz = ZoneInfo(cfg["schedule"]["timezone"])
+    now = datetime.now(tz)
+    upcoming = [e for e in data.get("entries", [])
+                if now <= datetime.fromisoformat(e["publish_at"]) <= now + timedelta(days=7)]
+    return {"streams": streams, "generated_at": data.get("generated_at"),
+            "next_7_days": len(upcoming),
+            "uploaded": sum(e.get("status") == "uploaded" for e in data.get("entries", [])),
+            "next": upcoming[0] if upcoming else None}
+
+
+# ---------- text for the CLI (and Discord's lists) ----------
+
+def mmss(s: float | None) -> str:
+    if s is None:
+        return "?"
+    s = int(round(s))
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
+
+
+def decision_text(r: dict) -> str:
+    out = r["decision"].replace("_", " ")
+    if r["hold"]:
+        out += ", held"
+    if r["publish_at"]:
+        out += f", pinned {r['publish_at']}"
+    return out
+
+
+def row_line(r: dict) -> str:
+    extra = f" | hook: {r['hook']}" if r["hook"] else ""
+    return (f"{r['short']:<22} {r['kind']:<7} {mmss(r['duration_s']):>7}  "
+            f"[{decision_text(r)}] {r['title']}{extra}")
+
+
+def print_rows(rows: list[dict]) -> None:
+    if not rows:
+        print("nothing waiting for review")
+    for r in rows:
+        print(row_line(r))
+        if r["comment"]:
+            print(f"{'':24}note: {r['comment'][:150]}")
+        if r["scheduled"]:
+            print(f"{'':24}scheduled {r['scheduled']}")
+        print(f"{'':24}{r['kitsu_url']}")
+        print(f"{'':24}{r['preview'] if r['preview'].exists() else r['file']}")
+
+
+def status_lines(s: dict) -> list[str]:
+    lines = []
+    for st in s["streams"]:
+        c = st["counts"]
+        parts = [f"{c.get(k, 0)} {k.replace('_', ' ')}" for k in
+                 ("pending", "changes_requested", "approved", "rejected") if c.get(k)]
+        held = f", {st['held']} held" if st["held"] else ""
+        lines.append(f"{st['stream']} ({st['date']}): {', '.join(parts) or 'empty'}{held}")
+    nxt = s["next"]
+    lines.append(f"schedule: {s['next_7_days']} releases in the next 7 days, "
+                 f"{s['uploaded']} uploaded"
+                 + (f"; next {nxt['publish_at'][:16].replace('T', ' ')} {nxt['title']}"
+                    if nxt else ""))
+    return lines

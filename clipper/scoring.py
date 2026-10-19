@@ -1,0 +1,519 @@
+"""Stage 4: Claude highlight scoring -> candidates.json.
+
+  summary  Pass A model condenses the transcript into a 15-minute-block timeline (for Pass B).
+  Pass A   one call per window: is there a self-contained clip? Short + horizontal cuts,
+           hook, title, score; hard-rejects other creators' video audio and casino play.
+  Pass B   one call over every kept candidate: dedupe, spread, rank the final picks.
+
+Prompts live in paths.prompts as <name>_<version>.md with {placeholders} filled from
+[scoring]. Every candidate records model and prompt_version so prompt changes can be
+compared. --dry-run writes the Pass A requests to scoring_requests/ without calling the API.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import numpy as np
+
+from .config import for_stream
+
+CATEGORIES = ["fail", "win", "joke", "insight", "reaction", "hot_take"]
+
+PASS_A_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "has_clip": {"type": "boolean"},
+        "third_party_audio": {"type": "boolean"},
+        "casino_gameplay": {"type": "boolean"},
+        "in_s": {"type": "number"},
+        "out_s": {"type": "number"},
+        "short_in_s": {"type": "number"},
+        "short_out_s": {"type": "number"},
+        "category": {"type": "string", "enum": CATEGORIES},
+        "hook": {"type": "string"},
+        "title": {"type": "string"},
+        "score": {"type": "integer"},
+        "why": {"type": "string"},
+        "source_audio_s": {"type": "number"},
+        "needs_context": {"type": "boolean"},
+    },
+    "required": ["has_clip", "third_party_audio", "casino_gameplay", "in_s", "out_s",
+                 "short_in_s", "short_out_s", "category", "hook", "title", "score", "why",
+                 "source_audio_s", "needs_context"],
+    "additionalProperties": False,
+}
+
+PASS_B_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "picks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "hook": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["id", "title", "hook", "reason"],
+                "additionalProperties": False,
+            },
+        },
+        "rejected": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "reason": {"type": "string"}},
+                "required": ["id", "reason"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["picks", "rejected"],
+    "additionalProperties": False,
+}
+
+SCAN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "moments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "start_s": {"type": "number"},
+                    "end_s": {"type": "number"},
+                    "summary": {"type": "string"},
+                    "why": {"type": "string"},
+                },
+                "required": ["start_s", "end_s", "summary", "why"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["moments"],
+    "additionalProperties": False,
+}
+
+SUMMARY_BLOCK_S = 900
+
+
+# ---------- inputs ----------
+
+def load_words(stream_dir: Path) -> list[dict]:
+    lines = (stream_dir / "words.jsonl").read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines]
+
+
+def transcript_lines(words: list[dict], a: float, b: float) -> list[str]:
+    """One line per WhisperX segment overlapping [a, b): "[start_s] text"."""
+    out, cur, seg = [], [], None
+    for w in words:
+        if w["end"] < a or w["start"] >= b:
+            continue
+        if w["seg"] != seg and cur:
+            out.append(f"[{cur[0]['start']:.1f}] " + " ".join(x["word"] for x in cur))
+            cur = []
+        seg = w["seg"]
+        cur.append(w)
+    if cur:
+        out.append(f"[{cur[0]['start']:.1f}] " + " ".join(x["word"] for x in cur))
+    return out
+
+
+def signal_table(sig: dict, a: int, b: int, bin_s: int = 10) -> str:
+    rows = ["t_start  chat/min  react  clip  loud_z  heat"]
+    for s in range(a, b, bin_s):
+        e = min(b, s + bin_s)
+        chat = sig["chat_msgs"][s:e].sum() * 60 / (e - s)
+        loud = np.nanmax(sig["loud_z"][s:e])
+        heat = np.nanmax(sig["heat"][s:e])
+        rows.append(f"{s:>7}  {chat:8.0f}  {int(sig['react'][s:e].sum()):5d}  "
+                    f"{int(sig['clip'][s:e].sum()):4d}  {loud:6.1f}  {heat:4.1f}")
+    return "\n".join(rows)
+
+
+def load_signals(stream_dir: Path) -> dict:
+    import pyarrow.parquet as pq
+
+    t = pq.read_table(stream_dir / "signals.parquet")
+    return {c: t[c].to_numpy(zero_copy_only=False) for c in t.column_names}
+
+
+def load_chat(stream_dir: Path, meta: dict) -> list[dict]:
+    from .signals import load_chat as _load
+
+    msgs, _ = _load(stream_dir, meta, int(np.ceil(meta["duration_s"])))
+    return msgs
+
+
+def snap(words: list[dict], t: float, key: str) -> float:
+    i = min(range(len(words)), key=lambda k: abs(words[k][key] - t))
+    return words[i][key]
+
+
+# ---------- prompts ----------
+
+def read_sections(path: Path, prefix: str, fmt: dict) -> dict[str, str]:
+    """Split a rule file on "## name" lines into {prefix_name: text}."""
+    out, name, buf = {}, None, []
+    for line in path.read_text(encoding="utf-8").format(**fmt).splitlines():
+        if line.startswith("## "):
+            if name:
+                out[f"{prefix}_{name}"] = "\n".join(buf).strip()
+            name, buf = line[3:].strip(), []
+        else:
+            buf.append(line)
+    if name:
+        out[f"{prefix}_{name}"] = "\n".join(buf).strip()
+    return out
+
+
+# Prompts that write text viewers see; [scoring] house_style rules are appended to them.
+VIEWER_FACING = {"score_a", "score_b", "meta", "chapters", "segments", "compilation",
+                 "thumbnail", "thumbnail_enquirer"}
+
+
+class Prompts:
+    def __init__(self, cfg: dict):
+        sc = cfg["scoring"]
+        self.version = sc["prompt_version"]
+        self.dir: Path = cfg["paths"]["prompts"]
+        self.house_style: list[str] = list(sc.get("house_style") or [])
+        self.vars = {"channel_name": sc["channel_name"], "audience": sc["audience"],
+                     "tone": sc["tone"], "max_picks": sc["max_picks"],
+                     "stream_context": sc["stream_context"],
+                     "max_source_audio_s": sc["max_source_audio_s"],
+                     "scan_max_per_block": sc["scan_max_per_block"],
+                     "known_figures": sc["known_figures"]}
+        # Swappable rule files, <kind>_<mode>_<version>.md, split into "## <section>" parts
+        # that fill {<kind>_<section>} placeholders. v3+: third_party; v4+: audience.
+        for kind, key, modes in (("third_party", "third_party_audio", ("reject", "allow_reactions")),
+                                 ("audience", "audience_knowledge", ("strangers", "fans"))):
+            if sc[key] not in modes:
+                raise SystemExit(f"scoring.{key} must be one of {modes}, not {sc[key]!r}")
+            rule = self.dir / f"{kind}_{sc[key]}_{self.version}.md"
+            if rule.exists():
+                self.vars.update(read_sections(rule, kind, self.vars))
+        # v3 prompts name the third-party sections {third_party_rule} / {third_party_rule_b}.
+        if "third_party_pass_a" in self.vars:
+            self.vars["third_party_rule"] = self.vars["third_party_pass_a"]
+            self.vars["third_party_rule_b"] = self.vars["third_party_pass_b"]
+
+    def get(self, name: str) -> str:
+        text = (self.dir / f"{name}_{self.version}.md").read_text(encoding="utf-8")
+        text = text.format(**self.vars)
+        if name in VIEWER_FACING and self.house_style:
+            text = (text.rstrip() + "\n\nHouse style for anything viewers see (titles, "
+                    "descriptions, hooks, chapter and thumbnail text):\n"
+                    + "\n".join(f"- {rule}" for rule in self.house_style) + "\n")
+        return text
+
+
+def pass_a_user(w: dict, words: list[dict], sig: dict, lead_in_s: int) -> str:
+    lead = transcript_lines(words, max(0, w["start_s"] - lead_in_s), w["start_s"])
+    body = transcript_lines(words, w["start_s"], w["end_s"])
+    peaks = ", ".join(str(p) for p in sorted(w["peaks"]))
+    chat = "\n".join(f"- {m}" for m in w.get("chat_sample", []))
+    origin = (f"Found by a transcript scan, not by chat: {w['scan_summary']}\n"
+              if w.get("scan_summary") else "")
+    return (
+        f"Window {w['start_s']}-{w['end_s']} s (chat peaks at {peaks} s).\n{origin}\n"
+        f"<lead_in>\n" + "\n".join(lead) + "\n</lead_in>\n\n"
+        f"<window>\n" + "\n".join(body) + "\n</window>\n\n"
+        f"<signals>\n{signal_table(sig, w['start_s'], w['end_s'])}\n</signals>\n\n"
+        f"<chat_at_peak>\n{chat}\n</chat_at_peak>"
+    )
+
+
+# ---------- API ----------
+
+class Claude:
+    PRICES = {  # $ per 1M input/output tokens, for the cost line only
+        "claude-haiku-5-5": (0.10, 0.50),
+        "claude-sonnet-5-5": (2.00, 10.00),
+        "claude-opus-5-5": (4.00, 20.00),
+    }
+
+    def __init__(self, workspace_id: str = ""):
+        import anthropic
+
+        # Keys not scoped to a workspace must name one on every request.
+        workspace_id = workspace_id or os.environ.get("ANTHROPIC_WORKSPACE_ID", "")
+        headers = {"anthropic-workspace-id": workspace_id} if workspace_id else None
+        self.client = anthropic.Anthropic(max_retries=4, default_headers=headers)
+        self.cost = 0.0
+
+    def _account(self, model: str, usage) -> dict:
+        pin, pout = self.PRICES.get(model, (0.0, 0.0))
+        self.cost += (usage.input_tokens * pin + usage.output_tokens * pout) / 1e6
+        return {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens}
+
+    def json_call(self, model: str, system: str, user: str, schema: dict,
+                  effort: str, fallback: bool = False,
+                  stream: bool = False) -> tuple[dict | None, dict]:
+        """Structured-output call. Returns (parsed JSON or None on refusal, meta).
+        stream=True for long inputs/outputs, so the request can't hit an HTTP timeout."""
+        kwargs = dict(
+            model=model, max_tokens=64000 if stream else 16000, system=system,
+            messages=[{"role": "user", "content": user}],
+            output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+        )
+        if fallback:
+            # Server-side refusal fallback (Claude API only); routes by refusal category.
+            kwargs.update(betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+            api = self.client.beta.messages
+        else:
+            api = self.client.messages
+        if stream:
+            with api.stream(**kwargs) as s:
+                resp = s.get_final_message()
+        else:
+            resp = api.create(**kwargs)
+        meta = {"model": resp.model, "request_id": getattr(resp, "_request_id", None),
+                "stop_reason": resp.stop_reason, **self._account(model, resp.usage)}
+        if resp.stop_reason == "refusal":
+            meta["refusal"] = getattr(resp.stop_details, "category", None)
+            return None, meta
+        if resp.stop_reason == "max_tokens":
+            raise RuntimeError(f"{model} hit max_tokens ({meta['request_id']})")
+        text = next(b.text for b in resp.content if b.type == "text")
+        return json.loads(text), meta
+
+    def text_call(self, model: str, system: str, user: str, effort: str) -> tuple[str, dict]:
+        resp = self.client.messages.create(
+            model=model, max_tokens=4000, system=system, output_config={"effort": effort},
+            messages=[{"role": "user", "content": user}])
+        meta = {"stop_reason": resp.stop_reason, **self._account(model, resp.usage)}
+        if resp.stop_reason == "refusal":
+            return "", meta
+        return "".join(b.text for b in resp.content if b.type == "text").strip(), meta
+
+
+# ---------- passes ----------
+
+def stream_summary(stream_dir: Path, words: list[dict], n: int, cfg: dict,
+                   claude: Claude, prompts: Prompts) -> list[dict]:
+    path = stream_dir / f"summary_{prompts.version}.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    sc = cfg["scoring"]
+    system = prompts.get("summary")
+
+    def one(a: int) -> dict:
+        lines = transcript_lines(words, a, a + SUMMARY_BLOCK_S)
+        if not lines:
+            return {"start_s": a, "summary": "(no speech)"}
+        text, _ = claude.text_call(sc["model_a"], system, "\n".join(lines), sc["effort_a"])
+        return {"start_s": a, "summary": text}
+
+    with ThreadPoolExecutor(sc["concurrency"]) as pool:
+        blocks = list(pool.map(one, range(0, n, SUMMARY_BLOCK_S)))
+    path.write_text(json.dumps(blocks, indent=2, ensure_ascii=False), encoding="utf-8")
+    return blocks
+
+
+def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
+                    claude: Claude, prompts: Prompts) -> list[dict]:
+    """Find own-voice moments block by block, independent of chat heat."""
+    path = stream_dir / f"scan_{prompts.version}.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    sc = cfg["scoring"]
+    system = prompts.get("scan")
+
+    def one(a: int) -> list[dict]:
+        lines = transcript_lines(words, a, a + SUMMARY_BLOCK_S)
+        if not lines:
+            return []
+        try:
+            out, _ = claude.json_call(sc["model_a"], system, "\n".join(lines), SCAN_SCHEMA,
+                                      sc["effort_a"])
+        except Exception as e:
+            print(f"scan block {a}: {type(e).__name__}: {e}")
+            return []
+        moments = (out or {}).get("moments", [])[:sc["scan_max_per_block"]]
+        return [m for m in moments if a - 60 <= m["start_s"] < m["end_s"] <= a + SUMMARY_BLOCK_S + 60]
+
+    with ThreadPoolExecutor(sc["concurrency"]) as pool:
+        moments = [m for block in pool.map(one, range(0, n, SUMMARY_BLOCK_S)) for m in block]
+    path.write_text(json.dumps(moments, indent=2, ensure_ascii=False), encoding="utf-8")
+    return moments
+
+
+def scan_windows(moments: list[dict], windows: list[dict], sig: dict, msgs: list[dict],
+                 sc: dict, lag: int) -> list[dict]:
+    """Turn scanned moments into Pass A windows, skipping ones a chat window already covers."""
+    from .signals import EMOTE
+
+    n = len(sig["heat"])
+    out = []
+    mt = np.array([m["t"] for m in msgs])
+    for m in sorted(moments, key=lambda m: m["start_s"]):
+        a = max(0, int(m["start_s"]) - sc["scan_pad_s"])
+        b = min(n, int(m["end_s"]) + sc["scan_pad_s"])
+        overlap = max((max(0, min(b, w["end_s"]) - max(a, w["start_s"])) for w in windows + out),
+                      default=0)
+        if b <= a or overlap / (b - a) > sc["scan_max_overlap"]:
+            continue
+        heat = np.nan_to_num(sig["heat"][a:b], nan=0.0)
+        p = a + int(np.argmax(heat))
+        lo, hi = np.searchsorted(mt, [p + lag - 5, p + lag + 15])
+        out.append({
+            "id": f"t{len(out) + 1:02d}", "source": "transcript", "rank": None,
+            "start_s": a, "end_s": b, "peak_s": p, "peaks": [p], "heat": float(heat.max()),
+            "scan_summary": m["summary"],
+            "chat_sample": [" ".join(EMOTE.sub(r" \1 ", x["content"]).split())
+                            for x in msgs[lo:hi]][:10],
+        })
+    return out
+
+
+def run_pass_a(windows: list[dict], words: list[dict], sig: dict, cfg: dict,
+               claude: Claude, prompts: Prompts) -> list[dict]:
+    sc = cfg["scoring"]
+    system = prompts.get("score_a")
+
+    def one(w: dict) -> dict:
+        rec = {"id": w.get("id") or f"w{w['rank']:02d}", "source": w.get("source", "chat"),
+               "window_rank": w["rank"], "window": [w["start_s"], w["end_s"]],
+               "heat": w["heat"], "pass": "A", "model": sc["model_a"],
+               "prompt_version": prompts.version}
+        user = pass_a_user(w, words, sig, sc["lead_in_s"])
+        try:
+            out, meta = claude.json_call(sc["model_a"], system, user, PASS_A_SCHEMA, sc["effort_a"])
+        except Exception as e:  # keep going; one bad window shouldn't sink the stream
+            return {**rec, "status": "error", "error": f"{type(e).__name__}: {e}"}
+        rec["api"] = meta
+        if out is None:
+            return {**rec, "status": "refused"}
+        rec.update(out)
+        rec["third_party_mode"] = sc["third_party_audio"]
+        too_much_source = (sc["third_party_audio"] == "allow_reactions"
+                           and out["source_audio_s"] > sc["max_source_audio_s"])
+        if out["third_party_audio"] or out["casino_gameplay"] or too_much_source:
+            rec["status"] = "rejected"
+            rec["has_clip"] = False
+        elif not out["has_clip"]:
+            rec["status"] = "no_clip"
+        elif out["needs_context"]:
+            rec["status"] = "rejected"
+        else:
+            rec["status"] = "kept"
+        if rec["status"] == "kept":
+            lo = max(0, w["start_s"] - sc["lead_in_s"])
+            span = [x for x in words if lo <= x["start"] < w["end_s"] + 30]
+            for a, b in (("in_s", "out_s"), ("short_in_s", "short_out_s")):
+                rec[a], rec[b] = snap(span, out[a], "start"), snap(span, out[b], "end")
+            rec["duration_s"] = round(rec["out_s"] - rec["in_s"], 2)
+            rec["short_duration_s"] = round(rec["short_out_s"] - rec["short_in_s"], 2)
+        return rec
+
+    with ThreadPoolExecutor(sc["concurrency"]) as pool:
+        return list(pool.map(one, windows))
+
+
+def run_pass_b(kept: list[dict], summary: list[dict], words: list[dict], cfg: dict,
+               claude: Claude, prompts: Prompts) -> dict:
+    sc = cfg["scoring"]
+    timeline = "\n".join(f"[{b['start_s'] // 60:>3} min] {b['summary']}" for b in summary)
+    cands = []
+    for c in kept:
+        text = " ".join(transcript_lines(words, c["in_s"], c["out_s"]))
+        cands.append(
+            f"<candidate id=\"{c['id']}\">\n"
+            f"time {c['in_s']:.1f}-{c['out_s']:.1f} s (short {c['short_in_s']:.1f}-"
+            f"{c['short_out_s']:.1f}), category {c['category']}, score {c['score']}, "
+            f"heat {c['heat']:.1f}\nhook: {c['hook']}\ntitle: {c['title']}\nwhy: {c['why']}\n"
+            f"transcript: {text}\n</candidate>")
+    from .analytics import feedback_block
+
+    user = (feedback_block(cfg, cfg["show"]["key"])
+            + f"<stream_timeline>\n{timeline}\n</stream_timeline>\n\n" + "\n\n".join(cands))
+    out, meta = claude.json_call(sc["model_b"], prompts.get("score_b"), user, PASS_B_SCHEMA,
+                                 sc["effort_b"], fallback=True)
+    result = {"pass": "B", "model": sc["model_b"], "prompt_version": prompts.version, "api": meta}
+    if out is None:
+        return {**result, "status": "refused"}
+    ids = {c["id"] for c in kept}
+    seen = [p["id"] for p in out["picks"]] + [r["id"] for r in out["rejected"]]
+    result["unaccounted"] = sorted(ids - set(seen))
+    result["unknown_ids"] = sorted(set(seen) - ids)
+    return {**result, "status": "ok", **out}
+
+
+def preflight(claude: Claude, model: str) -> None:
+    """One tiny call so account problems (auth, workspace, credits) stop the run with
+    one clear line instead of 60 identical failures."""
+    import anthropic
+
+    try:
+        claude.client.messages.create(model=model, max_tokens=16,
+                                      messages=[{"role": "user", "content": "Say OK."}])
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError,
+            anthropic.BadRequestError) as e:
+        raise SystemExit(f"Claude API unavailable ({e.status_code}): {e.message}") from None
+
+
+def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
+    cfg = for_stream(cfg, stream_dir)
+    sc = cfg["scoring"]
+    prompts = Prompts(cfg)
+    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+    windows = json.loads((stream_dir / "windows.json").read_text(encoding="utf-8"))["windows"]
+    words = load_words(stream_dir)
+    sig = load_signals(stream_dir)
+
+    if dry_run:
+        d = stream_dir / "scoring_requests"
+        d.mkdir(exist_ok=True)
+        system = prompts.get("score_a")
+        for w in windows:
+            user = pass_a_user(w, words, sig, sc["lead_in_s"])
+            (d / f"pass_a_w{w['rank']:02d}.md").write_text(
+                f"# system\n\n{system}\n\n# user\n\n{user}\n", encoding="utf-8")
+        print(f"wrote {len(windows)} Pass A requests to {d}")
+        return {}
+
+    claude = Claude(sc["workspace_id"])
+    preflight(claude, sc["model_a"])
+    t0 = time.time()
+    n = int(np.ceil(meta["duration_s"]))
+    with ThreadPoolExecutor(3) as pool:
+        f_sum = pool.submit(stream_summary, stream_dir, words, n, cfg, claude, prompts)
+        f_scan = pool.submit(transcript_scan, stream_dir, words, n, cfg, claude, prompts) \
+            if sc["transcript_scan"] else None
+        f_a = pool.submit(run_pass_a, windows, words, sig, cfg, claude, prompts)
+        summary, results = f_sum.result(), f_a.result()
+        if f_scan:
+            moments = f_scan.result()
+            extra = scan_windows(moments, windows, sig, load_chat(stream_dir, meta), sc,
+                                 cfg["signals"]["chat_lag_s"])
+            print(f"transcript scan: {len(moments)} moments, {len(extra)} new windows")
+            results += run_pass_a(extra, words, sig, cfg, claude, prompts)
+    kept = [r for r in results if r["status"] == "kept"]
+    counts = {s: sum(r["status"] == s for r in results)
+              for s in ("kept", "no_clip", "rejected", "refused", "error")}
+    print(f"Pass A: {counts} in {time.time() - t0:.0f}s")
+
+    pass_b = run_pass_b(kept, summary, words, cfg, claude, prompts) if kept else {
+        "pass": "B", "status": "skipped", "picks": [], "rejected": []}
+    out = {"stream_id": stream_dir.name, "title": meta.get("title"),
+           "prompt_version": prompts.version, "cost_usd": round(claude.cost, 4),
+           "pass_a": results, "pass_b": pass_b}
+    (stream_dir / "candidates.json").write_text(json.dumps(out, indent=2, ensure_ascii=False),
+                                                encoding="utf-8")
+
+    by_id = {r["id"]: r for r in results}
+    print(f"Pass B: {len(pass_b.get('picks', []))} picks; cost ${claude.cost:.3f}")
+    for i, p in enumerate(pass_b.get("picks", []), 1):
+        c = by_id.get(p["id"], {})
+        print(f"{i:>2}. {p['id']} {c.get('in_s', 0):8.1f}-{c.get('out_s', 0):8.1f}s "
+              f"[{c.get('category')}, A={c.get('score')}] {p['title']}")
+    return out
