@@ -1,7 +1,8 @@
 # Clipper handoff (2026-10-18)
 
 Stream clipper for Kino Casino (Kick channel `kinocasinogaming`) → YouTube channel **Lolcow Cinema**.
-Repo: `C:\clipper` (Python package `clipper/`, config `clipper.toml`, prompts `prompts/`).
+Repo: `C:\clipper`, remote https://github.com/byvfx/clipper (private, pushed 2026-10-18). Python package
+`clipper/`, config `clipper.toml` (gitignored; `clipper.example.toml` is tracked), prompts `prompts/`.
 Plan doc: https://claude.ai/code/artifact/a9bb9e38-ced0-4455-8d8e-18a78122f45f
 Keys are Windows **User** env vars (ANTHROPIC_API_KEY, KITSU_TOKEN); agent shells must load them, e.g.
 `export KITSU_TOKEN="$(powershell.exe -NoProfile -Command "[Environment]::GetEnvironmentVariable('KITSU_TOKEN','User')" | tr -d '\r')"`.
