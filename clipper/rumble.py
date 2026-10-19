@@ -29,7 +29,7 @@ import json
 import os
 import shutil
 import webbrowser
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -158,7 +158,7 @@ def upload_txt(e: dict, t: dict, cfg: dict, thumb: bool, video_name: str) -> str
         f"DESCRIPTION\n{t['description']}",
         f"TAGS\n{', '.join(t['tags'])}",
         f"CATEGORY\n{rc['category']}",
-        f"THUMBNAIL\n" + ("thumbnail.jpg (1280x720)" if thumb
+        "THUMBNAIL\n" + ("thumbnail.jpg (1280x720)" if thumb
                           else "none made; pick a frame on the form (or run clipper thumbs)"),
         f"LICENSING\n{rc['license']}" + (f"  ({license_note})" if license_note else ""),
         f"VISIBILITY\n{rc['visibility']}; {release_time(e, cfg)}",
@@ -190,7 +190,7 @@ def prepare(cfg: dict, e: dict, kitsu: list) -> dict:
         indent=2, ensure_ascii=False), encoding="utf-8")
     kitsu.append((e, {"Rumble": "ready"}))
     return {"status": "ready", "folder": str(folder),
-            "prepared_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+            "prepared_at": datetime.now(UTC).isoformat(timespec="seconds")}
 
 
 # ---------- Kitsu ----------
@@ -200,7 +200,6 @@ def push_kitsu(cfg: dict, updates: list[tuple[dict, dict]]) -> None:
     if not cfg["rumble"]["kitsu"] or not updates:
         return
     from . import review
-
     from .config import for_stream
 
     try:
@@ -229,7 +228,7 @@ def push_kitsu(cfg: dict, updates: list[tuple[dict, dict]]) -> None:
                       else gazu.shot.update_shot_data)
             if data:
                 update(st["entity_id"], data)
-    except (SystemExit, Exception) as ex:  # schedule.json is the record; Kitsu is a view
+    except (SystemExit, Exception) as ex:  # noqa: BLE001  # schedule.json is the record; Kitsu is a view
         print(f"  warning: Kitsu not updated: {ex}")
 
 
@@ -258,7 +257,7 @@ def mark_done(cfg: dict, ref: str, url: str = "", undo: bool = False) -> None:
         print(f"{e['key']}: Rumble mark cleared")
         return
     rec = {**prev, "status": "uploaded", "url": url or prev.get("url", ""),
-           "uploaded_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+           "uploaded_at": datetime.now(UTC).isoformat(timespec="seconds")}
     save_platform(cfg, {e["key"]: rec})
     push_kitsu(cfg, [(e, {"Rumble": "uploaded", "Rumble URL": rec["url"]})])
     print(f"{e['key']}: on Rumble{' at ' + rec['url'] if rec['url'] else ''}")
@@ -282,7 +281,7 @@ def run(cfg: dict, stream: str | None = None, items: list[str] | None = None,
         from_kitsu = done_in_kitsu(cfg, e) if r.get("status") != "uploaded" else None
         if from_kitsu is not None:
             updates[e["key"]] = {**r, "status": "uploaded", "url": from_kitsu, "uploaded_at":
-                                 datetime.now(timezone.utc).isoformat(timespec="seconds")}
+                                 datetime.now(UTC).isoformat(timespec="seconds")}
             print(f"  {e['key']}: marked uploaded in Kitsu {from_kitsu}")
             continue
         if r.get("status") == "uploaded":

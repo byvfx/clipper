@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -48,7 +48,7 @@ def credentials(paths: dict, sign_in: bool = False):
     if creds and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
-        except Exception as e:  # revoked, or a 7-day Testing-mode token that expired
+        except Exception as e:  # noqa: BLE001  # revoked, or a 7-day Testing-mode token that expired
             raise SystemExit(f"YouTube token refresh failed ({e}); run: clipper upload --sign-in")
     if not creds or not creds.valid:
         if not sign_in:
@@ -89,7 +89,7 @@ def metadata(entry: dict, cfg: dict) -> dict:
         fields = json.loads(review_path.read_text(encoding="utf-8")).get(key, {}).get("fields", {})
     # Kitsu's columns (your edits, or what publish put there) first, then the draft.
     proposed = draft_fields(draft) if draft else {}
-    value = lambda name: fields.get(name) or proposed.get(name) or ""  # noqa: E731
+    value = lambda name: fields.get(name) or proposed.get(name) or ""
     title = full_title(cfg, value("YouTube title") or entry["title"])
     description = value("YouTube description")
     hashtags = hashtag_line(value("Hashtags"))
@@ -220,7 +220,7 @@ def backfill_thumbnails(cfg: dict, sched: dict, sched_path: Path, dry_run: bool)
             set_thumbnail(yt, e["video_id"], m["thumb"])
         except ThumbnailsNotAllowed as ex:
             raise SystemExit(str(ex)) from None
-        e["thumbnail_set"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        e["thumbnail_set"] = datetime.now(UTC).isoformat(timespec="seconds")
         sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"  {e['url']} thumbnail set")
 
@@ -257,7 +257,7 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
         backfill_thumbnails(cfg, sched, sched_path, dry_run)
         return
     tz = ZoneInfo(sched["timezone"])
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     horizon = now + timedelta(hours=yc["upload_ahead_hours"])
     due, missed = [], []
     for e in sched["entries"]:
@@ -290,7 +290,7 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     playlists = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     for e in due:
         m = metadata(e, cfg)
-        publish_utc = datetime.fromisoformat(e["publish_at"]).astimezone(timezone.utc)
+        publish_utc = datetime.fromisoformat(e["publish_at"]).astimezone(UTC)
         body = {
             "snippet": {"title": m["title"], "description": m["description"], "tags": m["tags"],
                         "categoryId": yc["category_id"], "defaultLanguage": yc["language"],
@@ -306,8 +306,8 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
         url = f"https://youtu.be/{vid}"
         # Record the upload before the optional extras, so a failure there can't
         # make the next run upload the same video twice.
-        done = dict(status="uploaded", video_id=vid, url=url,
-                    uploaded_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        done = {"status": "uploaded", "video_id": vid, "url": url,
+                "uploaded_at": datetime.now(UTC).isoformat(timespec="seconds")}
         e.update(done)
         # Re-read first: `clipper rumble` may have written other platforms' marks meanwhile.
         fresh = json.loads(sched_path.read_text(encoding="utf-8"))
@@ -322,12 +322,12 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
         if m["thumb"]:  # its own try: a refusal here shouldn't skip captions and playlist
             try:
                 set_thumbnail(yt, vid, m["thumb"])
-                e["thumbnail_set"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                e["thumbnail_set"] = datetime.now(UTC).isoformat(timespec="seconds")
                 sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
                 extras.append("thumbnail")
             except ThumbnailsNotAllowed as ex:
                 print(f"  warning: {ex}")
-            except Exception as ex:
+            except Exception as ex:  # noqa: BLE001  # the video is up, the thumbnail is optional
                 print(f"  warning: thumbnail: {type(ex).__name__}: {ex}")
         try:
             if yc["captions"] and m["srt"]:
@@ -344,7 +344,7 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
                 extras.append(f"playlist {m['playlist']}")
             kitsu_url(cfg, m, url)
             extras.append("Kitsu link")
-        except Exception as ex:  # the video itself is up; report and move on
+        except Exception as ex:  # noqa: BLE001  # the video itself is up; report and move on
             print(f"  warning: after upload: {type(ex).__name__}: {ex}")
         if extras:
             print(f"  + {', '.join(extras)}")

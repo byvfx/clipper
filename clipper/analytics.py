@@ -19,7 +19,7 @@ Scoring (Pass B) gets a short "how past uploads did" block per show once at leas
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .config import _root, for_stream
@@ -86,7 +86,7 @@ def run(cfg: dict, sign_in: bool = False) -> dict:
         return data
     yt = build("youtube", "v3", credentials=creds, cache_discovery=False)
     ya = build("youtubeAnalytics", "v2", credentials=creds, cache_discovery=False) if has_analytics else None
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     by_id = {e["video_id"]: e for e in up}
     ids = list(by_id)
     for i in range(0, len(ids), 50):
@@ -108,7 +108,7 @@ def run(cfg: dict, sign_in: bool = False) -> dict:
         for vid, rec in data.items():
             if rec.get("d7") or vid not in by_id:
                 continue
-            pub = datetime.fromisoformat(rec["publish_at"]).astimezone(timezone.utc).date()
+            pub = datetime.fromisoformat(rec["publish_at"]).astimezone(UTC).date()
             if (now.date() - pub).days < 8:  # Analytics lags ~2 days; wait for a full week
                 continue
             r = ya.reports().query(

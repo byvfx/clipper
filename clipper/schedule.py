@@ -72,8 +72,9 @@ def candidates(streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[list[dict], l
                 if kind == "segment":
                     approved_segments.add(r["id"])
         seg_data = json.loads((sdir / "segments.json").read_text(encoding="utf-8"))
-        seg_keys = lambda comp: [f"{sdir.name}/{k}" for k, r in review.items()  # noqa: E731
-                                 if r["kind"] == "segment" and r["id"] in comp["segments"]]
+        def seg_keys(comp: dict, sdir: Path = sdir, review: dict = review) -> list[str]:
+            return [f"{sdir.name}/{k}" for k, r in review.items()
+                    if r["kind"] == "segment" and r["id"] in comp["segments"]]
         for comp in seg_data.get("compilations", []):
             key = f"{sdir.name}/comp-{comp['file'].removesuffix('.mp4')}"
             if key.split("/", 1)[1] in review:

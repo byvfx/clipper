@@ -108,7 +108,7 @@ def duration(asset: dict) -> float:
 # ---------- captions ----------
 
 def srt_time(t: float) -> str:
-    ms = int(round(t * 1000))
+    ms = round(t * 1000)
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
@@ -124,15 +124,15 @@ def make_srt(words: list[dict], parts: list[tuple], mc: dict, mask=lambda s: s) 
     """Cues of up to two lines of srt_line_chars, broken at pauses, sentence ends and
     srt_max_s, on each video's own timeline."""
     cues = []
+
+    def flush(cur: list[dict], a: float, off: float) -> None:
+        if cur:
+            cues.append((cur[0]["start"] - a + off, cur[-1]["end"] - a + off,
+                         wrap(mask(" ".join(w["word"] for w in cur)), mc["srt_line_chars"])))
+            cur.clear()
+
     for a, b, off in parts:
         cur: list[dict] = []
-
-        def flush():
-            if cur:
-                cues.append((cur[0]["start"] - a + off, cur[-1]["end"] - a + off,
-                             wrap(mask(" ".join(w["word"] for w in cur)), mc["srt_line_chars"])))
-                cur.clear()
-
         for w in words:
             if w["start"] < a or w["end"] > b:
                 continue
@@ -140,9 +140,9 @@ def make_srt(words: list[dict], parts: list[tuple], mc: dict, mask=lambda s: s) 
                         or len(" ".join(x["word"] for x in cur)) + len(w["word"]) > 2 * mc["srt_line_chars"]
                         or w["end"] - cur[0]["start"] > mc["srt_max_s"]
                         or cur[-1]["word"][-1:] in ".?!"):
-                flush()
+                flush(cur, a, off)
             cur.append(w)
-        flush()
+        flush(cur, a, off)
     return "".join(f"{i}\n{srt_time(s)} --> {srt_time(max(e, s + 0.3))}\n{t}\n\n"
                    for i, (s, e, t) in enumerate(cues, 1))
 

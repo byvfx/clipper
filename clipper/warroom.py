@@ -25,7 +25,7 @@ import sys
 import threading
 import time
 import webbrowser
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -52,7 +52,7 @@ def age_s(iso: str | None) -> float:
     if not iso:
         return 1e9
     try:
-        return (datetime.now(timezone.utc) - datetime.fromisoformat(iso)).total_seconds()
+        return (datetime.now(UTC) - datetime.fromisoformat(iso)).total_seconds()
     except ValueError:
         return 1e9
 
@@ -275,7 +275,7 @@ def sync_all(cfg: dict, stream: str | None = None) -> None:
                 review.sync(d, cfg, quiet=True)
         except (Exception, SystemExit) as e:  # noqa: BLE001
             SYNC["error"] = str(e)[:200]
-        SYNC.update(running=False, last=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        SYNC.update(running=False, last=datetime.now(UTC).isoformat(timespec="seconds"))
 
     threading.Thread(target=run, daemon=True).start()
 

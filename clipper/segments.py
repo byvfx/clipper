@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+from itertools import pairwise
 from pathlib import Path
 
 from .config import for_stream
@@ -100,7 +101,7 @@ def split(stream_dir: Path, cfg: dict, claude: Claude, prompts: Prompts) -> dict
         s["duration_s"] = round(s["end_s"] - s["start_s"], 1)
         s["file"] = f"{s['id']}_{slug(s['topic'])}.mp4"
     gaps = [(a["id"], b["id"], round(b["start_s"] - a["end_s"], 1))
-            for a, b in zip(segs, segs[1:]) if abs(b["start_s"] - a["end_s"]) > 30]
+            for a, b in pairwise(segs) if abs(b["start_s"] - a["end_s"]) > 30]
     return {"stream_id": stream_dir.name, "model": seg_cfg["model"],
             "prompt_version": prompts.version, "api": meta, "gaps": gaps, "segments": segs}
 

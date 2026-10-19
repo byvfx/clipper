@@ -23,7 +23,7 @@ class Bleeper:
         # Slurs always; swearing too when [bleep] profanity is on.
         pats = list(bc["patterns"]) + (list(bc.get("profanity_patterns") or [])
                                        if bc.get("profanity") else [])
-        self.rx = re.compile("|".join(f"(?:{p})" for p in pats), re.I) if pats else None
+        self.rx = re.compile("|".join(f"(?:{p})" for p in pats), re.IGNORECASE) if pats else None
 
     @property
     def on(self) -> bool:

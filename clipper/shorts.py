@@ -112,7 +112,7 @@ def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tu
             nh = w / aspect
             y += (h - nh) * fy
             h = nh
-        even = lambda v: int(v) // 2 * 2  # noqa: E731
+        even = lambda v: int(v) // 2 * 2
         crops.append((even(x), even(y), even(w), even(h), ph))
     if sum(c[4] for c in crops) != out_h:
         raise SystemExit(f"layout panels add up to {sum(c[4] for c in crops)} px, not {out_h}")
@@ -162,7 +162,7 @@ def ass_color(hex_rgb: str, alpha: int = 0) -> str:
 
 def ass_time(t: float) -> str:
     t = max(0.0, t)
-    cs = int(round(t * 100))
+    cs = round(t * 100)
     return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
 
 
@@ -217,7 +217,7 @@ def write_ass(words: list[dict], t0: float, dur: float, sc: dict, layout: dict,
         -1, 0, 0, 0, 100, 100, 1, 0, 1, sc["caption_outline_px"], sc["caption_shadow_px"],
         5, 60, 60, 0, 1])
     path.write_text(
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\n"
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\n"  # noqa: UP031
         "ScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, "
         "PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, "
         "StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, "
@@ -239,9 +239,10 @@ def probe_size(video: Path) -> tuple[int, int]:
 
 def measure_loudness(video: Path, sc: dict) -> dict:
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-vn", "-af",
-                        f"loudnorm=I={sc['lufs']}:TP={sc['true_peak']}:LRA={sc['lra']}"
-                        ":print_format=json", "-f", "null", "-"],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+                        (f"loudnorm=I={sc['lufs']}:TP={sc['true_peak']}:LRA={sc['lra']}"
+                         ":print_format=json"), "-f", "null", "-"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       check=False)
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr)
     if not m:
         raise SystemExit(f"loudnorm measurement failed for {video.name}")

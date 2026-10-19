@@ -39,7 +39,7 @@ def fail(area: str, what: str, hint: str = "") -> None:
 
 def run(cmd: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=timeout)
+                          errors="replace", timeout=timeout, check=False)
 
 
 # ---------- checks ----------
@@ -180,14 +180,14 @@ def check_gpu(cfg: dict) -> None:
     tc = cfg["transcribe"]
     if tc["backend"] == "mlx":
         try:
-            import mlx_whisper  # noqa: F401,PLC0415
+            import mlx_whisper  # noqa: F401
             ok("gpu", f"mlx-whisper installed ({tc['mlx_model']})")
         except ImportError:
             fail("gpu", "[transcribe] backend = mlx but mlx-whisper isn't installed",
                  "on an Apple Silicon Mac: uv sync --extra mac")
         return
     try:
-        import torch  # noqa: PLC0415
+        import torch
     except ImportError:
         warn("gpu", "torch not installed: this machine can't transcribe",
              "only the GPU worker needs it: uv sync --extra gpu")
@@ -206,7 +206,7 @@ def check_gpu(cfg: dict) -> None:
     else:
         ok("gpu", f"transcribe device {tc['device']} (torch {torch.__version__})")
     try:
-        import whisperx  # noqa: F401,PLC0415
+        import whisperx  # noqa: F401
         ok("gpu", "whisperx importable")
     except Exception as e:  # noqa: BLE001
         fail("gpu", f"whisperx import failed: {e}", "uv sync --extra gpu")
@@ -227,14 +227,14 @@ def check_keys(cfg: dict, role: str) -> None:
             "keys", f"${rc['token_env']} (Kitsu bot token) " + ("set" if os.environ.get(rc["token_env"]) else "not set"),
             "" if os.environ.get(rc["token_env"]) else "Kitsu > Bots > new token; set it as a user env var")
     if cfg["discord"]["enabled"] or role == "bot":
-        from .notify import token  # noqa: PLC0415
+        from .notify import token
         try:
             token(cfg)
             ok("keys", "Discord bot token found")
         except SystemExit as e:
             fail("keys", f"Discord: {e}", f"put the bot token in {cfg['paths']['discord_token']}")
         try:
-            import discord  # noqa: F401,PLC0415
+            import discord  # noqa: F401
             ok("keys", "discord.py installed")
         except ImportError:
             (fail if role == "bot" else warn)("keys", "discord.py not installed (needed for `clipper bot`)",
@@ -251,11 +251,11 @@ def check_keys(cfg: dict, role: str) -> None:
 
 
 def check_online(cfg: dict, role: str) -> None:
-    import requests  # noqa: PLC0415
+    import requests
 
     if role != "nas" and os.environ.get("ANTHROPIC_API_KEY"):
         try:
-            from .scoring import Claude  # noqa: PLC0415
+            from .scoring import Claude
             Claude(cfg["scoring"]["workspace_id"]).client.models.retrieve(cfg["scoring"]["model_a"])
             ok("online", f"Anthropic API answers ({cfg['scoring']['model_a']} available)")
         except Exception as e:  # noqa: BLE001
@@ -263,8 +263,8 @@ def check_online(cfg: dict, role: str) -> None:
                  "check the key, or set [scoring] workspace_id / $ANTHROPIC_WORKSPACE_ID")
     if role != "nas" and os.environ.get(cfg["review"]["token_env"]) and cfg["review"]["host"]             and "<" not in cfg["review"]["host"]:
         try:
-            from . import review  # noqa: PLC0415
-            from .config import for_show  # noqa: PLC0415
+            from . import review
+            from .config import for_show
             gazu = review.connect(cfg["review"])
             ok("online", f"Kitsu answers at {cfg['review']['host']}")
             for key in _root(cfg)["shows"] or [""]:
@@ -278,7 +278,7 @@ def check_online(cfg: dict, role: str) -> None:
             fail("online", f"Kitsu: {e}", "is the NAS up, and this machine on its network?")
     if cfg["discord"]["enabled"] or role == "bot":
         try:
-            from .notify import token  # noqa: PLC0415
+            from .notify import token
             r = requests.get("https://discord.com/api/v10/users/@me",
                              headers={"Authorization": f"Bot {token(cfg)}"}, timeout=15)
             (ok if r.ok else fail)("online", f"Discord bot {r.json().get('username', '?')}" if r.ok

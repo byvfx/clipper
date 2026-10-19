@@ -350,9 +350,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "stream_context": "",     # show name, regulars, channel emotes; v2+ prompts
         # Style rules appended to every prompt that writes viewer-facing text (titles,
         # descriptions, hooks, chapters, thumbnails). Add your own notes here.
-        "house_style": ['Use the word "hosts" rarely; it reads as machine-written. Name the '
-                        'person (Andy, Ashton, Jer...) or make the subject the actor '
-                        '("Nobody buys it").'],
+        "house_style": [('Use the word "hosts" rarely; it reads as machine-written. Name the '
+                         'person (Andy, Ashton, Jer...) or make the subject the actor '
+                         '("Nobody buys it").')],
         "third_party_audio": "reject",  # or "allow_reactions"; v3+ prompts
         "max_source_audio_s": 5,  # allow_reactions: most source audio a Short may carry
         "audience_knowledge": "strangers",  # or "fans" (know known_figures); v4+ prompts

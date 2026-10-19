@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import actions, notify, review
@@ -37,7 +37,7 @@ def signature(embed: dict, components: list[dict]) -> str:
 def stream_dirs(cfg: dict) -> list[Path]:
     """Streams with posted cards, started within refresh_days (0 = all)."""
     days = cfg["discord"]["refresh_days"]
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days) if days else None
+    cutoff = datetime.now(UTC) - timedelta(days=days) if days else None
     out = []
     for d in actions.review_dirs(cfg):
         if not (d / "discord.json").exists():
@@ -45,9 +45,9 @@ def stream_dirs(cfg: dict) -> list[Path]:
         started = (actions.load_json(d / "meta.json", {}) or {}).get("started_at", "")
         if cutoff and started:
             try:
-                when = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                when = datetime.fromisoformat(started)
                 if when.tzinfo is None:
-                    when = when.replace(tzinfo=timezone.utc)
+                    when = when.replace(tzinfo=UTC)
                 if when < cutoff:
                     continue
             except ValueError:

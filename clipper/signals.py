@@ -45,7 +45,7 @@ def load_chat(stream_dir: Path, meta: dict, n: int) -> tuple[list[dict], np.ndar
     for f in files:
         if f is not full:
             a = int(f.stem) - t0
-            covered[max(0, int(a)):min(n, int(math.ceil(a + CHAT_CHUNK_S)))] = True
+            covered[max(0, int(a)):min(n, math.ceil(a + CHAT_CHUNK_S))] = True
         for line in f.read_text(encoding="utf-8").splitlines():
             m = json.loads(line)
             if f is not full or "t" not in m:
@@ -201,7 +201,7 @@ def hms(s: float) -> str:
 
 def run(stream_dir: Path, sc: dict) -> list[dict]:
     meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
-    n = int(math.ceil(meta["duration_s"]))
+    n = math.ceil(meta["duration_s"])
     lag = sc["chat_lag_s"]
 
     msgs, covered = load_chat(stream_dir, meta, n)
@@ -219,7 +219,7 @@ def run(stream_dir: Path, sc: dict) -> list[dict]:
     clip_z = count_z(clip_n, covered, bs, sm, cap)
     loud_z = level_z(uniform_filter1d(loud, size=3, mode="nearest"), np.ones(n, bool), bs, cap)
 
-    pos = lambda z: np.clip(np.nan_to_num(z), 0, None)  # noqa: E731
+    pos = lambda z: np.clip(np.nan_to_num(z), 0, None)
     heat = (sc["w_chat"] * pos(chat_z) + sc["w_react"] * pos(react_z)
             + sc["w_clip"] * pos(clip_z) + sc["w_loud"] * pos(loud_z))
     heat[~covered] = np.nan  # no chat data -> don't pick from loudness alone

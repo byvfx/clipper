@@ -101,7 +101,7 @@ DETAILS = [("YouTube title", "title", "YouTube title", 100, False),
 
 
 class Details(discord.ui.Modal):
-    def __init__(self, bot: "Bot", ref: str, row: dict):
+    def __init__(self, bot: Bot, ref: str, row: dict):
         super().__init__(title="YouTube title and details", timeout=900)
         self.bot, self.ref, self.fields = bot, ref, []
         for col, key, label, max_len, multiline in DETAILS:
@@ -116,13 +116,13 @@ class Details(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
-        same = lambda a, b: a.split() == b.split()  # noqa: E731  (Discord may re-wrap text)
+        same = lambda a, b: a.split() == b.split()
         changes = {col: f.value for col, f, shown in self.fields if not same(f.value, shown)}
         await self.bot.apply(interaction, "details", self.ref, changes)
 
 
 class Form(discord.ui.Modal):
-    def __init__(self, bot: "Bot", action: str, ref: str, default: str = ""):
+    def __init__(self, bot: Bot, action: str, ref: str, default: str = ""):
         title, label, required, max_len, multiline = FORMS[action]
         super().__init__(title=title, timeout=900)
         self.bot, self.action, self.ref = bot, action, ref
@@ -505,7 +505,7 @@ def single_instance(cfg: dict):
     (two would race to answer every button)."""
     path = cfg["paths"]["streams"] / ".bot.lock"
     path.parent.mkdir(parents=True, exist_ok=True)
-    f = open(path, "a+")
+    f = open(path, "a+")  # noqa: SIM115 (held for the process's life)
     try:
         if os.name == "nt":
             import msvcrt

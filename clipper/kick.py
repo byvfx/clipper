@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -89,7 +89,7 @@ def _get(url: str, ua: str, limiter: RateLimiter | None = None) -> Any:
 def _parse_ts(s: str) -> datetime:
     # API uses both "2026-10-08 00:28:50" and ISO-8601 with Z; all UTC.
     dt = datetime.fromisoformat(s.replace("Z", "+00:00").replace(" ", "T"))
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 def parse_url(url: str) -> tuple[str, str]:

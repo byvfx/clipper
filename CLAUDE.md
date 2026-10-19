@@ -54,4 +54,4 @@ whenever behaviour changes.
 
 - `clipper doctor --role gpu --offline` after changing config, ffmpeg, fonts or dependencies.
 - Try risky changes on the test stream `kick-131151926` before a real one.
-- `uvx ruff check clipper` before committing (ruff is not in the venv; the rule set is the user-level ruff config, not pyproject). It has existing findings, mostly unused noqa and datetime.utc; do not add new ones. Avoid `uv run` while the bot is up: it re-syncs and cannot replace the running clipper.exe.
+- `uvx ruff check clipper` before committing (ruff is not in the venv; the rule set is the user-level ruff config, not pyproject). The tree is clean as of 2026-10-19; keep it that way. Avoid `uv run` while the bot is up: it re-syncs and cannot replace the running clipper.exe.

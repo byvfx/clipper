@@ -24,7 +24,7 @@ import hashlib
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .config import _root, for_stream, stream_dir
@@ -375,14 +375,14 @@ def process(cfg: dict, sdir: Path, key: str, note: str, comment_id: str,
     p, cost = plan(cfg, sdir, key, st, row, note)
     print(f"{short}: {note!r}\n  plan: {json.dumps(p, ensure_ascii=False)}  (${cost:.3f})", flush=True)
     entry = {"comment_id": comment_id, "comment": note,
-             "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             "at": datetime.now(UTC).isoformat(timespec="seconds"),
              "plan": p, "cost_usd": round(cost, 4)}
     if dry_run:
         return entry
     who = "clipper retake"
     try:
         done, videos = apply(cfg, sdir, key, st, p, who)
-    except Exception as e:  # noqa: BLE001 - the note says what failed; the item stays in retake
+    except Exception as e:
         entry.update(result="error", error=f"{type(e).__name__}: {e}")
         record(sdir, key, entry)
         gazu = review.connect(cfg["review"])

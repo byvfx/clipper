@@ -36,7 +36,7 @@ def keyframes(stream_dir: Path, src: Path) -> list[float]:
     cache = stream_dir / "keyframes.json"
     if cache.exists():
         return json.loads(cache.read_text())
-    probe = lambda args: subprocess.run(  # noqa: E731
+    probe = lambda args: subprocess.run(
         ["ffprobe", "-v", "error", *args, str(src)], check=True, capture_output=True, text=True
     ).stdout
     start = float(probe(["-show_entries", "format=start_time", "-of", "csv=p=0"]).strip())

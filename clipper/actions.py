@@ -386,7 +386,7 @@ def status(cfg: dict, sync: bool = False) -> dict:
 def mmss(s: float | None) -> str:
     if s is None:
         return "?"
-    s = int(round(s))
+    s = round(s)
     return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
 
 

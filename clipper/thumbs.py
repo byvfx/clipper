@@ -356,7 +356,7 @@ def font_path(tc: dict, key: str = "font") -> str:
 
 def font_at_cap(path: str, cap: float) -> ImageFont.FreeTypeFont:
     probe = ImageFont.truetype(path, 200)
-    l, t, r, b = probe.getbbox("H")
+    _, t, _, b = probe.getbbox("H")
     return ImageFont.truetype(path, max(8, int(200 * cap / (b - t))))
 
 
@@ -438,7 +438,7 @@ def compose(frame: Path, choice: dict, tc: dict, dst: Path) -> int:
         return save(img, dst, tc["max_bytes"])
     path = font_path(tc)
     lines, f = fit_text(words, tc, path, W - 2 * m)
-    l, t, r, b = f.getbbox("H")
+    _, t, _, b = f.getbbox("H")
     cap, gap = b - t, (b - t) * 0.22
     block = len(lines) * cap + (len(lines) - 1) * gap
     y0 = (max(m, top_used + m // 2) if choice["position"] == "top"

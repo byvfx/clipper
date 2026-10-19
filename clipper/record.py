@@ -40,7 +40,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +62,7 @@ def _now() -> float:
 
 
 def _iso(ts: float) -> str:
-    return datetime.fromtimestamp(ts, timezone.utc).isoformat()
+    return datetime.fromtimestamp(ts, UTC).isoformat()
 
 
 def _write_json(path: Path, data: Any) -> None:
@@ -234,7 +234,7 @@ class State:
     variant: str = ""
 
     @classmethod
-    def load(cls, path: Path) -> "State":
+    def load(cls, path: Path) -> State:
         d = json.loads(path.read_text(encoding="utf-8"))
         d["parts"] = [Part(**p) for p in d["parts"]]
         return cls(**d)
@@ -388,7 +388,7 @@ class Recording:
                     self.ended = True
                     break
                 self.stop_evt.wait(1.0 if retry_soon else max(1.0, target / 2))
-        except Exception as e:  # noqa: BLE001 — a thread death must be loud
+        except Exception as e:
             log.exception("%s: video thread crashed", self.st.stream_id)
             self.alert(f"{self.st.stream_id}: video thread crashed: {e!r}", logging.ERROR)
             self.ended = True
@@ -435,11 +435,11 @@ class Recording:
 
     # -- chat --
     def _chat(self) -> None:
-        from websockets.sync.client import connect
         from websockets.exceptions import WebSocketException
+        from websockets.sync.client import connect
 
         backoff = 1
-        rows = open(self.d / LIVE_CHAT, "a", encoding="utf-8")
+        rows = open(self.d / LIVE_CHAT, "a", encoding="utf-8")  # noqa: SIM115 (closed in finally)
         try:
             while not self.stop_evt.is_set():
                 span = None
@@ -518,7 +518,7 @@ class Recording:
                     if span:
                         span[1] = _now()
                         self.save()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception("%s: chat thread crashed", self.st.stream_id)
             self.alert(f"{self.st.stream_id}: chat thread crashed: {e!r}", logging.ERROR)
         finally:
@@ -701,7 +701,7 @@ def finalize(d: Path, cfg: dict, alerts: Alerts | None = None) -> dict | None:
     if rc["on_finish"]:
         cmd = rc["on_finish"].format(stream_id=st.stream_id, stream_dir=str(d), channel=st.channel)
         log.info("%s: on_finish: %s", st.stream_id, cmd)
-        r = subprocess.run(cmd, shell=True)
+        r = subprocess.run(cmd, shell=True, check=False)
         if r.returncode:
             alerts(f"{st.stream_id}: on_finish exited {r.returncode}: {cmd}", logging.ERROR)
     return meta
@@ -752,7 +752,7 @@ class Watcher:
         def run():
             try:
                 finalize(d, self.cfg, self.alert)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.exception("finalize %s", d.name)
                 self.alert(f"{d.name}: finalize failed: {e!r} (retry: clipper record "
                            f"finalize {d.name})", logging.ERROR)
@@ -885,7 +885,7 @@ class Watcher:
                 try:
                     self.tick()
                     self.heartbeat()
-                except Exception as e:  # noqa: BLE001 — keep the service up
+                except Exception as e:
                     log.exception("watcher tick")
                     self.alert(f"watcher error: {e!r}", logging.ERROR)
                 self.finalizing = [t for t in self.finalizing if t.is_alive()]

@@ -17,6 +17,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 
@@ -226,7 +227,7 @@ def pass_a_user(w: dict, words: list[dict], sig: dict, lead_in_s: int) -> str:
     return (
         f"Window {w['start_s']}-{w['end_s']} s (chat peaks at {peaks} s).\n{origin}\n"
         f"<lead_in>\n" + "\n".join(lead) + "\n</lead_in>\n\n"
-        f"<window>\n" + "\n".join(body) + "\n</window>\n\n"
+        "<window>\n" + "\n".join(body) + "\n</window>\n\n"
         f"<signals>\n{signal_table(sig, w['start_s'], w['end_s'])}\n</signals>\n\n"
         f"<chat_at_peak>\n{chat}\n</chat_at_peak>"
     )
@@ -235,7 +236,7 @@ def pass_a_user(w: dict, words: list[dict], sig: dict, lead_in_s: int) -> str:
 # ---------- API ----------
 
 class Claude:
-    PRICES = {  # $ per 1M input/output tokens, for the cost line only
+    PRICES: ClassVar[dict[str, tuple[float, float]]] = {  # $ per 1M input/output tokens, for the cost line only
         "claude-haiku-5-5": (0.10, 0.50),
         "claude-sonnet-5-5": (2.00, 10.00),
         "claude-opus-5-5": (4.00, 20.00),
@@ -260,11 +261,11 @@ class Claude:
                   stream: bool = False) -> tuple[dict | None, dict]:
         """Structured-output call. Returns (parsed JSON or None on refusal, meta).
         stream=True for long inputs/outputs, so the request can't hit an HTTP timeout."""
-        kwargs = dict(
-            model=model, max_tokens=64000 if stream else 16000, system=system,
-            messages=[{"role": "user", "content": user}],
-            output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
-        )
+        kwargs = {
+            "model": model, "max_tokens": 64000 if stream else 16000, "system": system,
+            "messages": [{"role": "user", "content": user}],
+            "output_config": {"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+        }
         if fallback:
             # Server-side refusal fallback (Claude API only); routes by refusal category.
             kwargs.update(betas=["server-side-fallback-2026-07-01"], fallbacks="default")
@@ -335,7 +336,7 @@ def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
         try:
             out, _ = claude.json_call(sc["model_a"], system, "\n".join(lines), SCAN_SCHEMA,
                                       sc["effort_a"])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  # one bad block shouldn't sink the scan
             print(f"scan block {a}: {type(e).__name__}: {e}")
             return []
         moments = (out or {}).get("moments", [])[:sc["scan_max_per_block"]]
@@ -388,7 +389,7 @@ def run_pass_a(windows: list[dict], words: list[dict], sig: dict, cfg: dict,
         user = pass_a_user(w, words, sig, sc["lead_in_s"])
         try:
             out, meta = claude.json_call(sc["model_a"], system, user, PASS_A_SCHEMA, sc["effort_a"])
-        except Exception as e:  # keep going; one bad window shouldn't sink the stream
+        except Exception as e:  # noqa: BLE001  # one bad window shouldn't sink the stream
             return {**rec, "status": "error", "error": f"{type(e).__name__}: {e}"}
         rec["api"] = meta
         if out is None:
