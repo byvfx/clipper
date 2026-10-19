@@ -102,6 +102,14 @@ reviewed, then posted ASAP**.
   delete it, so the user deleted it (~16:30). Most likely a Content ID match on The Kino Casino's
   own upload of the same video (a full re-upload). Until that is sorted (e.g. Kino whitelisting Lolcow
   Cinema), uploading pre-shows will be blocked again. schedule.json still lists it as uploaded.
+  User (2026-10-19): keep grabbing pre-shows for review; they are sorting the YouTube side out with
+  Kino.
+  **Re-uploaded 15:40 at the user's request: https://youtu.be/l5w5cmwJu1E** (public and playable at
+  15:42, cover set). The first copy was blocked after it went up, so watch this one for the same block.
+  Backup of the schedule before the reset: schedule.before_preshow_reupload_2026-10-19.json.
+- **Uploads are private-only for now** (user, 2026-10-19): `[youtube] manual_publish = true` in
+  clipper.toml; `clipper upload` sets no publishAt and never public. The user publishes in Studio
+  (suspects API-set visibility misbehaves until the API audit). Pre-shows too.
 - Bot restarted 15:03 on this code. Upload with `clipper upload --max 1` to send only the pre-show
   (plain `clipper upload` also sends everything else due within 48 h).
 

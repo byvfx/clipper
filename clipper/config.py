@@ -44,6 +44,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "auto_upload_minutes": 0, # `clipper bot` runs `clipper upload` this often; 0 = only by hand
         "upload_ahead_hours": 48, # upload entries whose slot is within this window
         "min_lead_minutes": 30,   # publishAt must still be this far in the future
+        "manual_publish": False,  # true: upload private, no publishAt; make it public in Studio by hand
         "max_per_run": 6,         # quota guard per run
         "category_id": "24",      # Entertainment
         "language": "en",

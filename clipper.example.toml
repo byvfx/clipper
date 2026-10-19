@@ -326,6 +326,8 @@ clip_order = "score"           # score (best first) or stream (oldest stream fir
 auto_upload_minutes = 0        # the Discord bot runs `clipper upload` this often (e.g. 60); 0 = by hand
 upload_ahead_hours = 48        # upload entries whose slot is within this window
 min_lead_minutes = 30          # publishAt must still be this far in the future
+manual_publish = false         # true: every upload stays private (no publishAt, pre-shows too);
+                               # you make it public in YouTube Studio at its slot
 max_per_run = 6                # quota guard per run
 category_id = "24"             # Entertainment
 language = "en"
