@@ -208,7 +208,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # style = "enquirer": a 1990s supermarket-tabloid cover (masthead, teaser band and
         # boxes plugging the episode's other videos, big face, yellow headline, inset).
         "style": "classic",       # classic | enquirer
-        "enquirer_prompt_version": "v2",  # prompts/thumbnail_enquirer_<v>.md
+        "enquirer_prompt_version": "v3",  # prompts/thumbnail_enquirer_<v>.md
         "masthead": "",           # empty = meta.show_name
         "masthead_tagline": "LARGEST CIRCULATION OF ANY STREAM ON KICK",
         "masthead_price": "$1.39",
@@ -218,6 +218,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
                             "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
                             "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"],
         "condensed_variation": "Bold Condensed",  # named instance for variable fonts
+        # Enquirer covers: a folder of head-and-shoulders photos named "<Person>.jpg" (or
+        # .png/.webp), for people talked about but not on screen. The model may use one for
+        # a cover's face or its teaser box; `clipper thumbs --photo/--teaser-photo` sets one
+        # by hand. Crop each to head and shoulders: the whole picture is the face. "" = none.
+        "photos": "",
     },
     "shorts": {
         # `clipper shorts`: each pick's short window as a vertical video in shorts/.

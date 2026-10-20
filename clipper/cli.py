@@ -118,6 +118,14 @@ def cmd_meta(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
     from . import thumbs
 
+    if args.photo is not None or args.teaser_photo is not None:
+        if not args.ids:
+            raise SystemExit("--photo/--teaser-photo need --ids")
+        changed = thumbs.set_photos(stream_dir(cfg, args.stream), cfg, args.ids.split(","),
+                                    photo=args.photo, teaser_photo=args.teaser_photo,
+                                    kitsu=not args.no_kitsu)
+        print(f"{len(changed)} changed: {', '.join(changed)}" if changed else "nothing to change")
+        return
     thumbs.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
                force=args.force, compose_only=args.compose_only, kitsu=not args.no_kitsu)
 
@@ -352,6 +360,11 @@ def main() -> None:
     p.add_argument("--compose-only", action="store_true",
                    help="re-render from thumbnails.json (brand or hand edits), no model calls")
     p.add_argument("--no-kitsu", action="store_true", help="don't attach them in Kitsu")
+    p.add_argument("--photo", metavar="PERSON",
+                   help="enquirer: use [thumbnail] photos/<PERSON> as the --ids covers' face "
+                        "(\"\" = back to the frame); re-renders, no model calls")
+    p.add_argument("--teaser-photo", metavar="PERSON",
+                   help="enquirer: show that photo beside the --ids videos' teasers on the other covers")
     p.set_defaults(fn=cmd_thumbs)
 
     p = sub.add_parser("shorts", help="vertical Shorts of the picks: layout crop, captions, loudness -> shorts/")

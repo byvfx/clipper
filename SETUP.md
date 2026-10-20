@@ -56,6 +56,13 @@ checks everything below and prints a fix for each problem.
 6. **Fonts**: thumbnails and Short captions use Impact and Bahnschrift, both standard on
    Windows. On Linux install `ttf-mscorefonts-installer` (Impact) and Roboto Condensed.
 
+   **Photos** (optional): tabloid covers can use a portrait of someone the show talks about
+   who is never on screen. Make a folder every machine can reach (e.g. `photos` beside
+   `streams` on the NAS), add one head-and-shoulders crop per person named `<Person>.jpg`
+   (the whole picture is treated as the face, so crop out watermarks and logos), and set
+   `[thumbnail] photos` to it. The model may then use one for a cover's face or teaser box;
+   `clipper thumbs <stream> --ids s04 --teaser-photo "Hasan Piker"` sets one by hand.
+
 7. **Check**: `uv run clipper doctor --role gpu` (or `--role bot`).
 
 8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed):

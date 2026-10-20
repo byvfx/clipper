@@ -63,6 +63,20 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - kick-132380636 (10/15) already had all 21 attached. Both checked against Kitsu (main preview = our .jpg).
 - Nothing from either stream is on YouTube yet; `clipper upload` sets the covers when they go up.
 
+## Cover photos (2026-10-20)
+- Problem: on the 10/16 404 stream (kick-132548228) s04 "Hasan debunks himself" had no usable Hasan
+  frame, so its cover face was someone else, and side boxes reuse each video's cover face: 21 covers showed
+  the wrong person beside the Hasan teaser. The user's Kitsu retakes on s12/s13 re-picked but could not fix
+  it (side boxes aren't the item's own pick).
+- Built `[thumbnail] photos`: a folder of `<Person>.jpg` head-and-shoulders crops (whole picture = face),
+  here `//192.168.0.155/docker/clipper/photos` (in clipper.toml). Entries can carry `photo` (main face) and
+  `teaser_photo` (beside the teaser on other covers). Prompt `thumbnail_enquirer_v3` (now the default)
+  lets the model choose them when the person isn't on screen. Set by hand, no model calls:
+  `clipper thumbs <stream> --ids s04 --teaser-photo "Hasan Piker"` (`""` clears). Doctor checks the folder.
+- Photos: Hasan Piker (user-supplied; site watermark and logo cropped out).
+- Applied: s04 teaser_photo = Hasan Piker, all 23 covers re-rendered, 22 attached in Kitsu (the s12/s13
+  retake asks are covered). Backup: thumbnails.before_photos.json. None of these are on YouTube yet.
+
 ## To do next
 0. **Republish re-cut videos to Kitsu (user said not yet, 2026-10-19).** Segments + compilations of
    kick-132733064, -133040747, -133095550, -133112185 were re-cut (seek fix, see Gotchas) and SRTs

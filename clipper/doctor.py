@@ -313,6 +313,20 @@ def check_online(cfg: dict, role: str) -> None:
 
 # ---------- command ----------
 
+def check_photos(cfg: dict) -> None:
+    tc = cfg["thumbnail"]
+    if not tc["photos"]:
+        return
+    d = Path(tc["photos"])
+    if not d.is_dir():
+        fail("photos", f"[thumbnail] photos folder {d} not found",
+             "create it (or mount the share), or set [thumbnail] photos = \"\"")
+        return
+    from .thumbs import photos
+    names = list(photos(tc))
+    ok("photos", f"{len(names)} in {d}: {', '.join(names)}" if names else f"none yet in {d}")
+
+
 def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     RESULTS.clear()
     check_python()
@@ -322,6 +336,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     check_ffmpeg(cfg, role)
     if role in ("all", "gpu"):
         check_fonts(cfg)
+        check_photos(cfg)
         check_gpu(cfg)
     check_keys(cfg, role)
     if not offline:

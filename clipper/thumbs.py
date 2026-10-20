@@ -17,6 +17,11 @@ flag re-renders everything after changing the brand settings. Text is checked ag
 touching files through the Kitsu "Thumbnail text" column or Discord's Thumbnail text button;
 `clipper review sync` writes it here and re-renders (set_texts).
 
+Enquirer covers can use [thumbnail] photos ("<Person>.jpg" portraits) for people talked
+about but not on screen: the model is offered the names and may set "photo" (the main
+face) or "teaser_photo" (shown beside this video's teaser on the other covers);
+`--photo` / `--teaser-photo` set them by hand (set_photos).
+
 `clipper upload` sets the .jpg as the YouTube thumbnail; with [thumbnail] kitsu on, it is
 attached to each item's latest Kitsu revision and becomes the item's Kitsu thumbnail.
 """
@@ -297,9 +302,16 @@ def pick_enquirer(x: dict, fr: list[dict], info: dict, tc: dict, claude: Claude,
         + (f"People: {', '.join(x['figures'])}\n" if x["figures"] else "")
         + (f"About: {info['about']}\n" if info["about"] else "")
         + f"Frames are numbered 1-{len(fr)}." + feedback_text(note))})
+    schema, names = ENQ_SCHEMA, list(tc.get("_photos", {}))
+    if names:
+        content.append({"type": "text", "text": f"Photos on file: {', '.join(names)}."})
+        pick_one = {"type": "string", "enum": ["", *names]}
+        schema = {**ENQ_SCHEMA, "properties": {**ENQ_SCHEMA["properties"], "photo": pick_one,
+                                               "teaser_photo": pick_one},
+                  "required": [*ENQ_SCHEMA["required"], "photo", "teaser_photo"]}
     out, meta = None, {}
     for attempt in range(2):
-        out, meta = claude.json_call(tc["model"], system, content, ENQ_SCHEMA, tc["effort"],
+        out, meta = claude.json_call(tc["model"], system, content, schema, tc["effort"],
                                      fallback=True)
         if out is None:
             break
@@ -329,6 +341,10 @@ def pick_enquirer(x: dict, fr: list[dict], info: dict, tc: dict, claude: Claude,
     for f_key, b_key in (("frame", "face"), ("inset_frame", "inset_face")):
         out[f_key] = min(max(int(out[f_key]), 1), len(fr))
         out[b_key] = clamp_box(out[b_key])
+    for k in ("photo", "teaser_photo"):  # kept only when set, so older entries read the same
+        name = photo_name(tc, out.pop(k, ""))
+        if name:
+            out[k] = name
     out["t"] = fr[out["frame"] - 1]["t"]
     out["text"] = " ".join(out["headline"])  # what reviewers edit (Kitsu, Discord)
     return out
@@ -520,6 +536,23 @@ def wrap_px(text: str, f: ImageFont.FreeTypeFont, max_w: float) -> list[str]:
     return lines
 
 
+PHOTO_EXT = (".jpg", ".jpeg", ".png", ".webp")
+WHOLE = {"x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0}  # a photo is all face
+
+
+def photos(tc: dict) -> dict[str, Path]:
+    """[thumbnail] photos: {person: path}, named by the file names ("Hasan Piker.jpg")."""
+    d = Path(tc["photos"]) if tc.get("photos") else None
+    if not d or not d.is_dir():
+        return {}
+    return {p.stem: p for p in sorted(d.iterdir()) if p.suffix.lower() in PHOTO_EXT}
+
+
+def photo_name(tc: dict, name: str) -> str:
+    """The on-file spelling of a photo's person, matched ignoring case; "" if none."""
+    return next((n for n in tc.get("_photos", {}) if n.lower() == (name or "").strip().lower()), "")
+
+
 def face_crop(path: Path, face: dict, size: tuple[int, int], fill: float = 0.72) -> Image.Image:
     """Crop around a face box so the head fills `fill` of the photo's height, the face a
     little above center, then cover-fit to size."""
@@ -606,9 +639,10 @@ def cover_context(key: str, state: dict, stream_dir: Path, tc: dict, own_band: s
     picks += [ke for ke in others[1:] if ke not in picks]
     side = []
     for k, e in picks[:3]:
-        path = stream_dir / "thumbs" / k / e["frames"][e["frame"] - 1]["path"]
+        photo = tc.get("_photos", {}).get(photo_name(tc, e.get("teaser_photo", "")))
+        path = photo or stream_dir / "thumbs" / k / e["frames"][e["frame"] - 1]["path"]
         side.append({"text": e["teaser"], "topic": e.get("topic") or "", "frame": path,
-                     "face": e["face"]})
+                     "face": WHOLE if photo else e["face"]})
     if not others:
         return own_context(key, me, stream_dir, own_band)
     return {"band": band, "side": side}
@@ -705,7 +739,9 @@ def compose_enquirer(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, d
 
     # Main face, bleeding to the bottom; reaction inset and channel badge on it.
     mx, my, mw, mh = 314, 126, 470, H - 126
-    img.paste(face_crop(frame_path(e["frame"]), e["face"], (mw, mh)), (mx, my))
+    photo = tc.get("_photos", {}).get(photo_name(tc, e.get("photo", "")))
+    img.paste(face_crop(photo, WHOLE, (mw, mh)) if photo
+              else face_crop(frame_path(e["frame"]), e["face"], (mw, mh)), (mx, my))
     iw, ih = 176, 158
     ix, iy = mx + mw - iw - 14, H - ih - 14
     d.rectangle((ix - 7, iy - 7, ix + iw + 7, iy + ih + 7), fill=WHT, outline=BLK, width=2)
@@ -802,6 +838,42 @@ def set_texts(stream_dir: Path, cfg: dict, texts: dict[str, str]) -> dict[str, s
     return changed
 
 
+def set_photos(stream_dir: Path, cfg: dict, ids: list[str], photo: str | None = None,
+               teaser_photo: str | None = None, kitsu: bool = True) -> list[str]:
+    """Put a [thumbnail] photos portrait on enquirer covers by hand ("" clears): `photo`
+    as each one's main face, `teaser_photo` beside its teaser on the other covers. Then
+    re-render the whole stream (teasers show on every cover) without model calls, and
+    re-attach in Kitsu. Returns the keys changed."""
+    tc = {**for_stream(cfg, stream_dir)["thumbnail"]}
+    tc["_photos"] = photos(tc)
+    state_path = stream_dir / "thumbnails.json"
+    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    keys = [k for k, e in state.items() if e["id"] in ids]
+    if missing := sorted(set(ids) - {state[k]["id"] for k in keys}):
+        raise SystemExit(f"no thumbnail yet for {missing}; run clipper thumbs first")
+    changed = []
+    for field, name in (("photo", photo), ("teaser_photo", teaser_photo)):
+        if name is None:
+            continue
+        on_file = photo_name(tc, name)
+        if name and not on_file:
+            raise SystemExit(f"no photo of {name!r} in [thumbnail] photos "
+                             f"({tc['photos'] or 'unset'}): {', '.join(tc['_photos']) or 'none'}")
+        for k in keys:
+            if state[k].get("style") != "enquirer":
+                raise SystemExit(f"{state[k]['id']}: photos are for enquirer covers only")
+            if state[k].get(field, "") != on_file:
+                if on_file:
+                    state[k][field] = on_file
+                else:
+                    state[k].pop(field, None)
+                changed.append(k)
+    if changed:
+        state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+        run(stream_dir, cfg, compose_only=True, kitsu=kitsu)
+    return sorted(set(changed))
+
+
 def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool = False,
         compose_only: bool = False, kitsu: bool = True,
         feedback: dict[str, str] | None = None) -> list[dict]:
@@ -809,7 +881,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
     cfg = for_stream(cfg, stream_dir)
     from .bleep import Bleeper
 
-    tc = cfg["thumbnail"]
+    tc = {**cfg["thumbnail"]}
+    tc["_photos"] = photos(tc) if tc["style"] == "enquirer" else {}
     assets = [x for x in load_assets(stream_dir) if not ids or x["id"] in ids]
     if not assets:
         raise SystemExit("no cut assets" + (f" matching {ids}" if ids else "; run `clipper cut` first"))

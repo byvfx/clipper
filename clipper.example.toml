@@ -217,12 +217,15 @@ kitsu = true                   # attach to each item's Kitsu revision and set it
 # Thumbnail look: "classic" (frame + big text) or "enquirer" (1990s tabloid cover:
 # masthead, teaser band and boxes plugging the episode's other videos, big face, inset).
 style = "classic"
-enquirer_prompt_version = "v2"   # prompts/thumbnail_enquirer_<v>.md
+enquirer_prompt_version = "v3"   # prompts/thumbnail_enquirer_<v>.md
 masthead = ""                  # empty = meta.show_name
 masthead_tagline = "LARGEST CIRCULATION OF ANY STREAM ON KICK"
 masthead_price = "$1.39"
 badge_kicker = "AS SEEN ON"
 badge_channel = ""             # empty = scoring.channel_name
+# Folder of head-and-shoulders photos, "<Person>.jpg", for people talked about but not on
+# screen; enquirer covers may use one for the face or the teaser box. "" = none.
+# photos = "//nas/share/clipper/photos"
 
 [shorts]
 # `clipper shorts`: each pick's short window (short_in_s..short_out_s from scoring) as a
