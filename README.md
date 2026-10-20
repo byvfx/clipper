@@ -23,7 +23,8 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **review**: every item goes to Kitsu and Discord. Approve, reject, hold, or leave a note asking for a change.
   Notes become retakes: the item is re-cut or re-thumbnailed and comes back for review.
 - **schedule / upload**: approved items get release slots and go to YouTube as private videos with a publish time
-  (or stay private for you to publish by hand: `[youtube] manual_publish`).
+  (or stay private for you to publish by hand: `[youtube] manual_publish`). Past the channel's daily
+  upload limit, upload the file in Studio and `clipper upload --attach <item> <link>` fills in the rest.
 
 Everything is a `clipper <stage>` subcommand. `clipper run` does every stage a stream still
 needs, and `clipper worker` does that for each recording as it finishes.

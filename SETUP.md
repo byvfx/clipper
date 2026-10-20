@@ -110,3 +110,38 @@ poll_minutes) and runs new pre-shows on the bot's machine, transcribe included, 
 bot's machine needs the GPU extra (or `[transcribe] device = "cpu"`); set poll_minutes = 0
 on a bot that shouldn't. yt-dlp needs deno for YouTube; `uv sync` installs it (yt-dlp's
 `deno` extra). Without it YouTube answers downloads with HTTP 403 partway through.
+
+## A new YouTube channel
+
+What we learned bringing up Lolcow Cinema (October 2026). A new channel is held back in
+ways the API reports badly, so do these before the first big upload run.
+
+1. **Sign in**: `clipper upload --sign-in` once, on the machine that uploads. The token
+   lands in `secrets/youtube_token.json`.
+2. **Verify the channel** at https://www.youtube.com/verify (phone). Without it custom
+   thumbnails are refused (403); videos still go up, and `clipper upload --thumbnails` sets
+   the covers afterwards. Verification can take more than one round: if Studio later
+   refuses an upload, it may offer another verification link. Follow it. On Lolcow Cinema
+   Studio accepted uploads again right after that second verification.
+3. **Expect a small daily upload cap.** `uploadLimitExceeded` ("The user has exceeded the
+   number of videos they may upload") is YouTube's limit on the *channel*, not the API
+   quota (that one is `quotaExceeded`). Private uploads count too. The window looks
+   rolling (about 24 h from each upload), and the API hit it at 8 uploads in 24 h on the
+   new channel. It grows with the channel's history and verification; YouTube doesn't
+   publish the number. Keep `[schedule] max_per_day` and `[youtube] max_per_run` under it.
+   A refused upload leaves nothing behind on YouTube or in schedule.json, so it is safe to
+   rerun later.
+4. **Past the cap, upload in Studio** (it may still accept uploads when the API is
+   refused): `clipper upload --next 5` lists what goes out next with each file; drag the
+   file into Studio, set it Private, skip the details, then
+   `clipper upload --attach <item> <link>` sets the title, description and tags, adds
+   the thumbnail, captions, playlist and Kitsu link, and records the video as uploaded so
+   clipper never sends it twice.
+5. **Publishing through the API** (`videos.update` to public) worked on our Cloud project
+   before any API audit, so `[youtube] manual_publish` can be turned off once you trust
+   the uploads. Before that, check the first private uploads for Content ID claims in
+   Studio. The Data API can't see claims; it only shows region blocks.
+6. **Playlists** are created on first use and their ids cached in
+   `secrets/youtube_playlists.json`. If you delete or rename one in Studio, delete its line
+   there too, or videos will fail to be added to it. Playlist names come from each item's
+   Kitsu "Playlist" column.

@@ -77,6 +77,28 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Applied: s04 teaser_photo = Hasan Piker, all 23 covers re-rendered, 22 attached in Kitsu (the s12/s13
   retake asks are covered). Backup: thumbnails.before_photos.json. None of these are on YouTube yet.
 
+## Upload test (2026-10-20)
+- User asked to upload 10 unslotted segments and make them public via the API. Pinned 10 in Kitsu
+  ("Publish at" 10/20 12:00-16:30, by "Claude (upload test)"), replanned, `clipper upload --max 10`.
+  Backup: schedule.before_upload_test_2026-10-20.json. Log: logs/upload_test_2026-10-20.log.
+- 2 went up: kick-132380636/s10 (vM_AZRUCAIU), kick-132548228/s14 (BOuoEjNO6VM). Then YouTube refused with
+  `uploadLimitExceeded` (channel upload cap, private uploads count, not API quota): 8 uploads in 24 h
+  (6 on 10/19 22:18-22:21 + these 2). Retried 11:38 after the user verified the account: same error.
+- **API publishing works**: videos.update privacyStatus=public on both succeeded (oEmbed 200). So
+  `manual_publish` may no longer be needed (user's call).
+- User chose to stagger as planned: the other 8 (s12-s15 of kick-132380636, s15-s18 of kick-132548228)
+  were unpinned, their 10/20 entries dropped from schedule.json and replanned; they are back in the
+  queue (no free segment slot in 21 days for now). Jerry Banfield playlist gets created when s17 uploads.
+- User deleted the "Kino Casino Hosts" playlist; its only item (kick-132380636/c05_t14, not uploaded) now
+  has Playlist "Kino Casino" in Kitsu, the stale id is out of youtube_playlists.json, and an empty public
+  "Kino Casino" playlist was created for it. That clip's title still says "hosts".
+
+- Built `clipper upload --next N` (what goes out next, with files) and `--attach ITEM LINK` (a video the
+  user uploaded in Studio gets title/description/tags, thumbnail, captions, playlist, Kitsu link and is
+  recorded uploaded with source "studio", publish_at = now so its slot frees up). Test: user uploading
+  kick-132380636/s12 in Studio. User re-verified the channel after a Studio error (10/20 ~12:00); Studio
+  then accepted uploads. Next: try one API upload to see if the API cap lifted too.
+
 ## To do next
 0. **Republish re-cut videos to Kitsu (user said not yet, 2026-10-19).** Segments + compilations of
    kick-132733064, -133040747, -133095550, -133112185 were re-cut (seek fix, see Gotchas) and SRTs

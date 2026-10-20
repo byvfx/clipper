@@ -17,6 +17,12 @@ the link goes into the Kitsu "YouTube URL" column. A pre-show placed "asap" by
 With [youtube] manual_publish = true every upload stays private (no publishAt) and you
 make it public in YouTube Studio; the slot is then only the suggested time.
 
+Uploaded by hand in Studio instead (e.g. past the channel's daily upload limit, which the
+API hits first): `clipper upload --next 5` lists what's next with its file; upload the
+file in Studio (private, no details), then `clipper upload --attach <item> <link>` sets
+the title, description and tags, adds thumbnail, captions, playlist and Kitsu link, and
+records it as uploaded so it never goes up twice.
+
 Until the Cloud project passes the YouTube API audit, YouTube keeps API uploads private
 regardless of publishAt; publish those by hand in YouTube Studio meanwhile.
 """
@@ -228,6 +234,43 @@ def backfill_thumbnails(cfg: dict, sched: dict, sched_path: Path, dry_run: bool)
         print(f"  {e['url']} thumbnail set")
 
 
+def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_path: Path,
+           sched: dict, sched_path: Path) -> None:
+    """Everything after the video itself: thumbnail, captions, playlist, Kitsu link. None
+    of it counts against the channel's daily upload limit."""
+    yc = cfg["youtube"]
+    extras = []
+    if m["thumb"]:  # its own try: a refusal here shouldn't skip captions and playlist
+        try:
+            set_thumbnail(yt, vid, m["thumb"])
+            e["thumbnail_set"] = datetime.now(UTC).isoformat(timespec="seconds")
+            sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+            extras.append("thumbnail")
+        except ThumbnailsNotAllowed as ex:
+            print(f"  warning: {ex}")
+        except Exception as ex:  # noqa: BLE001  # the video is up, the thumbnail is optional
+            print(f"  warning: thumbnail: {type(ex).__name__}: {ex}")
+    try:
+        if yc["captions"] and m["srt"]:
+            from googleapiclient.http import MediaFileUpload
+            yt.captions().insert(part="snippet", body={"snippet": {
+                "videoId": vid, "language": yc["language"], "name": "", "isDraft": False}},
+                media_body=MediaFileUpload(str(m["srt"]), mimetype="application/octet-stream")).execute()
+            extras.append("captions")
+        if yc["add_to_playlist"] and m["playlist"]:
+            pid = ensure_playlist(yt, m["playlist"], playlists, yc["playlist_privacy"])
+            cache_path.write_text(json.dumps(playlists, indent=2))
+            execute_with_retry(yt.playlistItems().insert(part="snippet", body={"snippet": {
+                "playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}}))
+            extras.append(f"playlist {m['playlist']}")
+        kitsu_url(cfg, m, f"https://youtu.be/{vid}")
+        extras.append("Kitsu link")
+    except Exception as ex:  # noqa: BLE001  # the video itself is up; report and move on
+        print(f"  warning: after upload: {type(ex).__name__}: {ex}")
+    if extras:
+        print(f"  + {', '.join(extras)}")
+
+
 def kitsu_url(cfg: dict, meta: dict, url: str) -> None:
     from . import review
 
@@ -331,33 +374,104 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
             fresh["entries"].append(e)
         sched_path.write_text(json.dumps(fresh, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"  {url} ({time.time() - t:.0f}s)", flush=True)
-        extras = []
-        if m["thumb"]:  # its own try: a refusal here shouldn't skip captions and playlist
-            try:
-                set_thumbnail(yt, vid, m["thumb"])
-                e["thumbnail_set"] = datetime.now(UTC).isoformat(timespec="seconds")
-                sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
-                extras.append("thumbnail")
-            except ThumbnailsNotAllowed as ex:
-                print(f"  warning: {ex}")
-            except Exception as ex:  # noqa: BLE001  # the video is up, the thumbnail is optional
-                print(f"  warning: thumbnail: {type(ex).__name__}: {ex}")
-        try:
-            if yc["captions"] and m["srt"]:
-                from googleapiclient.http import MediaFileUpload
-                yt.captions().insert(part="snippet", body={"snippet": {
-                    "videoId": vid, "language": yc["language"], "name": "", "isDraft": False}},
-                    media_body=MediaFileUpload(str(m["srt"]), mimetype="application/octet-stream")).execute()
-                extras.append("captions")
-            if yc["add_to_playlist"] and m["playlist"]:
-                pid = ensure_playlist(yt, m["playlist"], playlists, yc["playlist_privacy"])
-                cache_path.write_text(json.dumps(playlists, indent=2))
-                execute_with_retry(yt.playlistItems().insert(part="snippet", body={"snippet": {
-                    "playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}}))
-                extras.append(f"playlist {m['playlist']}")
-            kitsu_url(cfg, m, url)
-            extras.append("Kitsu link")
-        except Exception as ex:  # noqa: BLE001  # the video itself is up; report and move on
-            print(f"  warning: after upload: {type(ex).__name__}: {ex}")
-        if extras:
-            print(f"  + {', '.join(extras)}")
+        finish(yt, cfg, e, m, vid, playlists, cache_path, sched, sched_path)
+
+
+# ---------- videos uploaded by hand ----------
+
+def video_id(url: str) -> str:
+    """The id from a youtu.be / watch?v= / shorts / Studio link, or a bare id."""
+    import re
+
+    m = re.search(r"(?:youtu\.be/|[?&]v=|/shorts/|/video/|/live/)([\w-]{11})", url)
+    if m:
+        return m.group(1)
+    if re.fullmatch(r"[\w-]{11}", url.strip()):
+        return url.strip()
+    raise SystemExit(f"no YouTube video id in {url!r}")
+
+
+def queue(cfg: dict) -> list[dict]:
+    """Approved items not on YouTube yet, in the order they would go out: scheduled ones by
+    slot, then the unslotted ones as `clipper schedule` would place them next."""
+    sched = json.loads(cfg["paths"]["schedule"].read_text(encoding="utf-8"))
+    by_key = {e["key"]: e for e in sched["entries"]}
+    out = sorted((e for e in sched["entries"] if e.get("status") == "scheduled"),
+                 key=lambda e: e["publish_at"])
+    from .schedule import candidates
+
+    sc = cfg["schedule"]
+    items = {it["key"]: it for it in candidates(cfg, cfg["paths"]["streams"], sc,
+                                                 ZoneInfo(sc["timezone"]))[0]}
+    for u in sched.get("unscheduled", []):
+        if u["key"] in items and u["key"] not in by_key and u["reason"].startswith("no free"):
+            out.append({**items[u["key"]], "publish_at": "", "reason": u["reason"]})
+    return out
+
+
+def next_up(cfg: dict, n: int) -> None:
+    """Print the next n videos to upload by hand in YouTube Studio, with their files."""
+    for e in queue(cfg)[:n]:
+        when = e["publish_at"][:16].replace("T", " ") or "unslotted"
+        print(f"{e['key']}  ({e['kind']}, {when})\n  {e['title']}\n  {e['file']}")
+
+
+def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
+    """A video you uploaded yourself in YouTube Studio becomes item `ref`: title,
+    description and tags set, thumbnail, captions, playlist and Kitsu link added, and the
+    item recorded as uploaded so `clipper upload` never sends it again. The video's
+    privacy is left as you set it in Studio."""
+    from . import actions
+
+    yc, paths = cfg["youtube"], cfg["paths"]
+    vid = video_id(url)
+    item = actions.resolve(cfg, ref)
+    key = item.ref
+    sched_path: Path = paths["schedule"]
+    sched = json.loads(sched_path.read_text(encoding="utf-8"))
+    prev = next((e for e in sched["entries"] if e["key"] == key), None)
+    if prev and prev.get("status") == "uploaded":
+        raise SystemExit(f"{key} is already on YouTube: {prev.get('url')}")
+    if other := next((e for e in sched["entries"] if e.get("video_id") == vid), None):
+        raise SystemExit(f"{vid} is already recorded as {other['key']}")
+    e = prev or next((x for x in queue(cfg) if x["key"] == key), None)
+    if not e:
+        raise SystemExit(f"{key} isn't approved (or is on hold): approve it in Kitsu first")
+    e = {k: v for k, v in e.items() if k in ("key", "stream", "kind", "id", "title", "file",
+                                             "publish_at", "source", "platforms")}
+    refresh_review(cfg, [e])
+    m = metadata(e, cfg)
+    yt = service(paths)
+    found = yt.videos().list(part="snippet,status", id=vid).execute().get("items", [])
+    if not found:
+        raise SystemExit(f"YouTube has no video {vid} on this channel (still uploading?)")
+    v = found[0]
+    stem = Path(e["file"]).stem
+    print(f"{key} <- https://youtu.be/{vid} ({v['status']['privacyStatus']}, "
+          f"Studio title {v['snippet']['title']!r})")
+    import re
+
+    norm = lambda s: re.sub(r"[\W_]+", " ", s).strip().lower()  # Studio turns _ and - into spaces
+    if norm(v["snippet"]["title"]) not in (norm(stem), norm(m["title"])):
+        print(f"  note: the file for {key} is {stem}.mp4; check this is the same video")
+    print(f"  title {m['title']}\n  tags {len(m['tags'])}, captions {'yes' if m['srt'] else 'no'}, "
+          f"thumbnail {'yes' if m['thumb'] else 'no'}, playlist {m['playlist'] or '-'}")
+    if dry_run:
+        return
+    execute_with_retry(yt.videos().update(part="snippet", body={"id": vid, "snippet": {
+        "title": m["title"], "description": m["description"], "tags": m["tags"],
+        "categoryId": yc["category_id"], "defaultLanguage": yc["language"],
+        "defaultAudioLanguage": yc["language"]}}))
+    now = datetime.now(UTC)
+    # Recorded as out now, so any slot it had goes to the next item at the next replan.
+    e.update({"publish_at": now.astimezone(ZoneInfo(sched["timezone"])).isoformat(timespec="seconds"),
+              "source": "studio", "status": "uploaded", "video_id": vid,
+              "url": f"https://youtu.be/{vid}", "uploaded_at": now.isoformat(timespec="seconds")})
+    fresh = json.loads(sched_path.read_text(encoding="utf-8"))  # clipper rumble may have written
+    fresh["entries"] = [x for x in fresh["entries"] if x["key"] != key] + [e]
+    fresh["unscheduled"] = [x for x in fresh.get("unscheduled", []) if x["key"] != key]
+    sched_path.write_text(json.dumps(fresh, indent=2, ensure_ascii=False), encoding="utf-8")
+    print("  details set; recorded as uploaded")
+    cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
+    playlists = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+    finish(yt, cfg, e, m, vid, playlists, cache_path, fresh, sched_path)

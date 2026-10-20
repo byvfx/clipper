@@ -199,6 +199,12 @@ def cmd_schedule(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
     from . import youtube
 
+    if args.next:
+        youtube.next_up(cfg, args.next)
+        return
+    if args.attach:
+        youtube.attach(cfg, args.attach[0], args.attach[1], dry_run=args.dry_run)
+        return
     youtube.run(cfg, sign_in=args.sign_in, dry_run=args.dry_run, limit=args.max,
                 thumbnails_only=args.thumbnails)
 
@@ -439,6 +445,11 @@ def main() -> None:
     p.add_argument("--max", type=int, help="upload at most this many this run")
     p.add_argument("--thumbnails", action="store_true",
                    help="only set thumbnails on uploaded videos that lack one (after channel verification)")
+    p.add_argument("--next", type=int, metavar="N",
+                   help="list the next N videos to upload, with their files (for uploading in Studio)")
+    p.add_argument("--attach", nargs=2, metavar=("ITEM", "LINK"),
+                   help="a video you uploaded in Studio is ITEM (e.g. kick-132380636/s12): set its "
+                        "details, thumbnail, captions, playlist, Kitsu link; record it as uploaded")
     p.set_defaults(fn=cmd_upload)
 
     p = sub.add_parser("rumble", help="ready-to-upload Rumble folders for scheduled items; mark them done")
