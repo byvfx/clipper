@@ -27,6 +27,7 @@ import logging
 import re
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime, timedelta
@@ -75,7 +76,28 @@ def watched(cfg: dict) -> list[tuple[str, dict]]:
 
 
 def feed(channel_id: str, ua: str) -> list[dict]:
-    """The channel's latest ~15 uploads, newest first."""
+    """The channel's latest ~15 uploads, newest first. YouTube's RSS feed for a channel
+    sometimes 404s for hours while the channel is fine, so on any failure fall back to
+    listing the channel's videos page with yt-dlp (no dates: see `published_at`)."""
+    try:
+        return rss_feed(channel_id, ua)
+    except (urllib.error.URLError, ET.ParseError, TimeoutError) as e:
+        log.info("pre-show feed %s: RSS failed (%s), listing the channel with yt-dlp", channel_id, e)
+    r = ytdlp("--flat-playlist", "--playlist-end", "8", "--print", "%(id)s	%(title)s",
+              f"https://www.youtube.com/channel/{channel_id}/videos")
+    out = []
+    for line in r.stdout.splitlines():
+        vid, _, title = line.partition("	")
+        if vid and title:
+            out.append({"video_id": vid, "title": title, "published": "",
+                        "url": f"https://www.youtube.com/watch?v={vid}"})
+    if not out:
+        raise RuntimeError(f"pre-show feed {channel_id}: RSS and yt-dlp both failed "
+                           f"({r.stderr.strip().splitlines()[-1:]})")
+    return out
+
+
+def rss_feed(channel_id: str, ua: str) -> list[dict]:
     req = urllib.request.Request(FEED.format(channel_id), headers={"User-Agent": ua})
     with urllib.request.urlopen(req, timeout=30) as r:
         root = ET.fromstring(r.read())
@@ -86,6 +108,20 @@ def feed(channel_id: str, ua: str) -> list[dict]:
                     "published": e.findtext("a:published", "", NS),
                     "url": f"https://www.youtube.com/watch?v={vid}"})
     return out
+
+
+def published_at(e: dict) -> datetime:
+    """When an entry went up. yt-dlp's channel listing has no dates, so look the video up
+    (only done for entries that already match the title pattern and aren't grabbed)."""
+    if not e["published"]:
+        r = ytdlp("--skip-download", "--no-playlist", "--print",
+                  "%(timestamp|)s", e["url"])
+        ts = r.stdout.strip().splitlines()[-1:] or [""]
+        try:
+            e["published"] = datetime.fromtimestamp(float(ts[0]), UTC).isoformat()
+        except ValueError:
+            e["published"] = datetime.now(UTC).isoformat()  # unknown: treat as new
+    return datetime.fromisoformat(e["published"])
 
 
 def stream_of(cfg: dict, video_id: str) -> Path:
@@ -139,9 +175,8 @@ def new_entries(cfg: dict) -> list[tuple[str, dict]]:
     for key, sc in watched(cfg):
         pc = sc["preshow"]
         for e in feed(pc["youtube_channel"], sc["kick"]["user_agent"]):
-            age = now - datetime.fromisoformat(e["published"])
-            if (re.search(pc["title_pattern"], e["title"]) and age <= timedelta(hours=pc["max_age_hours"])
-                    and not grabbed(cfg, e["video_id"])):
+            if (re.search(pc["title_pattern"], e["title"]) and not grabbed(cfg, e["video_id"])
+                    and now - published_at(e) <= timedelta(hours=pc["max_age_hours"])):
                 out.append((key, e))
     return out
 
@@ -181,7 +216,7 @@ def show_list(cfg: dict) -> None:
         for e in feed(pc["youtube_channel"], sc["kick"]["user_agent"]):
             if not re.search(pc["title_pattern"], e["title"]):
                 continue
-            when = datetime.fromisoformat(e["published"]).astimezone(
+            when = published_at(e).astimezone(
                 ZoneInfo(sc["schedule"]["timezone"]))
             state = "grabbed" if grabbed(cfg, e["video_id"]) else "-"
             print(f"  {when:%a %m-%d %H:%M}  {state:<8} {PREFIX}{e['video_id']}  {e['title']}")

@@ -36,6 +36,33 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   Existing Discord cards were not re-posted; their Kitsu links show the new previews.
   Log: `streams/kick-131151926/recut_profanity.log`.
 
+## Backlog push (started 2026-10-19 22:20)
+- User wants the approved backlog (10/8-10/17 streams) on YouTube. clipper.toml `[schedule]`:
+  segments every day at 14:00/16:00/20:00 (was mon-fri 16:00), so days fill to max_per_day 6. Revert
+  when the backlog clears (comment in the file). Replan: 97 scheduled, 65 left for later replans
+  (45 pending review, the rest no slot yet; compilations come after their segments, Sat 14:00 only).
+  Backup: schedule.before_backlog_2026-10-19.json. Bot restarted 22:16 so its replans use the new slots.
+- First batch (`clipper upload --max 6`, private, manual_publish), Tue 10/20 slots, publish in Studio:
+  10:00 Short 4vnv3JOsW2k, 12:00 ihRedRw66oU, 14:00 -V1wTp0A3ok, 16:00 r8xVoG7DC1s, 18:00 XztAeLsQvZ8,
+  20:00 btWh90PKYAQ. All with captions, playlist, Kitsu link; covers on all but the Short. Log:
+  logs/upload_backlog_2026-10-19.log. **User is watching these for Content ID blocks before more go up.**
+  The Short's title still says "The hosts disagree" (old approved draft).
+- Bot's pre-show poll 404 (fixed 2026-10-19): from 17:23 the YouTube RSS feed for the Kino channel
+  (`feeds/videos.xml?channel_id=UCy58Oc...`) returned 404 on every poll (some other channels' feeds
+  were fine; the channel itself was up). Not a config problem. `preshow.feed()` now falls back to
+  `yt-dlp --flat-playlist` on the channel's /videos page when RSS fails (logs one INFO line;
+  `published_at()` looks up the date only for title matches not yet grabbed). The 10/19 pre-show
+  (yt-RGPltEFULV0) was already grabbed. No bot restart needed: the bot runs `clipper preshow check`
+  as a fresh process each poll, so polls exit 0 again from 22:37.
+
+## Thumbnails 10/10, 10/13, 10/15 (2026-10-19)
+- kick-131498615 (10/10) had no covers either: 27 made ($1.10), 24 attached in Kitsu (3 compilations on
+  disk only), checked against Kitsu.
+- kick-132040888 (10/13) had no covers: `clipper thumbs` made 33 ($1.42, log batch_thumbs.log) and
+  attached 28 in Kitsu (its 5 compilations aren't Kitsu items, so their .jpgs sit on disk only).
+- kick-132380636 (10/15) already had all 21 attached. Both checked against Kitsu (main preview = our .jpg).
+- Nothing from either stream is on YouTube yet; `clipper upload` sets the covers when they go up.
+
 ## To do next
 0. **Republish re-cut videos to Kitsu (user said not yet, 2026-10-19).** Segments + compilations of
    kick-132733064, -133040747, -133095550, -133112185 were re-cut (seek fix, see Gotchas) and SRTs
