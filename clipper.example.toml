@@ -333,6 +333,8 @@ min_lead_minutes = 30          # publishAt must still be this far in the future
 manual_publish = false         # true: every upload stays private (no publishAt, pre-shows too);
                                # you make it public in YouTube Studio at its slot
 max_per_run = 6                # quota guard per run
+max_per_24h = 6                # uploads in any 24 h, all runs together (YouTube's daily upload cap;
+                               # see SETUP.md "A new YouTube channel")
 category_id = "24"             # Entertainment
 language = "en"
 made_for_kids = false

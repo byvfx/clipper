@@ -116,6 +116,13 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   Still on YouTube: Short 4vnv3JOsW2k "The hosts disagree" (issue #3). `clipper meta` masks descriptions, but
   Kitsu text from before profanity = true isn't re-checked at upload: issue #8 (mask at upload time).
 
+## Automatic uploads (2026-10-20, user)
+- clipper.toml [youtube]: manual_publish = false (uploads private with publishAt = slot; public at once if
+  the slot is under min_lead_minutes away), auto_upload_minutes = 60 (bot: `clipper schedule` then
+  `clipper upload` hourly), max_per_24h = 15 (new: counts uploads in the last 24 h across runs; default 6).
+  Bot restarted 19:26; first run at 19:28 uploaded nothing (15 in the last 24 h). Uploads resume as
+  last night's batch ages out (~22:20). All 16 earlier uploads were already public (published in Studio).
+
 ## Vertical Short covers (issue #1, 2026-10-20)
 - `thumbs.compose_vertical`: 1080x1920 tabloid cover per Short from its clip's thumbnails.json choice
   (masthead, green band, headline split by `fill_lines` to fill the width, face to the bottom, inset and

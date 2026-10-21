@@ -129,7 +129,8 @@ ways the API reports badly, so do these before the first big upload run.
    quota (that one is `quotaExceeded`). Private uploads count too. The window looks
    rolling (about 24 h from each upload), and the API hit it at 8 uploads in 24 h on the
    new channel. It grows with the channel's history and verification; YouTube doesn't
-   publish the number. Keep `[schedule] max_per_day` and `[youtube] max_per_run` under it.
+   publish the number. Keep `[schedule] max_per_day`, `[youtube] max_per_run` and `max_per_24h` under it
+   (`max_per_24h` counts every upload in the last 24 h, so hourly automatic runs stay under too).
    A refused upload leaves nothing behind on YouTube or in schedule.json, so it is safe to
    rerun later.
 4. **Past the cap, upload in Studio** (it may still accept uploads when the API is

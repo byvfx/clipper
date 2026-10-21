@@ -46,6 +46,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_lead_minutes": 30,   # publishAt must still be this far in the future
         "manual_publish": False,  # true: upload private, no publishAt; make it public in Studio by hand
         "max_per_run": 6,         # quota guard per run
+        "max_per_24h": 6,         # uploads in any 24 h, all runs together: YouTube caps a channel's
+                                  # daily uploads (uploadLimitExceeded); new channels hit it near 8
         "category_id": "24",      # Entertainment
         "language": "en",
         "made_for_kids": False,

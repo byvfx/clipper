@@ -31,8 +31,9 @@ whenever behaviour changes.
   only in a chat answer.
 - Kitsu is the record for review decisions. Bot buttons and the war room act through
   `clipper/actions.py`; do not write decisions anywhere else.
-- Uploads are manual until the user turns on `[youtube] auto_upload_minutes`. Do not run
-  `clipper upload` or `clipper review publish` without being asked.
+- Uploads are automatic since 2026-10-20: the bot replans and runs `clipper upload` every
+  `[youtube] auto_upload_minutes` (60), private with publishAt, at most `max_per_24h`. Do not run
+  `clipper upload` or `clipper review publish` by hand without being asked.
 - Generated titles, descriptions and thumbnail text should avoid the word "hosts"; the
   user finds it reads as machine-written.
 

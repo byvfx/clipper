@@ -23,8 +23,9 @@ file in Studio (private, no details), then `clipper upload --attach <item> <link
 the title, description and tags, adds thumbnail, captions, playlist and Kitsu link, and
 records it as uploaded so it never goes up twice.
 
-Until the Cloud project passes the YouTube API audit, YouTube keeps API uploads private
-regardless of publishAt; publish those by hand in YouTube Studio meanwhile.
+Publishing through the API (public, or private with publishAt) worked on this Cloud project
+before any API audit (2026-10-20). [youtube] max_per_24h keeps every run together under the
+channel's daily upload cap; with auto_upload_minutes the bot replans and uploads on a timer.
 """
 
 from __future__ import annotations
@@ -317,7 +318,16 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
             missed.append(e)
         elif when <= horizon:
             due.append(e)
-    due = due[:limit or yc["max_per_run"]]
+    # Pre-shows first, then by slot; at most max_per_run, and never past max_per_24h
+    # counting everything uploaded in the last 24 h (YouTube's daily cap is per channel).
+    due.sort(key=lambda e: (e.get("source") != "asap", e["publish_at"]))
+    recent = sum(1 for e in sched["entries"] if e.get("uploaded_at")
+                 and now - datetime.fromisoformat(e["uploaded_at"]) < timedelta(hours=24))
+    room = max(0, yc["max_per_24h"] - recent)
+    if room < len(due[:limit or yc["max_per_run"]]):
+        print(f"  {recent} uploaded in the last 24 h ([youtube] max_per_24h = {yc['max_per_24h']}): "
+              f"{room} more now")
+    due = due[:min(limit or yc["max_per_run"], room)]
     refresh_review(cfg, due)
     for e in missed:
         print(f"  missed slot {e['publish_at']}: {e['title'][:60]} (rerun clipper schedule)")
