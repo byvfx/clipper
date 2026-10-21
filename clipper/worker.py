@@ -81,7 +81,14 @@ def read_json(path: Path) -> dict:
 def write_json(path: Path, data: dict) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    for attempt in range(10):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:  # a reader (war room, bot) has it open on the NAS share
+            if attempt == 9:
+                raise
+            time.sleep(0.2 * (attempt + 1))
 
 
 def stage_args(stage: str, stream: str, wc: dict) -> list[str]:
@@ -162,8 +169,11 @@ class Run:
         self.lock.unlink(missing_ok=True)
 
     def done(self, stage: str) -> bool:
-        if self.data["stages"].get(stage, {}).get("status") in ("done", "skipped"):
+        status = self.data["stages"].get(stage, {}).get("status")
+        if status in ("done", "skipped"):
             return True
+        if status in ("running", "failed"):
+            return False  # interrupted or failed: its outputs may be partial
         return any((self.d / m).exists() for m in DONE_MARKERS[stage])
 
 
