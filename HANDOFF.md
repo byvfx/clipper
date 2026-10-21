@@ -106,7 +106,8 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   logs/upload_backlog_2026-10-20.log.
 - 15 a day (user, 14:45): clipper.toml [schedule] hourly 08:00-22:00 (11 segment slots, Short 10:00, clips
   12/18, compilation daily 21:00), max_per_day 15, min_gap 60; [youtube] max_per_run 15. Revert notes in
-  the file; backups clipper.toml.before_15_per_day_2026-10-20, schedule.before_15_per_day_2026-10-20.json.
+  the file; backup schedule.before_15_per_day_2026-10-20.json (the clipper.toml copy was deleted;
+  the old values are in the comment).
   `clipper schedule --reshuffle`: 171 scheduled through 11/07, 1 compilation waiting. Bot restarted 14:48.
   "hosts" cleanup (user, 17:00): the 4 titles retitled "Andy and PPP ..." in Kitsu; 61 scheduled
   descriptions rewritten (54 via Kitsu, 7 compilation drafts on disk with .before_hosts_fix.json backups;
@@ -143,6 +144,16 @@ MacBook setup (6 below). Add new work there; this list stays for history.
    deploy/discord); deploy/*/env.local hold machine-specific values (keep them out of any shared copy);
    `[review] host` must be set per machine (no default since 2026-10-18); the NAS still runs the old
    recorder until `bash deploy/record/deploy.sh` is run between shows.
+7. **Link videos to their longer source (user wants it, brainstormed 2026-10-19, not built).** In the
+   description: clip -> its segment with a `?t=` timestamp at the clip's offset; segment -> its
+   compilation; segments of one stream -> previous/next part (optional). Compilations already have
+   chapters. Add the link at upload time as a per-show footer template (e.g. "Full segment: {url}"),
+   not in the reviewed Kitsu description, because the parent's URL doesn't exist at review time. The
+   schedule often puts a clip out before its segment, and with `manual_publish` the parent may still
+   be private, so add a backfill pass: when a parent goes public, `videos.update` its children's
+   descriptions (50 quota units each); run it from the upload/sync loop. No Kick VOD links (they send
+   people off YouTube and may expire). Shorts are out of scope (user not worried): the API can't set
+   the Shorts "related video" field or pin comments, and links in Shorts descriptions aren't clickable.
 
 ## Multi-show (done 2026-10-18)
 One clipper.toml, one `[shows.<key>]` table per show (kino, c404, dsp, blade) at its end: `channels`
@@ -169,7 +180,7 @@ reviewed, then posted ASAP**.
   prompts/preshow_v1.md, ~$0.02), cut, meta (credit = [preshow] credit, playlist "{show} Pre-shows"),
   thumbs, review. Whole run ~5 min, ~$0.25. Kitsu: lands in that day's episode ("2026-10-19").
 - **The bot polls** every `[preshow] poll_minutes` (5): `clipper preshow check --run`. The worker
-  only processes yt-* streams it finds (no worker task is installed on this laptop).
+  only processes yt-* streams it finds (worker task installed on this laptop 2026-10-20).
 - Schedule: approved pre-show -> source "asap", publish_at = time of the schedule run, outside slots
   and spacing; moves with each replan until uploaded. `clipper upload` treats asap entries as due and
   uploads them **public at once** (no publishAt). Uploads are still manual.
@@ -200,12 +211,44 @@ reviewed, then posted ASAP**.
 - Bot restarted 15:03 on this code. Upload with `clipper upload --max 1` to send only the pre-show
   (plain `clipper upload` also sends everything else due within 48 h).
 
-## Channel 404 News test stream (kick-132548228, Oct 16 VOD, 5.27 h)
-- transcribe → thumbs DONE 2026-10-18 (~$3.10). 16 segments, 5 picks, compilations The Quartering
-  (11 segments, 2h59m; topics relabeled by hand, backup `segments.before_relabel.json`) and Jerry
-  Banfield (2, 49m), 23 Channel 404 covers. User said hold publishing for now.
-- When asked: `clipper review publish kick-132548228 --no-notify` (no --config needed now), then ask
-  before Discord cards. Flag pick t32 (Jerry Banfield / Rosa Parks) for a careful look.
+## Channel 404 News (permission from Don 2026-10-19)
+- Don gave the go-ahead 2026-10-19: c404 goes through review → schedule like Kino (uploads still manual).
+  The scheduler only takes Kitsu-approved items, so nothing of 404's is scheduled until it is approved.
+- kick-132548228 (Oct 16 VOD, 5.27 h): 16 segments, 5 picks, compilations The Quartering (11 segments,
+  2h59m; topics relabeled by hand, backup `segments.before_relabel.json`) and Jerry Banfield (2, 49m),
+  23 covers, Shorts v01-v05. Published to Kitsu 2026-10-19 with `--no-notify` (log run_review.log).
+  Not yet asked: Discord cards. Flag pick t32 (Jerry Banfield / Rosa Parks) for a careful look.
+- kick-133095550 (Oct 18, recorded live): in Kitsu since 10/19. Its Kitsu previews predate the .mkv seek
+  fix (silent 2-4 s head); the local re-cuts (what uploads) are fine. See To do 0.
+  2026-10-20: 4 approved in Kitsu (c05_t08, s02, s04, comp-the-quartering), 19 pending. The Kino backlog
+  filled every segment slot through 11/10, so the user asked for the shows to take turns: new
+  `[schedule] mix_shows = true` (default; round-robin per kind, each show keeps its own order) and
+  `clipper schedule --reshuffle` (re-places auto entries not yet uploaded; pinned/asap/uploaded stay).
+  Ran it once (backup schedule.before_reshuffle_2026-10-20.json; 78 Kino entries moved, all 7 uploaded
+  kept): s02 Baxter Bulletin Wed 10/21 16:00, c05_t08 Wed 10/21 18:00, s04 Destiny Thu 10/22 14:00.
+  comp-the-quartering waits for its other 5 segments. Kino now fills oldest stream first again, so
+  10/13's Blade segments got slots and 7 segments of kick-132380636 (10/15) fell past the 21-day horizon.
+  Bot restarted 08:54 on this code (its replans use mix_shows; they don't reshuffle).
+- Discord cards posted 2026-10-20 (user asked): kick-132548228 28 cards (thread 1562150123956609166;
+  26 new, 2 were already there), kick-133095550 23 (thread 1562262846887170091). The 133095550 cards come
+  from its old Kitsu previews (silent head). With discord.json present, the bot's refresh loop now syncs
+  both streams, so approvals made directly in Kitsu reach the schedule too (cardsync.stream_dirs only
+  covers streams that have cards).
+- 2026-10-20 evening: user approved everything in the war room; all 51 items of both 404 streams are
+  scheduled (10/20-11/04).
+
+## First hands-off night (2026-10-20)
+- User goal: get kino + c404 running fully hands-off (recorder → worker → Kitsu + Discord cards for both
+  shows) before adding more shows.
+- The GPU worker task was NOT installed until now (kick-133095550 had been run by hand). Installed
+  17:47 with `deploy\worker\worker-task.ps1 -Install` (doctor --role gpu --offline: 21 ok). It began at
+  once on last night's Kino recording kick-133260144 (7.54 h, est. $4-5); tonight's 404 recording
+  kick-133423456 (started 17:00 PT) follows when the recorder marks it done. `[worker] notify = true`,
+  so the review stage posts Discord cards per show thread.
+- The worker runs the working tree, which includes another session's uncommitted worker.py/config.py
+  edits (write_json retry on PermissionError; running/failed stages count as not done).
+- Check tomorrow: `deploy\worker\worker-task.ps1 -Status`, logs\worker.log, both streams' run.json and
+  discord.json, then approvals → schedule.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
