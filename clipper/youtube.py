@@ -114,7 +114,8 @@ def metadata(entry: dict, cfg: dict) -> dict:
     srt, jpg = video.with_suffix(".srt"), video.with_suffix(".jpg")
     return {"title": clean(title, 100), "description": clean(description, 5000), "tags": tags,
             "playlist": value("Playlist").strip(), "srt": srt if srt.exists() else None,
-            "thumb": jpg if jpg.exists() and cfg["youtube"]["thumbnails"] else None,
+            "thumb": jpg if jpg.exists() and cfg["youtube"]["thumbnails"]
+            and (entry["kind"] != "short" or cfg["youtube"]["short_thumbnails"]) else None,
             "review_key": key, "stream_dir": sdir}
 
 

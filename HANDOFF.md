@@ -123,10 +123,12 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   zoom). Drawn by `clipper thumbs` (with the clip covers), by `clipper shorts` after rendering, and by
   `clipper thumbs <stream> --shorts` (just those, attaches just those in Kitsu). Upload/Kitsu pick up
   `shorts/<name>.jpg` like any cover.
-- Done on kick-131151926 only (`--no-kitsu`). Other streams: `clipper thumbs <stream> --shorts`.
-- Not yet known: whether `thumbnails.set` works on Shorts through the API (Studio allows it). The next
-  scheduled Short upload will tell; a refusal is only a warning. `clipper upload --thumbnails` would also
-  try the already-uploaded Shorts (only if the user asks).
+- Done and attached in Kitsu for every stream with Shorts (kick-131151926, -132548228, -133095550;
+  16 covers). Kino streams 10/10-10/17 have no Shorts. Committed adf35ae, issue #1 closed.
+- Not yet known: whether `thumbnails.set` works on Shorts through the API (Studio allows it). User
+  (2026-10-20): don't send Short covers to YouTube until that is verified, so `[youtube] short_thumbnails`
+  (default false) keeps uploads, `--attach` and `--thumbnails` from setting them. To verify: set one by
+  hand on a test Short, check it in Studio and on the Shorts shelf, then turn the key on.
 
 ## To do next
 Open work is now tracked as GitHub issues (byvfx/clipper #1-#7, created 2026-10-20): Shorts covers,

@@ -52,6 +52,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "notify_subscribers": True,
         "captions": True,         # upload the .srt beside each video
         "thumbnails": True,       # set the .jpg beside each video (`clipper thumbs`)
+        "short_thumbnails": False,  # ...Shorts too; off until thumbnails.set is verified on a Short
         "add_to_playlist": True,  # the metadata draft's playlist, created on first use
         "playlist_privacy": "public",
     },
