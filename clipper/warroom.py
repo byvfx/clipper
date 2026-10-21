@@ -63,21 +63,66 @@ def media_url(sdir: Path, p: Path | str | None) -> str:
     if not p:
         return ""
     p = Path(p)
-    try:
-        rel = p.resolve().relative_to(sdir.resolve()).as_posix()
+    try:   # no resolve(): it opens the file, a round trip each on the NAS share
+        rel = p.relative_to(sdir)
     except ValueError:
         return ""
-    return f"/media/{quote(sdir.name)}/{quote(rel)}"
+    if ".." in rel.parts:
+        return ""
+    return f"/media/{quote(sdir.name)}/{quote(rel.as_posix())}"
 
 
-def row_json(sdir: Path, r: dict) -> dict:
+def row_json(sdir: Path, r: dict, ls: review.Listing | None = None) -> dict:
+    ls = ls or review.Listing()
     out = {k: v for k, v in r.items() if not isinstance(v, Path)}
     out["thumbnail_url"] = media_url(sdir, r.get("thumbnail")) + (
         f"?v={int(r['thumb_mtime'])}" if r.get("thumb_mtime") else "")
     prev = r.get("preview")
-    src = prev if prev and Path(prev).exists() else r.get("file")
-    out["video_url"] = media_url(sdir, src) if src and Path(src).exists() else ""
+    src = prev if prev and ls.exists(prev) else r.get("file")
+    out["video_url"] = media_url(sdir, src) if src and ls.exists(src) else ""
     return out
+
+
+# Per-stream results, rebuilt when the stream folder's top-level entries change (any file
+# written there, or a file added to a subfolder, changes a name, mtime or size), or after
+# CACHE_MAX_AGE_S. Reading every item's files over the NAS share takes seconds per stream.
+CACHE: dict[tuple[str, str], tuple[tuple, float, object]] = {}
+CACHE_LOCK = threading.Lock()
+CACHE_MAX_AGE_S = 300
+
+
+def _scan(sdir: Path) -> tuple[set[str], tuple]:
+    try:
+        with os.scandir(sdir) as it:
+            ents = sorted((e.name, e.stat().st_mtime_ns, e.stat().st_size) for e in it)
+    except OSError:
+        return set(), ()
+    return {e[0] for e in ents}, tuple(ents)
+
+
+def _streams(cfg: dict) -> list[tuple[Path, set[str], tuple]]:
+    """(stream dir, its file names, a change signature) for each stream, one scan each."""
+    with os.scandir(cfg["paths"]["streams"]) as it:
+        dirs = sorted(Path(e.path) for e in it if e.is_dir() and not e.name.startswith("."))
+    return [(d, *_scan(d)) for d in dirs]
+
+
+def _cached(sdir: Path, what: str, sig: tuple, build):
+    with CACHE_LOCK:
+        hit = CACHE.get((sdir.name, what))
+    if hit and hit[0] == sig and time.time() - hit[1] < CACHE_MAX_AGE_S:
+        return hit[2]
+    val = build()
+    with CACHE_LOCK:
+        CACHE[(sdir.name, what)] = (sig, time.time(), val)
+    return val
+
+
+def _mtime(p: Path) -> int:
+    try:
+        return os.stat(p).st_mtime_ns
+    except OSError:
+        return 0
 
 
 def stream_info(cfg: dict, sdir: Path) -> dict:
@@ -131,14 +176,23 @@ def for_stream_show_name(cfg: dict, key: str) -> str:
     return for_show(cfg, key)["meta"]["show_name"] or key
 
 
-def all_rows(cfg: dict) -> list[dict]:
+def stream_rows(cfg: dict, sdir: Path) -> list[dict]:
+    sc = for_stream(cfg, sdir)
+    ls = review.Listing()
+    return [{**row_json(sdir, r, ls), "show": sc["show"]["key"],
+             "show_name": sc["meta"]["show_name"] or ""}
+            for r in actions.describe(cfg, sdir).values()]
+
+
+def all_rows(cfg: dict, streams: list | None = None) -> list[dict]:
+    """Every published stream's rows, oldest stream first."""
+    sched = _mtime(cfg["paths"]["schedule"])   # rows show scheduled/uploaded
     rows = []
-    for sdir in actions.review_dirs(cfg):
+    for sdir, names, sig in streams if streams is not None else _streams(cfg):
+        if "review_state.json" not in names:
+            continue
         try:
-            sc = for_stream(cfg, sdir)
-            for r in actions.describe(cfg, sdir).values():
-                rows.append({**row_json(sdir, r), "show": sc["show"]["key"],
-                             "show_name": sc["meta"]["show_name"] or ""})
+            rows += _cached(sdir, "rows", sig + (sched,), lambda d=sdir: stream_rows(cfg, d))
         except Exception as e:  # noqa: BLE001 - one broken stream shouldn't blank the page
             print(f"warroom: {sdir.name}: {type(e).__name__}: {e}", flush=True)
     return rows
@@ -177,9 +231,11 @@ def overview(cfg: dict) -> dict:
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     now = datetime.now(tz)
     streams_dir: Path = cfg["paths"]["streams"]
-    sdirs = sorted((p.parent for p in streams_dir.glob("*/meta.json")),
-                   key=lambda d: load(d / "meta.json", {}).get("started_at", ""), reverse=True)
-    rows = all_rows(cfg)
+    streams = _streams(cfg)
+    infos = sorted((_cached(d, "info", sig, lambda d=d: stream_info(cfg, d))
+                    for d, names, sig in streams if "meta.json" in names),
+                   key=lambda i: i["started_at"], reverse=True)
+    rows = all_rows(cfg, streams)
     counts = {"pending": 0, "changes": 0, "approved": 0, "approved_unscheduled": 0,
               "rejected": 0, "held": 0}
     name = {"changes_requested": "changes"}
@@ -211,7 +267,7 @@ def overview(cfg: dict) -> dict:
             "counts": {**counts, "scheduled_7d": sum(
                 1 for e in entries if now <= datetime.fromisoformat(e["publish_at"]) <= now + timedelta(days=7)),
                 "uploaded": sum(e.get("status") == "uploaded" for e in sched.get("entries", []))},
-            "streams": [stream_info(cfg, d) for d in sdirs[:20]],
+            "streams": infos[:20],
             "items": rows, "schedule": entries, "schedule_generated_at": sched.get("generated_at"),
             "retakes": retakes(cfg), "health": health(cfg), "stages": worker.STAGES}
 
@@ -407,6 +463,13 @@ def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
     wc = cfg["warroom"]
     if wc["host"] not in ("127.0.0.1", "localhost", "::1") and not wc["token"]:
         raise SystemExit("[warroom] host is reachable from other machines: set [warroom] token too")
+
+    def warm():  # fill the per-stream cache so the first page load isn't the slow one
+        try:
+            overview(cfg)
+        except Exception as e:  # noqa: BLE001
+            print(f"warroom: warm-up: {type(e).__name__}: {e}", flush=True)
+    threading.Thread(target=warm, name="warroom-warm", daemon=True).start()
     return ThreadingHTTPServer((wc["host"], port or wc["port"]), make_handler(cfg))
 
 

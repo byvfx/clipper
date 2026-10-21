@@ -470,11 +470,20 @@ def show_of_channel(cfg: dict, channel: str) -> str:
     return next((k for k, s in _root(cfg)["shows"].items() if channel in s["channels"]), "")
 
 
+_CHANNELS: dict[str, str] = {}   # a stream's channel never changes; meta.json may be on the NAS
+
+
 def stream_channel(sdir: Path) -> str:
+    key = str(sdir)
+    if key in _CHANNELS:
+        return _CHANNELS[key]
     try:
-        return json.loads((sdir / "meta.json").read_text(encoding="utf-8")).get("channel") or ""
+        channel = json.loads((sdir / "meta.json").read_text(encoding="utf-8")).get("channel") or ""
     except (OSError, ValueError):
         return ""
+    if channel:
+        _CHANNELS[key] = channel
+    return channel
 
 
 def _root(cfg: dict) -> dict:

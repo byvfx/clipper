@@ -304,6 +304,7 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
     except FileNotFoundError:
         outputs = {}
     meta = load_json(sdir / "meta.json", {})
+    ls = review.Listing()
     out = {}
     for key, st in state.items():
         r = decisions.get(key, {})
@@ -335,8 +336,8 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
             **{k: fields.get(n) or proposed.get(n) or "" for k, n in
                (("description", "YouTube description"), ("hashtags", "Hashtags"),
                 ("tags", "Tags"), ("playlist", "Playlist"))},
-            "thumbnail": jpg if jpg.exists() else None,
-            "thumb_mtime": jpg.stat().st_mtime if jpg.exists() else None,
+            "thumbnail": jpg if ls.exists(jpg) else None,
+            "thumb_mtime": ls.mtime(jpg),
             "file": sdir / st["file"], "preview": sdir / "review" / f"{key}.mp4",
             "revision": st.get("revision"), "synced_at": r.get("updated_at"),
         }

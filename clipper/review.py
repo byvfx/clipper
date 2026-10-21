@@ -123,6 +123,31 @@ SEQUENCE_KINDS = ("segment", "compilation")
 NOTE_PREFIX = "[clipper]"
 
 
+class Listing:
+    """File existence and mtimes from one directory scan per folder, not one round trip
+    per file: on the NAS share each stat costs tens of milliseconds."""
+
+    def __init__(self):
+        self._dirs: dict[Path, dict[str, os.DirEntry]] = {}
+
+    def entry(self, p: Path) -> os.DirEntry | None:
+        d = p.parent
+        if d not in self._dirs:
+            try:
+                with os.scandir(d) as it:
+                    self._dirs[d] = {e.name: e for e in it}
+            except OSError:
+                self._dirs[d] = {}
+        return self._dirs[d].get(p.name)
+
+    def exists(self, p: Path) -> bool:
+        return self.entry(Path(p)) is not None
+
+    def mtime(self, p: Path) -> float | None:
+        e = self.entry(Path(p))
+        return e.stat().st_mtime if e else None   # cached by the scan on Windows
+
+
 def connect(rc: dict):
     import gazu
 
@@ -234,7 +259,8 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "description": d["description"], "duration_s": d["duration_s"],
                         "fields": {"Topic": d["topic"]}, "meta": {**d, "id": key},
                         "segments": d["segments"]})
-    out = [it for it in out if it["file"].exists()]
+    ls = Listing()
+    out = [it for it in out if ls.exists(it["file"])]
     thumbs_path = stream_dir / "thumbnails.json"
     thumbs = json.loads(thumbs_path.read_text(encoding="utf-8")) if thumbs_path.exists() else {}
     for it in out:
@@ -243,7 +269,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
             it["fields"][THUMB_COL] = thumbs[it["thumb_key"]]["text"]
         # Prefer the upload metadata draft for what reviewers read and edit.
         draft = stream_dir / "metadata" / FOLDERS[it["kind"]] / f"{it['file'].stem}.json"
-        if draft.exists():
+        if ls.exists(draft):
             upload = draft_fields(json.loads(draft.read_text(encoding="utf-8")))
         else:
             upload = {"YouTube title": it["title"], "YouTube description": it["description"]}
