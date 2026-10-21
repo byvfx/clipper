@@ -50,5 +50,5 @@ who may never be on screen. Use them only for those people:
 Never use a photo for someone who is clearly on screen, and never for anyone else.
 
 Never print a slur, an insult aimed at a group, or a crude sexual phrase, even when the
-video quotes one. Use the word "hosts" rarely; it reads as machine-written. Name the
-person, or make the subject the actor ("Nobody buys it").
+video quotes one. Never use the word "hosts", or "host" for a co-host; it
+reads as machine-written. Name the person, or make the subject the actor ("Nobody buys it").

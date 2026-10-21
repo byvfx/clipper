@@ -104,7 +104,7 @@ stream_context = ""
 # Style rules appended to every prompt that writes viewer-facing text (titles,
 # descriptions, hooks, chapters, thumbnails). Add your own notes as more lines.
 house_style = [
-  'Use the word "hosts" rarely; it reads as machine-written. Name the person (Andy, PPP, Jer...) or make the subject the actor ("Nobody buys it").',
+  'Never use the word "hosts", or "host" for a co-host; it reads as machine-written. Name the person (Andy, PPP, Jer...) or make the subject the actor ("Nobody buys it").',
 ]
 # Other creators' video/stream audio in a clip (Content ID risk):
 #   "reject"           any clip whose payoff or setup needs more than a few seconds of it

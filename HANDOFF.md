@@ -24,7 +24,7 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Kitsu is the record for review/edits (no separate DB). Discord approvals must keep working.
 - Thumbnails: `[thumbnail] style = "enquirer"` (1990s tabloid: KINO CASINO masthead, no "THE NEW" roundel,
   no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v2` (face = headline subject).
-- Avoid the word "hosts" in viewer-facing text → `[scoring] house_style` rules, appended to all viewer-facing prompts.
+- Never use the word "hosts" in viewer-facing text (was "rarely" until 2026-10-20) → `[scoring] house_style` rules, appended to all viewer-facing prompts.
   Put future style notes there. Co-hosts are **Andy (Warski)** and **PPP**. Never call PPP by any other name (user,
   2026-10-19; Kick bio says "Andy Warski and PPP"). Who-looks-like-what is in [shows.kino.scoring] stream_context.
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
@@ -97,9 +97,28 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   user uploaded in Studio gets title/description/tags, thumbnail, captions, playlist, Kitsu link and is
   recorded uploaded with source "studio", publish_at = now so its slot frees up). Test: user uploading
   kick-132380636/s12 in Studio. User re-verified the channel after a Studio error (10/20 ~12:00); Studio
-  then accepted uploads. Next: try one API upload to see if the API cap lifted too.
+  then accepted uploads. Studio upload KghV1FnuK2k attached to s12 and checked (title, tags, cover,
+  captions, playlist, Kitsu URL). Then `clipper upload --max 1` worked too (kick-131151926/v02_t42 Short,
+  eSa1J0PK2t4, 10th upload in 24 h): the second verification lifted the API cap as well. Committed 9ecff7b.
+- Backlog via API, 13:00: pinned 5 unslotted segments for 10/20 13:30-15:30 ("Claude (backlog upload)"),
+  `clipper upload --max 5`: all up, private (esCySfEIUJE, 6-83Js5jPx4, aN_CabrkUXU, Bv5qbmYe_W8,
+  XJXgU5Dv-RQ). 15 uploads in 24 h, no refusal. Backup schedule.before_backlog5_2026-10-20.json, log
+  logs/upload_backlog_2026-10-20.log.
+- 15 a day (user, 14:45): clipper.toml [schedule] hourly 08:00-22:00 (11 segment slots, Short 10:00, clips
+  12/18, compilation daily 21:00), max_per_day 15, min_gap 60; [youtube] max_per_run 15. Revert notes in
+  the file; backups clipper.toml.before_15_per_day_2026-10-20, schedule.before_15_per_day_2026-10-20.json.
+  `clipper schedule --reshuffle`: 171 scheduled through 11/07, 1 compilation waiting. Bot restarted 14:48.
+  "hosts" cleanup (user, 17:00): the 4 titles retitled "Andy and PPP ..." in Kitsu; 61 scheduled
+  descriptions rewritten (54 via Kitsu, 7 compilation drafts on disk with .before_hosts_fix.json backups;
+  script and log in this session's scratchpad), 3 descriptions' profanity masked. Ashton = PPP. house_style is
+  now "Never use hosts" (clipper.toml, config.py, example, thumbnail_enquirer_v3). Bot restarted 17:03.
+  Still on YouTube: Short 4vnv3JOsW2k "The hosts disagree" (issue #3). `clipper meta` masks descriptions, but
+  Kitsu text from before profanity = true isn't re-checked at upload: issue #8 (mask at upload time).
 
 ## To do next
+Open work is now tracked as GitHub issues (byvfx/clipper #1-#7, created 2026-10-20): Shorts covers,
+backlog catch-up, "hosts" in t20 titles, stale playlist cache, source links, Kitsu republish (0 below),
+MacBook setup (6 below). Add new work there; this list stays for history.
 0. **Republish re-cut videos to Kitsu (user said not yet, 2026-10-19).** Segments + compilations of
    kick-132733064, -133040747, -133095550, -133112185 were re-cut (seek fix, see Gotchas) and SRTs
    rewritten; Kitsu still has the old previews with the silent 2-4 s head (132733064: 24 wfa,

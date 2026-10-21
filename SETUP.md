@@ -122,7 +122,8 @@ ways the API reports badly, so do these before the first big upload run.
    thumbnails are refused (403); videos still go up, and `clipper upload --thumbnails` sets
    the covers afterwards. Verification can take more than one round: if Studio later
    refuses an upload, it may offer another verification link. Follow it. On Lolcow Cinema
-   Studio accepted uploads again right after that second verification.
+   that second verification lifted the cap for Studio *and* the API: uploads went through
+   again right away.
 3. **Expect a small daily upload cap.** `uploadLimitExceeded` ("The user has exceeded the
    number of videos they may upload") is YouTube's limit on the *channel*, not the API
    quota (that one is `quotaExceeded`). Private uploads count too. The window looks
