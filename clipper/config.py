@@ -338,6 +338,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_gap_minutes": 90,    # between any two releases
         "kick_first_hours": 24,   # nothing goes out until this long after the stream ended
         "clip_order": "score",    # score (best first) or stream (oldest stream first)
+        "mix_shows": True,        # shows take turns in each kind's queue; false = one queue
     },
     "signals": {
         "chat_lag_s": 6,          # stream delay + typing time

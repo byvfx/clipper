@@ -13,7 +13,11 @@ date for that day's first slot) pins an item; everything else fills the [schedul
 slots: clip/short/segment/compilation days and times, at most max_per_day releases,
 min_gap_minutes apart, never before kick_first_hours after the stream ended.
 
-Slots already assigned in the future stay put, so reruns only fill gaps. The result is
+With mix_shows, the shows take turns for each kind's slots (each show keeps its own
+order), so one show's backlog can't hold back another's.
+
+Slots already assigned in the future stay put, so reruns only fill gaps; --reshuffle
+re-places the automatic ones that aren't uploaded yet. The result is
 schedule.json (the upload step reads it) and each item's Kitsu "Scheduled" column.
 """
 
@@ -48,11 +52,12 @@ def parse_when(text: str, tz: ZoneInfo, first_time: str) -> datetime | None:
 
 def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[list[dict], list[dict]]:
     """Approved, un-held items from every stream, plus why the others were left out."""
-    from .config import for_stream
+    from .config import for_stream, show_of_channel, stream_channel
 
     items, skipped = [], []
     for review_path in sorted(streams_dir.glob("*/review.json")):
         sdir = review_path.parent
+        show = show_of_channel(cfg, stream_channel(sdir))
         review = json.loads(review_path.read_text(encoding="utf-8"))
         state = json.loads((sdir / "review_state.json").read_text(encoding="utf-8"))
         meta = json.loads((sdir / "meta.json").read_text(encoding="utf-8"))
@@ -67,7 +72,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
         for key, r in review.items():
             kind = KINDS[r["kind"]]
             fields = r.get("fields", {})
-            item = {"key": f"{sdir.name}/{key}", "stream": sdir.name, "kind": kind,
+            item = {"key": f"{sdir.name}/{key}", "stream": sdir.name, "show": show, "kind": kind,
                     "id": r["id"], "file": str((sdir / r["file"]).resolve()),
                     "title": fields.get("YouTube title") or key,
                     "score": float(fields.get("Score") or 0), "stream_start": started,
@@ -100,7 +105,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                 skipped.append({"key": key, "reason": f"segments not approved: {missing}"
                                 if missing else "not cut"})
                 continue
-            items.append({"key": key, "stream": sdir.name, "kind": "compilation",
+            items.append({"key": key, "stream": sdir.name, "show": show, "kind": "compilation",
                           "id": comp["topic"], "file": str(video.resolve()),
                           "title": comp["title"], "score": 0, "stream_start": started,
                           "earliest": earliest, "entity": None, "override_text": "",
@@ -126,7 +131,19 @@ def fits(when: datetime, taken: list[datetime], sc: dict) -> bool:
     return same_day < sc["max_per_day"] and all(abs(t - when) >= gap for t in taken)
 
 
-def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: bool = False) -> dict:
+def take_turns(items: list[dict]) -> list[dict]:
+    """One queue per show, merged so the shows alternate (each keeps its own order)."""
+    by_show: dict[str, list[dict]] = {}
+    for it in items:
+        by_show.setdefault(it["show"], []).append(it)
+    queues = list(by_show.values())
+    return [q[i] for i in range(max(map(len, queues), default=0)) for q in queues if i < len(q)]
+
+
+def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: bool = False,
+        reshuffle: bool = False) -> dict:
+    """reshuffle: place every automatic, not-yet-uploaded entry afresh instead of keeping
+    its slot (pinned, pre-show and uploaded entries stay)."""
     sc = cfg["schedule"]
     tz = ZoneInfo(sc["timezone"])
     streams_dir: Path = cfg["paths"]["streams"]
@@ -191,7 +208,7 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
     # 2. Keep earlier assignments that are still ahead of us (or already uploaded).
     for it in items:
         prev = old.get(it["key"])
-        if it["key"] in placed or it.get("bad") or not prev:
+        if it["key"] in placed or it.get("bad") or not prev or (reshuffle and prev["source"] == "auto"):
             continue
         when = datetime.fromisoformat(prev["publish_at"]).astimezone(tz)
         if when > now and when >= it["earliest"]:
@@ -203,6 +220,8 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
         return (it["stream_start"], it["key"])
     queue = {k: sorted((it for it in items if it["kind"] == k and it["key"] not in placed
                         and not it.get("bad")), key=order) for k in ("clip", "short", "segment", "compilation")}
+    if sc["mix_shows"]:
+        queue = {k: take_turns(q) for k, q in queue.items()}
     all_slots = slots(sc, tz, start)
 
     def fill(kinds: tuple[str, ...]) -> None:

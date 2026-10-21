@@ -193,7 +193,7 @@ def cmd_schedule(cfg: dict, args: argparse.Namespace) -> None:
         schedule.show(cfg, args.days)
         return
     schedule.run(cfg, sync_first=not args.no_sync, write_kitsu=not args.no_kitsu,
-                 dry_run=args.dry_run)
+                 dry_run=args.dry_run, reshuffle=args.reshuffle)
 
 
 def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
@@ -435,6 +435,8 @@ def main() -> None:
     p.add_argument("--no-sync", action="store_true", help="use review.json as is, skip Kitsu sync")
     p.add_argument("--no-kitsu", action="store_true", help="don't write Scheduled back to Kitsu")
     p.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
+    p.add_argument("--reshuffle", action="store_true",
+                   help="re-place automatic entries not yet uploaded (pinned/uploaded stay)")
     p.add_argument("--show", action="store_true", help="list upcoming schedule.json entries, no replan")
     p.add_argument("--days", type=int, default=7, help="with --show: how far ahead (default 7)")
     p.set_defaults(fn=cmd_schedule)
