@@ -98,7 +98,13 @@ to the NAS; the recorder only reads `[record]` and `[kick]`. Re-run it after cha
 Add a `[shows.<key>]` table to clipper.toml (see the end of clipper.example.toml):
 `channels = ["<kick slug>"]`, `[shows.<key>.meta] show_name`, and
 `[shows.<key>.scoring] stream_context` / `known_figures`. For Shorts, measure the show's
-screen layouts into `[shows.<key>.shorts.layouts.<name>]` (panels of the frame, as fractions).
+screen layouts into `[shows.<key>.shorts.layouts.<name>]` (panels of the frame, as fractions), one per
+scene the show switches between: a Short that crosses a scene cut changes layout there.
+Save a reference screenshot of each one from a recorded stream (`clipper shorts <stream>
+--save-example <layout> --at <seconds>`); `clipper doctor` warns while any is missing.
+A layout that frames an existing scene another way (say, only the webcams of a watch scene)
+gets `pick = false`: scene detection never chooses it and it needs no screenshot; pick it by
+hand with `clipper shorts <stream> --ids <vNN> --layout <name>`, the Kitsu Layout column or a retake.
 Add the slug to `[record] channels` to record it live. `clipper shows` lists every show and
 its streams; the show's Kitsu production is created on its first publish.
 

@@ -1,7 +1,7 @@
 """Vertical Shorts: each Pass B pick's short window as a 1080x1920 video.
 
 Usage:
-    clipper shorts <stream> [--ids t33,w19] [--layout watch] [--force]
+    clipper shorts <stream> [--ids t33,w19] [--layout watch] [--force] [--rescene] [--check]
 
 For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>.mp4:
   1. the clip's window (in_s..out_s; [shorts] window = "short" uses scoring's 15-60 s
@@ -10,8 +10,10 @@ For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>
      at most max_s, snapped to word gaps with pad_s of room, cut with [bleep] applied;
   2. a layout: a stack of panels, each a crop of the source frame scaled to the full
      width, e.g. the video being watched on top and the webcams under it. Layouts are
-     per show ([shows.<key>.shorts.layouts]); a vision call on a few frames picks one per
-     Short, or set it: --layout, the Kitsu "Layout" column, or "layout" in shorts.json;
+     per show ([shows.<key>.shorts.layouts]). One vision call labels a frame every
+     scene_step_s; where the stream cuts to another scene the Short switches layout at
+     the cut (placed on the frame with the highest ffmpeg scene score). Or set one layout
+     for the whole Short: --layout, the Kitsu "Layout" column, or "layout" in shorts.json;
   3. burned-in captions from words.jsonl, a few words at a time with the spoken word
      highlighted, masked like every other caption ([bleep]);
   4. audio normalized to [shorts] lufs (two-pass loudnorm) with short fades.
@@ -28,6 +30,7 @@ import json
 import re
 import subprocess
 import time
+from itertools import pairwise
 from pathlib import Path
 
 from .bleep import Bleeper
@@ -91,6 +94,13 @@ def layouts_of(sc: dict) -> dict[str, dict]:
     return out
 
 
+def pickable(layouts: dict) -> dict[str, dict]:
+    """The layouts scene detection may choose. pick = false marks another way of showing a
+    scene that already has a layout (Kino's watch_hosts: the watch scene's cams only), so
+    it would only compete with that one; it is chosen by hand (--layout, Kitsu, a retake)."""
+    return {n: lay for n, lay in layouts.items() if lay.get("pick", True)}
+
+
 def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tuple]:
     """(x, y, w, h, panel_h) per panel: the panel's src box (fractions of the frame),
     cut down to the aspect of its slot (out_w x panel_h) around its focus point. Panels
@@ -120,38 +130,183 @@ def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tu
     return crops
 
 
-def grab_frames(video: Path, dur: float, n: int, out_dir: Path) -> list[Path]:
+def sample_frames(src: Path, a: float, dur: float, step: float, out_dir: Path,
+                  stem: str) -> list[tuple[float, Path]]:
+    """A small frame every step seconds of src[a, a+dur]: (time in the Short, jpg)."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    paths = []
-    for k in range(n):
-        t = dur * (k + 1) / (n + 1)
-        p = out_dir / f"{video.stem}_{k}.jpg"
-        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{t:.2f}",
-                        "-i", str(video), "-frames:v", "1", "-vf", "scale=768:-2", str(p)], check=True)
-        paths.append(p)
-    return paths
+    for old in out_dir.glob(f"{stem}_f*.jpg"):
+        old.unlink()
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{a:.3f}",
+                    "-t", f"{dur:.3f}", "-i", str(src), "-vf", f"fps=1/{step},scale=768:-2",
+                    "-q:v", "5", str(out_dir / f"{stem}_f%03d.jpg")], check=True)
+    frames = sorted(out_dir.glob(f"{stem}_f*.jpg"))
+    return [(k * step, f) for k, f in enumerate(frames)]
 
 
-def pick_layout(claude: Claude, sc: dict, layouts: dict, frames: list[Path]) -> str:
-    """Ask a vision model which layout the frames show; the most common answer wins."""
-    from .thumbs import b64_jpeg
+def label_frames(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[float, Path]]
+                 ) -> list[str] | None:
+    """One layout name per frame, scene_batch frames per vision call (with 25-45 frames in
+    one call the labels drifted from run to run), or None if a batch doesn't come back."""
+    n = max(1, sc["scene_batch"])
+    labels: list[str] = []
+    for k in range(0, len(frames), n):
+        got = label_batch(claude, sc, layouts, frames[k:k + n])
+        if got is None:
+            return None
+        labels += got
+    return labels
+
+
+def label_batch(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[float, Path]]
+                ) -> list[str] | None:
+    import base64
 
     names = list(layouts)
+    # With a screenshot of every real layout, "center" (anything else) only invited
+    # mistakes: a zoomed or busy screen box got called center.
+    if all(layouts[n].get("example") for n in names if n != "center") and len(names) > 2:
+        names = [n for n in names if n != "center"]
     system = ("You classify frames from a livestream by which screen layout they show. "
               "Layouts:\n" + "\n".join(f"- {n}: {layouts[n].get('description', '')}" for n in names)
-              + "\nFor each frame give the layout it shows. Pick the most specific layout "
+              + "\nThe frames are in time order, a few seconds apart; the stream can switch "
+              "layout between any two. Give the layout of every frame, in order. Judge the "
+              "arrangement of the frame (where the boxes and webcams are), not what is playing "
+              "inside them: a screen box showing a tall phone video with black bars, a dark "
+              "page or a paused video is still the same layout. Pick the most specific layout "
               "that fits; use center only when none of the others does.")
+    # A screenshot per layout ("example") anchors the labels: without them the model
+    # judged by what played in the screen box (a zoomed-in face read as "center").
     content = []
-    for i, f in enumerate(frames, 1):
-        content += [{"type": "text", "text": f"Frame {i}:"},
+    for n in names:
+        ex = layouts[n].get("example")
+        if ex and Path(ex).exists():
+            content += [{"type": "text", "text": f"Reference screenshot of layout {n}:"},
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                     "data": base64.b64encode(Path(ex).read_bytes()).decode()}}]
+    if content:
+        content.append({"type": "text", "text": "Now the frames to label:"})
+    for i, (t, f) in enumerate(frames, 1):
+        content += [{"type": "text", "text": f"Frame f{i:02d} ({t:.0f} s):"},
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                                                 "data": b64_jpeg(f)}}]
-    schema = {"type": "object", "additionalProperties": False, "required": ["frames"],
-              "properties": {"frames": {"type": "array", "items": {"type": "string", "enum": names}}}}
+                                                 "data": base64.b64encode(f.read_bytes()).decode()}}]
+    # One required key per frame: a free-length list came back short or long ~40% of the time.
+    keys = [f"f{i:02d}" for i in range(1, len(frames) + 1)]
+    schema = {"type": "object", "additionalProperties": False, "required": keys,
+              "properties": {k: {"type": "string", "enum": names} for k in keys}}
     out, _ = claude.json_call(sc["layout_model"], system, content, schema, sc["layout_effort"])
-    votes = (out or {}).get("frames") or []
-    return max(names, key=lambda n: (votes.count(n), n == sc["default_layout"])) if votes \
-        else sc["default_layout"]
+    labels = [(out or {}).get(k) for k in keys]
+    return labels if all(labels) else None
+
+
+def scene_runs(labels: list[str], step: float, min_scene: float) -> list[list]:
+    """Runs of equal labels as [first frame, last frame, name]; a run between two others
+    that is shorter than min_scene is folded into its longer neighbour until none is
+    left (one stray frame can't flip the layout)."""
+    runs: list[list] = []
+    for i, n in enumerate(labels):
+        if runs and runs[-1][2] == n:
+            runs[-1][1] = i
+        else:
+            runs.append([i, i, n])
+    while len(runs) > 2:
+        # Only runs between two others fold: a short run at the start or end is a scene
+        # the window just catches the edge of (a stream cut 4 s in still needs its crop).
+        k = min(range(1, len(runs) - 1), key=lambda j: runs[j][1] - runs[j][0])
+        if (runs[k][1] - runs[k][0] + 1) * step >= min_scene:
+            break
+        nbrs = [j for j in (k - 1, k + 1) if 0 <= j < len(runs)]
+        into = max(nbrs, key=lambda j: runs[j][1] - runs[j][0])
+        runs[into][0], runs[into][1] = min(runs[into][0], runs[k][0]), max(runs[into][1], runs[k][1])
+        del runs[k]
+        merged: list[list] = []
+        for r in runs:  # neighbours that now share a name become one run
+            if merged and merged[-1][2] == r[2]:
+                merged[-1][1] = r[1]
+            else:
+                merged.append(r)
+        runs = merged
+    return runs
+
+
+def find_cut(src: Path, a: float, t0: float, t1: float, fps: int = 20) -> float:
+    """The scene change between t0 and t1 (times in the Short). Stream scene switches are
+    often animated (slides, fades), so frame-to-frame scores stay low; instead each frame,
+    as a tiny grey thumbnail, is compared with the first and the last: the cut is the
+    first frame that looks more like the new scene than the old one, for good."""
+    w, h = 64, 36
+    raw = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", f"{a + t0:.3f}",
+                          "-t", f"{t1 - t0:.3f}", "-i", str(src), "-an", "-vf",
+                          f"fps={fps},scale={w}:{h},format=gray", "-f", "rawvideo", "-"],
+                         capture_output=True, check=False).stdout
+    frames = [raw[k:k + w * h] for k in range(0, len(raw) - w * h + 1, w * h)]
+    if len(frames) < 3:
+        return round((t0 + t1) / 2, 3)
+    first, last = frames[0], frames[-1]
+    dist = lambda x, y: sum(abs(p - q) for p, q in zip(x, y, strict=True))
+    newer = [dist(f, last) < dist(f, first) for f in frames]
+    k = next((k for k in range(len(newer)) if all(newer[k:])), len(newer) - 1)
+    return round(min(t1, t0 + k / fps), 3)
+
+
+def detect_scenes(need_claude, sc: dict, layouts: dict, src: Path, a: float, dur: float,
+                  work: Path, stem: str) -> tuple[list[list] | None, str]:
+    """([start, end, layout] stretches covering 0..dur, or None if labelling failed; how).
+    A vision model labels a frame every scene_step_s, with the show's reference
+    screenshots (layouts/<show>/<layout>.jpg) as anchors. Matching frames to those
+    screenshots by pixels was tried and failed: a bright page or a webcam filling the
+    screen box looked like the other layout."""
+    step = sc["scene_step_s"]
+    frames = sample_frames(src, a, dur, step, work, stem)
+    try:
+        labels = label_frames(need_claude(), sc, layouts, frames) if frames else None
+    finally:
+        for _, f in frames:
+            f.unlink(missing_ok=True)
+    how = "model"
+    if not labels:
+        return None, how
+    runs = scene_runs(labels, step, sc["min_scene_s"])
+    times = [k * step for k in range(len(labels))]
+    scenes, start = [], 0.0
+    for prev, nxt in pairwise(runs):
+        cut = find_cut(src, a, times[prev[1]], times[nxt[0]])
+        scenes.append([start, cut, prev[2]])
+        start = cut
+    scenes.append([start, round(dur, 3), runs[-1][2]])
+    return scenes, how
+
+
+def example_dir(cfg: dict) -> Path:
+    """Reference screenshots of this show's layouts: <paths.layouts>/<show>/<layout>.jpg."""
+    return cfg["paths"]["layouts"] / ((cfg.get("show") or {}).get("key") or "default")
+
+
+def with_examples(layouts: dict, cfg: dict) -> dict:
+    d = example_dir(cfg)
+    return {n: {**lay, "example": str(d / f"{n}.jpg")}
+            if not lay.get("example") and (d / f"{n}.jpg").exists() else lay
+            for n, lay in layouts.items()}
+
+
+def save_example(stream_dir: Path, cfg: dict, name: str, at: float) -> Path:
+    """The source frame at `at` s as the reference screenshot of layout `name`."""
+    cfg = for_stream(cfg, stream_dir)
+    if name not in layouts_of(cfg["shorts"]):
+        raise SystemExit(f"no layout {name!r}; this show has {', '.join(layouts_of(cfg['shorts']))}")
+    out = example_dir(cfg) / f"{name}.jpg"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{at:.3f}",
+                    "-i", str(source_file(stream_dir)), "-frames:v", "1", "-vf", "scale=768:-2",
+                    "-q:v", "3", str(out)], check=True)
+    print(f"{out}  (layout {name}, {stream_dir.name} at {at:.1f} s)")
+    return out
+
+
+def scenes_label(scenes: list[list]) -> str:
+    """'watch' for one scene, else e.g. 'cams 0:00 > watch 0:38' (the Kitsu Layout column)."""
+    if len(scenes) == 1:
+        return scenes[0][2]
+    return " > ".join(f"{n} {int(s) // 60}:{int(s) % 60:02d}" for s, _, n in scenes)
 
 
 # ---------- captions ----------
@@ -181,11 +336,17 @@ def chunks(words: list[dict], sc: dict) -> list[list[dict]]:
     return out
 
 
-def write_ass(words: list[dict], t0: float, dur: float, sc: dict, layout: dict,
+def write_ass(words: list[dict], t0: float, dur: float, sc: dict, scenes: list[tuple],
               bleeper: Bleeper, path: Path) -> int:
     """Captions for t0..t0+dur: chunks of a few words; while a word is spoken it is drawn
-    in the highlight colour, a little bigger. Returns the number of caption events."""
+    in the highlight colour, a little bigger. scenes: (start, end, layout) in the Short;
+    each caption sits at its scene's caption_y, and no chunk runs across a scene cut.
+    Returns the number of caption events."""
     W, H = sc["width"], sc["height"]
+
+    def scene_at(t: float) -> int:
+        return next((k for k, s in enumerate(scenes) if t < s[1]), len(scenes) - 1)
+
     ws = []
     for w in words:
         if w["end"] <= t0 or w["start"] >= t0 + dur:
@@ -197,10 +358,12 @@ def write_ass(words: list[dict], t0: float, dur: float, sc: dict, layout: dict,
             ws.append({**w, "text": text, "start": max(0.0, w["start"] - t0),
                        "end": min(dur, w["end"] - t0)})
     hi = ass_color(sc["caption_highlight"])
-    pos = f"{{\\pos({W // 2},{int(layout.get('caption_y', 0.7) * H)})}}"
     lines = []
-    groups = chunks(ws, sc)
+    groups = [g for k in range(len(scenes))
+              for g in chunks([w for w in ws if scene_at(w["start"]) == k], sc)]
     for gi, g in enumerate(groups):
+        layout = scenes[scene_at(g[0]["start"])][2]
+        pos = f"{{\\pos({W // 2},{int(layout.get('caption_y', 0.7) * H)})}}"
         nxt = groups[gi + 1][0]["start"] if gi + 1 < len(groups) else dur
         g_end = min(g[-1]["end"] + 0.25, nxt)
         for i, w in enumerate(g):
@@ -254,16 +417,35 @@ def esc_path(p: Path) -> str:
     return p.resolve().as_posix().replace(":", "\\:")  # filtergraph-escaped (C\:/...)
 
 
-def render(src_cut: Path, dst: Path, crops: list[tuple], ass: Path | None, dur: float,
+def stack(graph: list[str], src: str, crops: list[tuple], W: int, tag: str) -> str:
+    """Filters that cut src into its panels and stack them; returns the output label."""
+    n = len(crops)
+    graph.append(f"[{src}]split={n}" + "".join(f"[{tag}s{i}]" for i in range(n)) if n > 1
+                 else f"[{src}]null[{tag}s0]")
+    for i, (x, y, w, h, ph) in enumerate(crops):
+        graph.append(f"[{tag}s{i}]crop={w}:{h}:{x}:{y},scale={W}:{ph}:flags=lanczos,setsar=1[{tag}p{i}]")
+    graph.append("".join(f"[{tag}p{i}]" for i in range(n))
+                 + (f"vstack=inputs={n}" if n > 1 else "null") + f"[{tag}]")
+    return tag
+
+
+def render(src_cut: Path, dst: Path, parts: list[tuple], ass: Path | None, dur: float,
            sc: dict, codec: str) -> dict:
+    """parts: (start, end, crops) per scene stretch of the Short, in order."""
     W = sc["width"]
     loud = measure_loudness(src_cut, sc)
-    n = len(crops)
-    graph = [f"[0:v]fps={sc['fps']},split={n}" + "".join(f"[s{i}]" for i in range(n))
-             if n > 1 else f"[0:v]fps={sc['fps']}[s0]"]
-    for i, (x, y, w, h, ph) in enumerate(crops):
-        graph.append(f"[s{i}]crop={w}:{h}:{x}:{y},scale={W}:{ph}:flags=lanczos,setsar=1[p{i}]")
-    tail = "".join(f"[p{i}]" for i in range(n)) + (f"vstack=inputs={n}" if n > 1 else "null")
+    k = len(parts)
+    graph = [f"[0:v]fps={sc['fps']}" + (f",split={k}" + "".join(f"[v{j}]" for j in range(k))
+                                        if k > 1 else "[v0]")]
+    outs = []
+    for j, (s, e, crops) in enumerate(parts):
+        src = f"v{j}"
+        if k > 1:  # this stretch only, its clock restarted for concat
+            bounds = ":".join(([f"start={s:.3f}"] if j else []) + ([f"end={e:.3f}"] if j < k - 1 else []))
+            graph.append(f"[v{j}]trim={bounds},setpts=PTS-STARTPTS[t{j}]")
+            src = f"t{j}"
+        outs.append(stack(graph, src, crops, W, f"c{j}"))
+    tail = "".join(f"[{o}]" for o in outs) + (f"concat=n={k}:v=1:a=0" if k > 1 else "null")
     if ass:
         fonts = f":fontsdir='{esc_path(Path(sc['caption_fontsdir']))}'" if sc["caption_fontsdir"] else ""
         tail += f",subtitles=filename='{esc_path(ass)}'{fonts}"
@@ -318,7 +500,9 @@ def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dic
 # ---------- stage ----------
 
 def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str | None = None,
-        force: bool = False) -> list[dict]:
+        force: bool = False, rescene: bool = False, check: bool = False) -> list[dict]:
+    """rescene: label the scenes again for Shorts whose layout the model chose (re-renders
+    the ones that come out different). check: print each Short's scenes, render nothing."""
     cfg = for_stream(cfg, stream_dir)
     sc = cfg["shorts"]
     codec = sc["codec"] or cfg["cut"]["clip_codec"]
@@ -346,7 +530,14 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         review = json.loads((stream_dir / "review.json").read_text(encoding="utf-8"))
     out_dir, work = stream_dir / "shorts", stream_dir / "shorts" / "work"
     out_dir.mkdir(exist_ok=True)
+    layouts = with_examples(layouts, cfg)
     claude = None
+
+    def need_claude() -> Claude:
+        nonlocal claude
+        claude = claude or Claude(cfg["scoring"]["workspace_id"])
+        return claude
+
     done = []
     for i, p in enumerate(picks, 1):
         if ids and p["id"] not in ids and f"v{i:02d}" not in ids:
@@ -369,45 +560,61 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         if prev.get("window_override"):  # set by a retake: used as it is
             a, b = prev["window_override"]
             dur = round(b - a, 3)
-        # Layout: --layout, then a changed Kitsu "Layout" column, then the one already in
-        # shorts.json (edit it there too), else the model picks. --force keeps the layout.
-        kitsu_layout = (review.get(key, {}).get("fields") or {}).get("Layout") or ""
+        # Layout: --layout, then a changed Kitsu "Layout" column, then one set earlier by
+        # hand (shorts.json "layout", a retake): one layout for the whole Short. Otherwise
+        # frames through the window are labelled (detect_scenes) and each scene gets its
+        # own layout (kept in shorts.json "scenes"; --rescene labels again). --force keeps them.
+        # The column only counts once someone changed it from what clipper last proposed.
+        kitsu_layout = ((review.get(key, {}).get("fields") or {}).get("Layout") or ""
+                        if "Layout" in review.get(key, {}).get("edited", []) else "")
+        by_model = prev.get("layout_by", "model") in ("model", "only")
+        same_window = [prev.get("in_s"), prev.get("out_s")] == [a, b]
+        scenes = None
         if layout:
-            chosen, how = layout, "cli"
+            scenes, how = [[0.0, dur, layout]], "cli"
         elif kitsu_layout in layouts and kitsu_layout != prev.get("layout"):
-            chosen, how = kitsu_layout, "kitsu"
-        elif prev.get("layout") in layouts:
-            chosen, how = prev["layout"], prev.get("layout_by", "model")
-        else:
-            chosen, how = None, "model"
+            scenes, how = [[0.0, dur, kitsu_layout]], "kitsu"
+        elif prev.get("layout") in layouts and not (by_model and (rescene or check)):
+            scenes, how = [[0.0, dur, prev["layout"]]], prev.get("layout_by", "model")
+        elif prev.get("scenes") and same_window and not (rescene or check):
+            scenes, how = prev["scenes"], prev.get("layout_by", "model")
+        elif len(pickable(layouts)) == 1:
+            scenes, how = [[0.0, dur, next(iter(pickable(layouts)))]], "only"
+        if scenes is None:
+            scenes, how = detect_scenes(need_claude, sc, pickable(layouts), src, a, dur, work, key)
+            if scenes is None:
+                print(f"  {key}: frame labels didn't come back whole; using {sc['default_layout']}")
+                scenes = [[0.0, dur, sc["default_layout"]]]
+        label = scenes_label(scenes)
+        if check:
+            was = prev.get("scenes") and scenes_label(prev["scenes"]) or prev.get("layout", "-")
+            print(f"{key}  {dur:5.1f}s  {label}" + (f"   (now: {was})" if was != label else ""),
+                  flush=True)
+            continue
         t = time.time()
         clips = sorted((stream_dir / "clips").glob(f"{i:02d}_{p['id']}_*.mp4"))
         clip_video = clips[0] if clips else dst
         sig_base = {"a": a, "b": b, "captions": sc["captions"], "codec": codec,
                     "style": {k: v for k, v in sc.items() if k.startswith("caption_")},
                     "lufs": sc["lufs"], "w": sc["width"], "h": sc["height"]}
-        if chosen and not force and dst.exists() and prev.get("sig") == signature(
-                {**sig_base, "layout": layouts[chosen], "name": chosen}):
+        # One scene keeps the signature it always had, so Shorts made before scene
+        # detection aren't re-rendered when it finds the same single layout.
+        sig = signature({**sig_base, "layout": layouts[scenes[0][2]], "name": scenes[0][2]}
+                        if len(scenes) == 1 else
+                        {**sig_base, "scenes": [[s, e, n, layouts[n]] for s, e, n in scenes]})
+        if not force and dst.exists() and prev.get("sig") == sig:
             continue
         work.mkdir(parents=True, exist_ok=True)
         cut = work / f"{key}.cut.mp4"
         n_bleeps = ffmpeg_cut(src, cut, a, b, sc["cut_codec"] or cfg["cut"]["clip_codec"], sc["cut_crf"],
                               keyframe=keyframe_before(stream_dir, src, a),
                               bleep=(audio_bleeper, words))
-        if chosen is None:
-            if len(layouts) == 1:
-                chosen, how = next(iter(layouts)), "only"
-            else:
-                claude = claude or Claude(cfg["scoring"]["workspace_id"])
-                frames = grab_frames(cut, dur, sc["layout_frames"], work)
-                chosen = pick_layout(claude, sc, layouts, frames)
-                for f in frames:
-                    f.unlink(missing_ok=True)
         W, H = probe_size(cut)
-        crops = panel_crops(layouts[chosen], W, H, sc["width"], sc["height"])
+        parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"])) for s, e, n in scenes]
         ass = work / f"{key}.ass" if sc["captions"] else None
-        n_caps = write_ass(words, a, dur, sc, layouts[chosen], bleeper, ass) if ass else 0
-        loud = render(cut, dst, crops, ass, dur, sc, codec)
+        n_caps = write_ass(words, a, dur, sc, [(s, e, layouts[n]) for s, e, n in scenes],
+                           bleeper, ass) if ass else 0
+        loud = render(cut, dst, parts, ass, dur, sc, codec)
         if not sc["keep_work"]:
             cut.unlink(missing_ok=True)
             if ass:
@@ -417,26 +624,29 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
                 old.unlink(missing_ok=True)
                 old.with_suffix(".json").unlink(missing_ok=True)
                 old.with_suffix(".jpg").unlink(missing_ok=True)
-        side = {**p, "key": key, "in_s": a, "out_s": b, "duration_s": dur, "layout": chosen,
-                "layout_by": how, "bleeps": n_bleeps, "captions": n_caps, **loud,
+        multi = {"scenes": scenes} if len(scenes) > 1 else {}
+        side = {**p, "key": key, "in_s": a, "out_s": b, "duration_s": dur, "layout": label,
+                **multi, "layout_by": how, "bleeps": n_bleeps, "captions": n_caps, **loud,
                 "category": c.get("category"), "score_a": c.get("score"),
                 "clip": clip_video.name if clip_video != dst else ""}
         dst.with_suffix(".json").write_text(json.dumps(side, indent=2, ensure_ascii=False),
                                             encoding="utf-8")
         write_draft(stream_dir, clip_video, dst, p, sc)
-        state[key] = {"file": f"shorts/{dst.name}", "layout": chosen, "layout_by": how,
+        state[key] = {"file": f"shorts/{dst.name}", "layout": label, **multi, "layout_by": how,
                       "in_s": a, "out_s": b,
                       **({"window_override": prev["window_override"]}
                          if prev.get("window_override") else {}),
-                      "sig": signature({**sig_base, "layout": layouts[chosen], "name": chosen})}
+                      "sig": sig}
         state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
         done.append(side)
-        print(f"{key}  {dur:5.1f}s  {chosen:<8} ({how})  {n_caps} captions, {n_bleeps} bleeps, "
+        print(f"{key}  {dur:5.1f}s  {label:<8} ({how})  {n_caps} captions, {n_bleeps} bleeps, "
               f"{loud['input_lufs']:.1f} -> {sc['lufs']} LUFS  -> {dst.name} ({time.time() - t:.0f}s)",
               flush=True)
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")  # marks the stage done
     if claude and claude.cost:
         print(f"layout picks cost ${claude.cost:.4f}")
+    if check:
+        return []
+    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")  # marks the stage done
     print(f"{len(done)} shorts rendered, {len(picks) - len(done)} unchanged or skipped")
     if done:  # their vertical covers, from the clips' thumbnail choices (no model calls)
         from . import thumbs

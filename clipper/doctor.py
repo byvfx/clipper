@@ -67,6 +67,19 @@ def check_config(cfg: dict) -> None:
     else:
         warn("config", "no [shows.<key>] tables; every stream uses the base settings",
              "add a [shows.<key>] table per show (see clipper.example.toml)")
+    from .config import for_show
+    from .shorts import layouts_of, pickable, with_examples
+    for key in shows:  # Shorts scene detection reads its layouts off reference screenshots
+        sc = for_show(cfg, key)  # (pick = false layouts are chosen by hand: no screenshot)
+        lays = {n: lay for n, lay in with_examples(pickable(layouts_of(sc["shorts"])), sc).items()
+                if n != "center"}
+        missing = [n for n, lay in lays.items() if not lay.get("example")]
+        if len(lays) > 1 and missing:
+            warn("shorts", f"{key}: no reference screenshot for layout(s) {', '.join(missing)}; "
+                 "Short scene detection is less reliable without them",
+                 f"clipper shorts <a {key} stream> --save-example <layout> --at <seconds>")
+        elif len(lays) > 1:
+            ok("shorts", f"{key}: reference screenshots for {', '.join(lays)}")
     streams: Path = cfg["paths"]["streams"]
     if not streams.exists():
         fail("paths", f"streams folder {streams} doesn't exist",

@@ -23,6 +23,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "discord_token": "secrets/discord_token.txt",  # bot token, if not in [discord] token_env
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
+        "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.
@@ -257,9 +258,14 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # 9:16 crop of the middle) is always there.
         "layouts": {},
         "default_layout": "center",
-        "layout_model": "claude-haiku-5-5",  # picks a layout from a few frames per Short
+        "layout_model": "claude-haiku-5-5",  # labels sampled frames with a layout
         "layout_effort": "low",
-        "layout_frames": 3,
+        # Scene cuts: a frame every scene_step_s gets a layout; a run shorter than
+        # min_scene_s joins its neighbour; each change is placed on the first frame that
+        # looks more like the new scene than the old, and every stretch uses its own layout.
+        "scene_step_s": 4,
+        "scene_batch": 8,         # frames per labelling call (more per call drifted)
+        "min_scene_s": 6,
         "captions": True,
         "caption_font": "Impact",  # a font family the system (libass) can find
         "caption_fontsdir": "",    # or a folder of font files to look in

@@ -138,8 +138,13 @@ def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_shorts(cfg: dict, args: argparse.Namespace) -> None:
     from . import shorts
 
+    if args.save_example:
+        if args.at is None:
+            raise SystemExit("--save-example needs --at <seconds into the stream>")
+        shorts.save_example(stream_dir(cfg, args.stream), cfg, args.save_example, args.at)
+        return
     shorts.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
-               layout=args.layout, force=args.force)
+               layout=args.layout, force=args.force, rescene=args.rescene, check=args.check)
 
 
 def cmd_retake(cfg: dict, args: argparse.Namespace) -> None:
@@ -389,6 +394,13 @@ def main() -> None:
     p.add_argument("--ids", help="only these picks, e.g. t33,w19 or v01")
     p.add_argument("--layout", help="use this layout (from [shorts] layouts) for the chosen picks")
     p.add_argument("--force", action="store_true", help="re-render even if unchanged (keeps layouts)")
+    p.add_argument("--rescene", action="store_true",
+                   help="label scene layouts again where the model chose them; re-render what changes")
+    p.add_argument("--check", action="store_true",
+                   help="print each Short's scene layouts (labels frames again), render nothing")
+    p.add_argument("--save-example", metavar="LAYOUT",
+                   help="save the stream's frame at --at as LAYOUT's reference screenshot (scene matching)")
+    p.add_argument("--at", type=float, help="with --save-example: seconds into the stream")
     p.set_defaults(fn=cmd_shorts)
 
     p = sub.add_parser("review", help="Kitsu review: publish, sync, and per-item decisions")

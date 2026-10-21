@@ -11,6 +11,7 @@ youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sig
 discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 bot_log = "logs/bot.log"                       # clipper bot log, rotated; "" = console only
 rumble = "rumble"                              # clipper rumble upload folders
+layouts = "layouts"                            # reference screenshots per show layout (clipper shorts --save-example)
 
 [kick]
 channel = ""               # set per show ([shows.<key>] channels); a stream uses its own
@@ -235,8 +236,16 @@ badge_channel = ""             # empty = scoring.channel_name
 # loudness normalized. Layouts are per show: [shows.<key>.shorts.layouts.<name>] with
 # description (what the layout picker looks for), caption_y and panels = [{src = [x, y,
 # w, h] (fractions of the frame), h = px tall, focus = [fx, fy]}, ...]; "center" (a 9:16
-# crop of the middle) always exists. Change one Short's layout with --layout, the Kitsu
-# "Layout" column or shorts.json, then rerun `clipper shorts` and `clipper review publish`.
+# crop of the middle) always exists. The picker labels a frame every scene_step_s, so a
+# Short that spans a scene cut switches layout at the cut ("cams 0:00 > watch 0:39").
+# Give it a reference screenshot of each layout (`clipper shorts <stream> --save-example
+# <layout> --at <seconds>`, kept in [paths] layouts/<show>/); without them it confuses
+# a busy screen box with another layout, and with them "center" is never picked.
+# pick = false keeps a layout out of the picker (and needs no screenshot): another way
+# to frame a scene that has its own layout, e.g. only the webcams of a watch scene.
+# Force one layout for a whole Short with --layout, the Kitsu "Layout" column or
+# shorts.json, then rerun `clipper shorts` and `clipper review publish`. Older Shorts:
+# `clipper shorts <stream> --check` lists their scenes; --rescene re-renders those that change.
 codec = ""                     # empty = cut.clip_codec
 crf = 20
 window = "clip"                # clip: the pick's in/out | short: scoring's 15-60 s window
@@ -246,6 +255,9 @@ pad_s = 0.15                   # room before the first and after the last word
 lufs = -14.0                   # loudness target
 default_layout = "center"
 layout_model = "claude-haiku-5-5"
+scene_step_s = 4               # one frame labelled this often (~$0.002 a Short)
+scene_batch = 8                # frames per call; more per call drifted
+min_scene_s = 6                # shorter runs join a neighbour (one odd frame can't flip it)
 caption_font = "Impact"        # a font family libass can find; or caption_fontsdir = "fonts"
 caption_size = 96
 caption_highlight = "#ffd400"
