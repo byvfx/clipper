@@ -4,6 +4,7 @@ Stream clipper for Kino Casino (Kick channel `kinocasinogaming`) → YouTube cha
 Repo: `C:\clipper`, remote https://github.com/byvfx/clipper (private, pushed 2026-10-18). Python package
 `clipper/`, config `clipper.toml` (gitignored; `clipper.example.toml` is tracked), prompts `prompts/`.
 Plan doc: https://claude.ai/code/artifact/a9bb9e38-ced0-4455-8d8e-18a78122f45f
+Walkthrough (usage only, for presenting; Claude Docs, updated 2026-10-21): https://claude.ai/code/artifact/0d0e04da-54f6-4f15-bad0-2df72a286383
 Keys are Windows **User** env vars (ANTHROPIC_API_KEY, KITSU_TOKEN); agent shells must load them, e.g.
 `export KITSU_TOKEN="$(powershell.exe -NoProfile -Command "[Environment]::GetEnvironmentVariable('KITSU_TOKEN','User')" | tr -d '\r')"`.
 README.md (what it is) and CLAUDE.md (conventions for agents) were added 2026-10-19.
