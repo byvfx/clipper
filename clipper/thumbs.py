@@ -1077,8 +1077,10 @@ def set_photos(stream_dir: Path, cfg: dict, ids: list[str], photo: str | None = 
 
 def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool = False,
         compose_only: bool = False, kitsu: bool = True,
-        feedback: dict[str, str] | None = None) -> list[dict]:
-    """feedback: {asset id: what was wrong with its thumbnail}, for a re-pick (retakes)."""
+        feedback: dict[str, str] | None = None, missing: bool = False) -> list[dict]:
+    """feedback: {asset id: what was wrong with its thumbnail}, for a re-pick (retakes).
+    missing: only videos with no thumbnail choice yet; the others' covers (and their
+    Shorts' covers) are not re-rendered."""
     cfg = for_stream(cfg, stream_dir)
     from .bleep import Bleeper
 
@@ -1089,6 +1091,13 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         raise SystemExit("no cut assets" + (f" matching {ids}" if ids else "; run `clipper cut` first"))
     state_path = stream_dir / "thumbnails.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    if missing:
+        kept = len(assets)
+        assets = [x for x in assets if asset_key(x) not in state]
+        if not assets:
+            print(f"all {kept} videos have a thumbnail")
+            return []
+        print(f"{len(assets)} videos without a thumbnail ({kept - len(assets)} kept)")
     review_path = stream_dir / "review.json"
     review = json.loads(review_path.read_text(encoding="utf-8")) if review_path.exists() else {}
     # Banned words are always enforced on thumbnail text, whatever [bleep] mode is.

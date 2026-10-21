@@ -112,7 +112,7 @@ def cmd_meta(cfg: dict, args: argparse.Namespace) -> None:
     from . import meta
 
     d = stream_dir(cfg, args.stream)
-    meta.captions_only(d, cfg) if args.captions_only else meta.run(d, cfg)
+    meta.captions_only(d, cfg) if args.captions_only else meta.run(d, cfg, missing=args.missing)
 
 
 def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
@@ -131,7 +131,8 @@ def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
         print(f"{n} Short covers")
         return
     thumbs.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
-               force=args.force, compose_only=args.compose_only, kitsu=not args.no_kitsu)
+               force=args.force, compose_only=args.compose_only, kitsu=not args.no_kitsu,
+               missing=args.missing)
 
 
 def cmd_shorts(cfg: dict, args: argparse.Namespace) -> None:
@@ -361,6 +362,8 @@ def main() -> None:
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
     p.add_argument("--captions-only", action="store_true",
                    help="rewrite .srt and re-mask metadata text, no model calls")
+    p.add_argument("--missing", action="store_true",
+                   help="only videos with no draft yet; existing drafts stay as they are")
     p.set_defaults(fn=cmd_meta)
 
     p = sub.add_parser("thumbs", help="thumbnails: pick a frame, write the text -> <video>.jpg")
@@ -370,6 +373,8 @@ def main() -> None:
     p.add_argument("--compose-only", action="store_true",
                    help="re-render from thumbnails.json (brand or hand edits), no model calls")
     p.add_argument("--no-kitsu", action="store_true", help="don't attach them in Kitsu")
+    p.add_argument("--missing", action="store_true",
+                   help="only videos with no thumbnail yet; leave the others' covers alone")
     p.add_argument("--shorts", action="store_true",
                    help="only the Shorts' 9:16 covers, from their clips' choices (no model calls)")
     p.add_argument("--photo", metavar="PERSON",

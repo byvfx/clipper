@@ -28,7 +28,11 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
   upload limit, upload the file in Studio and `clipper upload --attach <item> <link>` fills in the rest.
 
 Everything is a `clipper <stage>` subcommand. `clipper run` does every stage a stream still
-needs, and `clipper worker` does that for each recording as it finishes.
+needs, and `clipper worker` does that for each recording as it finishes. Clips come first
+(`[worker] fast_lane`): once a stream is transcribed and scored, its picks and their Shorts are
+cut, written up and sent to review (roughly an hour after an 8-hour show ends), and only then
+does the worker cut the long segments and compilations, which take hours. A newer stream's
+clips go ahead of an older stream's segments.
 
 **Pre-shows.** A show can also post a pre-recorded pre-show on its own YouTube channel (Kino
 Casino does, on show days around midday PT). With `[shows.<key>.preshow] youtube_channel`

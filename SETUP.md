@@ -4,7 +4,7 @@ clipper runs in three roles. A machine can do more than one.
 
 | Role | What runs there | Needs |
 |---|---|---|
-| **GPU worker** | `clipper worker`: transcribe, score, segments, cut, meta, thumbs, shorts, review | NVIDIA GPU (8 GB+), the NAS share, ffmpeg |
+| **GPU worker** | `clipper worker`: transcribe, score, segments, then clips + Shorts to review, then long segments to review | NVIDIA GPU (8 GB+), the NAS share, ffmpeg |
 | **Bot** | `clipper bot`: Discord review cards, buttons, retakes | always on, the NAS share (or local streams), ffmpeg |
 | **Recorder** | `clipper record watch` in Docker on the NAS | Docker; see `deploy/record/deploy.sh` |
 

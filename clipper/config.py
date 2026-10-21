@@ -73,7 +73,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "poll_s": 300,
         "stages": ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts",
                    "review"],
-        "notify": True,           # review stage posts Discord cards ([discord] enabled too)
+        # Clips first: cut, draft, cover and publish the picks and their Shorts, then cut
+        # the long segments and compilations (hours of cutting and previews).
+        "fast_lane": True,
+        "notify": True,          # review stage posts Discord cards ([discord] enabled too)
         "channels": [],           # only recordings of these Kick slugs; [] = all
         "max_attempts": 3,        # failed runs are retried this many times in all...
         "retry_minutes": 60,      # ...this long apart

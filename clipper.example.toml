@@ -53,6 +53,7 @@ alert_mention = ""         # prepended to warnings, e.g. "<@123456789012345678>"
 # share the recorder writes to. `clipper worker --status` lists runs.
 poll_s = 300
 stages = ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts", "review"]
+fast_lane = true           # clips + Shorts to review first, then the long segments and compilations
 notify = true              # review stage posts Discord cards (needs [discord] enabled)
 channels = []              # only recordings of these Kick slugs; [] = all
 max_attempts = 3           # a failed run is retried this many times in all...

@@ -134,7 +134,7 @@ def stream_info(cfg: dict, sdir: Path) -> dict:
         info = (run.get("stages") or {}).get(st, {})
         status = info.get("status")
         if not status:
-            status = "done" if all((sdir / m).exists() for m in worker.DONE_MARKERS.get(st, [])) else ""
+            status = "done" if worker.output_found(sdir, st) else ""
         stages[st] = status
     live = load(sdir / "live" / "state.json", {})
     running = run.get("status") == "running" and age_s(run.get("heartbeat")) < 15 * 60

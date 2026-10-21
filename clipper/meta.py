@@ -213,7 +213,14 @@ def captions_only(stream_dir: Path, cfg: dict) -> None:
     print("captions rewritten" + (", text masked" if bleeper.mode != "off" else ""))
 
 
-def run(stream_dir: Path, cfg: dict) -> list[dict]:
+def draft_path(stream_dir: Path, asset: dict) -> Path:
+    # Own folder: review.py reads every *.json beside the videos as a cut sidecar.
+    return stream_dir / "metadata" / asset["video"].parent.name / f"{asset['video'].stem}.json"
+
+
+def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
+    """missing: only the videos with no draft yet (the worker's second pass, after the
+    clips went to review); the model is told which playlists the drafted ones use."""
     cfg = for_stream(cfg, stream_dir)
     mc = cfg["meta"]
     prompts = Prompts(cfg)
@@ -228,6 +235,15 @@ def run(stream_dir: Path, cfg: dict) -> list[dict]:
                        if cfg["bleep"]["mode"] != "off" else []})
     if not assets:
         raise SystemExit("no cut assets; run `clipper cut` first")
+    drafted: dict[str, dict] = {}
+    if missing:
+        drafted = {x["id"]: json.loads(draft_path(stream_dir, x).read_text(encoding="utf-8"))
+                   for x in assets if draft_path(stream_dir, x).exists()}
+        assets = [x for x in assets if x["id"] not in drafted]
+        if not assets:
+            print(f"all {len(drafted)} videos have a draft")
+            return []
+        print(f"{len(assets)} videos without a draft ({len(drafted)} kept)")
 
     claude = Claude(cfg["scoring"]["workspace_id"])
     preflight(claude, mc["model"])
@@ -244,6 +260,10 @@ def run(stream_dir: Path, cfg: dict) -> list[dict]:
             + (f"people: {', '.join(x['figures'])}\n" if x["figures"] else "")
             + (f"description: {x['body']}\n" if x["body"] else f"editor note: {x['summary']}\n")
             + (f"transcript: {text}\n" if text else "") + "</asset>")
+    used = sorted({d["playlist"] for d in drafted.values() if d.get("playlist")})
+    if used:
+        lines.append("Playlists this episode's other videos already use (reuse the name for "
+                     "the same subject): " + "; ".join(used))
     long_segs = [x for x in assets if x["kind"] == "segment" and duration(x) >= mc["chapters_min_s"]]
     with ThreadPoolExecutor(mc["concurrency"]) as pool:
         f_meta = pool.submit(claude.json_call, mc["model"], prompts.get("meta"),
@@ -262,8 +282,8 @@ def run(stream_dir: Path, cfg: dict) -> list[dict]:
             ch = []
             for sid, (_, _, off) in zip(x["segments"], x["parts"]):
                 ch.append({"t": round(off, 1), "title": x["segment_titles"][sid]})
-                ch += [{"t": round(off + c["t"], 1), "title": c["title"]}
-                       for c in chapters.get(sid, [])[1:]]
+                seg_ch = chapters.get(sid) or drafted.get(sid, {}).get("chapters", [])
+                ch += [{"t": round(off + c["t"], 1), "title": c["title"]} for c in seg_ch[1:]]
             chapters[x["id"]] = ch
 
     credit = credit_line(meta, mc, cfg)
@@ -291,8 +311,7 @@ def run(stream_dir: Path, cfg: dict) -> list[dict]:
         if len(desc) > 5000:
             problems.append(f"description {len(desc)} chars")
         out["problems"] = problems
-        # Own folder: review.py reads every *.json beside the videos as a cut sidecar.
-        dst = stream_dir / "metadata" / x["video"].parent.name / f"{x['video'].stem}.json"
+        dst = draft_path(stream_dir, x)
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
         x["video"].with_suffix(".srt").write_text(make_srt(words, x["parts"], mc, bleeper.mask),
