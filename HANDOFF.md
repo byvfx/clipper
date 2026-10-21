@@ -132,6 +132,13 @@ decisions; clipper can't create accounts), #28 send Shorts to the phone as draft
 chose: Content Posting API upload to inbox, user taps post), #29 direct posting after TikTok's app audit
 (later, optional; unaudited direct posts are private only).
 
+## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
+Tracking issue #30. The YouTube Data API can't create Posts, so clipper drafts copy and images, the bot
+posts a Discord card, and the user posts in Studio or the app. #31 check the channel can post and the
+limits (user's, first), #32 `clipper posts` stage + square covers + Discord drafts, then #33 cover stories
+and #34 reader polls (suggested first), #35 weekly issue carousel, #36 blind items and reveals, #37
+"Who said it?" quiz, #38 STOP THE PRESSES live/pre-show alerts.
+
 ## Automatic uploads (2026-10-20, user)
 - clipper.toml [youtube]: manual_publish = false (uploads private with publishAt = slot; public at once if
   the slot is under min_lead_minutes away), auto_upload_minutes = 60 (bot: `clipper schedule` then
@@ -317,7 +324,31 @@ reviewed, then posted ASAP**.
 - On YouTube from this stream: clip c01_t27 "Phil (DSP) says he won Evo" https://youtu.be/XztAeLsQvZ8
   (captions off). 29 more items scheduled from 10/28 (uploads 48 h ahead, so nothing before 10/26).
   The hosts-only re-render of v04_t35 and the scene re-render of v03_w06 also need the fix first.
-- Waiting on the user: how to fix the stream (see the session's question).
+- FIXED 2026-10-21 (user chose "shift and re-cut"): measured the old->source clock by correlating
+  the old audio.wav against a gap-filled extraction (27 steps of 1-4 s between 453 s and 1993 s old
+  time, +46.916 s after; one false match at ~2470 s removed). Shifted words.jsonl, transcript.json,
+  candidates pass_a in/out/short, segments.json, scan/summary, retakes trims, shorts.json windows;
+  audio.wav replaced with the gap-filled one. Left alone: chat.jsonl, windows.json, pass_a window[]
+  (chat heat, already source clock). Backups + clock_map.json in streams/kick-132733064/clockfix_backup/.
+  Re-cut all segments, compilations, clips; captions rewritten; all 7 Shorts re-rendered (v04_t35
+  keeps watch_hosts). Checked: Shorts vs audio.wav peak 0.89-0.96 at 0.00 s (was 0.02), s14 exact.
+  `clipper review publish kick-132733064` (with cards) republishes everything for re-review; log
+  logs/clockfix_publish_kick-132733064.log.
+- Uploaded clip c01_t27 (https://youtu.be/XztAeLsQvZ8): `cut --ids` filters segments only, so it was
+  re-cut too; restored to the old cut (old candidates times, sidecar has a note) and dated before its
+  review preview so publish skips it; its .srt now matches the YouTube video. ALSO its bleeps were on
+  the old clock: on YouTube "fucking" (1:21) and "fuck" (1:24) are audible and bleeps sit on normal
+  speech at 0:34, 0:37, 1:37. User chose to replace it (2026-10-21): corrected cut (in_s 18015.741,
+  3 bleeps on the right words, sync -0.02 s) uploaded first as https://youtu.be/uKrHtUrU6Uk (pinned
+  in Kitsu "Publish at" 2026-10-21 08:30, private until then; one upload over max_per_24h via
+  CLIPPER_YOUTUBE_MAX_PER_24H=16 for that run; log logs/upload_t27_replace_2026-10-21.log), then
+  XztAeLsQvZ8 deleted via the API once the new one was confirmed. schedule.json entry has a
+  "replaces" note; backup schedule.before_t27_replace_2026-10-21.json. The running publish will
+  give c01 a new Kitsu revision (pending) with the corrected preview: re-approve it in Kitsu; it
+  stays uploaded either way.
+- Publish done 2026-10-21: 35 items republished (18 segments, 7 clips, 7 Shorts, 3 compilations),
+  34 Discord cards, no errors. All pending re-review. This also covers To do 0 for kick-132733064
+  (its Kitsu previews no longer have the silent head).
 
 ## Shorts switch layout at scene cuts (built 2026-10-20 late)
 - User rejected kick-131498615 v01_w14: "the first 38 seconds is a weird format, after that the format
