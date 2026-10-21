@@ -92,6 +92,9 @@ What's left to gain is cold loads, post-action rebuilds and video seeking, plus 
 
 ## Out of scope
 
+(2026-10-20: both now planned. Tailscale access is byvfx/clipper#10, the bot and worker
+on the NAS #12, under the roadmap #14. This brief is issue #9.)
+
 - Moving the Discord bot or the GPU worker to the NAS.
 - Exposing the war room outside the LAN. No port forwarding; the token is LAN-grade only.
 

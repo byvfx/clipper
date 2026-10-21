@@ -116,6 +116,22 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   Still on YouTube: Short 4vnv3JOsW2k "The hosts disagree" (issue #3). `clipper meta` masks descriptions, but
   Kitsu text from before profanity = true isn't re-checked at upload: issue #8 (mask at upload time).
 
+## Roadmap: NAS hub (agreed 2026-10-20, issues only, nothing built)
+NAS becomes the always-on hub, laptop optional. Issues: #9 war room on the NAS
+(docs/brief-warroom-on-nas.md), #10 Tailscale access (user's choice, no port forwarding), #11 Modal for
+WhisperX (user's choice), #12 worker and bot on the NAS (goal: laptop can sleep; NAS is a Pentium Gold
+8505, 6 threads, 31 GB, Intel iGPU in Docker at /dev/dri, no CUDA), #13 Claude chat panel in the war room
+(clipper actions only, no code changes). Tracking issue #14. #9 and #11 can start in parallel.
+War room ease of life, also under #14: #15 watch a live show here or in a new window (user's
+idea: quick access while live; the header's live chips become clickable), #26 pop out item videos / open
+the full recording at a clip, #16 keyboard review, #17 bulk actions with dry run, #18 cover editor, #19 inline style checks,
+#20 drag-and-drop schedule, #21 upload status, #22 notifications, #23 undo, #24 search, #25 phone
+layout. User is big on ease-of-life features. Suggested first: #15-#18, #25, then #22.
+TikTok (user wants an account, 2026-10-20), also under #14: #27 account/permission/content rules (user's
+decisions; clipper can't create accounts), #28 send Shorts to the phone as drafts (route the user
+chose: Content Posting API upload to inbox, user taps post), #29 direct posting after TikTok's app audit
+(later, optional; unaudited direct posts are private only).
+
 ## Automatic uploads (2026-10-20, user)
 - clipper.toml [youtube]: manual_publish = false (uploads private with publishAt = slot; public at once if
   the slot is under min_lead_minutes away), auto_upload_minutes = 60 (bot: `clipper schedule` then
@@ -270,6 +286,117 @@ reviewed, then posted ASAP**.
   edits (write_json retry on PermissionError; running/failed stages count as not done).
 - Check tomorrow: `deploy\worker\worker-task.ps1 -Status`, logs\worker.log, both streams' run.json and
   discord.json, then approvals → schedule.
+
+## Shorts front-loaded (2026-10-20 ~22:00)
+- User: Shorts get more views, so 3 a day. clipper.toml `[schedule]`: short_times 10:00/15:00/20:00,
+  those two segment slots removed (still 15 a day). Backups: clipper.before_shorts3_2026-10-20.toml,
+  schedule.before_shorts3_2026-10-20.json. `clipper schedule --reshuffle` run: the 14 queued Shorts now
+  go 10/21 15:00 through 10/25 20:00.
+- **Bot NOT restarted** (user was recording). Its hourly auto-upload runs `clipper schedule` as a fresh
+  process, so that uses the new slots; only its in-process replans after a Discord/war-room decision
+  still use the old slots. Restart it between shows: `deploy\discord\bot-task.ps1 -Restart`.
+- Backlog Shorts: kick-131498615, -132040888, -132380636, -132733064 (Kino 10/10-10/17) had none.
+  `clipper shorts` + a Shorts-only publish (log logs/backlog_shorts_2026-10-20.log, script in that
+  session's scratchpad: config copy with review.include = ["shorts"] and `_resolved` cleared, since
+  for_stream caches show configs there). A plain `review publish` on those streams would also re-render
+  and republish their re-cut segments as new revisions (To do 0, user said not yet).
+- Suggested to the user: set each Short's "related video" in Studio once its segment is public (the API
+  can't).
+
+## kick-132733064: transcript clock 46.91 s behind the video (found 2026-10-21)
+- User rejected v06_t06 and v07_t34 "captions dont match". Cause: the old recorder dropped 31 HLS
+  segments (63.8 s) in the first ~43 min; source.mkv keeps timestamp jumps there, but
+  `transcribe.extract_audio` wrote audio.wav without timestamps, so the samples closed up over the
+  gaps. audio.wav is 28394.4 s, source 28441.3 s; from ~0.7 h on, source time = transcript time
+  + 46.91 s (measured by audio cross-correlation every 40 min). Every cut from this stream (segments,
+  clips, compilations, Shorts, thumbnails) after that point starts ~47 s early and its captions are
+  47 s off. Only this stream: kick-133095550's one gap is between two parts (joined end to end; its
+  wav and source match), and 133260144/133423456 have no gaps.
+- Fixed for new recordings: extract_audio uses `aresample=async=1:first_pts=0` (fills gaps with
+  silence). Tested on this source: 28441.31 s and aligned at every probe.
+- On YouTube from this stream: clip c01_t27 "Phil (DSP) says he won Evo" https://youtu.be/XztAeLsQvZ8
+  (captions off). 29 more items scheduled from 10/28 (uploads 48 h ahead, so nothing before 10/26).
+  The hosts-only re-render of v04_t35 and the scene re-render of v03_w06 also need the fix first.
+- Waiting on the user: how to fix the stream (see the session's question).
+
+## Shorts switch layout at scene cuts (built 2026-10-20 late)
+- User rejected kick-131498615 v01_w14: "the first 38 seconds is a weird format, after that the format
+  looks great" — the stream was on its cams scene for 39 s, then switched to watch; the old picker voted
+  one layout from 3 frames. Rule (user chose it): a Short switches layout at each scene cut.
+- shorts.py: `sample_frames` (one 768 px frame every `[shorts] scene_step_s` = 4 s from the source),
+  Haiku labels them `scene_batch` = 8 per call with one required key per frame (`label_frames`, ~$0.002
+  a Short), anchored by a reference screenshot per layout in `layouts/<show>/<layout>.jpg` ([paths]
+  layouts, gitignored; made with `clipper shorts <stream> --save-example <layout> --at <s>`; saved for
+  kino cams/watch from kick-131498615 at 7139/7182 s and c404 desk/watch from kick-132548228 at
+  1947/15975 s). With references for every real layout, "center" is not offered. `scene_runs` folds
+  interior runs under `min_scene_s` (6 s); runs at the start/end stay (a cut 4 s in is real).
+  `find_cut` puts each change on the first frame that looks more like the new scene than the old
+  (64x36 grey diff at 20 fps; Kino's switch is a ~0.5 s crossfade, ffmpeg scene scores stayed < 0.05).
+  Render trims the cut per scene and concats; captions take each scene's caption_y and never cross a
+  cut. State: shorts.json "scenes" [[start, end, name]], "layout" = label like "cams 0:00 > watch 0:39"
+  (also the Kitsu Layout column). One-scene Shorts keep their old signature (no re-render).
+- What failed on the way (don't retry): all frames in one call (40% wrong count, labels drifted run to
+  run); no references (zoomed/busy screen box read as "center"); whole-frame pixel distance to the
+  references (bright page or a webcam filling the screen box matched the other layout); Sonnet (20x
+  the cost, still one spurious center). Haiku + references + no center: 10/10 known cases, same
+  answer on repeat runs. `clipper doctor` warns when a show with 2+ layouts lacks references.
+- Layout set by hand (--layout, a Kitsu Layout edit, a retake) still means one layout for the whole
+  Short. A Kitsu Layout value now counts as an edit only when sync lists it in "edited".
+- New flags: `clipper shorts <stream> --check` (print scenes, render nothing) and `--rescene` (re-label
+  model-chosen Shorts, re-render the ones that change). `[shorts] layout_frames` is gone.
+- Fixed in review.publish: re-publishing an item dropped its "fields" (what clipper last proposed), so
+  columns never updated on a new revision and the next sync flagged them as reviewer edits.
+- v01_w14 re-rendered (cams 0:00-0:39.4, watch after), published rev 2 (pending) with a new Discord card.
+  Its YouTube description (clip draft from the 10/10 meta run) still says "hosts" twice.
+- `--check` over all 8 streams with Shorts: 9 would change. Re-rendered + published (pending, new cards):
+  kick-131498615 v01_w14, kick-132040888 v03_w10 (was rejected "weird cut around 5 s in"; now 6 scenes).
+  Waiting on the user: APPROVED + scheduled, re-render would reset approval and slot:
+  kick-131151926 v06_w11 (cams -> cams>watch 1:20, slot 10/23 10:00), kick-132733064 v03_w06 (cams ->
+  4 scenes, 10/28 20:00), kick-133095550 v03_t23 (desk -> watch, 10/25 10:00). REJECTED for other reasons:
+  kick-132380636 v04_t49 + v06_t32 and kick-132733064 v04_t35 want "just PPP and Andy" (no hosts-only
+  crop of Kino's watch scene exists; would be a new layout), kick-132733064 v06_t06 "captions dont
+  match" (not investigated; re-encode cuts seek accurately, so not the .mkv copy-cut offset).
+
+## Kino hosts-only Short layout (2026-10-20 late)
+- New layout `[shows.kino.shorts.layouts.watch_hosts]` in clipper.toml: Kino's watch scene without the
+  video, the two right-hand webcams (same src boxes as "watch") stacked 960 + 960, cropped to 1080x960 with
+  focus x 0.9 (top cam: the person sits right of centre) and 0.55 (bottom), caption_y 0.49 (on the seam,
+  over mics/chests, clear of faces). Checked on 7 frames from 4 streams.
+- `pick = false` (new layout key, `shorts.pickable()`): scene detection never offers it, since it is the
+  watch scene shown another way, and `clipper doctor` wants no reference screenshot for it. Choose it by
+  hand: `clipper shorts <stream> --ids vNN --layout watch_hosts`, the Kitsu Layout column, or a retake
+  (the planner still lists every layout). Documented in clipper.example.toml [shorts] and SETUP.md.
+- Re-rendered with it and published Shorts-only (rev 2, pending, new Discord cards): kick-132380636
+  v04_t49 + v06_t32, kick-132733064 v04_t35 (all three rejected asking for just PPP and Andy).
+  Their titles still say "host"/"hosts" (v04_t49 "Host explains why Phil…", v06_t32 "…and the hosts"):
+  not touched here.
+
+## Clips first: worker fast lane (built 2026-10-20 ~23:30)
+- User: speed is key for clips. The worker already started only after the recorder marked a stream
+  done (5 min end_grace_s + ~6 min finalize + up to 5 min poll), but clips and Shorts came out last:
+  on kick-133260144 (7.5 h Kino) cut took 2 h 27 min (all long segments; the 4 picks ~2.5 min) and the
+  review stage 2 h+ (segment/compilation previews), so Shorts reached review ~6 h after the show.
+- `[worker] fast_lane = true` (default): stages are now signals, transcribe, score, segments, then the
+  fast lane `clips` (`cut picks`), `clips_meta`, `clips_thumbs`, `shorts`, `clips_review`, then the slow
+  lane `cut` (`cut segments compilations`), `meta`, `thumbs`, `review`. Both meta/thumbs passes use the
+  new `--missing` flag (only videos with no draft/cover; the model is told the playlists already used),
+  so clips under review keep their drafts and covers. review publish was already incremental (cached
+  previews, skips unchanged mtime, notifies only newly published keys). `[worker] stages` keeps the
+  old names; the clips_* twins are added for scored streams (not pre-shows).
+- `clipper worker`: every waiting stream's fast lane first, then slow lanes oldest first; a slow lane
+  checks between stages and pauses (run.json "partial", "paused") when another stream's clips wait.
+  Granularity is a stage: a 2.5 h segment cut isn't interrupted. Alerts: "<id> clips and Shorts are in
+  review (N min after the stream ended); segments next", then "<id> is in review". run.json gets
+  "clips_ready". Expected: Shorts in review ~75-90 min after an 8 h show (transcribe ~48 min).
+- DONE_MARKERS are per stage, globs allowed (`worker.output_found`, also used by the war room bars).
+  Streams finished by the old worker show the new bars as done from their files.
+- Tested: simulated worker with fake stages (two streams interleaving, legacy stream marked done),
+  `meta --missing` on a copy of kick-131151926 with the model mocked, `meta/thumbs --missing` on the
+  real test stream (no-op). Not yet run on a real recording.
+- Worker restarted with this code 2026-10-21 07:42 (one supervisor/worker chain, idle). By then the old
+  worker had already finished both overnight streams the old way: kick-133423456 (404, ended 22:36 PT)
+  started 00:07 PT after the Kino review, cut 75 min, review 72 min, in review 03:26 PT. The next
+  recording is the fast lane's first real run: check its run.json "clips_ready" vs meta.json ended_at.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
