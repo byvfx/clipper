@@ -502,7 +502,9 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
                                                preview_file_path=str(it["preview"]),
                                                normalize_movie=rc["normalize"],
                                                set_thumbnail=True)
-        state[it["key"]] = {"kind": it["kind"], "id": it["meta"]["id"],
+        old = state.get(it["key"], {})  # keep what we last proposed, for the columns below
+        state[it["key"]] = {**{k: old[k] for k in ("fields", "thumbnail_text") if k in old},
+                            "kind": it["kind"], "id": it["meta"]["id"],
                             "file": str(it["file"].relative_to(stream_dir)),
                             "sequence": it["seq"], "entity_id": entity["id"],
                             "task_id": task["id"], "preview_id": preview["id"],
