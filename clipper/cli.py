@@ -126,6 +126,10 @@ def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
                                     kitsu=not args.no_kitsu)
         print(f"{len(changed)} changed: {', '.join(changed)}" if changed else "nothing to change")
         return
+    if args.shorts:
+        n = thumbs.shorts_only(stream_dir(cfg, args.stream), cfg, kitsu=not args.no_kitsu)
+        print(f"{n} Short covers")
+        return
     thumbs.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
                force=args.force, compose_only=args.compose_only, kitsu=not args.no_kitsu)
 
@@ -366,6 +370,8 @@ def main() -> None:
     p.add_argument("--compose-only", action="store_true",
                    help="re-render from thumbnails.json (brand or hand edits), no model calls")
     p.add_argument("--no-kitsu", action="store_true", help="don't attach them in Kitsu")
+    p.add_argument("--shorts", action="store_true",
+                   help="only the Shorts' 9:16 covers, from their clips' choices (no model calls)")
     p.add_argument("--photo", metavar="PERSON",
                    help="enquirer: use [thumbnail] photos/<PERSON> as the --ids covers' face "
                         "(\"\" = back to the frame); re-renders, no model calls")

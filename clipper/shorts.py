@@ -16,8 +16,9 @@ For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>
      highlighted, masked like every other caption ([bleep]);
   4. audio normalized to [shorts] lufs (two-pass loudnorm) with short fades.
 Writes shorts.json (per-Short state: window, layout, how it was chosen) and an upload
-metadata draft per Short in metadata/shorts/ (the clip's draft plus #Shorts). Unchanged
-Shorts are skipped unless --force.
+metadata draft per Short in metadata/shorts/ (the clip's draft plus #Shorts), and a 9:16
+tabloid cover beside each new Short from its clip's thumbnail choice (thumbs.shorts_only;
+`clipper thumbs` redraws them too). Unchanged Shorts are skipped unless --force.
 """
 
 from __future__ import annotations
@@ -415,6 +416,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
             if old != dst:
                 old.unlink(missing_ok=True)
                 old.with_suffix(".json").unlink(missing_ok=True)
+                old.with_suffix(".jpg").unlink(missing_ok=True)
         side = {**p, "key": key, "in_s": a, "out_s": b, "duration_s": dur, "layout": chosen,
                 "layout_by": how, "bleeps": n_bleeps, "captions": n_caps, **loud,
                 "category": c.get("category"), "score_a": c.get("score"),
@@ -436,6 +438,12 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     if claude and claude.cost:
         print(f"layout picks cost ${claude.cost:.4f}")
     print(f"{len(done)} shorts rendered, {len(picks) - len(done)} unchanged or skipped")
+    if done:  # their vertical covers, from the clips' thumbnail choices (no model calls)
+        from . import thumbs
+        try:
+            thumbs.shorts_only(stream_dir, cfg, {s["key"] for s in done})
+        except Exception as e:  # noqa: BLE001  # a cover is optional; the Short is done
+            print(f"  warning: Short covers: {type(e).__name__}: {e}")
     return done
 
 

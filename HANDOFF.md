@@ -116,6 +116,18 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   Still on YouTube: Short 4vnv3JOsW2k "The hosts disagree" (issue #3). `clipper meta` masks descriptions, but
   Kitsu text from before profanity = true isn't re-checked at upload: issue #8 (mask at upload time).
 
+## Vertical Short covers (issue #1, 2026-10-20)
+- `thumbs.compose_vertical`: 1080x1920 tabloid cover per Short from its clip's thumbnails.json choice
+  (masthead, green band, headline split by `fill_lines` to fill the width, face to the bottom, inset and
+  badge kept ~380 px above the bottom for YouTube's mobile title overlay; no side teasers; up to 2.5x
+  zoom). Drawn by `clipper thumbs` (with the clip covers), by `clipper shorts` after rendering, and by
+  `clipper thumbs <stream> --shorts` (just those, attaches just those in Kitsu). Upload/Kitsu pick up
+  `shorts/<name>.jpg` like any cover.
+- Done on kick-131151926 only (`--no-kitsu`). Other streams: `clipper thumbs <stream> --shorts`.
+- Not yet known: whether `thumbnails.set` works on Shorts through the API (Studio allows it). The next
+  scheduled Short upload will tell; a refusal is only a warning. `clipper upload --thumbnails` would also
+  try the already-uploaded Shorts (only if the user asks).
+
 ## To do next
 Open work is now tracked as GitHub issues (byvfx/clipper #1-#7, created 2026-10-20): Shorts covers,
 backlog catch-up, "hosts" in t20 titles, stale playlist cache, source links, Kitsu republish (0 below),

@@ -22,6 +22,11 @@ about but not on screen: the model is offered the names and may set "photo" (the
 face) or "teaser_photo" (shown beside this video's teaser on the other covers);
 `--photo` / `--teaser-photo` set them by hand (set_photos).
 
+Shorts get a 9:16 version of their clip's enquirer cover beside them (shorts/<name>.jpg):
+compose_vertical, from the clip's thumbnails.json choice, no model calls. `clipper thumbs`
+draws them with the clip covers, `clipper shorts` right after rendering a Short, and
+`clipper thumbs <stream> --shorts` draws just those (e.g. for streams made before this).
+
 `clipper upload` sets the .jpg as the YouTube thumbnail; with [thumbnail] kitsu on, it is
 attached to each item's latest Kitsu revision and becomes the item's Kitsu thumbnail.
 """
@@ -553,15 +558,16 @@ def photo_name(tc: dict, name: str) -> str:
     return next((n for n in tc.get("_photos", {}) if n.lower() == (name or "").strip().lower()), "")
 
 
-def face_crop(path: Path, face: dict, size: tuple[int, int], fill: float = 0.72) -> Image.Image:
+def face_crop(path: Path, face: dict, size: tuple[int, int], fill: float = 0.72,
+              max_zoom: float = 2.0) -> Image.Image:
     """Crop around a face box so the head fills `fill` of the photo's height, the face a
-    little above center, then cover-fit to size."""
+    little above center, then cover-fit to size, enlarging the source at most max_zoom."""
     img = Image.open(path).convert("RGB")
     fw, fh = img.size
     tw, th = size
     b = clamp_box(face)
     cx, cy = (b["x"] + b["width"] / 2) * fw, (b["y"] + b["height"] / 2) * fh
-    h = min(fh, max(b["height"] * fh / fill, th * 0.5))
+    h = min(fh, max(b["height"] * fh / fill, th / max_zoom))
     w = h * tw / th
     if w > fw:
         w, h = fw, fw * th / tw
@@ -777,6 +783,201 @@ def compose_enquirer(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, d
     return save(Image.blend(img, noise, 0.04), dst, tc["max_bytes"])
 
 
+# ---------- vertical (Shorts) ----------
+
+# The same tabloid cover at 9:16 for a Short, from its clip's thumbnails.json choice:
+# masthead and green band on top, the headline stacked big under them, then the clip's
+# face to the bottom with the reaction inset and channel badge kept clear of the bottom,
+# where YouTube's mobile shelf lays the title over the cover. No side teasers.
+SW, SH = 1080, 1920
+
+
+def fill_lines(text: str, tc: dict, width: int, budget: int, max_lines: int = 4,
+               biggest: int = 330) -> list[tuple[str, int]]:
+    """Headline lines and font sizes for a tall cover: each line as wide as width, the
+    whole block within budget px of height, splitting where the smallest line comes out
+    biggest. (enquirer_lines balances line lengths for the 16:9 column instead.)"""
+    words = text.upper().split()
+    probe = head_font(tc, 100)
+    best = None
+    for k in range(1, min(max_lines, len(words)) + 1):
+        for split in layouts(words, k):
+            lines = [" ".join(w) for w in split]
+            sizes = [min(biggest, int(width * 100 / max(probe.getlength(ln), 1))) for ln in lines]
+            scale = min(1.0, budget / (sum(sizes) * 0.93))
+            sizes = [int(s * scale) for s in sizes]
+            if best is None or min(sizes) > best[0]:
+                best = (min(sizes), list(zip(lines, sizes)))
+    return best[1] if best else []
+
+
+def compose_vertical(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, date: str,
+                     video: Path, dst: Path) -> int:
+    img = Image.new("RGB", (SW, SH), BLK)
+    d = ImageDraw.Draw(img)
+    fdir = stream_dir / "thumbs" / key
+    m = 16
+
+    def frame_path(n: int) -> Path:
+        p = fdir / e["frames"][n - 1]["path"]
+        if not p.exists():
+            p.parent.mkdir(parents=True, exist_ok=True)
+            grab(video, e["frames"][n - 1]["t"], p)
+        return p
+
+    # Masthead.
+    d.rectangle((m, m, SW - m, 236), fill=WHT, outline=BLK, width=4)
+    small = cond_font(tc, 24)
+    d.text((m + 16, m + 12), tc["masthead_tagline"], font=small, fill=RED)
+    d.text((SW - m - 16, m + 44), f"{date}  ·  {tc['masthead_price']}".strip(" ·"), font=small,
+           fill=BLK, anchor="ra")
+    size = 170
+    while True:
+        name = italic(tc["_masthead"], head_font(tc, size), RED)
+        if name.width <= SW - 2 * m - 20 or size <= 60:
+            break
+        size -= 2
+    img.paste(name, (m + 6, 236 - name.height + 10), name)
+
+    # Green band: another story from the episode.
+    band = ctx["band"] or {"band_kicker": "Exclusive:", "band_headline": " ".join(e["headline"])}
+    d.rectangle((m, 248, SW - m, 388), fill=GREEN, outline=BLK, width=4)
+    bw = SW - 2 * m - 36
+    if band["band_kicker"]:
+        d.text((m + 18, 256), band["band_kicker"],
+               font=fit_font(lambda s: cond_font(tc, s), band["band_kicker"], bw, 40), fill=YEL)
+        bf = fit_font(lambda s: head_font(tc, s), band["band_headline"], bw, 74)
+        d.text((m + 18, 302), band["band_headline"], font=bf, fill=WHT, stroke_width=2, stroke_fill=BLK)
+    else:
+        bf = fit_font(lambda s: head_font(tc, s), band["band_headline"], bw, 96)
+        d.text((m + 18, 318), band["band_headline"], font=bf, fill=WHT, stroke_width=2,
+               stroke_fill=BLK, anchor="lm")
+
+    # Headline, as wide as the cover allows, scaled to a height budget; attribution, subhead.
+    hx, hw = m + 8, SW - 2 * m - 16
+    y = 404
+    bottom = y
+    for line, s in fill_lines(e["text"] or " ".join(e["headline"]), tc, hw, 470):
+        f = head_font(tc, s)
+        d.text((hx, y - int(f.size * 0.04)), line, font=f, fill=YEL)
+        bottom = d.textbbox((hx, y - int(f.size * 0.04)), line, font=f)[3]
+        y += int(f.size * 0.93)
+    y = max(y, bottom + 12)
+    if e.get("attribution"):
+        af = fit_font(lambda s: cond_font(tc, s), f"— {e['attribution']}", hw, 40)
+        d.text((SW - m - 8, y), f"— {e['attribution']}", font=af, fill=YEL, anchor="ra")
+        y += 52
+    sf = cond_font(tc, 48)
+    for line in wrap_px(e.get("subhead", ""), sf, hw)[:2]:
+        d.text((hx, y), line, font=sf, fill=WHT)
+        y += 52
+
+    # The face to the bottom; inset and badge above the bottom title overlay.
+    py = y + 16
+    pw, ph = SW - 2 * m, SH - m - py
+    photo = tc.get("_photos", {}).get(photo_name(tc, e.get("photo", "")))
+    img.paste(face_crop(photo, WHOLE, (pw, ph)) if photo
+              else face_crop(frame_path(e["frame"]), e["face"], (pw, ph), max_zoom=2.5), (m, py))
+    iw, ih = 330, 296
+    ix, iy = SW - m - iw - 22, max(py + 40, SH - m - ih - 380)
+    d.rectangle((ix - 9, iy - 9, ix + iw + 9, iy + ih + 9), fill=WHT, outline=BLK, width=3)
+    img.paste(face_crop(frame_path(e["inset_frame"]), e["inset_face"], (iw, ih), fill=0.72), (ix, iy))
+    if tc["_channel"]:
+        bf2, kf = cond_font(tc, 52), cond_font(tc, 24)
+        bwid = int(bf2.getlength(tc["_channel"])) + 40
+        bx, bb = m + 22, iy + ih
+        d.rectangle((bx, bb - 104, bx + bwid, bb), fill=RED, outline=WHT, width=3)
+        d.text((bx + bwid / 2, bb - 96), tc["badge_kicker"], font=kf, fill=YEL, anchor="ma")
+        d.text((bx + bwid / 2, bb - 8), tc["_channel"], font=bf2, fill=WHT, anchor="mb")
+
+    noise = Image.effect_noise((SW, SH), 20).convert("RGB")
+    return save(Image.blend(img, noise, 0.04), dst, tc["max_bytes"])
+
+
+def short_covers(stream_dir: Path, state: dict, tc_enq: dict, date: str, own_band: str, bleeper,
+                 clip_ids: set[str] | None = None, short_keys: set[str] | None = None) -> list[dict]:
+    """A vertical cover beside each Short (shorts/<name>.jpg) whose clip has an enquirer
+    choice in thumbnails.json; clip_ids / short_keys limit which. Returns what was written."""
+    shorts_path = stream_dir / "shorts.json"
+    if not shorts_path.exists():
+        return []
+    by_clip = {e["id"]: (k, e) for k, e in state.items()
+               if e.get("kind") == "clip" and e.get("style") == "enquirer"}
+    out = []
+    for skey, s in json.loads(shorts_path.read_text(encoding="utf-8")).items():
+        cid = skey.split("_", 1)[1] if "_" in skey else skey  # v01_t20 -> t20
+        video = stream_dir / s["file"]
+        if (clip_ids is not None and cid not in clip_ids) or (short_keys is not None and skey not in short_keys):
+            continue
+        if cid not in by_clip or not video.exists():
+            continue
+        ckey, e = by_clip[cid]
+        e = printable(e, bleeper)
+        dst = video.with_suffix(".jpg")
+        size = compose_vertical(stream_dir, ckey, e, cover_context(ckey, state, stream_dir, tc_enq, own_band),
+                                tc_enq, date, stream_dir / f"{ckey}.mp4", dst)
+        out.append({**e, "key": f"shorts/{video.stem}", "short": skey, "jpg": dst, "bytes": size})
+    return out
+
+
+def shorts_only(stream_dir: Path, cfg: dict, short_keys: set[str] | None = None,
+                kitsu: bool = False) -> int:
+    """Vertical covers for these Shorts (all if None), no model calls: `clipper shorts`
+    right after it renders them, `clipper thumbs --shorts` for a stream's existing ones
+    (kitsu: attach just those). 0 if the stream has no enquirer thumbnails yet."""
+    cfg = for_stream(cfg, stream_dir)
+    from .bleep import Bleeper
+
+    tc = {**cfg["thumbnail"]}
+    state_path = stream_dir / "thumbnails.json"
+    if tc["style"] != "enquirer" or not state_path.exists():
+        return 0
+    tc["_photos"] = photos(tc)
+    tc_enq, date, own_band = enquirer_setup(stream_dir, cfg, tc)
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    done = short_covers(stream_dir, state, tc_enq, date, own_band,
+                        Bleeper({**cfg["bleep"], "mode": "bleep"}), short_keys=short_keys)
+    for r in done:
+        print(f"  cover {r['jpg'].relative_to(stream_dir)}  {r['bytes'] / 1e3:.0f} KB  {r['text']}")
+    if done and kitsu and tc["kitsu"] and (stream_dir / "review_state.json").exists():
+        from . import review as kitsu_review
+        kitsu_review.attach_thumbnails(stream_dir, cfg, keys=[r["short"] for r in done])
+    return len(done)
+
+
+def printable(e: dict, bleeper) -> dict:
+    """The entry with its text made safe: a hand edit with a listed word falls back to
+    the original headline (enquirer) or no text (classic)."""
+    if not unsafe(e["text"], bleeper):
+        return e
+    if e.get("style") == "enquirer":
+        print(f"  {e['id']}: text has a banned word; using the original headline")
+        return {**e, "text": " ".join(e["headline"])}
+    print(f"  {e['id']}: text {e['text']!r} has a banned word; printing none")
+    return {**e, "text": ""}
+
+
+def enquirer_setup(stream_dir: Path, cfg: dict, tc: dict) -> tuple[dict, str, str]:
+    """(tc with the masthead and badge names, the cover date, the pre-show band or "")."""
+    meta_path = stream_dir / "meta.json"
+    smeta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    started = smeta.get("started_at", "")
+    own_band = ""
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        dt = datetime.fromisoformat(started)
+        date = f"{dt:%b} {dt.day}, {dt.year}".upper()
+        if smeta.get("kind") == "preshow":  # the green band names the pre-show and its air date
+            local = dt.astimezone(ZoneInfo(cfg["schedule"]["timezone"]))
+            own_band = cfg["preshow"]["band"].format(date=f"{local.month}/{local.day}")
+    except ValueError:
+        date = ""
+    tc_enq = {**tc, "_masthead": (tc["masthead"] or cfg["meta"]["show_name"] or "").upper(),
+              "_channel": (tc["badge_channel"] or cfg["scoring"]["channel_name"] or "").upper()}
+    return tc_enq, date, own_band
+
+
 # ---------- stage ----------
 
 def asset_info(stream_dir: Path, x: dict, review: dict) -> dict:
@@ -939,32 +1140,10 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
                 state[key] = entry
                 state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    meta_path = stream_dir / "meta.json"
-    smeta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-    started = smeta.get("started_at", "")
-    own_band = ""
-    try:
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        dt = datetime.fromisoformat(started)
-        date = f"{dt:%b} {dt.day}, {dt.year}".upper()
-        if smeta.get("kind") == "preshow":  # the green band names the pre-show and its air date
-            local = dt.astimezone(ZoneInfo(cfg["schedule"]["timezone"]))
-            own_band = cfg["preshow"]["band"].format(date=f"{local.month}/{local.day}")
-    except ValueError:
-        date = ""
-    tc_enq = {**tc, "_masthead": (tc["masthead"] or cfg["meta"]["show_name"] or "").upper(),
-              "_channel": (tc["badge_channel"] or cfg["scoring"]["channel_name"] or "").upper()}
+    tc_enq, date, own_band = enquirer_setup(stream_dir, cfg, tc)
     results = []
     for x in assets:
-        e = state[asset_key(x)]
-        if unsafe(e["text"], bleeper):  # a hand edit with a listed word
-            if e.get("style") == "enquirer":
-                print(f"  {x['id']}: text has a banned word; using the original headline")
-                e = {**e, "text": " ".join(e["headline"])}
-            else:
-                print(f"  {x['id']}: text {e['text']!r} has a banned word; printing none")
-                e = {**e, "text": ""}
+        e = printable(state[asset_key(x)], bleeper)
         frame = stream_dir / "thumbs" / asset_key(x) / e["frames"][e["frame"] - 1]["path"]
         if not frame.exists():  # edited "frame"/"t" by hand, or candidates cleaned up
             frame.parent.mkdir(parents=True, exist_ok=True)
@@ -976,6 +1155,9 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         else:
             size = compose(frame, e, tc, x["video"].with_suffix(".jpg"))
         results.append({"key": asset_key(x), "jpg": x["video"].with_suffix(".jpg"), "bytes": size, **e})
+    # Shorts get a vertical cover from their clip's choice (no model calls).
+    results += short_covers(stream_dir, state, tc_enq, date, own_band, bleeper,
+                            clip_ids={x["id"] for x in assets if x["kind"] == "clip"})
     print(f"{len(results)} thumbnails ({len(todo)} picked"
           + (f", cost ${claude.cost:.3f}" if claude else "") + ")")
     for r in results:

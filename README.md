@@ -18,7 +18,8 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **score**: Claude reads the transcript and heat curve and proposes moments and picks.
 - **segments**: Claude splits the stream into topic segments and compilations.
 - **cut**: lossless segment cuts on keyframes, re-encoded picks, bleeps.
-- **meta / thumbs / shorts**: upload metadata and SRT, tabloid-style thumbnails, vertical captioned Shorts.
+- **meta / thumbs / shorts**: upload metadata and SRT, tabloid-style thumbnails (a 9:16 one for each Short),
+  vertical captioned Shorts.
   Covers can use portraits from a photos folder for people talked about but not on screen.
 - **review**: every item goes to Kitsu and Discord. Approve, reject, hold, or leave a note asking for a change.
   Notes become retakes: the item is re-cut or re-thumbnailed and comes back for review.
