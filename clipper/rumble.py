@@ -52,18 +52,19 @@ def load_schedule(cfg: dict) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def save_platform(cfg: dict, updates: dict[str, dict | None]) -> None:
-    """Write entries' Rumble records into schedule.json, re-read just before writing so a
-    concurrent `clipper schedule` or `clipper upload` isn't overwritten. None clears."""
+def save_platform(cfg: dict, updates: dict[str, dict | None], platform: str = "rumble") -> None:
+    """Write entries' records for a platform (rumble, tiktok) into schedule.json, re-read just
+    before writing so a concurrent `clipper schedule` or `clipper upload` isn't overwritten.
+    None clears."""
     path: Path = cfg["paths"]["schedule"]
     sched = json.loads(path.read_text(encoding="utf-8"))
     for e in sched["entries"] + sched.get("unscheduled", []):
         if e["key"] in updates:
             plats = e.setdefault("platforms", {})
             if updates[e["key"]] is None:
-                plats.pop("rumble", None)
+                plats.pop(platform, None)
             else:
-                plats["rumble"] = updates[e["key"]]
+                plats[platform] = updates[e["key"]]
             if not plats:
                 e.pop("platforms")
     path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -88,7 +89,7 @@ def resolve(sched: dict, ref: str) -> dict:
             or [e for e in pool if short_key(e).split("_")[0] == ref]
             or [e for e in pool if short_key(e).startswith(ref)])
     if not hits:
-        raise SystemExit(f"no schedule.json entry {ref!r}; only scheduled items go to Rumble")
+        raise SystemExit(f"no schedule.json entry {ref!r}; only scheduled items can be sent")
     if len(hits) > 1:
         raise SystemExit(f"{ref!r} matches {', '.join(e['key'] for e in hits[:8])}; give more of it")
     return hits[0]

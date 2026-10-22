@@ -231,6 +231,18 @@ def cmd_rumble(cfg: dict, args: argparse.Namespace) -> None:
                    open_after=args.open, dry_run=args.dry_run)
 
 
+def cmd_tiktok(cfg: dict, args: argparse.Namespace) -> None:
+    from . import tiktok
+
+    if args.sign_in:
+        tiktok.sign_in(cfg)
+        print(f"signed in to TikTok as {tiktok.whoami(cfg)}")
+    if args.items:
+        tiktok.send(cfg, args.items.split(","), args.stream, dry_run=args.dry_run)
+    elif not args.sign_in:
+        tiktok.status(cfg, args.stream, check=not args.dry_run)
+
+
 def config_path(args: argparse.Namespace) -> str:
     return str(Path(args.config or os.environ.get("CLIPPER_CONFIG") or "clipper.toml").resolve())
 
@@ -489,6 +501,13 @@ def main() -> None:
     p.add_argument("--url", help="with --done: the video's Rumble link")
     p.add_argument("--undo", metavar="ITEM", help="clear ITEM's uploaded mark")
     p.set_defaults(fn=cmd_rumble)
+
+    p = sub.add_parser("tiktok", help="send scheduled Shorts to the TikTok app's drafts; post from the phone")
+    p.add_argument("stream", nargs="?", help="stream id, for short --items like s02 (default: any)")
+    p.add_argument("--items", help="send these as drafts, e.g. t20,v01_t20 or a full schedule key")
+    p.add_argument("--sign-in", action="store_true", help="one-time TikTok sign-in in your browser")
+    p.add_argument("--dry-run", action="store_true", help="show files and captions, send nothing")
+    p.set_defaults(fn=cmd_tiktok)
 
     p = sub.add_parser("run", help="run every pipeline stage not done yet: transcribe ... review publish")
     p.add_argument("stream")

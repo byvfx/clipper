@@ -21,6 +21,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "youtube_client_secret": "secrets/youtube_client_secret.json",  # OAuth Desktop client
         "youtube_token": "secrets/youtube_token.json",                  # written by --sign-in
         "discord_token": "secrets/discord_token.txt",  # bot token, if not in [discord] token_env
+        "tiktok_client": "secrets/tiktok_client.json",  # {"client_key", "client_secret"}
+        "tiktok_token": "secrets/tiktok_token.json",    # written by `clipper tiktok --sign-in`
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
@@ -40,6 +42,15 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_description_chars": 5000,
         "link": "hardlink",       # hardlink (no extra disk, copy across drives) | copy
         "kitsu": True,            # Rumble / Rumble URL columns
+    },
+    "tiktok": {
+        # `clipper tiktok`: Shorts to the TikTok app's drafts; you post from the phone.
+        "kinds": ["short"],       # schedule.json kinds allowed
+        "max_per_24h": 3,         # drafts sent in any 24 h; TikTok allows at most 5 pending
+        "hashtags": [],           # added to every caption, after the Short's own
+        "max_caption_chars": 2200,
+        "redirect_port": 3455,    # sign-in redirect http://localhost:<port>/callback/
+        "caption_channel_id": "", # Discord channel for captions; empty = [record] alert channel
     },
     "youtube": {
         "auto_upload_minutes": 0, # `clipper bot` runs `clipper upload` this often; 0 = only by hand

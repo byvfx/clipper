@@ -134,6 +134,20 @@ decisions; clipper can't create accounts), #28 send Shorts to the phone as draft
 chose: Content Posting API upload to inbox, user taps post), #29 direct posting after TikTok's app audit
 (later, optional; unaudited direct posts are private only).
 
+## TikTok drafts (#28, built 2026-10-21)
+- User made the TikTok account and a developer app (Login Kit desktop + Content Posting API, scopes
+  user.info.basic + video.upload, redirect `http://localhost:3455/callback/`). Privacy/terms copy for
+  byvfx.com (Squarespace, "Not linked" pages /lolcow-privacy, /lolcow-terms): docs/tiktok-app-pages.md.
+  Keys in `secrets/tiktok_client.json` (the user saved them as two plain lines; converted to JSON).
+- `clipper tiktok --sign-in | --items <keys> [--dry-run] | [stream]` (clipper/tiktok.py): inbox upload
+  (FILE_UPLOAD, 32 MB chunks over 64 MB), caption = Kitsu title + hashtags (minus #Shorts) + [tiktok]
+  hashtags, masked; the API takes no caption for drafts, so it goes to Discord via record.Alerts
+  ([tiktok] caption_channel_id, else the alert channel/webhook). Recorded as schedule.json
+  platforms.tiktok {status sent|posted|failed, publish_id, caption, sent_at}; `clipper tiktok` asks
+  TikTok's status endpoint and marks PUBLISH_COMPLETE as posted. Cap [tiktok] max_per_24h = 3 (TikTok:
+  max 5 pending in 24 h). `rumble.save_platform` now takes the platform name. Doctor: check_tiktok.
+- Picked by hand with --items until #27 (which Shorts, pace, hashtags) is decided; not in the bot loop.
+
 ## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
 Tracking issue #30. The YouTube Data API can't create Posts, so clipper drafts copy and images, the bot
 posts a Discord card, and the user posts in Studio or the app. #31 check the channel can post and the

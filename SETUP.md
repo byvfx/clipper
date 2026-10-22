@@ -153,3 +153,28 @@ ways the API reports badly, so do these before the first big upload run.
    `secrets/youtube_playlists.json`. If you delete or rename one in Studio, delete its line
    there too, or videos will fail to be added to it. Playlist names come from each item's
    Kitsu "Playlist" column.
+
+## TikTok drafts
+
+`clipper tiktok` sends scheduled Shorts to the TikTok app's drafts (Content Posting API,
+Upload route). You open the notification on the phone, paste the caption and post. TikTok's
+API takes no caption for drafts, so clipper posts it to Discord (`[tiktok] caption_channel_id`,
+else the `[record]` alert webhook or channel) and keeps it in schedule.json.
+
+1. **Developer app** at developers.tiktok.com, owned by an organization: platform Desktop,
+   products **Login Kit** (redirect URI `http://localhost:3455/callback/`, the port is
+   `[tiktok] redirect_port`) and **Content Posting API** (leave Direct Post off), scopes
+   `user.info.basic` and `video.upload`. It needs a website, privacy and terms URL; ours are
+   pages on byvfx.com (docs/tiktok-app-pages.md). Testing works in **Sandbox** with the TikTok
+   account added as a target user.
+2. **Keys**: save `{"client_key": "...", "client_secret": "..."}` as `secrets/tiktok_client.json`.
+3. **Sign in** once, as the TikTok account: `clipper tiktok --sign-in`. The token lands in
+   `secrets/tiktok_token.json`; it refreshes itself and the sign-in lasts 365 days
+   (`clipper doctor` warns two weeks before).
+4. **Send**: `clipper tiktok --items kick-131151926/v01 --dry-run` shows the file and caption;
+   without `--dry-run` it sends. `clipper tiktok` lists what was sent and marks drafts you
+   posted as posted.
+
+Limits: TikTok allows at most 5 pending drafts in 24 h; `[tiktok] max_per_24h` (3) stays
+under it. Most accounts can post up to 3 minutes. Direct posting without the phone step needs
+TikTok's app audit (issue #29).

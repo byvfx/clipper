@@ -13,12 +13,14 @@ everything but the bot), bot (the Discord bot + review), nas (the recorder only)
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .config import _root
@@ -263,6 +265,36 @@ def check_keys(cfg: dict, role: str) -> None:
         else:
             warn("keys", "no YouTube client secret: `clipper upload` won't work here",
                  f"copy {p['youtube_client_secret'].name} and {p['youtube_token'].name} into secrets/")
+        check_tiktok(cfg)
+
+
+def check_tiktok(cfg: dict) -> None:
+    """Optional: only `clipper tiktok` needs it."""
+    p = cfg["paths"]
+    if not p["tiktok_client"].exists():
+        warn("keys", "no TikTok client key: `clipper tiktok` won't work here (optional)",
+             f"see SETUP.md (TikTok); save the app's key and secret in {p['tiktok_client']}")
+        return
+    try:
+        c = json.loads(p["tiktok_client"].read_text(encoding="utf-8-sig"))
+        assert c.get("client_key") and c.get("client_secret")
+    except (ValueError, AssertionError, AttributeError):
+        fail("keys", f"{p['tiktok_client'].name} is not JSON with client_key and client_secret",
+             '{"client_key": "...", "client_secret": "..."}')
+        return
+    if not p["tiktok_token"].exists():
+        warn("keys", "TikTok client key present but not signed in", "clipper tiktok --sign-in")
+        return
+    tok = json.loads(p["tiktok_token"].read_text(encoding="utf-8"))
+    days = (tok.get("refresh_expires_at", 0) - time.time()) / 86400
+    if days <= 0:
+        fail("keys", "TikTok sign-in expired", "clipper tiktok --sign-in")
+    elif "video.upload" not in tok.get("scope", ""):
+        fail("keys", f"TikTok token lacks video.upload (has {tok.get('scope')!r})",
+             "add the scope to the app, then clipper tiktok --sign-in")
+    else:
+        (warn if days < 14 else ok)("keys", f"TikTok sign-in token {p['tiktok_token'].name} "
+                                    f"(renew within {days:.0f} days)", "clipper tiktok --sign-in")
 
 
 def check_online(cfg: dict, role: str) -> None:

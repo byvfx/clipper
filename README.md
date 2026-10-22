@@ -28,6 +28,8 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **schedule / upload**: approved items get release slots and go to YouTube as private videos with a publish time
   (or stay private for you to publish by hand: `[youtube] manual_publish`). Past the channel's daily
   upload limit, upload the file in Studio and `clipper upload --attach <item> <link>` fills in the rest.
+- **tiktok / rumble**: `clipper tiktok --items ...` sends Shorts to the TikTok app's drafts (you post from the
+  phone; the caption comes to Discord); `clipper rumble` prepares folders for Rumble's upload form.
 
 Everything is a `clipper <stage>` subcommand. `clipper run` does every stage a stream still
 needs, and `clipper worker` does that for each recording as it finishes. Clips and Shorts come first

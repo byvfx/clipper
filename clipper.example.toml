@@ -8,6 +8,8 @@ prompts = "prompts"
 schedule = "schedule.json"
 youtube_client_secret = "secrets/youtube_client_secret.json"
 youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sign-in
+tiktok_client = "secrets/tiktok_client.json"   # {"client_key": ..., "client_secret": ...}
+tiktok_token = "secrets/tiktok_token.json"     # written by clipper tiktok --sign-in
 discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 bot_log = "logs/bot.log"                       # clipper bot log, rotated; "" = console only
 rumble = "rumble"                              # clipper rumble upload folders
@@ -382,6 +384,19 @@ max_title_chars = 100
 max_description_chars = 5000
 link = "hardlink"              # hardlink (no extra disk; copies across drives) | copy
 kitsu = true                   # Kitsu "Rumble" (ready/uploaded) and "Rumble URL" columns
+
+[tiktok]
+# `clipper tiktok --items s02,t20`: Shorts go to the TikTok app's drafts (Content Posting API,
+# Upload route); you open the notification on the phone, paste the caption and post. The API
+# takes no caption for drafts, so it is posted to Discord and kept in schedule.json.
+# One-time: clipper tiktok --sign-in (developer app at developers.tiktok.com, Login Kit desktop
+# redirect URI http://localhost:<redirect_port>/callback/, scopes user.info.basic + video.upload).
+kinds = ["short"]
+max_per_24h = 3                # TikTok allows at most 5 pending drafts in 24 h; new accounts get throttled
+hashtags = []                  # added to every caption, e.g. ["lolcowcinema"]
+max_caption_chars = 2200
+redirect_port = 3455
+caption_channel_id = ""        # Discord channel for captions; empty = [record] alert channel/webhook
 
 [signals]
 chat_lag_s = 6             # shift chat earlier: stream delay + typing time
