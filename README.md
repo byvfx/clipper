@@ -28,6 +28,11 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **schedule / upload**: approved items get release slots and go to YouTube as private videos with a publish time
   (or stay private for you to publish by hand: `[youtube] manual_publish`). Past the channel's daily
   upload limit, upload the file in Studio and `clipper upload --attach <item> <link>` fills in the rest.
+- **pick**: Shorts from a stretch you name, when you watched the show and know where the good bits are:
+  `clipper pick <stream> --from 4:05:00 --to 4:25:00 --about "the Quartering bit"` (or `--at 4:50:00`, or
+  only `--about`, which searches the stream's summary first; `--find <word>` lists transcript lines for free).
+  Times are the Kick VOD's clock. The moments found join the stream's picks (ids `h01`...) and go through
+  cut, meta, thumbs, Shorts and review like scored ones; `--dry-run` shows them without saving.
 - **tiktok / rumble**: `clipper tiktok --items ...` sends Shorts to the TikTok app's drafts (you post from the
   phone; the caption comes to Discord); `clipper rumble` prepares folders for Rumble's upload form.
 

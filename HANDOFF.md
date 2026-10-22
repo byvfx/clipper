@@ -156,6 +156,32 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   `--caption <item>` reposts. Draft status SEND_TO_USER_INBOX = in the app's Inbox notifications.
   Two early test messages in #tiktok (one-message format, one with the old 'hosts' schedule title) can be deleted.
 
+## Hand picks: `clipper pick` (built 2026-10-22, not yet run on a real stream)
+- User asked for Shorts from parts of last night's Kino stream (10/21) they remembered: ~4:13 the Quartering
+  and Adam Sellers "the bull" (4:10-4:23 area), the section of "the bearing video" Andy and PPP go on about
+  (no time given), and ~4:50 Jer's threesome story. Built in a cloud session (no stream files there), so
+  the picks themselves still need running on the Windows machine; commands below.
+- `clipper pick <stream> --from T --to T | --at T | --about "..." [--dry-run] [--no-run] [--no-notify]`
+  (clipper/pick.py, prompts pick_v1 + pick_locate_v1, `[pick]` config). Times are the Kick VOD clock
+  (stream_started_at); recordings are mapped to the video clock through meta.json recording.parts, so a
+  late start or a gap doesn't shift them (`--clock video` takes them as they are). `--at` reads
+  `[pick] span_s` (10 min) around the time. `--about` alone asks Haiku which summary_v4 blocks match,
+  then reads those (+-2 min). `--find WORD` greps the transcript with both clocks (no model calls).
+- Sonnet reads the stretch (transcript, lead-in, 30 s signal bins, picks already there) and returns up
+  to 3 moments in Pass A's shape. Each is appended to candidates.json as pass_a (source "hand",
+  "request" = the --about text) + pass_b pick, ids h01.., so existing c/v keys don't move. Moments whose
+  Short overlaps an existing pick by >50% are skipped (`--allow-overlap`). Backup
+  candidates.before_pick_<utc>.json. Then: cut picks (those ids), meta --missing, thumbs --missing
+  (those ids), shorts (those ids), review publish --only picks/shorts (Discord cards unless --no-notify).
+  Kitsu "Found by" says "hand". Cost: a 20-minute stretch is roughly 6-8k tokens in, a few cents.
+- Tested only with the model mocked on a synthetic recorded stream (clock across a gap, locate, overlap
+  skip, ids); the cut/Shorts/publish half reuses the functions the worker and retakes call.
+- To run for the 10/21 Kino stream (find its id in the war room or `clipper review status`):
+  `clipper pick <id> --find quartering` / `--find bull` to check the times, then
+  `clipper pick <id> --from 4:05 --to 4:25 --about "the Quartering, and Adam Sellers the bull" --dry-run`,
+  `clipper pick <id> --about "the bearing video section Andy and PPP go on about" --dry-run`,
+  `clipper pick <id> --at 4:50 --about "Jer having a threesome" --dry-run`; drop --dry-run to keep them.
+
 ## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
 Tracking issue #30. The YouTube Data API can't create Posts, so clipper drafts copy and images, the bot
 posts a Discord card, and the user posts in Studio or the app. #31 check the channel can post and the

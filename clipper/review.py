@@ -233,7 +233,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "duration_s": d["out_s"] - d["in_s"],
                         "fields": {"Hook": d["hook"], "Category": d.get("category"),
                                    "Score": d.get("score_a"),
-                                   "Found by": "transcript" if d["id"].startswith("t") else "chat"},
+                                   "Found by": found_by(d["id"])},
                         "meta": d})
     if "shorts" in include:
         for side in sorted((stream_dir / "shorts").glob("v*.json")):
@@ -247,7 +247,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "duration_s": d["duration_s"],
                         "fields": {"Hook": d.get("hook"), "Category": d.get("category"),
                                    "Score": d.get("score_a"), "Layout": d["layout"],
-                                   "Found by": "transcript" if d["id"].startswith("t") else "chat"},
+                                   "Found by": found_by(d["id"])},
                         "meta": d})
     if "compilations" in include:
         for side in sorted((stream_dir / "compilations").glob("*.json")):
@@ -295,6 +295,10 @@ def episode_name(stream_dir: Path, rc: dict, tz: str = "America/Los_Angeles") ->
     aired = datetime.fromisoformat(meta["started_at"]).astimezone(ZoneInfo(tz))
     return rc["episode_name"].format(date=f"{aired:%Y-%m-%d}", stream_id=stream_dir.name,
                                      title=meta.get("title", ""))
+
+
+def found_by(pick_id: str) -> str:
+    return {"t": "transcript", "h": "hand"}.get(pick_id[:1], "chat")
 
 
 def render_preview(src: Path, dst: Path, rc: dict, codec: str) -> Path:

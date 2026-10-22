@@ -317,6 +317,20 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "context_s": 90,          # transcript this far around the cut points
         "max_per_run": 10,
     },
+    "pick": {
+        # `clipper pick`: Shorts from a stretch of a stream the user names (hand picks).
+        "model": "claude-sonnet-5-5",
+        "effort": "high",
+        "prompt_version": "v1",   # prompts/pick_<v>.md, pick_locate_<v>.md
+        "max_clips": 3,           # moments per stretch
+        "span_s": 600,            # --at: this long a stretch, centred on the time
+        "max_span_s": 2700,       # longest stretch read in one call
+        "max_overlap": 0.5,       # skip a moment whose Short overlaps an existing pick this much
+        "locate_model": "claude-haiku-5-5",  # --about without a time: search the summary timeline
+        "locate_effort": "medium",
+        "max_stretches": 2,       # summary blocks read after locating
+        "locate_pad_s": 120,      # around each located 15-minute block
+    },
     "review": {
         "host": "",               # Kitsu API URL + /api, e.g. http://nas:8090/api (required for review)
         "token_env": "KITSU_TOKEN",   # env var holding a Kitsu bot token
