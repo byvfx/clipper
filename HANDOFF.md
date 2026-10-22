@@ -154,6 +154,14 @@ posts a Discord card, and the user posts in Studio or the app. #31 check the cha
 limits (user's, first), #32 `clipper posts` stage + square covers + Discord drafts, then #33 cover stories
 and #34 reader polls (suggested first), #35 weekly issue carousel, #36 blind items and reveals, #37
 "Who said it?" quiz, #38 STOP THE PRESSES live/pre-show alerts.
+- Weekly issue look decided 2026-10-22 (user, #35): **Lolcow Cinema Weekly**, one issue for the whole
+  channel (all shows), all eight slides (cover, contents, cover story, news in brief, quote, numbers,
+  marketplace of parody ads, next week + poll), a modern editorial style (Anton / Instrument Serif /
+  Inter, paper and ink, red labels, yellow highlighter, rounded cards), and a reader poll every week.
+  Mockups and the design spec: `mockups/weekly/` (README). Rejected along the way: the dense Enquirer
+  look and the newsprint page (parts looked out of place with each other). Faces must be cropped on
+  a detected face, whole head kept. Open: whether a Post can carry both images and a poll (#31); if
+  not, the poll is its own post beside the issue. Still nothing built.
 
 ## Automatic uploads (2026-10-20, user)
 - clipper.toml [youtube]: manual_publish = false (uploads private with publishAt = slot; public at once if
