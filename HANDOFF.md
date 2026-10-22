@@ -162,6 +162,11 @@ and #34 reader polls (suggested first), #35 weekly issue carousel, #36 blind ite
   look and the newsprint page (parts looked out of place with each other). Faces must be cropped on
   a detected face, whole head kept. Open: whether a Post can carry both images and a poll (#31); if
   not, the poll is its own post beside the issue. Still nothing built.
+- #41 (user, 2026-10-22): a cast library, 3-4 photos per person (`photos/<Person>/<label>.jpg`),
+  `clipper cast grab` (best face frames from a stream) and `clipper cast add`. Open: the cast list
+  (draft: Andy, PPP, Jer, Blade, Chef, Geezer, Mel, Jim Bakker, Mr. Morrow, Victor, Jasko, Bores,
+  DSP). Cloud sessions can't reach image hosts; a web image pass needs allowed domains or the
+  Windows machine.
 
 ## Automatic uploads (2026-10-20, user)
 - clipper.toml [youtube]: manual_publish = false (uploads private with publishAt = slot; public at once if
