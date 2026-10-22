@@ -4,7 +4,8 @@
                                       desktop PKCE); token saved in paths.tiktok_token and
                                       refreshed automatically (access 24 h, refresh 365 days)
   clipper tiktok --items s02,t20      send these as drafts; each caption goes to Discord
-  clipper tiktok --status [stream]    sent / posted / failed per Short; asks TikTok about
+  clipper tiktok --caption t20        post a sent draft's caption to Discord again
+  clipper tiktok [stream]             sent / posted / failed per Short; asks TikTok about
                                       drafts still waiting, so posted ones are marked posted
 
 Uses the Content Posting API's Upload route (scope video.upload): the video lands in the
@@ -30,6 +31,8 @@ import http.server
 import json
 import re
 import secrets as pysecrets
+import select
+import socket
 import time
 import urllib.parse
 import webbrowser
@@ -103,25 +106,36 @@ def sign_in(cfg: dict) -> dict:
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
-            self.wfile.write(("Signed in to TikTok; you can close this tab." if ok else
+            self.wfile.write(("TikTok approved; clipper is finishing the sign-in. You can close this tab." if ok else
                               f"TikTok sign-in failed: {q.get('error_description') or q.get('error') or 'no code'}"
                               ).encode())
 
         def log_message(self, *a):
             pass
 
-    server = http.server.HTTPServer(("127.0.0.1", port), Handler)
-    server.timeout = 5
+    class Server6(http.server.HTTPServer):
+        address_family = socket.AF_INET6
+
+    # The browser may resolve localhost to ::1 or to 127.0.0.1; listen on both.
+    servers = [http.server.HTTPServer(("127.0.0.1", port), Handler)]
+    try:
+        servers.append(Server6(("::1", port), Handler))
+    except OSError:
+        pass
     print(f"Opening your browser to sign in to TikTok: {url}")
     webbrowser.open(url)
-    deadline = time.time() + 300
+    deadline = time.time() + 600
     while not got and time.time() < deadline:
-        server.handle_request()
-    server.server_close()
+        ready, _, _ = select.select(servers, [], [], 5)
+        for s in ready:
+            s.handle_request()
+    for s in servers:
+        s.server_close()
     if not got:
-        raise SystemExit("TikTok sign-in timed out (5 min); run: clipper tiktok --sign-in")
+        raise SystemExit("TikTok sign-in timed out (10 min); run: clipper tiktok --sign-in")
     if got.get("state") != state or "code" not in got:
-        raise SystemExit(f"TikTok sign-in failed: {got.get('error_description') or got.get('error')}")
+        raise SystemExit("TikTok sign-in failed: "
+                         f"{got.get('error_description') or got.get('error') or 'state did not match'}")
     tok = save_token(paths, token_request(c, code=got["code"], grant_type="authorization_code",
                                           redirect_uri=redirect, code_verifier=verifier))
     if "video.upload" not in tok.get("scope", ""):
@@ -241,7 +255,12 @@ def notify_caption(cfg: dict, e: dict, text: str) -> None:
     if alerts.webhook or alerts.channel:
         import logging
 
-        alerts(f"TikTok draft sent: {e['key']}. Caption to paste:\n```\n{text}\n```", logging.INFO)
+        # Two messages, so a long-press Copy Text on the phone copies just the caption.
+        alerts(f"TikTok draft sent ({e['key']}): open the TikTok inbox notification, paste the "
+               "caption below, post.", logging.INFO)
+        alerts(text, logging.INFO)
+    else:
+        print("  caption not posted to Discord: set [tiktok] caption_channel_id (or a [record] alert channel)")
 
 
 def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool = False) -> None:
@@ -293,10 +312,20 @@ def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
             print(f"  warning: caption not posted to Discord: {ex}")
 
 
+def repost_caption(cfg: dict, ref: str) -> None:
+    """Post a sent draft's caption to Discord again."""
+    e = rumble.resolve(rumble.load_schedule(cfg), ref)
+    t = tiktok_of(e)
+    if not t.get("caption"):
+        raise SystemExit(f"{e['key']} hasn't been sent to TikTok")
+    notify_caption(cfg, e, t["caption"])
+    print(f"{e['key']}: caption posted\n    {t['caption']}")
+
+
 def status(cfg: dict, stream: str | None = None, check: bool = True) -> None:
     sched = rumble.load_schedule(cfg)
     rows = [e for e in sched["entries"] + sched.get("unscheduled", [])
-            if (not stream or e["stream"] == stream) and tiktok_of(e)]
+            if (not stream or e["key"].split("/", 1)[0] == stream) and tiktok_of(e)]
     updates = {}
     for e in rows:
         t = tiktok_of(e)

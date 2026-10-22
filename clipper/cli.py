@@ -239,6 +239,9 @@ def cmd_tiktok(cfg: dict, args: argparse.Namespace) -> None:
         print(f"signed in to TikTok as {tiktok.whoami(cfg)}")
     if args.items:
         tiktok.send(cfg, args.items.split(","), args.stream, dry_run=args.dry_run)
+    elif args.caption:
+        tiktok.repost_caption(cfg, args.caption if "/" in args.caption or not args.stream
+                              else f"{args.stream}/{args.caption}")
     elif not args.sign_in:
         tiktok.status(cfg, args.stream, check=not args.dry_run)
 
@@ -506,6 +509,7 @@ def main() -> None:
     p.add_argument("stream", nargs="?", help="stream id, for short --items like s02 (default: any)")
     p.add_argument("--items", help="send these as drafts, e.g. t20,v01_t20 or a full schedule key")
     p.add_argument("--sign-in", action="store_true", help="one-time TikTok sign-in in your browser")
+    p.add_argument("--caption", metavar="ITEM", help="post a sent draft's caption to Discord again")
     p.add_argument("--dry-run", action="store_true", help="show files and captions, send nothing")
     p.set_defaults(fn=cmd_tiktok)
 

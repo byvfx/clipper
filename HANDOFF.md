@@ -147,6 +147,14 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   TikTok's status endpoint and marks PUBLISH_COMPLETE as posted. Cap [tiktok] max_per_24h = 3 (TikTok:
   max 5 pending in 24 h). `rumble.save_platform` now takes the platform name. Doctor: check_tiktok.
 - Picked by hand with --items until #27 (which Shorts, pace, hashtags) is decided; not in the bot loop.
+- 2026-10-22: signed in (Sandbox app "clipper sandbox", account "Lol Cow Cinema"); first test draft
+  kick-131151926/v01_t20 sent. Setup gotchas: Sandbox has its own key/secret, products, scopes and redirect
+  URI (editing Production changes nothing for it); the website field is not the redirect URI; the form won't
+  save until byvfx.com is DNS-verified (TXT at @, done) and a demo video is attached
+  (docs/tiktok-demo-placeholder.mp4, untracked placeholder, not for review). Captions go to Discord #tiktok
+  (1562904458575482980, user-made; the bot lacks Manage Channels), set in clipper.toml [tiktok];
+  `--caption <item>` reposts. Draft status SEND_TO_USER_INBOX = in the app's Inbox notifications.
+  Two early test messages in #tiktok (one-message format, one with the old 'hosts' schedule title) can be deleted.
 
 ## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
 Tracking issue #30. The YouTube Data API can't create Posts, so clipper drafts copy and images, the bot

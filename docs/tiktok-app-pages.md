@@ -4,8 +4,10 @@ TikTok's developer app form (issue #28) needs a public website, a privacy policy
 These are on byvfx.com (Squarespace), not linked from the menu:
 
 - Website: `https://byvfx.com`
-- Privacy: `https://byvfx.com/lolcow-privacy`
-- Terms: `https://byvfx.com/lolcow-terms`
+- Privacy: `https://byvfx.com/lolcowprivacy`
+- Terms: `https://byvfx.com/lolcowterms`
+
+(Live as of 2026-10-22; byvfx.com redirects to www.byvfx.com.)
 
 ## Adding them in Squarespace
 

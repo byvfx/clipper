@@ -173,7 +173,11 @@ else the `[record]` alert webhook or channel) and keeps it in schedule.json.
    (`clipper doctor` warns two weeks before).
 4. **Send**: `clipper tiktok --items kick-131151926/v01 --dry-run` shows the file and caption;
    without `--dry-run` it sends. `clipper tiktok` lists what was sent and marks drafts you
-   posted as posted.
+   posted as posted. The draft arrives as a notification in the TikTok app's **Inbox**
+   (System notifications), not under Profile > Drafts; it becomes a draft once opened.
+5. **Captions**: create a Discord text channel (ours is #tiktok; the bot can't create channels)
+   and set `[tiktok] caption_channel_id`. Each send posts a note and then the bare caption, so
+   Copy Text on the phone copies just the caption. `clipper tiktok --caption <item>` posts it again.
 
 Limits: TikTok allows at most 5 pending drafts in 24 h; `[tiktok] max_per_24h` (3) stays
 under it. Most accounts can post up to 3 minutes. Direct posting without the phone step needs
