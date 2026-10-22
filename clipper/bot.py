@@ -167,6 +167,8 @@ class Bot(discord.Client):
         self.analytics_proc: asyncio.subprocess.Process | None = None
         self.preshow_proc: asyncio.subprocess.Process | None = None
         self.last_analytics = 0.0
+        self.tiktok_proc: asyncio.subprocess.Process | None = None
+        self.last_tiktok = 0.0
         register_commands(self)
 
     async def setup_hook(self) -> None:
@@ -205,7 +207,13 @@ class Bot(discord.Client):
                     and not (self.upload_proc and self.upload_proc.returncode is None):
                 self.last_upload = time.monotonic()
                 self.loop.create_task(self._auto_upload())
-            every_an = self.cfg["analytics"]["auto_hours"] * 3600
+            every_tt = self.cfg["tiktok"]["auto_send_minutes"] * 60
+            if every_tt > 0 and time.monotonic() - self.last_tiktok >= every_tt \
+                    and self.cfg["paths"]["tiktok_token"].exists() \
+                    and not (self.tiktok_proc and self.tiktok_proc.returncode is None):
+                self.last_tiktok = time.monotonic()
+                self.loop.create_task(self._clipper_bg("tiktok", ["tiktok", "--auto"]))
+            every_an =self.cfg["analytics"]["auto_hours"] * 3600
             if every_an > 0 and time.monotonic() - self.last_analytics >= every_an \
                     and self.cfg["paths"]["youtube_token"].exists() \
                     and '"uploaded"' in (self.cfg["paths"]["schedule"].read_text(encoding="utf-8")

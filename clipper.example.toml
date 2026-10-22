@@ -393,6 +393,8 @@ kitsu = true                   # Kitsu "Rumble" (ready/uploaded) and "Rumble URL
 # redirect URI http://localhost:<redirect_port>/callback/, scopes user.info.basic + video.upload).
 kinds = ["short"]
 max_per_24h = 3                # TikTok allows at most 5 pending drafts in 24 h; new accounts get throttled
+auto_send_minutes = 0          # the bot runs `clipper tiktok --auto` this often (next Shorts in
+                               # YouTube-schedule order, up to max_per_24h); 0 = only by hand
 hashtags = []                  # added to every caption, e.g. ["lolcowcinema"]
 max_caption_chars = 2200
 redirect_port = 3455

@@ -155,6 +155,22 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   (1562904458575482980, user-made; the bot lacks Manage Channels), set in clipper.toml [tiktok];
   `--caption <item>` reposts. Draft status SEND_TO_USER_INBOX = in the app's Inbox notifications.
   Two early test messages in #tiktok (one-message format, one with the old 'hosts' schedule title) can be deleted.
+- 2026-10-22 ~16:40 (user: "all the Shorts as drafts to my phone", chose 5/day automatic): new
+  `clipper tiktok --auto` (next unsent scheduled Shorts by publish_at, up to the cap; skips captions with
+  host(s)) and `[tiktok] auto_send_minutes` in the bot's refresh loop. clipper.toml: max_per_24h = 5,
+  auto_send_minutes = 60. Sent 4 at once (kick-131151926 v02_t42/v03_t01/v04_t21, kick-132548228
+  v01_t33); 47 left, ~10 days at 5 a day. Bot restarted 16:39 on this code (nothing recording).
+  Unknown: whether TikTok counts posted drafts toward its 5 pending; if sends fail with spam_risk,
+  lower max_per_24h.
+
+## "Baring" -> "Bearing" (2026-10-22, user)
+- Whisper writes the YouTuber Bearing as "Baring". kick-133597196 (10/21 Kino): fixed in Kitsu text of
+  s08/s09/s10/comp-the-quartering (signed "Claude (Bearing spelling)"), s09's thumbnail text, captions,
+  transcript/words/segments/metadata files, and all 25 covers re-rendered (`thumbs --compose-only`; the
+  s09 and compilation teasers sit on every other cover, which is what the user's s11 retake meant).
+  Backups: streams/kick-133597196/before_bearing_fix_2026-10-22/. kick-131151926: chapter line fixed in
+  comp-the-quartering (Kitsu, before upload) and s11 (Kitsu + live YouTube description of JGV65Y-qUT8,
+  user OK'd). Expect it again whenever Bearing comes up.
 
 ## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
 Tracking issue #30. The YouTube Data API can't create Posts, so clipper drafts copy and images, the bot

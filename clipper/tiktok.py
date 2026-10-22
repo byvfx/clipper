@@ -4,6 +4,9 @@
                                       desktop PKCE); token saved in paths.tiktok_token and
                                       refreshed automatically (access 24 h, refresh 365 days)
   clipper tiktok --items s02,t20      send these as drafts; each caption goes to Discord
+  clipper tiktok --auto               send the next unsent Shorts, in YouTube-schedule order,
+                                      as far as max_per_24h allows (the bot runs this every
+                                      [tiktok] auto_send_minutes)
   clipper tiktok --caption t20        post a sent draft's caption to Discord again
   clipper tiktok [stream]             sent / posted / failed per Short; asks TikTok about
                                       drafts still waiting, so posted ones are marked posted
@@ -14,9 +17,9 @@ post. The API takes no caption for drafts, so clipper posts it to Discord ([tikt
 caption_channel_id, else the [record] alert webhook/channel) and prints it. Direct posting
 (video.publish) needs TikTok's app audit and is private only until then (issue #29).
 
-TikTok allows at most 5 pending drafts in any 24 hours; [tiktok] max_per_24h (3) stays under
-that and paces a new account. Which Shorts go is picked by hand with --items until the
-content rules (issue #27) are settled. Each send is recorded in schedule.json under
+TikTok allows at most 5 pending drafts in any 24 hours; [tiktok] max_per_24h (default 3)
+keeps under that. --auto (user, 2026-10-22) sends every scheduled Short in the order YouTube
+gets them, skipping captions that say "host(s)"; --items picks by hand. Each send is recorded in schedule.json under
 "platforms": {"tiktok": {...}} (as `clipper rumble` does), so nothing goes twice.
 
 Client key and secret: paths.tiktok_client, JSON {"client_key": ..., "client_secret": ...}
@@ -312,6 +315,29 @@ def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
             print(f"  warning: caption not posted to Discord: {ex}")
 
 
+def auto(cfg: dict, dry_run: bool = False) -> None:
+    """Send the next unsent scheduled Shorts, earliest YouTube slot first, up to the room
+    max_per_24h leaves. A caption saying host(s) is skipped until it's retitled in Kitsu."""
+    tc = cfg["tiktok"]
+    status(cfg, check=not dry_run, quiet=True)  # mark drafts posted since the last run
+    sched = rumble.load_schedule(cfg)
+    room = max(tc["max_per_24h"] - sent_last_24h(sched), 0)
+    queue = sorted((e for e in sched["entries"] if e["kind"] in tc["kinds"] and not tiktok_of(e)
+                    and e.get("status") in ("scheduled", "uploaded") and Path(e["file"]).exists()),
+                   key=lambda e: e.get("publish_at") or "")
+    print(f"TikTok: {len(queue)} Shorts not sent; {room} of {tc['max_per_24h']} drafts left in 24 h")
+    picked = []
+    for e in queue:
+        if len(picked) >= room:
+            break
+        if re.search(r"\bhosts?\b", caption(e, cfg), re.IGNORECASE):
+            print(f"  {e['key']}: skipped, the caption says host(s); retitle it in Kitsu")
+            continue
+        picked.append(e["key"])
+    if picked:
+        send(cfg, picked, dry_run=dry_run)
+
+
 def repost_caption(cfg: dict, ref: str) -> None:
     """Post a sent draft's caption to Discord again."""
     e = rumble.resolve(rumble.load_schedule(cfg), ref)
@@ -322,7 +348,7 @@ def repost_caption(cfg: dict, ref: str) -> None:
     print(f"{e['key']}: caption posted\n    {t['caption']}")
 
 
-def status(cfg: dict, stream: str | None = None, check: bool = True) -> None:
+def status(cfg: dict, stream: str | None = None, check: bool = True, quiet: bool = False) -> None:
     sched = rumble.load_schedule(cfg)
     rows = [e for e in sched["entries"] + sched.get("unscheduled", [])
             if (not stream or e["key"].split("/", 1)[0] == stream) and tiktok_of(e)]
@@ -341,10 +367,13 @@ def status(cfg: dict, stream: str | None = None, check: bool = True) -> None:
                      **({"fail_reason": s["fail_reason"]} if s.get("fail_reason") else {}),
                      "checked_at": datetime.now(UTC).isoformat(timespec="seconds")}
                 updates[e["key"]] = t
-        print(f"  {t.get('sent_at', '')[:16]}  {t['status']:<7} {e['key']:<34} {e['title'][:50]}"
-              + (f"  ({t['fail_reason']})" if t.get("fail_reason") else ""))
+        if not quiet or e["key"] in updates:
+            print(f"  {t.get('sent_at', '')[:16]}  {t['status']:<7} {e['key']:<34} {e['title'][:50]}"
+                  + (f"  ({t['fail_reason']})" if t.get("fail_reason") else ""))
     if updates:
         rumble.save_platform(cfg, updates, "tiktok")
+    if quiet:
+        return
     print(f"{len(rows)} on TikTok; {sent_last_24h(sched)} sent in the last 24 h "
           f"(max {cfg['tiktok']['max_per_24h']})")
     if not stream:

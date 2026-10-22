@@ -47,6 +47,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # `clipper tiktok`: Shorts to the TikTok app's drafts; you post from the phone.
         "kinds": ["short"],       # schedule.json kinds allowed
         "max_per_24h": 3,         # drafts sent in any 24 h; TikTok allows at most 5 pending
+        "auto_send_minutes": 0,   # `clipper bot` runs `clipper tiktok --auto` this often; 0 = only by hand
         "hashtags": [],           # added to every caption, after the Short's own
         "max_caption_chars": 2200,
         "redirect_port": 3455,    # sign-in redirect http://localhost:<port>/callback/
