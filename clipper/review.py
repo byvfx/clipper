@@ -439,11 +439,14 @@ def ensure_playlist(gazu, proj: dict, ep: dict, name: str, for_entity: str,
     return pl
 
 
-def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = True) -> None:
+def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = True,
+            only: list[str] | None = None) -> None:
+    """only: publish just these kinds of [review] include (e.g. re-cut Shorts without
+    sending re-cut segments back for review too)."""
     cfg = for_stream(cfg, stream_dir)
     rc = cfg["review"]
     codec = rc["preview_codec"] or cfg["cut"]["clip_codec"]
-    todo = items(stream_dir, rc["include"], cfg)
+    todo = items(stream_dir, [k for k in rc["include"] if not only or k in only], cfg)
     prev_dir = stream_dir / "review"
     prev_dir.mkdir(exist_ok=True)
 
@@ -566,7 +569,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
     print(f"{len(todo)} items in Kitsu: {rc['host'].removesuffix('/api')} "
           f"({project_name(cfg)} / {ep_name})")
     if cfg["thumbnail"]["kitsu"]:
-        attach_thumbnails(stream_dir, cfg, gazu)
+        attach_thumbnails(stream_dir, cfg, gazu, keys=[it["key"] for it in todo] if only else None)
     if notify and published and cfg["discord"]["enabled"]:
         from . import notify as discord_notify
         discord_notify.post(stream_dir, cfg, keys=published)

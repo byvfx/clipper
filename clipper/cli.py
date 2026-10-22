@@ -160,7 +160,7 @@ def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
     if args.action in ("publish", "sync", "notify"):
         d = stream_dir(cfg, args.stream)
         if args.action == "publish":
-            review.publish(d, cfg, force=args.force, notify=not args.no_notify)
+            review.publish(d, cfg, force=args.force, notify=not args.no_notify, only=args.only)
         elif args.action == "sync":
             review.sync(d, cfg)
         else:
@@ -410,6 +410,8 @@ def main() -> None:
     r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
     r.add_argument("--force", action="store_true", help="publish new revisions even if unchanged")
     r.add_argument("--no-notify", action="store_true", help="don't post to Discord")
+    r.add_argument("--only", action="append", choices=["segments", "picks", "shorts", "compilations"],
+                   help="publish only these kinds of [review] include (repeatable), e.g. --only shorts")
     r = rsub.add_parser("sync", help="read Kitsu decisions and columns into review.json")
     r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
     r = rsub.add_parser("notify", help="post a stream's review cards to Discord")

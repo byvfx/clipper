@@ -19,7 +19,9 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **segments**: Claude splits the stream into topic segments and compilations.
 - **cut**: lossless segment cuts on keyframes, re-encoded picks, bleeps.
 - **meta / thumbs / shorts**: upload metadata and SRT, tabloid-style thumbnails (a 9:16 one for each Short),
-  vertical captioned Shorts.
+  vertical captioned Shorts. With `[shorts] window = "short"` each Short is the pick's scored hot-take
+  moment (15-59 s here, under YouTube's 60 s Content ID block line), ending on a full sentence.
+  Picks are also cut as horizontal clips; leave `"picks"` out of `[review] include` to post only their Shorts.
   Covers can use portraits from a photos folder for people talked about but not on screen.
 - **review**: every item goes to Kitsu and Discord. Approve, reject, hold, or leave a note asking for a change.
   Notes become retakes: the item is re-cut or re-thumbnailed and comes back for review.
@@ -28,7 +30,7 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
   upload limit, upload the file in Studio and `clipper upload --attach <item> <link>` fills in the rest.
 
 Everything is a `clipper <stage>` subcommand. `clipper run` does every stage a stream still
-needs, and `clipper worker` does that for each recording as it finishes. Clips come first
+needs, and `clipper worker` does that for each recording as it finishes. Clips and Shorts come first
 (`[worker] fast_lane`): once a stream is transcribed and scored, its picks and their Shorts are
 cut, written up and sent to review (roughly an hour after an 8-hour show ends), and only then
 does the worker cut the long segments and compilations, which take hours. A newer stream's

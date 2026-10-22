@@ -251,6 +251,7 @@ crf = 20
 window = "clip"                # clip: the pick's in/out | short: scoring's 15-60 s window
 min_s = 90                     # widen shorter windows by whole transcript lines (setup first)
 max_s = 179                    # longest Short; YouTube files vertical videos up to 3:00 as Shorts
+end_pause_s = 0.7              # window "short": end on a sentence end or a pause this long; 0 = off
 pad_s = 0.15                   # room before the first and after the last word
 lufs = -14.0                   # loudness target
 default_layout = "center"

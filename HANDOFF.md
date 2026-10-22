@@ -162,6 +162,28 @@ and #34 reader polls (suggested first), #35 weekly issue carousel, #36 blind ite
   (default false) keeps uploads, `--attach` and `--thumbnails` from setting them. To verify: set one by
   hand on a test Short, check it in Studio and on the Shorts shelf, then turn the key on.
 
+## Hot-take Shorts, no clips (issue #40, live 2026-10-21 ~17:15)
+- User wants many more Shorts, mixed lengths, built on hot takes. Deep research (reports/YouTube Shorts
+  growth strategy.md, notes in research_notes/; also the first comment on #40): length and linking matter
+  more than volume; Shorts over 60 s with any Content ID claim are blocked worldwide.
+- Trial on kick-131151926, then the user approved it: clipper.toml `[shorts] window = "short"`, min_s 15,
+  max_s 59, end_pause_s 0.7 (new: `shorts.end_on_sentence` moves the end to a sentence end or a pause,
+  forward within max_s, else back). Starts are still scoring's short_in_s (some open mid-phrase).
+- **Clips dropped** (user: too short): `"picks"` out of `[review] include`, `[schedule] clip_days = []`
+  (clip_times kept: a pinned clip still reads it), 12:00/18:00 moved to segment_times (still 15 a day).
+  Picks are still cut, drafted and covered: Shorts reuse their titles and covers. Approved clips stay
+  approved in Kitsu but never get a slot; the 4 uploaded stay up.
+- Re-cut: the 43 queued Shorts (all approved, not uploaded; rejected ones and window_override retakes
+  left alone) re-rendered at 15-59 s and published as new Kitsu revisions waiting for approval,
+  `review publish --only shorts --no-notify` (new flag: only those kinds, so re-cut segments weren't
+  republished). Log logs/recut_shorts_2026-10-21.log. They're in the war room's review queue; the user
+  started approving at 17:04. Old cuts of the test stream in its `shorts_before_window_short_2026-10-21/`.
+- `clipper shorts` now skips Shorts already uploaded (schedule.json) unless --force: the trial had
+  re-rendered 3 uploaded test-stream Shorts; restored from that backup.
+- `clipper schedule --reshuffle` run (backup schedule.before_noclips_2026-10-21.json): no clips queued,
+  Shorts only as they get re-approved. Bot restarted 16:51 so its in-process replans use the new slots.
+- Several older approved Short titles still say "hosts" (old drafts), e.g. "Two hosts fight over...".
+
 ## To do next
 Open work is now tracked as GitHub issues (byvfx/clipper #1-#7, created 2026-10-20): Shorts covers,
 backlog catch-up, "hosts" in t20 titles, stale playlist cache, source links, Kitsu republish (0 below),
@@ -251,6 +273,9 @@ reviewed, then posted ASAP**.
   **Re-uploaded 15:40 at the user's request: https://youtu.be/l5w5cmwJu1E** (public and playable at
   15:42, cover set). The first copy was blocked after it went up, so watch this one for the same block.
   Backup of the schedule before the reset: schedule.before_preshow_reupload_2026-10-19.json.
+- 10/21 pre-show (yt-6g2iMNJuyPc) approved 14:21; at the user's request `clipper schedule` then
+  `clipper upload --max 1` at 14:23: **public https://youtu.be/Hyk2gKNvKk8** with cover, captions, playlist,
+  Kitsu link (log logs/upload_preshow_2026-10-21.log). Watch it for the same Content ID block.
 - **Uploads are private-only for now** (user, 2026-10-19): `[youtube] manual_publish = true` in
   clipper.toml; `clipper upload` sets no publishAt and never public. The user publishes in Studio
   (suspects API-set visibility misbehaves until the API audit). Pre-shows too.

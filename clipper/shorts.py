@@ -7,7 +7,8 @@ For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>
   1. the clip's window (in_s..out_s; [shorts] window = "short" uses scoring's 15-60 s
      short_in_s..short_out_s instead), widened by whole transcript lines to at least min_s
      (two lines of setup before for each line after, inside the clip's topic segment),
-     at most max_s, snapped to word gaps with pad_s of room, cut with [bleep] applied;
+     at most max_s; the short window also ends on a sentence end or an end_pause_s pause;
+     snapped to word gaps with pad_s of room, cut with [bleep] applied;
   2. a layout: a stack of panels, each a crop of the source frame scaled to the full
      width, e.g. the video being watched on top and the webcams under it. Layouts are
      per show ([shows.<key>.shorts.layouts]). One vision call labels a frame every
@@ -20,7 +21,8 @@ For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>
 Writes shorts.json (per-Short state: window, layout, how it was chosen) and an upload
 metadata draft per Short in metadata/shorts/ (the clip's draft plus #Shorts), and a 9:16
 tabloid cover beside each new Short from its clip's thumbnail choice (thumbs.shorts_only;
-`clipper thumbs` redraws them too). Unchanged Shorts are skipped unless --force.
+`clipper thumbs` redraws them too). Unchanged Shorts, and Shorts already uploaded
+(schedule.json), are skipped unless --force.
 """
 
 from __future__ import annotations
@@ -84,6 +86,37 @@ def grow_window(words: list[dict], a: float, b: float, min_s: float, max_s: floa
         (before if take_before else after).pop(0)
         turn += 1
     return a, b
+
+
+SENTENCE_END = re.compile(r"[.!?…][\"')\]]*$")
+
+
+def end_on_sentence(words: list[dict], a: float, b: float, min_s: float, max_s: float,
+                    hi: float, pause_s: float) -> float:
+    """Move the end b to a sentence end (a word ending in . ! ?) or a pause of pause_s
+    after a word: forward to the first one that keeps a..b within max_s and hi, else back
+    to the last one that leaves at least min_s. Unchanged if neither exists."""
+    def ends(k: int) -> bool:
+        return bool(SENTENCE_END.search(words[k]["word"].strip())) or (
+            k + 1 < len(words) and words[k + 1]["start"] - words[k]["end"] >= pause_s)
+
+    last = [k for k, w in enumerate(words) if a < w["end"] and w["start"] < b]
+    if not last:
+        return b
+    j = last[-1]
+    if words[j]["end"] - a <= max_s and ends(j):
+        return b
+    for k in range(j + 1, len(words)):
+        if words[k]["end"] - a > max_s or words[k]["end"] > hi:
+            break
+        if ends(k):
+            return words[k]["end"]
+    for k in range(j, -1, -1):
+        if words[k]["end"] - a < min_s:
+            break
+        if words[k]["end"] - a <= max_s and ends(k):
+            return words[k]["end"]
+    return b
 
 
 # ---------- layout ----------
@@ -528,6 +561,10 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     review = {}
     if (stream_dir / "review.json").exists():
         review = json.loads((stream_dir / "review.json").read_text(encoding="utf-8"))
+    uploaded = set()  # on YouTube already: their files stay what was uploaded
+    if cfg["paths"]["schedule"].exists():
+        sched = json.loads(cfg["paths"]["schedule"].read_text(encoding="utf-8"))
+        uploaded = {e["key"] for e in sched["entries"] if e.get("status") == "uploaded"}
     out_dir, work = stream_dir / "shorts", stream_dir / "shorts" / "work"
     out_dir.mkdir(exist_ok=True)
     layouts = with_examples(layouts, cfg)
@@ -544,6 +581,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
             continue
         c = by_id[p["id"]]
         key = f"v{i:02d}_{p['id']}"
+        if f"{stream_dir.name}/{key}" in uploaded and not force:
+            continue
         if sc["window"] == "short":
             a, b = c.get("short_in_s", c["in_s"]), c.get("short_out_s", c["out_s"])
         else:
@@ -552,6 +591,9 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         lo, hi = (topic["start_s"], topic["end_s"]) if topic else (0.0, end_of_stream)
         a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
                            min(lo, a), max(hi, b))
+        if sc["window"] == "short" and sc["end_pause_s"] > 0:  # don't stop mid-sentence
+            b = end_on_sentence(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
+                                max(hi, b), sc["end_pause_s"])
         a, b = snap_window(words, a, b, sc["pad_s"])
         b = min(b, a + sc["max_s"])
         dur = round(b - a, 3)

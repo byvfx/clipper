@@ -245,6 +245,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "window": "clip",         # clip: the pick's in/out | short: scoring's 15-60 s short window
         "min_s": 90,              # widen shorter windows by whole transcript lines to this
         "max_s": 179,             # longest Short (YouTube files vertical videos up to 3:00 as Shorts)
+        "end_pause_s": 0.7,       # window "short": end on a sentence end or a pause this long; 0 = off
         "fade_in_s": 0.05,
         "fade_out_s": 0.25,
         "lufs": -14.0,            # loudness target (two-pass loudnorm)
