@@ -138,6 +138,11 @@ untouched. The performer's accent carries through.
 
 Takes longer than `[narrate] max_s` (300 s) are split at pauses first.
 
+`clipper narrate speak script.txt` reads a script in the same voice (text to speech,
+`[narrate] tts_model` = eleven_v3; inline cues like `[sighs]`, `[pause]`, `[whispers]` steer the
+delivery) and writes `script.read.mp3`. The performer can then lip-sync to it on camera, so the
+face and timing are theirs and the voice and accent are the read's.
+
 ## 3. The NAS recorder
 
 `bash deploy/record/deploy.sh` from the repo root (ssh alias `nas`). It copies clipper.toml

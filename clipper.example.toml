@@ -451,3 +451,8 @@ youtube_channel = "UCy58OcrZ-Y6ebDYKcJAHyxw"
 
 # [shows.<key>.thumbnail], [shows.<key>.discord] etc. work the same way, e.g. a
 # different masthead or review channel for one show.
+
+[narrate]
+# `clipper narrate` (ElevenLabs): the character voice for re-voiced takes and script reads.
+# Key in $ELEVENLABS_API_KEY or secrets/elevenlabs_api_key.txt. Find ids: clipper narrate voices
+voice_id = ""

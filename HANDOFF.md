@@ -289,7 +289,14 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   → `<take>.voiced.mp4` with the picture copied; `voices [--accent --gender --age --search]`, `--add
   OWNER:VOICE_ID`. `[narrate]` config, doctor (warn if no key; online: key, plan, voice), SETUP 2c.
   User chose ElevenLabs and is making the account + `ELEVENLABS_API_KEY`. Next: pick her voice, run
-  the 30 s take, mux under wan3_30s.mp4. Jer archive restarted
+  the 30 s take, mux under wan3_30s.mp4.
+  Update 2026-10-23: key in `secrets/elevenlabs_api_key.txt` (Creator plan; the env var still wins).
+  **Mother Moo's voice = "Harriet - British Actress"** (library voice, `voice_id aAsWcN5jdLdiYG7Hq0YL`,
+  set in clipper.toml), picked from 5 finalists after the user's take ran through each (reel in
+  mockups/udder_truth/voice/, local; the other four "MM test - …" voices are still in the account).
+  **User prefers the AI read over their own British accent** → workflow "perform to playback":
+  `clipper narrate speak script.txt` (eleven_v3 TTS with [cue] tags) → the user lip-syncs to it on
+  camera → WAN 3 Prime → the TTS audio is the final audio. Test read: test_take_read.txt → 62.8 s. Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows

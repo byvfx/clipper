@@ -1,6 +1,7 @@
 """`clipper narrate`: the user's performance in a character's voice (issue #57).
 
 Usage:
+    clipper narrate speak <script.txt> [--voice-id ID] [-o OUT]
     clipper narrate voice <take> [--voice-id ID] [-o OUT]
     clipper narrate voices [--search TEXT] [--accent british] [--gender female] [--age old]
 
@@ -10,6 +11,11 @@ Usage:
 lip sync made from the original take (e.g. by the Mother Moo video models, #58) still lines
 up; an audio file comes back as <take>.voiced.mp3. The performer's accent carries through:
 for a British character, perform it British.
+
+`speak` reads a script in the character's voice (text to speech, [narrate] tts_model, with
+inline delivery tags like [sighs]). The performer then lip-syncs to it on camera ("perform to
+playback"), so the face is theirs, the voice and accent are the read's, and the mouth matches
+because the take mimes that exact audio (user's preferred route, 2026-10-23).
 
 `voices` lists the account's own voices, then ElevenLabs' shared library filtered by the
 options, to pick a voice_id. The key is the ELEVENLABS_API_KEY user environment variable
@@ -97,6 +103,24 @@ def voice(take: Path, nc: dict, voice_id: str = "", out: Path | None = None) -> 
         else:
             out.write_bytes(voiced.read_bytes())
     print(f"{out}  ({dur:.1f} s, voice {voice_id})")
+    return out
+
+
+def speak(text: str, nc: dict, out: Path, voice_id: str = "") -> Path:
+    """Text to speech in the character's voice: the read to perform to (lip-sync on headphones).
+    eleven_v3 takes inline delivery tags such as [sighs], [whispers], [pause]."""
+    voice_id = voice_id or nc["voice_id"]
+    if not voice_id:
+        raise SystemExit("no voice: set [narrate] voice_id, or pass --voice-id")
+    if len(text) > nc["tts_max_chars"]:
+        raise SystemExit(f"script is {len(text)} characters; split it (max {nc['tts_max_chars']} per read)")
+    r = requests.post(f"{API}/v1/text-to-speech/{voice_id}", params={"output_format": nc["output_format"]},
+                      headers={"xi-api-key": key(nc)}, json={"text": text, "model_id": nc["tts_model"]},
+                      timeout=600)
+    if not r.ok:
+        raise SystemExit(f"ElevenLabs text to speech: HTTP {r.status_code}: {r.text[:300]}")
+    out.write_bytes(r.content)
+    print(f"{out}  ({duration(out):.1f} s, voice {voice_id}, {len(text)} characters)")
     return out
 
 

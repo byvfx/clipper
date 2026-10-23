@@ -33,7 +33,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # `clipper narrate`: a performance re-voiced by the ElevenLabs Voice Changer (#57).
         "key_env": "ELEVENLABS_API_KEY",  # env var with the API key (never in clipper.toml)
         "voice_id": "",           # the character's voice (clipper narrate voices); "" = not set up
-        "model_id": "eleven_multilingual_sts_v2",
+        "model_id": "eleven_multilingual_sts_v2",  # voice changer (`narrate voice`)
+        "tts_model": "eleven_v3",  # script reads (`narrate speak`); takes [sighs]-style tags
+        "tts_max_chars": 3000,    # per read; split longer scripts at scene breaks
         "output_format": "mp3_44100_128",  # wav_44100 / pcm_44100 need the Pro tier
         "remove_background_noise": True,   # phone takes in a room
         "max_s": 300,             # longest take per call; split longer ones at pauses
