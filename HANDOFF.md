@@ -241,7 +241,8 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   review. Needs the user's ElevenLabs account + ELEVENLABS_API_KEY. Original/licensed voice only.
   Same issue (user, 2026-10-23): an **AI avatar host** from pre-recorded webcam takes (LivePortrait
   on Modal preferred). Character: a salacious, campy gossip dame in the Joan Rivers / Harvey Fierstein
-  *type*, but an original face, voice and name (not recognizable as either). Name not picked yet.
+  *type*, but an original face, voice and name (not recognizable as either). **Name: Mother Moo**
+  (user, 2026-10-23), the Lolcow Cinema host. Bit ideas on #57 (not decided).
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
