@@ -267,6 +267,13 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   -14 LUFS. User can get a sound library (e.g. **Artlist**); register the channel for Content ID
   clearance first. Possible clipper work (not started): `[udder] sounds` kit folder + FCPXML with
   laid-out A1-A6 audio tracks.
+  Test-throw script (2026-10-23, cloud session): `mockups/udder_truth/test_throw_script.md`, 11
+  shots, ~1:40 (trims noted to get under 90 s). Mother Moo's lines are the already-performed take
+  (read C) verbatim; new performance is only Rupert Churn (~40 s). Each shot has a Runway frame
+  prompt; planned cutaways at WAN's 15 s splices. Cast + reference-image prompts: `cast.md` (Moo,
+  @Desk, Rupert Churn, @Cafe, barista; bench: Dr Fenella Whey, DS Colin Rennet, Trudy Skimm).
+  Sound list: `test_sound_list.md` (cue numbers used in the script). Next: storyboard frames in
+  Runway from a laptop session (the Runway MCP is local only).
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
