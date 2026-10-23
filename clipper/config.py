@@ -53,6 +53,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "fps": 30,
         "crf": 21,                # pieces stay under the 30 MB single upload
         # lip-sync pass (`clipper perform lipsync`): redraw the mouth to match the read
+        "lipsync_engine": "latentsync",  # latentsync (Modal, no account) | sync (sync.so, needs a key)
         "latentsync_app": "clipper-lipsync",  # Modal app (`clipper perform lipsync --deploy`)
         "latentsync_steps": 20,   # 20-50: higher is better and slower
         "latentsync_guidance": 1.5,  # 1.0-3.0: higher syncs harder, may jitter

@@ -321,7 +321,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   `clipper perform lipsync <dir> --engine latentsync|sync|both` redraws the mouth to the read:
   LatentSync 1.6 as Modal app `clipper-lipsync` (~9 min / ~$0.30 for 50 s on L40S) and sync.so
   lipsync-2 (key in secrets/sync_api_key.txt, ~5 min). Both ran on the first clip; 3-way
-  comparison sent; the user picks. User will also record in shorter takes broken at the pauses.
+  comparison sent. **User picked Sync** (2026-10-23): `[perform] lipsync_engine = "sync"` in
+  clipper.toml (the config.py default stays latentsync, which needs no account). User will also
+  record in shorter takes broken at the pauses.
   Cold-open reference is now the **Brass Eye 2001 Special intro** (youtu.be/Fh7UgrHMjbQ): narrated,
   story-led, ends on the presenter beside a giant video wall pun (#59, cold_open_breakdown.md). Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.

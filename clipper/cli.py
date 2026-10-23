@@ -97,7 +97,8 @@ def cmd_perform(cfg: dict, args: argparse.Namespace) -> None:
             return perform.deploy_lipsync()
         if not args.target:
             raise SystemExit("clipper perform lipsync <dir or video> [--engine ...], or --deploy")
-        for engine in (["latentsync", "sync"] if args.engine == "both" else [args.engine]):
+        chosen = args.engine or pc["lipsync_engine"]
+        for engine in (["latentsync", "sync"] if chosen == "both" else [chosen]):
             perform.lipsync(Path(args.target), pc, engine, Path(args.audio) if args.audio else None)
     elif args.action == "prepare":
         perform.prepare(Path(args.recording), Path(args.read), pc, args.take, Path(args.out) if args.out else None)
@@ -455,7 +456,8 @@ def main() -> None:
     r.add_argument("dir")
     r = rsub.add_parser("lipsync", help="redraw the mouth to match the read (LatentSync on Modal, or Sync)")
     r.add_argument("target", nargs="?", help="a perform dir (uses final.mp4 + its read) or a video")
-    r.add_argument("--engine", choices=["latentsync", "sync", "both"], default="latentsync")
+    r.add_argument("--engine", choices=["latentsync", "sync", "both"],
+                   help="default [perform] lipsync_engine")
     r.add_argument("--audio", help="the audio to sync to (default: the dir's read)")
     r.add_argument("--deploy", action="store_true", help="deploy the LatentSync Modal app")
 
