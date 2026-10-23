@@ -249,6 +249,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   ElevenLabs → character animation via the user's ComfyUI workflows run on Modal → user comps and
   finishes from a clipper-built timeline. User knows post (VFX) and some ComfyUI, little AI video.
   Satire rules: real people only say what they said, no pranks, fake experts are original.
+  User decided: finish in **DaVinci Resolve** (clipper hands off FCPXML). Structure: cold-open montage
+  → Inside Edition-style logo → Mother Moo at the desk throwing to reporter characters and back.
+  First test: one 60-90 s throw (desk → reporter → desk), filmed vs. audio-driven reporters.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
