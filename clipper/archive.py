@@ -180,21 +180,31 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
           f"~${estimate_usd(hours, gpu):.2f} (measured speed; upload and cold starts extra)")
     if dry_run or not todo:
         return
-    spent, done, failed = 0.0, 0, 0
+    spent, done, failed, streak = 0.0, 0, 0, 0
+    stop_after = cfg["archive"]["stop_after_failures"]
     with ThreadPoolExecutor(parallel) as pool:
         jobs = {pool.submit(transcribe_item, cfg, d / it["id"], it, gpu): it for it in todo}
         for job in as_completed(jobs):
             it = jobs[job]
+            if job.cancelled():
+                continue
             try:
                 spent += job.result()["est_usd"]
                 done += 1
+                streak = 0
             except Exception as e:  # noqa: BLE001
                 failed += 1
+                streak += 1
                 (d / it["id"]).mkdir(parents=True, exist_ok=True)
                 (d / it["id"] / "error.txt").write_text(f"{type(e).__name__}: {e}", encoding="utf-8")
                 log.warning("%s failed: %s: %s", it["id"], type(e).__name__, str(e)[:200])
             print(f"[{done + failed}/{len(todo)}] {it['id']} {it['title'][:50]!r}  "
                   f"(spent ~${spent:.2f})", flush=True)
+            if stop_after and streak >= stop_after:
+                # e.g. YouTube's bot check on this IP: stop before it also blocks pre-show grabs
+                log.warning("%d failures in a row: stopping (rerun to resume)", streak)
+                pool.shutdown(wait=True, cancel_futures=True)
+                break
     print(f"{subject}: {done} transcribed, {failed} failed, ~${spent:.2f}")
 
 

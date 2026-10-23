@@ -33,6 +33,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "parallel": 8,            # items at once (the Modal app allows 10 containers)
         "min_duration_s": 60,     # skip shorter items (Shorts)
         "youtube_format": "bestaudio[abr<=96]/bestaudio",  # ~40 MB per hour of audio
+        "stop_after_failures": 20,  # in a row (e.g. YouTube's bot check); 0 = never stop
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.
