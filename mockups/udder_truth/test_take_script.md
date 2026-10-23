@@ -28,8 +28,9 @@ For seats. For... *"the experience."* Is your family safe? Is your *wallet* safe
 *(fast speech, emotion shift, hands in frame)*
 
 **[Snap back to calm. Turn your head a little to your right, as if to a monitor.]**
-We go live now to our correspondent, standing outside a coffee shop... in the rain...
-for reasons we have not been told.
+We go live now to our correspondent, who has been standing outside a coffee shop... in the
+rain... since Tuesday... to find out whether it stocks *Coffee Brand Coffee.*
+**[Tiny pause.]** It does not.
 *(head turn: profile angle, then back)*
 
 **[Turn back to the lens. Long deadpan hold, 3 seconds. Tiny smile at the very end.]**
