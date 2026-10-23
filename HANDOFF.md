@@ -324,6 +324,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   comparison sent. **User picked Sync** (2026-10-23): `[perform] lipsync_engine = "sync"` in
   clipper.toml (the config.py default stays latentsync, which needs no account). User will also
   record in shorter takes broken at the pauses.
+  **Editor (user, 2026-10-23): DaVinci Resolve Studio** (buying the license; not installed here yet).
+  #60: `clipper udder timeline <week>`: FCPXML first, then Studio's external Python scripting to
+  build the project, bins, timeline, Fusion titles and render queue.
   Cold-open reference is now the **Brass Eye 2001 Special intro** (youtu.be/Fh7UgrHMjbQ): narrated,
   story-led, ends on the presenter beside a giant video wall pun (#59, cold_open_breakdown.md). Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
