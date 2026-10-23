@@ -315,36 +315,41 @@ def check_tiktok(cfg: dict) -> None:
 
 def check_narrate(cfg: dict) -> None:
     """Optional: only `clipper narrate` needs it."""
-    nc = cfg["narrate"]
-    if not os.environ.get(nc["key_env"]):
+    from .narrate import find_key, settings
+
+    nc = settings(cfg)
+    where = f"${nc['key_env']} or {nc['key_file']}"
+    if not find_key(nc):
         if nc["voice_id"]:
-            fail("keys", f"[narrate] voice_id is set but ${nc['key_env']} isn't",
-                 "set the ElevenLabs API key as a user env var (SETUP.md, Narration)")
+            fail("keys", f"[narrate] voice_id is set but there's no ElevenLabs key ({where})",
+                 "SETUP.md, Narration")
         else:
-            warn("keys", f"no ${nc['key_env']}: `clipper narrate` won't work here (optional)",
+            warn("keys", f"no ElevenLabs key ({where}): `clipper narrate` won't work here (optional)",
                  "SETUP.md, Narration")
         return
     if not nc["voice_id"]:
-        warn("keys", "ElevenLabs key set but no [narrate] voice_id", "clipper narrate voices")
+        warn("keys", "ElevenLabs key found but no [narrate] voice_id", "clipper narrate voices")
     else:
-        ok("keys", f"ElevenLabs key set, voice {nc['voice_id']}")
+        ok("keys", f"ElevenLabs key found, voice {nc['voice_id']}")
 
 
 def check_online(cfg: dict, role: str) -> None:
     import requests
 
-    nc = cfg["narrate"]
-    if os.environ.get(nc["key_env"]):
-        r = requests.get("https://api.elevenlabs.io/v1/user", headers={"xi-api-key": os.environ[nc["key_env"]]},
-                         timeout=15)
+    from .narrate import find_key, settings
+
+    nc = settings(cfg)
+    if el_key := find_key(nc):
+        r = requests.get("https://api.elevenlabs.io/v1/user", headers={"xi-api-key": el_key}, timeout=15)
         if not r.ok:
-            fail("online", f"ElevenLabs refused the key (HTTP {r.status_code})", "check $" + nc["key_env"])
+            fail("online", f"ElevenLabs refused the key (HTTP {r.status_code})",
+                 f"check ${nc['key_env']} / {nc['key_file']}")
         else:
             tier = (r.json().get("subscription") or {}).get("tier", "?")
             ok("online", f"ElevenLabs answers (plan {tier})")
             if nc["voice_id"]:
                 v = requests.get(f"https://api.elevenlabs.io/v1/voices/{nc['voice_id']}",
-                                 headers={"xi-api-key": os.environ[nc["key_env"]]}, timeout=15)
+                                 headers={"xi-api-key": el_key}, timeout=15)
                 (ok if v.ok else fail)("online", f"ElevenLabs voice {nc['voice_id']}: "
                                        + (v.json().get("name", "?") if v.ok else f"HTTP {v.status_code}"),
                                        "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")

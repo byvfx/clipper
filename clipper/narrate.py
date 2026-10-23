@@ -29,10 +29,26 @@ API = "https://api.elevenlabs.io"
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".m4v", ".webm"}
 
 
+def settings(cfg: dict) -> dict:
+    """[narrate] plus the key file's path, for key()."""
+    return dict(cfg["narrate"], key_file=cfg["paths"]["elevenlabs_key"])
+
+
+def find_key(nc: dict) -> str:
+    """$ELEVENLABS_API_KEY, else the paths.elevenlabs_key file; "" if neither."""
+    k = os.environ.get(nc["key_env"], "").strip()
+    path: Path = nc["key_file"]
+    if not k and path.exists():
+        k = path.read_text(encoding="utf-8-sig").strip()
+    return k
+
+
 def key(nc: dict) -> str:
-    k = os.environ.get(nc["key_env"], "")
+    k = find_key(nc)
     if not k:
-        raise SystemExit(f"${nc['key_env']} is not set (ElevenLabs API key; see SETUP.md, Narration)")
+        path = nc["key_file"]
+        raise SystemExit(f"no ElevenLabs API key: set ${nc['key_env']} or put it in {path} "
+                         "(SETUP.md, Narration)")
     return k
 
 

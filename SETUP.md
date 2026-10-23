@@ -123,8 +123,9 @@ the voice becomes the character's. A video comes back as `<take>.voiced.mp4` wit
 untouched. The performer's accent carries through.
 
 1. Make an ElevenLabs account (a paid tier for commercial use; WAV/PCM 44.1 kHz output needs
-   Pro). Profile → API keys → create a key, and set it as the Windows *user* environment variable
-   `ELEVENLABS_API_KEY`.
+   Pro). Profile → API keys → create a key (it needs the Voice Changer and Voices permissions).
+   Paste it, alone on one line, into `secrets/elevenlabs_api_key.txt` (gitignored), or set the
+   Windows *user* environment variable `ELEVENLABS_API_KEY`, which wins if both are set.
 2. Pick the voice: `clipper narrate voices --accent british --gender female --age old` lists your
    voices and matching library voices. Add a library voice with
    `clipper narrate voices --add OWNER:VOICE_ID --name "Mother Moo"`.

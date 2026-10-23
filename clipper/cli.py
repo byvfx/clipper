@@ -71,7 +71,7 @@ def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_narrate(cfg: dict, args: argparse.Namespace) -> None:
     from . import narrate
 
-    nc = cfg["narrate"]
+    nc = narrate.settings(cfg)
     if args.action == "voice":
         narrate.voice(Path(args.take), nc, args.voice_id or "", Path(args.out) if args.out else None)
     elif args.add:

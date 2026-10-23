@@ -21,6 +21,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "youtube_client_secret": "secrets/youtube_client_secret.json",  # OAuth Desktop client
         "youtube_token": "secrets/youtube_token.json",                  # written by --sign-in
         "discord_token": "secrets/discord_token.txt",  # bot token, if not in [discord] token_env
+        "elevenlabs_key": "secrets/elevenlabs_api_key.txt",  # if not in [narrate] key_env
         "tiktok_client": "secrets/tiktok_client.json",  # {"client_key", "client_secret"}
         "tiktok_token": "secrets/tiktok_token.json",    # written by `clipper tiktok --sign-in`
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
