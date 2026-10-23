@@ -273,7 +273,14 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   Prime leads (wide desk framing the user likes, original audio kept, mouth follows speech); Aleph
   (2c852f6d-36f5-4b3d-ab6a-bc7ed0279ebc) tight framing, original audio, less mouth movement; Kling 4
   stiff, generated audio, 24 fps; Motion Control stuck at 98% at Runway. Table on #58; grids in
-  mockups/udder_truth/takes/bakeoff/ (local). ~1,100 credits used so far (28,398 left). Jer archive restarted
+  mockups/udder_truth/takes/bakeoff/ (local). ~1,100 credits used so far (28,398 left).
+  **User picked WAN 3 Prime.** Motion Control finished late (decent, regenerated audio, 9.87 s).
+  WAN 3 Prime takes max 15 s of reference video, so longer takes run in 15 s pieces cut at pauses:
+  30 s test = bc93ee7c-2eea-47eb-8b0b-a5c4edb8a6a0 (16.5-31.5 s) + 130fd02e-c588-4569-935c-f3525d3d76ff
+  (31.5-46.5 s), 420 credits each; stitch and check identity across the cut. User prefers performing
+  + voice change over AI-performed (AI = a new dice roll per take). Runway has no speech-to-speech,
+  so the voice changer is ElevenLabs direct (user's account/key) or Seed-VC-class on Modal. Voice
+  auditions (Runway TTS presets Marlene/Miriam/Paula, British) in mockups/udder_truth/voice/ (local). Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
