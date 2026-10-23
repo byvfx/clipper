@@ -300,7 +300,14 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   User notes: "more punchy and British, stern, not over the top… leave a little camp". Picked read
   **C** (test_take_read_v3.txt): defaults now in clipper.toml `[narrate] tts_settings = {stability
   0.5, style 0, speed 1.05}`. Delivery/writing guide: mockups/udder_truth/mother_moo_voice.md (use it
-  for any Mother Moo script, including Claude drafts for #58). Jer archive restarted
+  for any Mother Moo script, including Claude drafts for #58).
+  **First real clip (2026-10-23):** user's lip-sync take `2026-10-23 07-08-23.mov` (repo root, 3 takes;
+  synced to read C by audio correlation and by matching transcript words: takes at 9.61/74.21/145.96 s).
+  Take 1, cut at read pauses 0/14.95/28.6/42.0/51.5 s into `mockups/udder_truth/takes/first_clip/`,
+  WAN 3 Prime tasks 0df59de0…, 0c9eef30…, 3fe40128…, a8c447c9… (~1,400 credits; 26,443 left).
+  WAN rounds outputs down to whole seconds, so stitching places each piece at its read time and
+  holds the last frame over the gap (scratchpad stitch_moo.sh; checked within 1 frame). This hand
+  workflow (sync, split at pauses, render, stitch) should become a `clipper` command (#58). Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
