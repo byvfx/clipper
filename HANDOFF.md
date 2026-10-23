@@ -328,7 +328,10 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   #60: `clipper udder timeline <week>`: FCPXML first, then Studio's external Python scripting to
   build the project, bins, timeline, Fusion titles and render queue.
   Cold-open reference is now the **Brass Eye 2001 Special intro** (youtu.be/Fh7UgrHMjbQ): narrated,
-  story-led, ends on the presenter beside a giant video wall pun (#59, cold_open_breakdown.md). Jer archive restarted
+  story-led, ends on the presenter beside a giant video wall pun (#59, cold_open_breakdown.md).
+  **Full-series reference** (user, 2026-10-23): youtube.com/watch?v=pQCrcAFuI-E, all 6 episodes + the
+  2001 special (2 h 49 m, unofficial upload; study only). Studied from its auto-captions (no video
+  download): episode format breakdown in `mockups/udder_truth/brass_eye_formats.md` (#58). Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
