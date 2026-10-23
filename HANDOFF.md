@@ -255,6 +255,13 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   User wants quality over automation/cost: a model bake-off on #58 (Act-Two, Wan-Animate-2 on Modal,
   Ray3 Modify/MiniMax H3, 3D face capture; HeyGen/Hedra/Kling Avatar for reporters; Sync for lip
   touch-ups). User may block the show out in 3D (tool and iPhone not yet known).
+  2026-10-23: user knows **Houdini** (grey playblast synced to the take's audio for the throw; camera
+  out as Alembic/FBX for Fusion; moves that suit a 2D character card). User is signing up for
+  **Runway Max** ($95/mo, 9,500 credits: ~13 min Gen-4.5 or ~4 min Seedance Pro 1080p a month, so
+  Runway for bake-off/design/plates/ads, weekly volume likely Wan-Animate-2 on Modal). **Runway MCP
+  added** to Claude Code (local scope, `https://mcp.runwayml.com/mcp`, OAuth, spends plan credits);
+  needs `claude mcp login runway` (or `/mcp`) at the laptop, then a new session to load its tools.
+  Test-take script: `mockups/udder_truth/test_take_script.md` (phone take is fine).
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
