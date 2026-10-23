@@ -224,6 +224,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   the hard part, test fetching the Kick VOD from a container) and #52 speaker labels (words have
   speaker null today) first; #53 embeddings for receipts, #54 face recognition, #55 face-following
   Shorts crop, #56 old-footage cleanup. User is fine paying for a bigger GPU if it's worth it.
+  #57 (user): narration in the user's own voice through ElevenLabs Voice Changer (user chose best
+  quality/ease), first on a Jer video; `clipper narrate` = script, record, voice change, ducked mix,
+  review. Needs the user's ElevenLabs account + ELEVENLABS_API_KEY. Original/licensed voice only.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
