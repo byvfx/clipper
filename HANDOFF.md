@@ -216,8 +216,15 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   Update: token saved (`~/.modal.toml`, profile byvfx, active); app deployed 2026-10-23 (first build
   404 s): modal.com/apps/byvfx/main/deployed/clipper-whisperx. Measured on a copy of kick-131151926
   (7.85 h): L4 19 min ~$0.26, **L40S 10 min ~$0.34 (now the default)**, H100 8.4 min ~$0.59; 99.9% of
-  words and timings match the laptop (table on #11). Live clipper.toml still says backend whisperx:
-  switching the worker to modal is the user's call. #49 (user): Modal monitoring in the war
+  words and timings match the laptop (table on #11). **Live since 2026-10-23 (user):** clipper.toml
+  `[transcribe] backend = "modal"`, `modal_gpu = "L40S"`; `backend = "whisperx"` goes back to the
+  laptop GPU. modal is installed with `uv pip` (bot was up); a later `uv sync` must include `--extra modal`.
+- **`clipper archive` (built 2026-10-23):** `add <subject> <url>` (YouTube channels via yt-dlp, Odysee
+  via its API), `transcribe <subject> [--limit --oldest --gpu --parallel --dry-run]` (8 at once on L4
+  by default), `status`. Data in `paths.archive` (`archive/`, gitignored), one dir per item with
+  meta.json/transcript.json/words.jsonl. Jer cataloged: 11,571 items / 2,732 h (~$89 on L4 for all).
+  3-item test fine; the 100 newest were started 2026-10-23. Odysee CDN refuses direct ffmpeg pulls
+  (401 then 429), so Jerry needs yt-dlp's extractor (#44). #49 (user): Modal monitoring in the war
   room, on the #14 roadmap. #50 (user): running P&L, a costs.jsonl ledger (Claude costs are only
   printed today) plus YouTube estimatedRevenue once monetized (needs the monetary analytics scope).
   More Modal ideas filed (user): #51 render cuts on Modal (cut is the slowest stage; source upload is

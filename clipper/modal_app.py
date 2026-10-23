@@ -27,6 +27,7 @@ GPU_PRICES = {  # $ per hour (modal.com/pricing, 2026-10-23), for the cost line 
     "T4": 0.59, "L4": 0.80, "A10": 1.10, "A10G": 1.10, "L40S": 1.95,
     "A100": 2.10, "A100-40GB": 2.10, "A100-80GB": 2.50, "H100": 3.95,
 }
+SPEED = {"L4": 24.5, "L40S": 46.5, "H100": 55.0}  # x realtime, 8 h stream incl. align (2026-10-23)
 BAKED_MODEL = "large-v3"
 
 

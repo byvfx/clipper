@@ -86,6 +86,22 @@ holds your Discord ids and Kitsu address.
 Secrets never go in the config: API keys and tokens are environment variables, and the
 YouTube OAuth files live in `secrets/` (gitignored).
 
+## Archives
+
+`clipper archive` builds searchable transcripts of other channels' back catalogs (for
+receipts and supercuts), kept apart from the streams folder so nothing in them is uploaded:
+
+```bash
+clipper archive add jer https://www.youtube.com/@TheQuartering   # list long-form videos
+clipper archive transcribe jer --limit 100 --dry-run              # hours and estimated cost
+clipper archive transcribe jer --limit 100                        # WhisperX on Modal, 8 at once
+clipper archive status
+```
+
+It needs the Modal backend set up (SETUP.md, "Transcribe on Modal"). YouTube audio is
+downloaded on this machine and uploaded; Odysee is meant to be fetched in the cloud (not
+working yet, issue #44).
+
 ## Review
 
 Review happens in [Kitsu](https://www.cg-wire.com/kitsu), with one production per show and

@@ -107,10 +107,6 @@ def transcribe_mlx(wav: Path, tc: dict) -> tuple[list[dict], float]:
 
 def transcribe_modal(wav: Path, tc: dict) -> tuple[list[dict], float, dict]:
     """Segments from WhisperX on Modal, plus what the run cost."""
-    import modal
-
-    from .modal_app import GPU_PRICES
-
     suffix, codec = {"flac": (".flac", ["-c:a", "flac"]),
                      "opus": (".ogg", ["-c:a", "libopus", "-b:a", "48k"])}[tc["modal_audio"]]
     enc = wav.with_name(f"audio.modal{suffix}")
@@ -121,20 +117,34 @@ def transcribe_modal(wav: Path, tc: dict) -> tuple[list[dict], float, dict]:
     enc.unlink()
     print(f"encoded {len(data) / 1e6:.0f} MB {tc['modal_audio']} in {time.time() - t1:.0f}s", flush=True)
 
-    cls = modal.Cls.from_name(tc["modal_app"], "WhisperX")
-    if tc["modal_gpu"]:
-        cls = cls.with_options(gpu=tc["modal_gpu"])
     t2 = time.time()
-    out = cls().transcribe.remote(data, suffix, {k: tc[k] for k in ("model", "language",
-                                                                    "compute_type", "batch_size")})
-    wall = time.time() - t2
-    # Billed time is the container's life: about the call's wall clock (upload and cold
-    # start included) plus scaledown_window idle, so this is an upper estimate.
-    price = GPU_PRICES.get(tc["modal_gpu"] or "L4", 0.0)
-    cost = {"gpu": out["gpu"], "call_s": round(wall, 1), **out["timings"],
-            "est_usd": round((wall + 30) / 3600 * price, 3)}
-    print(f"modal {out['gpu']}: {wall:.0f}s call ({out['timings']}), ~${cost['est_usd']:.2f}", flush=True)
+    out = modal_worker(tc, tc["modal_gpu"]).transcribe.remote(data, suffix, modal_settings(tc))
+    cost = modal_cost(tc["modal_gpu"], time.time() - t2, out)
+    print(f"modal {out['gpu']}: {cost['call_s']:.0f}s call ({out['timings']}), ~${cost['est_usd']:.2f}",
+          flush=True)
     return out["segments"], out["dur"], cost
+
+
+def modal_worker(tc: dict, gpu: str):
+    """An instance of the deployed WhisperX class, on this GPU ("" = the app's default)."""
+    import modal
+
+    cls = modal.Cls.from_name(tc["modal_app"], "WhisperX")
+    return (cls.with_options(gpu=gpu) if gpu else cls)()
+
+
+def modal_settings(tc: dict) -> dict:
+    return {k: tc[k] for k in ("model", "language", "compute_type", "batch_size")}
+
+
+def modal_cost(gpu: str, wall: float, out: dict) -> dict:
+    """Billed time is the container's life: about the call's wall clock (upload and cold
+    start included) plus scaledown_window idle, so this is an upper estimate."""
+    from .modal_app import GPU_PRICES
+
+    price = GPU_PRICES.get(gpu or "L4", 0.0)
+    return {"gpu": out["gpu"], "call_s": round(wall, 1), **out["timings"],
+            "est_usd": round((wall + 30) / 3600 * price, 3)}
 
 
 def run(stream_dir: Path, tc: dict) -> None:

@@ -68,6 +68,20 @@ def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
         print(f"{d.name}: grabbed; the worker runs it, or: clipper run {d.name}")
 
 
+def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
+    from . import archive
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if args.action == "add":
+        archive.add(cfg, args.subject, args.url)
+    elif args.action == "transcribe":
+        ac = cfg["archive"]
+        archive.run_transcribe(cfg, args.subject, args.limit, args.oldest, args.gpu or ac["gpu"],
+                               args.parallel or ac["parallel"], args.dry_run)
+    else:
+        archive.status(cfg, args.subject)
+
+
 def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
     from . import transcribe
 
@@ -365,6 +379,22 @@ def main() -> None:
     p.add_argument("--deploy", action="store_true",
                    help="deploy the Modal app for [transcribe] backend = \"modal\"")
     p.set_defaults(fn=cmd_transcribe)
+
+    p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee): list, transcribe on Modal")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_archive)
+    r = rsub.add_parser("add", help="list a channel's long-form videos into a subject's catalog")
+    r.add_argument("subject", help="short name, e.g. jer")
+    r.add_argument("url", nargs="+", help="YouTube channel/tab or Odysee channel url")
+    r = rsub.add_parser("transcribe", help="transcribe catalog items not done yet, on Modal")
+    r.add_argument("subject")
+    r.add_argument("--limit", type=int, help="at most this many items")
+    r.add_argument("--oldest", action="store_true", help="oldest first (default newest first)")
+    r.add_argument("--gpu", help="Modal GPU (default [archive] gpu)")
+    r.add_argument("--parallel", type=int, help="items at once (default [archive] parallel)")
+    r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
+    r = rsub.add_parser("status", help="items, hours transcribed, errors, cost")
+    r.add_argument("subject", nargs="?")
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")

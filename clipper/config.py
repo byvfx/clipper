@@ -26,6 +26,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
+        "archive": "archive",     # `clipper archive` subjects: <subject>/catalog.json + one dir per item
+    },
+    "archive": {
+        "gpu": "L4",              # Modal GPU for bulk runs: cheapest per hour of audio (#11)
+        "parallel": 8,            # items at once (the Modal app allows 10 containers)
+        "min_duration_s": 60,     # skip shorter items (Shorts)
+        "youtube_format": "bestaudio[abr<=96]/bestaudio",  # ~40 MB per hour of audio
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.
