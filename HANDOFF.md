@@ -262,6 +262,11 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   added** to Claude Code (local scope, `https://mcp.runwayml.com/mcp`, OAuth, spends plan credits);
   needs `claude mcp login runway` (or `/mcp`) at the laptop, then a new session to load its tools.
   Test-take script: `mockups/udder_truth/test_take_script.md` (phone take is fine).
+  Sound design plan on #58 (comment 2026-10-23): no model audio, audio-first; studio vs. field
+  acoustics; a reusable show sound kit (theme, stings, beds) from a library; mix in Fairlight at
+  -14 LUFS. User can get a sound library (e.g. **Artlist**); register the channel for Content ID
+  clearance first. Possible clipper work (not started): `[udder] sounds` kit folder + FCPXML with
+  laid-out A1-A6 audio tracks.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
