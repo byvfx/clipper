@@ -223,7 +223,12 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   via its API), `transcribe <subject> [--limit --oldest --gpu --parallel --dry-run]` (8 at once on L4
   by default), `status`. Data in `paths.archive` (`archive/`, gitignored), one dir per item with
   meta.json/transcript.json/words.jsonl. Jer cataloged: 11,571 items / 2,732 h (~$89 on L4 for all).
-  3-item test fine; the 100 newest were started 2026-10-23. Odysee CDN refuses direct ffmpeg pulls
+  3-item test fine; the 100 newest: 20.7 h in ~11 min, 0 failures, ~61 GPU-min (~$0.85; the
+  built-in estimate says $1.50, it assumes a cold container per item). **Full run started
+  2026-10-23 03:25 PT (user: "run em all")**: 11,468 items / 2,711 h, expect ~23 h and ~$110-130,
+  detached process (survives the session; Win32_Process create), log `logs/archive-jer.log`,
+  progress `clipper archive status jer`. Stops itself after 20 failures in a row (YouTube bot
+  check) and a rerun resumes. The laptop must stay awake and online for the downloads. Odysee CDN refuses direct ffmpeg pulls
   (401 then 429), so Jerry needs yt-dlp's extractor (#44). #49 (user): Modal monitoring in the war
   room, on the #14 roadmap. #50 (user): running P&L, a costs.jsonl ledger (Claude costs are only
   printed today) plus YouTube estimatedRevenue once monetized (needs the monetary analytics scope).
