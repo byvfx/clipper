@@ -79,6 +79,8 @@ playlist = "{show} Pre-shows"   # one playlist for all of them; "" = the model's
 credit = "The {show} pre-show from {date}, first posted on their YouTube channel: {url}"
 
 [transcribe]
+# backend = "modal"        # cloud GPU instead of local CUDA; see SETUP.md "Transcribe on Modal"
+# modal_gpu = "L40S"
 model = "large-v3"
 language = "en"
 compute_type = "float16"   # int8_float16 if VRAM is tight

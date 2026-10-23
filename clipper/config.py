@@ -135,6 +135,12 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     },
     "transcribe": {
         "backend": "whisperx",    # whisperx (CUDA) | mlx (Apple Silicon, `uv sync --extra mac`)
+                                  # | modal (cloud GPU, `uv sync --extra modal`, issue #11)
+        "modal_app": "clipper-whisperx",  # deployed app name (`clipper transcribe --deploy`)
+        "modal_gpu": "L40S",      # T4 | L4 | A10 | L40S | A100 | H100; "" = the app's default
+                                  # (8 h stream, 2026-10-23: L40S 10 min ~$0.34, L4 19 min ~$0.26,
+                                  # H100 8 min ~$0.59; L4 is cheapest for bulk archive runs)
+        "modal_audio": "flac",    # flac (lossless, ~60 MB/h) | opus (48 kbps, smaller upload)
         "mlx_model": "mlx-community/whisper-large-v3-turbo",  # Hugging Face repo for mlx
         "mlx_align": True,        # refine mlx word times with WhisperX alignment if installed
         "model": "large-v3",

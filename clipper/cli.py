@@ -71,6 +71,10 @@ def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
     from . import transcribe
 
+    if args.deploy:
+        return transcribe.deploy()
+    if not args.stream:
+        raise SystemExit("clipper transcribe <stream>, or --deploy")
     transcribe.run(stream_dir(cfg, args.stream), cfg["transcribe"])
 
 
@@ -357,7 +361,9 @@ def main() -> None:
     r.add_argument("url")
 
     p = sub.add_parser("transcribe", help="WhisperX -> words.jsonl")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    p.add_argument("stream", nargs="?", help="stream id under paths.streams, or a stream dir")
+    p.add_argument("--deploy", action="store_true",
+                   help="deploy the Modal app for [transcribe] backend = \"modal\"")
     p.set_defaults(fn=cmd_transcribe)
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")

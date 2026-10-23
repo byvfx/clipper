@@ -14,6 +14,9 @@ audio.wav (skipped if present), transcribes it with word timings and writes:
     mlx       mlx-whisper on Apple Silicon (`uv sync --extra mac`), with its own word
               timestamps; when WhisperX is installed too (mlx_align), its alignment model
               refines them on the CPU
+    modal     the same WhisperX on a Modal cloud GPU (`uv sync --extra modal`, issue #11);
+              audio.wav goes up as FLAC, the aligned segments come back. Deploy the app
+              first: `clipper transcribe --deploy` (clipper/modal_app.py)
 """
 
 from __future__ import annotations
@@ -102,14 +105,49 @@ def transcribe_mlx(wav: Path, tc: dict) -> tuple[list[dict], float]:
     return segments, dur
 
 
+def transcribe_modal(wav: Path, tc: dict) -> tuple[list[dict], float, dict]:
+    """Segments from WhisperX on Modal, plus what the run cost."""
+    import modal
+
+    from .modal_app import GPU_PRICES
+
+    suffix, codec = {"flac": (".flac", ["-c:a", "flac"]),
+                     "opus": (".ogg", ["-c:a", "libopus", "-b:a", "48k"])}[tc["modal_audio"]]
+    enc = wav.with_name(f"audio.modal{suffix}")
+    t1 = time.time()
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(wav), *codec,
+                    str(enc)], check=True)
+    data = enc.read_bytes()
+    enc.unlink()
+    print(f"encoded {len(data) / 1e6:.0f} MB {tc['modal_audio']} in {time.time() - t1:.0f}s", flush=True)
+
+    cls = modal.Cls.from_name(tc["modal_app"], "WhisperX")
+    if tc["modal_gpu"]:
+        cls = cls.with_options(gpu=tc["modal_gpu"])
+    t2 = time.time()
+    out = cls().transcribe.remote(data, suffix, {k: tc[k] for k in ("model", "language",
+                                                                    "compute_type", "batch_size")})
+    wall = time.time() - t2
+    # Billed time is the container's life: about the call's wall clock (upload and cold
+    # start included) plus scaledown_window idle, so this is an upper estimate.
+    price = GPU_PRICES.get(tc["modal_gpu"] or "L4", 0.0)
+    cost = {"gpu": out["gpu"], "call_s": round(wall, 1), **out["timings"],
+            "est_usd": round((wall + 30) / 3600 * price, 3)}
+    print(f"modal {out['gpu']}: {wall:.0f}s call ({out['timings']}), ~${cost['est_usd']:.2f}", flush=True)
+    return out["segments"], out["dur"], cost
+
+
 def run(stream_dir: Path, tc: dict) -> None:
     t0 = time.time()
     wav = extract_audio(stream_dir)
     if tc["backend"] == "mlx":
         segments, dur = transcribe_mlx(wav, tc)
         return write(stream_dir, tc, segments, dur, t0)
+    if tc["backend"] == "modal":
+        segments, dur, cost = transcribe_modal(wav, tc)
+        return write(stream_dir, tc, segments, dur, t0, {"modal": cost})
     if tc["backend"] != "whisperx":
-        raise SystemExit(f"[transcribe] backend must be whisperx or mlx, not {tc['backend']!r}")
+        raise SystemExit(f"[transcribe] backend must be whisperx, mlx or modal, not {tc['backend']!r}")
     import torch
     import whisperx
 
@@ -138,10 +176,12 @@ def run(stream_dir: Path, tc: dict) -> None:
     write(stream_dir, tc, result["segments"], dur, t0)
 
 
-def write(stream_dir: Path, tc: dict, segments: list[dict], dur: float, t0: float) -> None:
+def write(stream_dir: Path, tc: dict, segments: list[dict], dur: float, t0: float,
+          extra: dict | None = None) -> None:
     (stream_dir / "transcript.json").write_text(
         json.dumps({"model": tc["mlx_model"] if tc["backend"] == "mlx" else tc["model"],
-                    "backend": tc["backend"], "language": tc["language"], "segments": segments},
+                    "backend": tc["backend"], "language": tc["language"], **(extra or {}),
+                    "segments": segments},
                    ensure_ascii=False),
         encoding="utf-8",
     )
@@ -164,3 +204,10 @@ def write(stream_dir: Path, tc: dict, segments: list[dict], dur: float, t0: floa
     total = time.time() - t0
     print(f"{len(segments)} segments, {len(words)} words ({missing} interpolated); "
           f"total {total:.0f}s = {dur / max(total, 1e-9):.1f}x realtime")
+
+
+def deploy() -> None:
+    """Deploy (or update) the Modal app in clipper/modal_app.py."""
+    from . import modal_app
+
+    subprocess.run([sys.executable, "-m", "modal", "deploy", modal_app.__file__], check=True)

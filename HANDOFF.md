@@ -200,7 +200,35 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   of both shows (91 Jer segments in 13 streams). YouTube: ~11,570 long-form / ~2,730 h, captions
   free; Rumble (his main now) not yet counted. Idea: send "receipts packs" (old clips with source
   links) to Don and Kino for use on stream, for reach; the user makes contact, nothing auto-sent.
-  Lolcow Cinema content. User decided (same day): **Jer goes first** of the four archive projects,
+  Lolcow Cinema content. 2026-10-23: **On Cinema at the Cinema** is the second channel's third subject
+  (user loves it). The full show is on HEI Network (paid membership, 16 seasons + 12 Oscar specials);
+  YouTube has only promos plus Tim Heidecker's channel (~400 h with lives). Details on #46.
+  2026-10-23: **Modal backend built (#11), not deployed yet.** `[transcribe] backend = "modal"`,
+  `clipper/modal_app.py` (CUDA 12.8 image, torch 2.8 / whisperx 3.8.6 as uv.lock, large-v3 + en
+  alignment baked in, L4 default, max 10 containers, `transcribe_url` for cloud-side archive pulls),
+  `clipper transcribe --deploy`, doctor checks (package, token, app deployed), SETUP 2b, extra `modal`.
+  Tested with the cloud call stubbed: FLAC upload, settings and cost fields right, words.jsonl identical
+  (394/394) for kick-131151926's first segments. Waiting on the user's Modal account + MODAL_TOKEN_ID /
+  MODAL_TOKEN_SECRET (user env vars). Then: deploy, transcribe a copy of kick-131151926 (not the NAS
+  dir), compare with the local words/timings, write cost per stream on #11. Live config unchanged
+  (backend still whisperx). User wants the bulk archive transcription done this way, uploads queued on
+  YouTube as now.
+  Update: token saved (`~/.modal.toml`, profile byvfx, active); app deployed 2026-10-23 (first build
+  404 s): modal.com/apps/byvfx/main/deployed/clipper-whisperx. Measured on a copy of kick-131151926
+  (7.85 h): L4 19 min ~$0.26, **L40S 10 min ~$0.34 (now the default)**, H100 8.4 min ~$0.59; 99.9% of
+  words and timings match the laptop (table on #11). Live clipper.toml still says backend whisperx:
+  switching the worker to modal is the user's call. #49 (user): Modal monitoring in the war
+  room, on the #14 roadmap. #50 (user): running P&L, a costs.jsonl ledger (Claude costs are only
+  printed today) plus YouTube estimatedRevenue once monetized (needs the monetary analytics scope).
+  More Modal ideas filed (user): #51 render cuts on Modal (cut is the slowest stage; source upload is
+  the hard part, test fetching the Kick VOD from a container) and #52 speaker labels (words have
+  speaker null today) first; #53 embeddings for receipts, #54 face recognition, #55 face-following
+  Shorts crop, #56 old-footage cleanup. User is fine paying for a bigger GPU if it's worth it.
+  Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
+  Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
+  fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
+  shrinks the desktop question to storage. #44's WhisperX estimate corrected to ~40 GPU h locally.
+  User decided (2026-10-22): **Jer goes first** of the four archive projects,
   but it waits on hardware logistics the user is still working out (desktop / storage). Don't start
   the pull until they say so.
 
@@ -209,6 +237,10 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
 full). Issue 01 (`mockups/weekly/tiktok/`, 10 pages, 3:4) goes out as two posts of five; text in
 `mockups/weekly/youtube_post_test.md`, images sent to the user's phone. The user is testing it by hand
 (the API can't post). Waiting on: private/draft option, feed crop of 3:4, poll in part 2 (#31, #35).
+Re-checked 2026-10-23: the Data API still has no Posts endpoint, so the user posts by hand from
+`mockups/weekly/youtube_post/01-10.jpg` (upload order; not committed). Plan (user): schedule the test,
+delete it if it works, then **Saturday 2026-10-25 is the first real issue**. Before then: page 05
+says "PART 2 IN THE NEXT POST" instead of SWIPE, and the aspect follows the test.
 Tracking issue #30. The YouTube Data API can't create Posts, so clipper drafts copy and images, the bot
 posts a Discord card, and the user posts in Studio or the app. #31 check the channel can post and the
 limits (user's, first), #32 `clipper posts` stage + square covers + Discord drafts, then #33 cover stories

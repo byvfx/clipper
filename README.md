@@ -53,7 +53,7 @@ meta, thumbs, review. No clips and no Shorts. Once approved, `clipper schedule` 
 | Role | Runs | Where |
 |---|---|---|
 | Recorder | `clipper record watch` | Docker on a NAS, see `deploy/record` |
-| GPU worker | `clipper worker` | a machine with an NVIDIA GPU (8 GB+) or Apple Silicon |
+| GPU worker | `clipper worker` | a machine with an NVIDIA GPU (8 GB+) or Apple Silicon, or any machine with `[transcribe] backend = "modal"` (cloud GPU) |
 | Bot | `clipper bot` | any always-on machine: Discord review cards, retakes, the war room, pre-show grabs |
 
 All roles share one streams folder (a NAS share). One machine can do more than one role.

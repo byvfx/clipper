@@ -203,6 +203,22 @@ def check_gpu(cfg: dict) -> None:
             fail("gpu", "[transcribe] backend = mlx but mlx-whisper isn't installed",
                  "on an Apple Silicon Mac: uv sync --extra mac")
         return
+    if tc["backend"] == "modal":
+        try:
+            import modal
+            ok("gpu", f"modal {modal.__version__} installed (transcribe on a cloud {tc['modal_gpu'] or 'GPU'})")
+        except ImportError:
+            fail("gpu", "[transcribe] backend = modal but modal isn't installed", "uv sync --extra modal")
+            return
+        if os.environ.get("MODAL_TOKEN_ID") and os.environ.get("MODAL_TOKEN_SECRET"):
+            ok("gpu", "Modal token in MODAL_TOKEN_ID / MODAL_TOKEN_SECRET")
+        elif (Path.home() / ".modal.toml").exists():
+            ok("gpu", "Modal token in ~/.modal.toml")
+        else:
+            fail("gpu", "no Modal token",
+                 "modal.com -> Settings -> API Tokens; set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET "
+                 "as user env vars (or run: python -m modal token new)")
+        return
     try:
         import torch
     except ImportError:
@@ -333,6 +349,16 @@ def check_online(cfg: dict, role: str) -> None:
                                    "" if r.ok else "reset the bot token in the Developer Portal")
         except (Exception, SystemExit) as e:  # noqa: BLE001
             fail("online", f"Discord: {e}")
+    if role in ("all", "gpu") and cfg["transcribe"]["backend"] == "modal":
+        try:
+            import modal
+            modal.Cls.from_name(cfg["transcribe"]["modal_app"], "WhisperX").hydrate()
+            ok("online", f"Modal app {cfg['transcribe']['modal_app']!r} deployed")
+        except ImportError:
+            pass  # check_gpu already failed it
+        except Exception as e:  # noqa: BLE001
+            fail("online", f"Modal app {cfg['transcribe']['modal_app']!r}: {type(e).__name__}: {str(e)[:120]}",
+                 "clipper transcribe --deploy (after setting the Modal token)")
     if role in ("all", "gpu"):  # the worker grabs pre-shows
         from . import preshow
         for key, sc in preshow.watched(_root(cfg)):
