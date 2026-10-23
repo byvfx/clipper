@@ -280,7 +280,16 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   (31.5-46.5 s), 420 credits each; stitch and check identity across the cut. User prefers performing
   + voice change over AI-performed (AI = a new dice roll per take). Runway has no speech-to-speech,
   so the voice changer is ElevenLabs direct (user's account/key) or Seed-VC-class on Modal. Voice
-  auditions (Runway TTS presets Marlene/Miriam/Paula, British) in mockups/udder_truth/voice/ (local). Jer archive restarted
+  auditions (Runway TTS presets Marlene/Miriam/Paula, British) in mockups/udder_truth/voice/ (local).
+  30 s test done (wan3_30s.mp4 + side-by-side): identity holds across the two 15 s pieces, but her
+  head position jumps at the splice (each piece restarts from the hero image), so plan a cutaway or
+  angle change at every splice, or overlap renders and dissolve. ~1,960 credits used in all (27,843 left).
+- **`clipper narrate` (built 2026-10-23, untested until the key exists):** `voice <take>` → ElevenLabs
+  Voice Changer (POST /v1/voice-changer/{voice_id}, eleven_multilingual_sts_v2, background noise off)
+  → `<take>.voiced.mp4` with the picture copied; `voices [--accent --gender --age --search]`, `--add
+  OWNER:VOICE_ID`. `[narrate]` config, doctor (warn if no key; online: key, plan, voice), SETUP 2c.
+  User chose ElevenLabs and is making the account + `ELEVENLABS_API_KEY`. Next: pick her voice, run
+  the 30 s take, mux under wan3_30s.mp4. Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows

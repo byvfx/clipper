@@ -313,8 +313,41 @@ def check_tiktok(cfg: dict) -> None:
                                     f"(renew within {days:.0f} days)", "clipper tiktok --sign-in")
 
 
+def check_narrate(cfg: dict) -> None:
+    """Optional: only `clipper narrate` needs it."""
+    nc = cfg["narrate"]
+    if not os.environ.get(nc["key_env"]):
+        if nc["voice_id"]:
+            fail("keys", f"[narrate] voice_id is set but ${nc['key_env']} isn't",
+                 "set the ElevenLabs API key as a user env var (SETUP.md, Narration)")
+        else:
+            warn("keys", f"no ${nc['key_env']}: `clipper narrate` won't work here (optional)",
+                 "SETUP.md, Narration")
+        return
+    if not nc["voice_id"]:
+        warn("keys", "ElevenLabs key set but no [narrate] voice_id", "clipper narrate voices")
+    else:
+        ok("keys", f"ElevenLabs key set, voice {nc['voice_id']}")
+
+
 def check_online(cfg: dict, role: str) -> None:
     import requests
+
+    nc = cfg["narrate"]
+    if os.environ.get(nc["key_env"]):
+        r = requests.get("https://api.elevenlabs.io/v1/user", headers={"xi-api-key": os.environ[nc["key_env"]]},
+                         timeout=15)
+        if not r.ok:
+            fail("online", f"ElevenLabs refused the key (HTTP {r.status_code})", "check $" + nc["key_env"])
+        else:
+            tier = (r.json().get("subscription") or {}).get("tier", "?")
+            ok("online", f"ElevenLabs answers (plan {tier})")
+            if nc["voice_id"]:
+                v = requests.get(f"https://api.elevenlabs.io/v1/voices/{nc['voice_id']}",
+                                 headers={"xi-api-key": os.environ[nc["key_env"]]}, timeout=15)
+                (ok if v.ok else fail)("online", f"ElevenLabs voice {nc['voice_id']}: "
+                                       + (v.json().get("name", "?") if v.ok else f"HTTP {v.status_code}"),
+                                       "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")
 
     if role != "nas" and os.environ.get("ANTHROPIC_API_KEY"):
         try:
@@ -410,6 +443,8 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_photos(cfg)
         check_gpu(cfg)
     check_keys(cfg, role)
+    if role in ("all", "gpu"):
+        check_narrate(cfg)
     if not offline:
         check_online(cfg, role)
     width = max(len(a) for _, a, _, _ in RESULTS)

@@ -68,6 +68,18 @@ def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
         print(f"{d.name}: grabbed; the worker runs it, or: clipper run {d.name}")
 
 
+def cmd_narrate(cfg: dict, args: argparse.Namespace) -> None:
+    from . import narrate
+
+    nc = cfg["narrate"]
+    if args.action == "voice":
+        narrate.voice(Path(args.take), nc, args.voice_id or "", Path(args.out) if args.out else None)
+    elif args.add:
+        narrate.add_voice(nc, args.add, args.name)
+    else:
+        narrate.voices(nc, args.search or "", args.accent or "", args.gender or "", args.age or "")
+
+
 def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
     from . import archive
 
@@ -379,6 +391,21 @@ def main() -> None:
     p.add_argument("--deploy", action="store_true",
                    help="deploy the Modal app for [transcribe] backend = \"modal\"")
     p.set_defaults(fn=cmd_transcribe)
+
+    p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_narrate)
+    r = rsub.add_parser("voice", help="take (video or audio) -> <take>.voiced.mp4/.mp3 in [narrate] voice_id")
+    r.add_argument("take")
+    r.add_argument("--voice-id", help="override [narrate] voice_id")
+    r.add_argument("-o", "--out", help="output path")
+    r = rsub.add_parser("voices", help="list your voices and the shared library; --add one")
+    r.add_argument("--search")
+    r.add_argument("--accent", help="e.g. british")
+    r.add_argument("--gender", help="male | female | neutral")
+    r.add_argument("--age", help="young | middle_aged | old")
+    r.add_argument("--add", metavar="OWNER:VOICE_ID", help="add a library voice to your account")
+    r.add_argument("--name", default="Mother Moo", help="name for --add")
 
     p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee): list, transcribe on Modal")
     rsub = p.add_subparsers(dest="action", required=True)

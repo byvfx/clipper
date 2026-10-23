@@ -115,6 +115,28 @@ plan includes $30 of compute a month. Measured on that 8 h stream: L40S (default
 Each run prints the GPU, the call time and an estimated cost, and keeps them under `"modal"` in
 transcript.json. The estimate is an upper bound (it counts upload and cold start).
 
+## 2c. Narration voice (ElevenLabs, optional)
+
+`clipper narrate voice <take>` re-voices a performance (a phone take, a webcam clip, an audio
+file) with the ElevenLabs Voice Changer: the words, timing and delivery stay the performer's,
+the voice becomes the character's. A video comes back as `<take>.voiced.mp4` with the picture
+untouched. The performer's accent carries through.
+
+1. Make an ElevenLabs account (a paid tier for commercial use; WAV/PCM 44.1 kHz output needs
+   Pro). Profile → API keys → create a key, and set it as the Windows *user* environment variable
+   `ELEVENLABS_API_KEY`.
+2. Pick the voice: `clipper narrate voices --accent british --gender female --age old` lists your
+   voices and matching library voices. Add a library voice with
+   `clipper narrate voices --add OWNER:VOICE_ID --name "Mother Moo"`.
+3. Put the printed id in clipper.toml:
+   ```toml
+   [narrate]
+   voice_id = "..."
+   ```
+4. `clipper doctor` checks the key, the plan and the voice.
+
+Takes longer than `[narrate] max_s` (300 s) are split at pauses first.
+
 ## 3. The NAS recorder
 
 `bash deploy/record/deploy.sh` from the repo root (ssh alias `nas`). It copies clipper.toml
