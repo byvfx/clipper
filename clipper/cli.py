@@ -77,8 +77,11 @@ def cmd_narrate(cfg: dict, args: argparse.Namespace) -> None:
     elif args.action == "speak":
         src = Path(args.script)
         ext = nc["output_format"].split("_")[0]
+        overrides = {k: v for k, v in (("stability", args.stability), ("style", args.style),
+                                       ("speed", args.speed)) if v is not None}
         narrate.speak(src.read_text(encoding="utf-8").strip(), nc,
-                      Path(args.out) if args.out else src.with_suffix(f".read.{ext}"), args.voice_id or "")
+                      Path(args.out) if args.out else src.with_suffix(f".read.{ext}"), args.voice_id or "",
+                      overrides)
     elif args.add:
         narrate.add_voice(nc, args.add, args.name)
     else:
@@ -404,6 +407,9 @@ def main() -> None:
     r.add_argument("script", help="UTF-8 text; eleven_v3 tags like [sighs] [pause] allowed")
     r.add_argument("--voice-id", help="override [narrate] voice_id")
     r.add_argument("-o", "--out", help="output path")
+    r.add_argument("--stability", type=float, help="0 creative | 0.5 natural | 1 steadiest (eleven_v3)")
+    r.add_argument("--style", type=float, help="0-1 style exaggeration")
+    r.add_argument("--speed", type=float, help="0.7-1.2")
     r = rsub.add_parser("voice", help="take (video or audio) -> <take>.voiced.mp4/.mp3 in [narrate] voice_id")
     r.add_argument("take")
     r.add_argument("--voice-id", help="override [narrate] voice_id")

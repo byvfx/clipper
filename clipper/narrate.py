@@ -106,21 +106,26 @@ def voice(take: Path, nc: dict, voice_id: str = "", out: Path | None = None) -> 
     return out
 
 
-def speak(text: str, nc: dict, out: Path, voice_id: str = "") -> Path:
+def speak(text: str, nc: dict, out: Path, voice_id: str = "", overrides: dict | None = None) -> Path:
     """Text to speech in the character's voice: the read to perform to (lip-sync on headphones).
-    eleven_v3 takes inline delivery tags such as [sighs], [whispers], [pause]."""
+    eleven_v3 takes inline delivery tags such as [sighs], [whispers], [pause].
+    [narrate] tts_settings (and `overrides`) go in as voice_settings: stability (eleven_v3: 0
+    creative, 0.5 natural, 1 robust/steadiest), style (exaggeration), speed (0.7-1.2)."""
     voice_id = voice_id or nc["voice_id"]
     if not voice_id:
         raise SystemExit("no voice: set [narrate] voice_id, or pass --voice-id")
     if len(text) > nc["tts_max_chars"]:
         raise SystemExit(f"script is {len(text)} characters; split it (max {nc['tts_max_chars']} per read)")
+    body = {"text": text, "model_id": nc["tts_model"]}
+    if settings_ := {**nc["tts_settings"], **(overrides or {})}:
+        body["voice_settings"] = settings_
     r = requests.post(f"{API}/v1/text-to-speech/{voice_id}", params={"output_format": nc["output_format"]},
-                      headers={"xi-api-key": key(nc)}, json={"text": text, "model_id": nc["tts_model"]},
-                      timeout=600)
+                      headers={"xi-api-key": key(nc)}, json=body, timeout=600)
     if not r.ok:
         raise SystemExit(f"ElevenLabs text to speech: HTTP {r.status_code}: {r.text[:300]}")
     out.write_bytes(r.content)
-    print(f"{out}  ({duration(out):.1f} s, voice {voice_id}, {len(text)} characters)")
+    print(f"{out}  ({duration(out):.1f} s, voice {voice_id}, {len(text)} characters, "
+          f"settings {body.get('voice_settings', 'voice default')})")
     return out
 
 
