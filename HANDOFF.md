@@ -243,6 +243,12 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   on Modal preferred). Character: a salacious, campy gossip dame in the Joan Rivers / Harvey Fierstein
   *type*, but an original face, voice and name (not recognizable as either). **Name: Mother Moo**
   (user, 2026-10-23), the Lolcow Cinema host. Bit ideas on #57 (not decided).
+- **#58 The Udder Truth** (user, 2026-10-23): weekly Brass Eye-style show (the 1997 Channel 4 one)
+  hosted by Mother Moo; same weekly data as the magazine (its parody ads become TV spots), The
+  Receipt Drawer is a segment (#48). Pipeline in the issue: Claude script → user's webcam take →
+  ElevenLabs → character animation via the user's ComfyUI workflows run on Modal → user comps and
+  finishes from a clipper-built timeline. User knows post (VFX) and some ComfyUI, little AI video.
+  Satire rules: real people only say what they said, no pranks, fake experts are original.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
