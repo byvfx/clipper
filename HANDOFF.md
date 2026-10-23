@@ -539,6 +539,13 @@ reviewed, then posted ASAP**.
   yt-analytics.readonly from the file, so analytics never saw it. It now keeps extra saved scopes. Bot
   restarted 19:26 on the fix. 7-day numbers start ~2026-10-26. Still open: `analytics --show` and
   `schedule --show` crash ("no [shows.True]"): the subcommand flag collides with the global --show.
+- Show playlists (2026-10-22, user): every upload also goes in its show's playlist, `[youtube]
+  show_playlist = "{show}"` ("Kino Casino"), next to the model's subject playlist. Uploaded entries
+  record `"playlists": [...]` in schedule.json. Backfill: `clipper upload --playlists [--max N]
+  [--dry-run]` (50 quota units per add; skips videos already in the playlist). All 28 uploaded Kino
+  videos are in "Kino Casino", all 17 Channel 404 videos in the new public "Channel 404 News" (user OK'd).
+  Bot restarted 21:06 on this code, so new uploads join their show playlist.
+- Wish list: lore-order playlists (storylines in the order they happened), issue #43.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS

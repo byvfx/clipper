@@ -69,6 +69,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "thumbnails": True,       # set the .jpg beside each video (`clipper thumbs`)
         "short_thumbnails": False,  # ...Shorts too; off until thumbnails.set is verified on a Short
         "add_to_playlist": True,  # the metadata draft's playlist, created on first use
+        "show_playlist": "{show}",  # ...and every upload in its show's playlist too; "" = off
         "playlist_privacy": "public",
     },
     "kick": {

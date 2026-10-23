@@ -117,8 +117,12 @@ def metadata(entry: dict, cfg: dict) -> dict:
             tags.append(t)
             total += len(t) + 1
     srt, jpg = video.with_suffix(".srt"), video.with_suffix(".jpg")
+    playlist = value("Playlist").strip()
+    show_list = (cfg["youtube"]["show_playlist"].format(show=cfg["meta"]["show_name"])
+                 if cfg["youtube"]["show_playlist"] and cfg["meta"]["show_name"] else "")
     return {"title": clean(title, 100), "description": clean(description, 5000), "tags": tags,
-            "playlist": value("Playlist").strip(), "srt": srt if srt.exists() else None,
+            "playlist": playlist, "playlists": list(dict.fromkeys(p for p in (playlist, show_list) if p)),
+            "srt": srt if srt.exists() else None,
             "thumb": jpg if jpg.exists() and cfg["youtube"]["thumbnails"]
             and (entry["kind"] != "short" or cfg["youtube"]["short_thumbnails"]) else None,
             "review_key": key, "stream_dir": sdir}
@@ -199,6 +203,66 @@ def ensure_playlist(yt, name: str, cache: dict, privacy: str) -> str:
     return cache[name]
 
 
+def add_to_playlist(yt, name: str, vid: str, cache: dict, cache_path: Path, privacy: str) -> None:
+    pid = ensure_playlist(yt, name, cache, privacy)
+    cache_path.write_text(json.dumps(cache, indent=2))
+    execute_with_retry(yt.playlistItems().insert(part="snippet", body={"snippet": {
+        "playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}}))
+
+
+def playlist_videos(yt, pid: str) -> set[str]:
+    out, page = set(), None
+    while True:
+        res = yt.playlistItems().list(part="contentDetails", playlistId=pid, maxResults=50,
+                                      pageToken=page).execute()
+        out |= {i["contentDetails"]["videoId"] for i in res.get("items", [])}
+        page = res.get("nextPageToken")
+        if not page:
+            return out
+
+
+def backfill_playlists(cfg: dict, sched: dict, sched_path: Path, dry_run: bool,
+                       limit: int | None) -> None:
+    """Put uploaded videos in the playlists they belong in but aren't in yet (e.g. the show
+    playlist, added 2026-10-22). Each add costs 50 quota units, so --max spreads it out."""
+    paths, yc = cfg["paths"], cfg["youtube"]
+    cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
+    cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+    up = [e for e in sched["entries"] if e.get("status") == "uploaded" and e.get("video_id")]
+    yt = service(paths)
+    members: dict[str, set[str]] = {}
+    todo = []
+    for e in up:
+        for name in metadata(e, cfg)["playlists"]:
+            if name in e.get("playlists", []):
+                continue
+            if name not in members:  # existing playlists only; a new one is empty
+                members[name] = playlist_videos(yt, cache[name]) if name in cache else set()
+            if e["video_id"] in members[name]:
+                if not dry_run:  # already there; just remember it
+                    note_playlist(sched_path, e["key"], name)
+            else:
+                todo.append((e, name))
+    todo = todo[:limit] if limit else todo
+    print(f"{len(todo)} playlist adds" + (" (dry run)" if dry_run else "")
+          + f", {len(todo) * 50} quota units")
+    for e, name in todo:
+        print(f"  {name}: {e['url']} {e['title'][:60]}")
+        if not dry_run:
+            add_to_playlist(yt, name, e["video_id"], cache, cache_path, yc["playlist_privacy"])
+            note_playlist(sched_path, e["key"], name)
+
+
+def note_playlist(sched_path: Path, key: str, name: str) -> None:
+    """Record that an uploaded entry is in a playlist, re-reading schedule.json first (the
+    bot may have replanned since)."""
+    sched = json.loads(sched_path.read_text(encoding="utf-8"))
+    for e in sched["entries"]:
+        if e["key"] == key and name not in e.get("playlists", []):
+            e.setdefault("playlists", []).append(name)
+    sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 class ThumbnailsNotAllowed(Exception):
     pass
 
@@ -263,12 +327,11 @@ def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_pat
                 "videoId": vid, "language": yc["language"], "name": "", "isDraft": False}},
                 media_body=MediaFileUpload(str(m["srt"]), mimetype="application/octet-stream")).execute()
             extras.append("captions")
-        if yc["add_to_playlist"] and m["playlist"]:
-            pid = ensure_playlist(yt, m["playlist"], playlists, yc["playlist_privacy"])
-            cache_path.write_text(json.dumps(playlists, indent=2))
-            execute_with_retry(yt.playlistItems().insert(part="snippet", body={"snippet": {
-                "playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}}))
-            extras.append(f"playlist {m['playlist']}")
+        for name in m["playlists"] if yc["add_to_playlist"] else []:
+            add_to_playlist(yt, name, vid, playlists, cache_path, yc["playlist_privacy"])
+            e.setdefault("playlists", []).append(name)
+            sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+            extras.append(f"playlist {name}")
         kitsu_url(cfg, m, f"https://youtu.be/{vid}")
         extras.append("Kitsu link")
     except Exception as ex:  # noqa: BLE001  # the video itself is up; report and move on
@@ -295,7 +358,7 @@ def kitsu_url(cfg: dict, meta: dict, url: str) -> None:
 
 
 def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | None = None,
-        thumbnails_only: bool = False) -> None:
+        thumbnails_only: bool = False, playlists_only: bool = False) -> None:
     yc, paths = cfg["youtube"], cfg["paths"]
     if sign_in:
         service(paths, sign_in=True)
@@ -307,6 +370,9 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     sched = json.loads(sched_path.read_text(encoding="utf-8"))
     if thumbnails_only:
         backfill_thumbnails(cfg, sched, sched_path, dry_run)
+        return
+    if playlists_only:
+        backfill_playlists(cfg, sched, sched_path, dry_run, limit)
         return
     tz = ZoneInfo(sched["timezone"])
     now = datetime.now(UTC)

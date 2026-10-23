@@ -360,6 +360,8 @@ thumbnails = true              # set the .jpg beside each video (custom thumbnai
                                # phone-verified channel; then `clipper upload --thumbnails`)
 short_thumbnails = false       # Shorts' 9:16 covers too; off until the API is verified on a Short
 add_to_playlist = true         # the metadata draft's playlist, created on first use
+show_playlist = "{show}"       # ...and every upload in its show's playlist ("Kino Casino"); "" = off
+                               # backfill videos already up: clipper upload --playlists [--max N]
 playlist_privacy = "public"
 
 [rumble]
