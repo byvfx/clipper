@@ -269,7 +269,11 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   **Bake-off started** on a 10 s clip (4.5-14.5 s, 30 fps, `mockups/udder_truth/takes/`): Kling 3
   Motion Control 7342a353-f243-4859-9431-74f790c8cc3a (170 cr), Kling 4 v2v e115cf43-4da9-4e44-
   93de-3041bd57ff71 (212 cr), WAN 3 Prime v2v 1e77fcfd-46f9-434b-b897-f8c025fc8513 (280 cr), Aleph
-  keyframe 5a1f162d-97a3-4bfd-8303-ba5dc5f48ad8 then the Aleph edit (~280 cr). Jer archive restarted
+  keyframe 5a1f162d-97a3-4bfd-8303-ba5dc5f48ad8 then the Aleph edit (~280 cr). Results: WAN 3
+  Prime leads (wide desk framing the user likes, original audio kept, mouth follows speech); Aleph
+  (2c852f6d-36f5-4b3d-ab6a-bc7ed0279ebc) tight framing, original audio, less mouth movement; Kling 4
+  stiff, generated audio, 24 fps; Motion Control stuck at 98% at Runway. Table on #58; grids in
+  mockups/udder_truth/takes/bakeoff/ (local). ~1,100 credits used so far (28,398 left). Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
