@@ -54,7 +54,11 @@ def credentials(paths: dict, sign_in: bool = False):
     token_path: Path = paths["youtube_token"]
     creds = None
     if token_path.exists() and not sign_in:
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        # Keep scopes granted beyond ours (analytics --sign-in adds yt-analytics): loading with
+        # SCOPES alone would refresh without them and rewrite the file without them.
+        saved = json.loads(token_path.read_text(encoding="utf-8")).get("scopes") or []
+        creds = Credentials.from_authorized_user_file(
+            str(token_path), [*SCOPES, *(s for s in saved if s not in SCOPES)])
     if creds and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())

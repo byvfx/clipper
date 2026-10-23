@@ -532,7 +532,13 @@ reviewed, then posted ASAP**.
   a second person or a broad tag the audience browses (#StreamerDrama, #Lolcow, #Kick), then the show
   (#KinoCasino). Bans generic words (#Groceries) and two tags for one person (#DSP + #DarksydePhil).
   Shorts prepend #Shorts, so only the first two of ours show there; that's why the show tag is last.
-- Takes effect at the next stream's `meta` stage (the worker). Not committed.
+- Takes effect at the next stream's `meta` stage (the worker). Committed 53c1c96.
+- Monthly analytics check-in: issue #42. Analytics scope granted 2026-10-22 (`clipper analytics
+  --sign-in`, channel LOLCOW CINEMA; old token in secrets/youtube_token.before_analytics_2026-10-22.json).
+  Bug fixed: youtube.credentials loaded the token with only the upload scopes and rewrote it, dropping
+  yt-analytics.readonly from the file, so analytics never saw it. It now keeps extra saved scopes. Bot
+  restarted 19:26 on the fix. 7-day numbers start ~2026-10-26. Still open: `analytics --show` and
+  `schedule --show` crash ("no [shows.True]"): the subcommand flag collides with the global --show.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
