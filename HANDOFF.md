@@ -239,6 +239,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   #57 (user): narration in the user's own voice through ElevenLabs Voice Changer (user chose best
   quality/ease), first on a Jer video; `clipper narrate` = script, record, voice change, ducked mix,
   review. Needs the user's ElevenLabs account + ELEVENLABS_API_KEY. Original/licensed voice only.
+  Same issue (user, 2026-10-23): an **AI avatar host** from pre-recorded webcam takes (LivePortrait
+  on Modal preferred). Character: a salacious, campy gossip dame in the Joan Rivers / Harvey Fierstein
+  *type*, but an original face, voice and name (not recognizable as either). Name not picked yet.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
