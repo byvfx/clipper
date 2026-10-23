@@ -316,7 +316,14 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   found at the same offsets as by hand; stitch of the real renders is pixel-identical to the hand
   stitch. **Render is not a clipper step**: Runway plan credits are only reachable through the Runway
   MCP (Claude) or the web app; its developer API is a separate key and credit pool.
-  Brass Eye opening reference from the user (cold open/titles): youtu.be/yXv73GGSEag (28 s, 1997). Jer archive restarted
+  Brass Eye opening reference from the user (cold open/titles): youtu.be/yXv73GGSEag (28 s, 1997).
+  **Lip-sync pass (2026-10-23):** the user's own lip sync was off except in spots, so
+  `clipper perform lipsync <dir> --engine latentsync|sync|both` redraws the mouth to the read:
+  LatentSync 1.6 as Modal app `clipper-lipsync` (~9 min / ~$0.30 for 50 s on L40S) and sync.so
+  lipsync-2 (key in secrets/sync_api_key.txt, ~5 min). Both ran on the first clip; 3-way
+  comparison sent; the user picks. User will also record in shorter takes broken at the pauses.
+  Cold-open reference is now the **Brass Eye 2001 Special intro** (youtu.be/Fh7UgrHMjbQ): narrated,
+  story-led, ends on the presenter beside a giant video wall pun (#59, cold_open_breakdown.md). Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
