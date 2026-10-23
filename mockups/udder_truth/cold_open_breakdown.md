@@ -1,4 +1,43 @@
-# The Udder Truth: cold open and logo sting, from the Brass Eye (1997) opening
+# The Udder Truth: cold open and logo sting
+
+## Primary reference (user's favourite): the Brass Eye 2001 Special intro
+
+https://youtu.be/Fh7UgrHMjbQ (75 s), studied from a local copy (not kept). Unlike the 1997
+titles it is a **narrated, story-led cold open**: about 165 words of grave voice-over over 15
+shots (one held for 20 s), escalating from mundane to absurd, landing on the presenter.
+
+| Time | Beat | On screen |
+|---|---|---|
+| 0 – 9 | **Ominous ordinary** | Black, then a slow, uneasy shot of an ordinary street scene; narration starts sombre. |
+| 9 – 14 | **Name the place** | A street sign zooms in; a doorstep-style lurch at a front door. |
+| 14 – 38 | **The witness** | One long talking-head interview on a sofa, holding a photo, with narration over it, deadly earnest. |
+| 38 – 52 | **The absurd escalation** | A rocket launch with a face inset, clean-room technicians, a capsule over the Earth from orbit: the story balloons to cosmic scale with total sincerity. |
+| 52 – 61 | **Control room** | Tight shots of an operator with an earpiece; a quick type-on graphic. |
+| 61 – 75 | **The reveal** | The presenter tiny on a vast dark set beside a giant video wall; a map graphic whose caption turns into the episode's pun. |
+
+**What makes it work:** sincerity. The narration never winks; the visuals escalate one
+absurd step at a time; the pay-off is a single graphic pun on a huge screen with the presenter
+dwarfed beside it. Fewer cuts than 1997, more story.
+
+**Ours, mapped (weekly cold open, ~60-75 s):**
+1. *Ominous ordinary:* a quiet, slow shot tied to the week's story (a coffee shop at dusk, a
+   webcam light blinking on). Mother Moo's narration starts, grave (Harriet, read in her guide's
+   register).
+2. *Name the place:* a sign or caption zooms in ("Coffee Brand Coffee, aisle 4").
+3. *The witness:* a long, earnest talking head: **an original character** (a fake expert or
+   "concerned viewer", AI-generated and voiced), never a real person. Or real clips of the week's
+   lolcow saying what they really said, played straight.
+4. *The absurd escalation:* the story balloons (a coffee bag launched into orbit, a war room
+   tracking World Series tickets), generated or Houdini.
+5. *Control room:* tight, tense shots (Mother Moo's "newsroom", generated).
+6. *The reveal:* Mother Moo small on the vast dark set beside a giant video wall; a map or chart
+   whose caption turns into the week's pun. Then the THE UDDER TRUTH sting (below, built once).
+
+The topic of the 2001 special is not ours; we take only its shape.
+
+---
+
+## Earlier reference: the Brass Eye (1997) opening titles
 
 Reference: the user's link, https://youtu.be/yXv73GGSEag (27.5 s). Studied from a local copy
 (scratch only, not kept). We borrow the *structure and energy*, never its footage, emblem or music.
