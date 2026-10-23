@@ -196,8 +196,19 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   was terminated for guidelines, so review carefully. User then chose: pull episodes from the
   benavery.live archive (backfill + weekly after Wednesday), not live Twitch recording (that stays
   a fallback in the issue). No chat, so the transcript scan carries it.
+- Issue #48 (user, same day): the same archive/receipts method on Jer (The Quartering), the backbone
+  of both shows (91 Jer segments in 13 streams). YouTube: ~11,570 long-form / ~2,730 h, captions
+  free; Rumble (his main now) not yet counted. Idea: send "receipts packs" (old clips with source
+  links) to Don and Kino for use on stream, for reach; the user makes contact, nothing auto-sent.
+  Lolcow Cinema content. User decided (same day): **Jer goes first** of the four archive projects,
+  but it waits on hardware logistics the user is still working out (desktop / storage). Don't start
+  the pull until they say so.
 
 ## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
+2026-10-22: Posts take at most 5 images (Google Help; recommends 1:1, feed shows square, tap for
+full). Issue 01 (`mockups/weekly/tiktok/`, 10 pages, 3:4) goes out as two posts of five; text in
+`mockups/weekly/youtube_post_test.md`, images sent to the user's phone. The user is testing it by hand
+(the API can't post). Waiting on: private/draft option, feed crop of 3:4, poll in part 2 (#31, #35).
 Tracking issue #30. The YouTube Data API can't create Posts, so clipper drafts copy and images, the bot
 posts a Discord card, and the user posts in Studio or the app. #31 check the channel can post and the
 limits (user's, first), #32 `clipper posts` stage + square covers + Discord drafts, then #33 cover stories
