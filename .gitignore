@@ -23,3 +23,8 @@ deploy/record/env.local
 # run state (upload schedule, analytics)
 schedule*.json
 analytics.json
+
+# Udder Truth performance takes (large phone video)
+mockups/udder_truth/takes/
+*.mov
+mockups/udder_truth/mother_moo/*.png
