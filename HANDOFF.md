@@ -261,9 +261,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   Runway for bake-off/design/plates/ads, weekly volume likely Wan-Animate-2 on Modal). **Runway MCP
   added** to Claude Code (local scope, `https://mcp.runwayml.com/mcp`, OAuth, spends plan credits);
   needs `claude mcp login runway` (or `/mcp`) at the laptop, then a new session to load its tools.
-  Test-take script: `mockups/udder_truth/test_take_script.md` (phone take is fine).
+  Test-take script: `mockups/udder_truth/scripts/test_take_script.md` (phone take is fine).
   2026-10-23: Runway MCP signed in (Max, 29,500 credits incl. 20,000 bought). User's take:
-  `2026-10-23 05-44-59.mov` in the repo root (gitignored), 84 s 1080p60 SDR; transcribed on Modal.
+  `2026-10-23 05-44-59.mov` (now in mockups/udder_truth/takes/recordings/, gitignored), 84 s 1080p60 SDR; transcribed on Modal.
   Mother Moo = Runway design option 4, **British** (accent: user performs it, or TTS; #57); hero
   image task fe671c52-2ab8-4da9-9ef8-f89d39c02acc, files and ids in mockups/udder_truth/mother_moo/.
   **Bake-off started** on a 10 s clip (4.5-14.5 s, 30 fps, `mockups/udder_truth/takes/`): Kling 3
@@ -301,7 +301,7 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   **C** (test_take_read_v3.txt): defaults now in clipper.toml `[narrate] tts_settings = {stability
   0.5, style 0, speed 1.05}`. Delivery/writing guide: mockups/udder_truth/mother_moo_voice.md (use it
   for any Mother Moo script, including Claude drafts for #58).
-  **First real clip (2026-10-23):** user's lip-sync take `2026-10-23 07-08-23.mov` (repo root, 3 takes;
+  **First real clip (2026-10-23):** user's lip-sync take `2026-10-23 07-08-23.mov` (takes/recordings/, 3 takes;
   synced to read C by audio correlation and by matching transcript words: takes at 9.61/74.21/145.96 s).
   Take 1, cut at read pauses 0/14.95/28.6/42.0/51.5 s into `mockups/udder_truth/takes/first_clip/`,
   WAN 3 Prime tasks 0df59de0…, 0c9eef30…, 3fe40128…, a8c447c9… (~1,400 credits; 26,443 left).
@@ -331,7 +331,17 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   story-led, ends on the presenter beside a giant video wall pun (#59, cold_open_breakdown.md).
   **Full-series reference** (user, 2026-10-23): youtube.com/watch?v=pQCrcAFuI-E, all 6 episodes + the
   2001 special (2 h 49 m, unofficial upload; study only). Studied from its auto-captions (no video
-  download): episode format breakdown in `mockups/udder_truth/brass_eye_formats.md` (#58). Jer archive restarted
+  download): episode format breakdown in `mockups/udder_truth/brass_eye_formats.md` (#58).
+  `mockups/udder_truth/` tidied (2026-10-23, README there): scripts/, storyboards/ (first: throw_v1,
+  the user's 8-panel desk → reporter → desk board + Runway animatics of panels 2-8; the full-size
+  board and animatics live on the NAS under \\192.168.0.155\docker\clipper\udder_truth\, only
+  board.jpg + README in git), takes/recordings/ (the two .mov takes, moved from the repo root;
+  perform manifests updated). Script `scripts/throw_v1.md` (+ `_moo.txt` / `_rupert.txt` reads):
+  user wants it **biting satire**. **Build version = v1b** (user, 2026-10-23): after the satellite
+  delay Rupert starts and Mother Moo cuts him off, then says his punchline herself. Build audio
+  `throw_v1b_mix.mp3` (90.9 s; spliced, recipe in throw_v1.md) on the NAS under
+  udder_truth\audio\throw_v1\. Rupert's voice is a temporary stand-in (ElevenLabs "Daniel").
+  Next: the user performs Mother Moo's shots to the mix (`clipper perform`). Panel 4 could still be sharper. Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows

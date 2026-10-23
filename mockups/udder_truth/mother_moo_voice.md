@@ -2,7 +2,7 @@
 
 Voice: ElevenLabs library "Harriet - British Actress" (`[narrate] voice_id`), read with
 eleven_v3 at stability 0.5, style 0, speed 1.05 (`[narrate] tts_settings`). Picked by the user
-2026-10-23 as read "C"; reference script: `test_take_read_v3.txt`.
+2026-10-23 as read "C"; reference script: `scripts/test_take_read_v3.txt`.
 
 **Register:** a stern, punchy British newsreader. The comedy is in what she says, delivered
 straight (Brass Eye). A little camp, rationed: two or three moments a segment, never the whole
