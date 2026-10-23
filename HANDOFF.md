@@ -252,6 +252,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   User decided: finish in **DaVinci Resolve** (clipper hands off FCPXML). Structure: cold-open montage
   → Inside Edition-style logo → Mother Moo at the desk throwing to reporter characters and back.
   First test: one 60-90 s throw (desk → reporter → desk), filmed vs. audio-driven reporters.
+  User wants quality over automation/cost: a model bake-off on #58 (Act-Two, Wan-Animate-2 on Modal,
+  Ray3 Modify/MiniMax H3, 3D face capture; HeyGen/Hedra/Kling Avatar for reporters; Sync for lip
+  touch-ups). User may block the show out in 3D (tool and iPhone not yet known).
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
