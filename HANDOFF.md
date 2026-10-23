@@ -186,6 +186,22 @@ and #34 reader polls (suggested first), #35 weekly issue carousel, #36 blind ite
   look and the newsprint page (parts looked out of place with each other). Faces must be cropped on
   a detected face, whole head kept. Open: whether a Post can carry both images and a poll (#31); if
   not, the poll is its own post beside the issue. Still nothing built.
+- Later 2026-10-22 (user, after merging the mockups into main): the weekly fits TikTok better than
+  YouTube (photo carousel to drafts; needs 3:4 or 9:16 slides, images on a verified URL, no native
+  poll). The **cover can go full tabloid** ("we can get crazy"; gen AI allowed but probably not
+  needed); inside pages stay modern. Barcode block on the magazine cover is fine. YouTube
+  thumbnails stay as they are until the magazine is settled. Cover research (1970-2025 Enquirer
+  covers, the 2020s template anatomy, what to borrow): research_notes/enquirer-covers.md. User is
+  still collecting references. Full issue mockup, cover + 7 inside pages at 3:4 from real Oct
+  18-24 data: mockups/weekly/tiktok/ (contact_sheet.jpg; notes in mockups/weekly/README.md).
+  Cover approved after two rounds of markup; user then said "this is great" and asked for the
+  inside pages; later rounds: funnier numbers page (screen time per regular, Lolcow of the
+  Week, joke stats from transcripts/chat) and two real articles, so the issue is now 10 pages.
+  User (2026-10-22): "a good test"; posting this issue to TikTok by hand. Next: pick the weekly's
+  day (suggested: week = Sun-Sat, build Saturday after Friday's Kino is processed, post Sunday
+  late morning PT before Channel 404's 5 PM show), then build it as a `clipper weekly` stage. Person cut-out via torchvision DeepLabV3 (weights cached
+  in ~/.cache/torch on this laptop). Render scripts were scratch files, not in the repo; a real
+  `clipper weekly` stage is not built.
 - #41 (user, 2026-10-22): a cast library, 3-4 photos per person (`photos/<Person>/<label>.jpg`),
   `clipper cast grab` (best face frames from a stream) and `clipper cast add`. Cast to start (user;
   adds more as they come up): Andy, PPP, Jer, Blade, Chef, Geezer, Mel, Jim Bakker, Mr. Morrow,
