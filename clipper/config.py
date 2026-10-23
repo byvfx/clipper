@@ -42,6 +42,16 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "remove_background_noise": True,   # phone takes in a room
         "max_s": 300,             # longest take per call; split longer ones at pauses
     },
+    "perform": {
+        # `clipper perform`: a lip-sync take to a read, cut for the character model (#58).
+        "max_piece_s": 15,        # WAN 3 Prime takes at most 15 s of reference video
+        "min_piece_s": 3,
+        "tail_s": 1.5,            # keep this much of the take after the read ends (the final hold)
+        "silence_db": -35,        # pause detection in the read
+        "silence_min_s": 0.25,
+        "fps": 30,
+        "crf": 21,                # pieces stay under the 30 MB single upload
+    },
     "archive": {
         "gpu": "L4",              # Modal GPU for bulk runs: cheapest per hour of audio (#11)
         "parallel": 8,            # items at once (the Modal app allows 10 containers)

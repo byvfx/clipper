@@ -102,6 +102,22 @@ It needs the Modal backend set up (SETUP.md, "Transcribe on Modal"). YouTube aud
 downloaded on this machine and uploaded; Odysee is meant to be fetched in the cloud (not
 working yet, issue #44).
 
+## Character pieces (Mother Moo)
+
+The Udder Truth's host is performed to playback: a script read in her voice, the performer
+lip-syncing to it on camera, a video model turning the take into her.
+
+```bash
+clipper narrate speak script.txt                       # the read, in [narrate] voice_id
+# film yourself lip-syncing while the read plays out loud (one or more takes)
+clipper perform prepare take.mov --read script.read.mp3 --take 1   # cut at the read's pauses
+# render each pieceN.mp4 with the character model -> renderN.mp4 (Runway, WAN 3 Prime)
+clipper perform stitch take.perform                     # final.mp4 + final_phone.mp4
+```
+
+`clipper narrate voice <take>` re-voices a take in her voice when the performer's own delivery
+is wanted instead. Setup: SETUP.md, "Narration voice".
+
 ## Review
 
 Review happens in [Kitsu](https://www.cg-wire.com/kitsu), with one production per show and

@@ -88,6 +88,18 @@ def cmd_narrate(cfg: dict, args: argparse.Namespace) -> None:
         narrate.voices(nc, args.search or "", args.accent or "", args.gender or "", args.age or "")
 
 
+def cmd_perform(cfg: dict, args: argparse.Namespace) -> None:
+    from . import perform
+
+    pc = cfg["perform"]
+    if args.action == "prepare":
+        perform.prepare(Path(args.recording), Path(args.read), pc, args.take, Path(args.out) if args.out else None)
+    elif args.action == "status":
+        perform.status(Path(args.dir))
+    else:
+        perform.stitch(Path(args.dir), pc)
+
+
 def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
     from . import archive
 
@@ -421,6 +433,19 @@ def main() -> None:
     r.add_argument("--age", help="young | middle_aged | old")
     r.add_argument("--add", metavar="OWNER:VOICE_ID", help="add a library voice to your account")
     r.add_argument("--name", default="Mother Moo", help="name for --add")
+
+    p = sub.add_parser("perform", help="lip-sync take to a read: find takes, cut at pauses, stitch the renders")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_perform)
+    r = rsub.add_parser("prepare", help="find the takes, cut take N at the read's pauses -> DIR/pieceN.mp4")
+    r.add_argument("recording", help="the phone/webcam video, the read playing out loud in it")
+    r.add_argument("--read", required=True, help="the read the takes follow (clipper narrate speak)")
+    r.add_argument("--take", type=int, default=1, help="which take (default 1)")
+    r.add_argument("--out", help="output folder (default <recording>.perform)")
+    r = rsub.add_parser("status", help="which pieces are rendered")
+    r.add_argument("dir")
+    r = rsub.add_parser("stitch", help="renderN.mp4 at their read times + the read -> final.mp4")
+    r.add_argument("dir")
 
     p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee): list, transcribe on Modal")
     rsub = p.add_subparsers(dest="action", required=True)

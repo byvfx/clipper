@@ -307,7 +307,16 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   WAN 3 Prime tasks 0df59de0…, 0c9eef30…, 3fe40128…, a8c447c9… (~1,400 credits; 26,443 left).
   WAN rounds outputs down to whole seconds, so stitching places each piece at its read time and
   holds the last frame over the gap (scratchpad stitch_moo.sh; checked within 1 frame). This hand
-  workflow (sync, split at pauses, render, stitch) should become a `clipper` command (#58). Jer archive restarted
+  workflow (sync, split at pauses, render, stitch) should become a `clipper` command (#58).
+  **Done: `clipper perform` (2026-10-23).** `prepare <recording> --read <read> [--take N]` finds takes
+  by FFT cross-correlation with the read (needs the read audible in the recording), cuts take N
+  inside the read's pauses (ffmpeg silencedetect; greedy, ≤ `[perform] max_piece_s` 15) into
+  `<recording>.perform/pieceN.mp4` + manifest.json; `status`; `stitch` places renderN.mp4 at the read
+  times with last-frame holds, read as audio → final.mp4 + final_phone.mp4 (720p). Tested: takes
+  found at the same offsets as by hand; stitch of the real renders is pixel-identical to the hand
+  stitch. **Render is not a clipper step**: Runway plan credits are only reachable through the Runway
+  MCP (Claude) or the web app; its developer API is a separate key and credit pool.
+  Brass Eye opening reference from the user (cold open/titles): youtu.be/yXv73GGSEag (28 s, 1997). Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
