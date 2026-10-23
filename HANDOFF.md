@@ -172,6 +172,31 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   comp-the-quartering (Kitsu, before upload) and s11 (Kitsu + live YouTube description of JGV65Y-qUT8,
   user OK'd). Expect it again whenever Bearing comes up.
 
+## Jerry Banfield archive (issue #44, 2026-10-22, side project, nothing built)
+- For once the backlog is mostly caught up. Census done: ~3,650 long-form videos / ~1,740 h. That's his
+  7 current YouTube channels (433 h, captions) plus his deleted main channel's Odysee mirror (1,310 h,
+  2011-2024, needs WhisperX). Shorts are out of scope. Idea: index it, then cut "receipts" into Don's
+  weekly Jerry segments (every c404 stream has one). Channel ids, formats, guardrails, costs and a
+  < $2 pilot are in the issue.
+- User FYI 2026-10-22: Lolcow Cinema is verified with advanced features, up to 100 uploads/day.
+  `[youtube] max_per_24h` stays 15 (user: leaves room to try new things).
+- Issue #45 (same day, same status): Papa Meat (MeatCanyon's second channel) story supercuts, ~715 h
+  across Papa Meat, CreepCast, Meaty Magic, all with captions. The user loves his stories; he isn't a
+  lolcow. Open: his permission (no commentary from us = reupload) and which channel it goes on.
+- Both run on the user's desktop (user, 2026-10-22): it doubles as the first from-scratch install on a
+  second machine (SETUP.md + doctor only). Separate `[paths] streams` there so the bot/worker/auto-upload
+  never see archive items. Plan is in comments on #44/#45; desktop GPU/disk/network not checked yet.
+- Issue #46 (user, same day): a second YouTube channel for non-lolcow clips/subjects the user likes,
+  starting with Papa Meat. Lolcow Cinema stays lolcow-only (Jerry fits there). Plan: the desktop's
+  own clipper.toml (own token, schedule, streams) = the second channel; gap is a second Discord bot
+  app/token. Name, branding and permission are open.
+- Issue #47 (user, same day): Ben Avery's "The Show" for the second channel; user says he doesn't mind
+  clippers. Live free on Twitch `benaveryisgood`, Wednesdays 4-9 PM PT; no public VODs. Members
+  archive on benavery.live (user has an account; cookies in secrets/, never a password). His YouTube
+  was terminated for guidelines, so review carefully. User then chose: pull episodes from the
+  benavery.live archive (backfill + weekly after Wednesday), not live Twitch recording (that stays
+  a fallback in the issue). No chat, so the transcript scan carries it.
+
 ## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
 Tracking issue #30. The YouTube Data API can't create Posts, so clipper drafts copy and images, the bot
 posts a Discord card, and the user posts in Studio or the app. #31 check the channel can post and the
