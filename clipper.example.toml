@@ -73,6 +73,7 @@ max_age_hours = 36         # older feed entries are left alone; `clipper preshow
 poll_minutes = 5           # `clipper bot` checks the feeds this often and runs new ones; 0 = off
 stages = ["transcribe", "segments", "cut", "meta", "thumbs", "review"]
 model = "claude-sonnet-5-5"  # writes the segment's title/description (~$0.03 each)
+trim_end_s = 3.0           # seconds dropped off the end of each pre-show; 0 = the whole video
 publish = "asap"           # asap: approved -> next `clipper upload` publishes it at once | slots
 band = "Pre-show {date}!"  # the cover's green band, {date} = M/D; "" = the model's own line
 playlist = "{show} Pre-shows"   # one playlist for all of them; "" = the model's pick

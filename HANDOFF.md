@@ -520,6 +520,16 @@ reviewed, then posted ASAP**.
 - **Uploads are private-only for now** (user, 2026-10-19): `[youtube] manual_publish = true` in
   clipper.toml; `clipper upload` sets no publishAt and never public. The user publishes in Studio
   (suspects API-set visibility misbehaves until the API audit). Pre-shows too.
+- 10/23 pre-show (yt-NM9zvxSN1nY): user rejected the first cover ("say PPP, not Andy, picture PPP");
+  retake applied by hand (a reject doesn't trigger auto-retake; Changes/retake does), "Huck" -> "Hawk"
+  Blend fixed in the draft + Kitsu description. Approved, uploaded at the user's request
+  (`clipper upload --max 1`, log logs/upload_preshow_2026-10-23.log):
+  **public https://youtu.be/xfTIUuCGYdY**.
+- **End trim (user, 2026-10-23):** `[preshow] trim_end_s` = 3 s off the end of each pre-show (they all
+  end on the ~11-15 s "tune in tonight 8:30 Eastern on Kick" plug; user chose a fixed 3 s over cutting
+  the plug). Applies to pre-shows grabbed from now on (segments stage); the three already up are
+  untouched. No restart needed: the bot and worker run each stage as a fresh `clipper` process on the
+  editable install.
 - Bot restarted 15:03 on this code. Upload with `clipper upload --max 1` to send only the pre-show
   (plain `clipper upload` also sends everything else due within 48 h).
 

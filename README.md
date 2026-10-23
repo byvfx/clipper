@@ -43,8 +43,8 @@ clips go ahead of an older stream's segments.
 **Pre-shows.** A show can also post a pre-recorded pre-show on its own YouTube channel (Kino
 Casino does, on show days around midday PT). With `[shows.<key>.preshow] youtube_channel`
 set, the bot checks that channel's feed every few minutes, grabs each new pre-show into
-`streams/yt-<video id>/` and runs it as **one whole video**: transcribe, one segment, cut,
-meta, thumbs, review. No clips and no Shorts. Once approved, `clipper schedule` places it
+`streams/yt-<video id>/` and runs it as **one whole video** (less `[preshow] trim_end_s`, 3 s,
+off the end): transcribe, one segment, cut, meta, thumbs, review. No clips and no Shorts. Once approved, `clipper schedule` places it
 "asap", outside the release slots, and the next `clipper upload` publishes it at once.
 `clipper preshow list` shows the feed; `clipper preshow fetch <url>` grabs an older one.
 

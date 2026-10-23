@@ -250,7 +250,8 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
         return data["segments"]
     meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
     words = load_words(stream_dir)
-    end = video_duration(source_file(stream_dir)) or meta["duration_s"]
+    full = video_duration(source_file(stream_dir)) or meta["duration_s"]
+    end = full - pc["trim_end_s"] if full > 2 * pc["trim_end_s"] else full
     prompts = Prompts(cfg)
     prompts.version = pc["prompt_version"]
     claude = Claude(cfg["scoring"]["workspace_id"])
@@ -270,5 +271,6 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
             "api": api, "gaps": [], "segments": [seg], "compilations": [],
             "cost_usd": round(claude.cost, 4)}
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"pre-show: one segment, {end / 60:.1f} min: {seg['title']}; ${claude.cost:.3f}")
+    trimmed = f" ({full - end:.1f} s off the end)" if end < full else ""
+    print(f"pre-show: one segment, {end / 60:.1f} min{trimmed}: {seg['title']}; ${claude.cost:.3f}")
     return [seg]

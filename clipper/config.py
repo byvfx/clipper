@@ -148,6 +148,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "model": "claude-sonnet-5-5",  # writes the one segment's title/description
         "effort": "medium",
         "prompt_version": "v1",   # prompts/preshow_<v>.md
+        "trim_end_s": 3.0,        # drop this much off the end (2026-10-23, user); 0 = whole video
         "publish": "asap",        # asap: out as soon as it is approved and uploaded | slots
         "band": "Pre-show {date}!",  # cover's green band ({date} = M/D aired); "" = the model's line
         "playlist": "{show} Pre-shows",  # YouTube playlist for every pre-show; "" = the model's pick
