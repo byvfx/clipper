@@ -4,6 +4,7 @@ Usage:
     clipper perform prepare <recording> --read <read.mp3> [--take N] [--out DIR]
     clipper perform status <dir>
     clipper perform stitch <dir>
+    clipper perform lipsync <dir> [--engine latentsync|sync|both]   (--deploy: the Modal app)
 
 "Perform to playback" (#57): the performer plays the character's read (`clipper narrate
 speak`) out loud and lip-syncs to it on camera, one or more takes in one recording.
@@ -21,6 +22,10 @@ stitch   places each render at its exact read time (the model rounds lengths dow
          seconds, so a short render holds its last frame over the gap, inside a pause), lays
          the read under it and writes DIR/final.mp4 plus DIR/final_phone.mp4 (small enough to
          send to a phone).
+lipsync  redraws the mouth of final.mp4 to match the read exactly (the performer's own lip
+         sync is rarely perfect): LatentSync 1.6 on Modal (clipper/modal_lipsync.py, ~9 min and
+         ~$0.30 for 50 s on an L40S) or the sync.so API ([perform] sync_model; key in
+         $SYNC_API_KEY or secrets/sync_api_key.txt). Writes final.lipsync-<engine>.mp4.
 """
 
 from __future__ import annotations
@@ -156,3 +161,83 @@ def stitch(d: Path, pc: dict) -> Path:
                     str(phone)], check=True)
     print(f"{final} ({duration(final):.1f} s), {phone.name} ({phone.stat().st_size / 2**20:.0f} MB)")
     return final
+
+
+# ---------- lip-sync pass ----------
+
+def sync_key(pc: dict) -> str:
+    import os
+
+    k = os.environ.get(pc["sync_key_env"], "").strip()
+    path: Path = pc["sync_key_file"]
+    if not k and path.exists():
+        k = path.read_text(encoding="utf-8-sig").strip()
+    if not k:
+        raise SystemExit(f"no Sync API key: set ${pc['sync_key_env']} or put it in {path}")
+    return k
+
+
+def lipsync_latentsync(video: Path, audio_wav: Path, pc: dict) -> bytes:
+    import modal
+
+    fn = modal.Function.from_name(pc["latentsync_app"], "lipsync")
+    out = fn.remote(video.read_bytes(), audio_wav.read_bytes(), pc["latentsync_steps"], pc["latentsync_guidance"])
+    print(f"LatentSync: {out['seconds']:.0f} s on Modal")
+    return out["video"]
+
+
+def lipsync_sync(video: Path, audio_wav: Path, pc: dict) -> bytes:
+    import time
+
+    import requests
+
+    h = {"x-api-key": sync_key(pc)}
+    with open(video, "rb") as v, open(audio_wav, "rb") as a:
+        r = requests.post("https://api.sync.so/v2/generate", headers=h, timeout=600,
+                          data={"model": pc["sync_model"], "options": json.dumps({"sync_mode": "cut_off"})},
+                          files={"video": (video.name, v, "video/mp4"), "audio": (audio_wav.name, a, "audio/wav")})
+    if not r.ok:
+        raise SystemExit(f"Sync: HTTP {r.status_code}: {r.text[:300]}")
+    gid = r.json()["id"]
+    t0 = time.time()
+    while True:
+        time.sleep(10)
+        s = requests.get(f"https://api.sync.so/v2/generate/{gid}", headers=h, timeout=60).json()
+        if s.get("status") == "COMPLETED":
+            print(f"Sync {pc['sync_model']}: {time.time() - t0:.0f} s")
+            return requests.get(s["outputUrl"], timeout=600).content
+        if s.get("status") in ("FAILED", "REJECTED"):
+            raise SystemExit(f"Sync {s.get('status')}: {s.get('errorCode')} {s.get('error')}")
+
+
+def lipsync(target: Path, pc: dict, engine: str, audio: Path | None = None) -> Path:
+    """Redraw the mouth of `target` (a perform dir's final.mp4, or any video) to match the
+    read (the manifest's, or `audio`), with LatentSync on Modal or the Sync API. The output keeps
+    the read as its audio: <video>.lipsync-<engine>.mp4."""
+    import tempfile
+
+    video = target / "final.mp4" if target.is_dir() else target
+    if audio is None:
+        audio = Path(json.loads((target / "manifest.json").read_text(encoding="utf-8"))["read"])
+    out = video.with_name(f"{video.stem}.lipsync-{engine}.mp4")
+    with tempfile.TemporaryDirectory() as td:
+        wav = Path(td) / "read.wav"
+        # Padded to the video's length: the models stop where the audio stops (the final hold).
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(audio), "-af", f"apad=whole_dur={duration(video):.3f}",
+                        "-ac", "1", "-ar", "16000", str(wav)], check=True)
+        raw = Path(td) / "raw.mp4"
+        raw.write_bytes((lipsync_latentsync if engine == "latentsync" else lipsync_sync)(video, wav, pc))
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-i", str(audio), "-map", "0:v", "-map", "1:a",
+                        "-af", f"apad=whole_dur={duration(raw):.3f}", "-c:v", "libx264", "-crf", "16", "-preset",
+                        "medium", "-c:a", "aac", "-b:a", "192k", "-t", f"{duration(raw):.3f}", "-movflags", "+faststart",
+                        str(out)], check=True)
+    print(f"{out} ({duration(out):.1f} s)")
+    return out
+
+
+def deploy_lipsync() -> None:
+    import sys
+
+    from . import modal_lipsync
+
+    subprocess.run([sys.executable, "-m", "modal", "deploy", modal_lipsync.__file__], check=True)

@@ -91,8 +91,15 @@ def cmd_narrate(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_perform(cfg: dict, args: argparse.Namespace) -> None:
     from . import perform
 
-    pc = cfg["perform"]
-    if args.action == "prepare":
+    pc = dict(cfg["perform"], sync_key_file=cfg["paths"]["sync_key"])
+    if args.action == "lipsync":
+        if args.deploy:
+            return perform.deploy_lipsync()
+        if not args.target:
+            raise SystemExit("clipper perform lipsync <dir or video> [--engine ...], or --deploy")
+        for engine in (["latentsync", "sync"] if args.engine == "both" else [args.engine]):
+            perform.lipsync(Path(args.target), pc, engine, Path(args.audio) if args.audio else None)
+    elif args.action == "prepare":
         perform.prepare(Path(args.recording), Path(args.read), pc, args.take, Path(args.out) if args.out else None)
     elif args.action == "status":
         perform.status(Path(args.dir))
@@ -446,6 +453,11 @@ def main() -> None:
     r.add_argument("dir")
     r = rsub.add_parser("stitch", help="renderN.mp4 at their read times + the read -> final.mp4")
     r.add_argument("dir")
+    r = rsub.add_parser("lipsync", help="redraw the mouth to match the read (LatentSync on Modal, or Sync)")
+    r.add_argument("target", nargs="?", help="a perform dir (uses final.mp4 + its read) or a video")
+    r.add_argument("--engine", choices=["latentsync", "sync", "both"], default="latentsync")
+    r.add_argument("--audio", help="the audio to sync to (default: the dir's read)")
+    r.add_argument("--deploy", action="store_true", help="deploy the LatentSync Modal app")
 
     p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee): list, transcribe on Modal")
     rsub = p.add_subparsers(dest="action", required=True)

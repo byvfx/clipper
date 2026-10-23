@@ -22,6 +22,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "youtube_token": "secrets/youtube_token.json",                  # written by --sign-in
         "discord_token": "secrets/discord_token.txt",  # bot token, if not in [discord] token_env
         "elevenlabs_key": "secrets/elevenlabs_api_key.txt",  # if not in [narrate] key_env
+        "sync_key": "secrets/sync_api_key.txt",  # sync.so, if not in [perform] sync_key_env
         "tiktok_client": "secrets/tiktok_client.json",  # {"client_key", "client_secret"}
         "tiktok_token": "secrets/tiktok_token.json",    # written by `clipper tiktok --sign-in`
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
@@ -51,6 +52,12 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "silence_min_s": 0.25,
         "fps": 30,
         "crf": 21,                # pieces stay under the 30 MB single upload
+        # lip-sync pass (`clipper perform lipsync`): redraw the mouth to match the read
+        "latentsync_app": "clipper-lipsync",  # Modal app (`clipper perform lipsync --deploy`)
+        "latentsync_steps": 20,   # 20-50: higher is better and slower
+        "latentsync_guidance": 1.5,  # 1.0-3.0: higher syncs harder, may jitter
+        "sync_model": "lipsync-2",   # sync.so: lipsync-2 | lipsync-2-pro
+        "sync_key_env": "SYNC_API_KEY",  # else paths.sync_key
     },
     "archive": {
         "gpu": "L4",              # Modal GPU for bulk runs: cheapest per hour of audio (#11)
