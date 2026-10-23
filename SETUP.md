@@ -206,9 +206,10 @@ ways the API reports badly, so do these before the first big upload run.
    the uploads. Before that, check the first private uploads for Content ID claims in
    Studio. The Data API can't see claims; it only shows region blocks.
 6. **Playlists** are created on first use and their ids cached in
-   `secrets/youtube_playlists.json`. If you delete or rename one in Studio, delete its line
-   there too, or videos will fail to be added to it. Playlist names come from each item's
-   Kitsu "Playlist" column.
+   `secrets/youtube_playlists.json`. If you delete one in Studio, the next add finds it gone,
+   looks the name up again and makes a new one if needed. A playlist renamed in Studio keeps
+   its id, so videos keep going into it. Playlist names come from each item's Kitsu
+   "Playlist" column.
 
 ## TikTok drafts
 

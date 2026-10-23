@@ -4,7 +4,7 @@ Usage:
     clipper analytics             refresh analytics.json for every uploaded schedule entry
     clipper analytics --sign-in   once: grant read-only YouTube Analytics (adds 7-day views,
                                   average view percentage, watch time, subscribers gained)
-    clipper analytics --show      print what's in analytics.json, best first
+    clipper analytics --list      print what's in analytics.json, best first
 
 Views, likes and comments come from the YouTube Data API with the upload sign-in. Once a
 video is 7 days old, its first-7-days numbers come from the YouTube Analytics API (needs

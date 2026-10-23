@@ -734,8 +734,8 @@ reviewed, then posted ASAP**.
   --sign-in`, channel LOLCOW CINEMA; old token in secrets/youtube_token.before_analytics_2026-10-22.json).
   Bug fixed: youtube.credentials loaded the token with only the upload scopes and rewrote it, dropping
   yt-analytics.readonly from the file, so analytics never saw it. It now keeps extra saved scopes. Bot
-  restarted 19:26 on the fix. 7-day numbers start ~2026-10-26. Still open: `analytics --show` and
-  `schedule --show` crash ("no [shows.True]"): the subcommand flag collides with the global --show.
+  restarted 19:26 on the fix. 7-day numbers start ~2026-10-26. The `analytics --show` /
+  `schedule --show` crash is fixed (2026-10-23, #61): use `--list`.
 - Show playlists (2026-10-22, user): every upload also goes in its show's playlist, `[youtube]
   show_playlist = "{show}"` ("Kino Casino"), next to the model's subject playlist. Uploaded entries
   record `"playlists": [...]` in schedule.json. Backfill: `clipper upload --playlists [--max N]
@@ -743,6 +743,17 @@ reviewed, then posted ASAP**.
   videos are in "Kino Casino", all 17 Channel 404 videos in the new public "Channel 404 News" (user OK'd).
   Bot restarted 21:06 on this code, so new uploads join their show playlist.
 - Wish list: lore-order playlists (storylines in the order they happened), issue #43.
+
+## Bug sweep (2026-10-23, #61 #8 #4)
+- #61: `clipper schedule --list` / `clipper analytics --list` (own `dest`; the old `--show`
+  spelling still works, hidden). `clipper --show kino schedule` no longer loses the show.
+- #8: `youtube.metadata()` masks banned words (slurs, and swearing while `[bleep] profanity`)
+  in title, description and tags, so YouTube, Rumble and TikTok all get it; `clipper upload
+  --dry-run` says when it masked something so Kitsu can be fixed. First catch, of 203 scheduled:
+  kick-132040888/v05_t41 (Short, Nov 1), whose Kitsu description also says "The hosts" (not fixed).
+- #4: a playlist deleted in Studio: the add 404s, the cache entry is dropped, the name is looked
+  up again (or created) and the add retried once. `--playlists` backfill treats it as empty.
+- Uploads run as `clipper upload` subprocesses, so no bot restart was needed.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS

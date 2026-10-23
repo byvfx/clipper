@@ -36,6 +36,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from .bleep import Bleeper
 from .config import for_stream
 from .review import draft_fields, full_title, hashtag_line
 
@@ -116,6 +117,12 @@ def metadata(entry: dict, cfg: dict) -> dict:
         if t and total + len(t) + 1 <= 480:
             tags.append(t)
             total += len(t) + 1
+    # Last safety net: Kitsu or an old draft may predate a [bleep] change, and banned
+    # words are always masked in text, as on thumbnails.
+    mask = Bleeper({**cfg["bleep"], "mode": "bleep"}).mask
+    masked = [n for n, v in (("title", title), ("description", description), ("tags", ",".join(tags)))
+              if mask(v) != v]
+    title, description, tags = mask(title), mask(description), [mask(t) for t in tags]
     srt, jpg = video.with_suffix(".srt"), video.with_suffix(".jpg")
     playlist = value("Playlist").strip()
     show_list = (cfg["youtube"]["show_playlist"].format(show=cfg["meta"]["show_name"])
@@ -125,7 +132,7 @@ def metadata(entry: dict, cfg: dict) -> dict:
             "srt": srt if srt.exists() else None,
             "thumb": jpg if jpg.exists() and cfg["youtube"]["thumbnails"]
             and (entry["kind"] != "short" or cfg["youtube"]["short_thumbnails"]) else None,
-            "review_key": key, "stream_dir": sdir}
+            "review_key": key, "stream_dir": sdir, "masked": masked}
 
 
 def refresh_review(cfg: dict, entries: list[dict]) -> None:
@@ -204,17 +211,36 @@ def ensure_playlist(yt, name: str, cache: dict, privacy: str) -> str:
 
 
 def add_to_playlist(yt, name: str, vid: str, cache: dict, cache_path: Path, privacy: str) -> None:
-    pid = ensure_playlist(yt, name, cache, privacy)
-    cache_path.write_text(json.dumps(cache, indent=2))
-    execute_with_retry(yt.playlistItems().insert(part="snippet", body={"snippet": {
-        "playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}}))
+    from googleapiclient.errors import HttpError
+
+    for attempt in range(2):
+        pid = ensure_playlist(yt, name, cache, privacy)
+        cache_path.write_text(json.dumps(cache, indent=2))
+        try:
+            execute_with_retry(yt.playlistItems().insert(part="snippet", body={"snippet": {
+                "playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}}))
+            return
+        except HttpError as e:
+            if e.resp.status != 404 or attempt:
+                raise
+            # Deleted in Studio since it was cached: look the name up again (or create it).
+            print(f"  playlist {name!r} ({pid}) is gone; finding or making it again")
+            cache.pop(name, None)
 
 
 def playlist_videos(yt, pid: str) -> set[str]:
+    """Videos in a playlist; empty if it no longer exists (add_to_playlist then remakes it)."""
+    from googleapiclient.errors import HttpError
+
     out, page = set(), None
     while True:
-        res = yt.playlistItems().list(part="contentDetails", playlistId=pid, maxResults=50,
-                                      pageToken=page).execute()
+        try:
+            res = yt.playlistItems().list(part="contentDetails", playlistId=pid, maxResults=50,
+                                          pageToken=page).execute()
+        except HttpError as e:
+            if e.resp.status == 404:
+                return out
+            raise
         out |= {i["contentDetails"]["videoId"] for i in res.get("items", [])}
         page = res.get("nextPageToken")
         if not page:
@@ -413,6 +439,8 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
                   f"captions {'yes' if m['srt'] else 'no'}, "
                   f"thumbnail {m['thumb'].name if m['thumb'] else 'no'}, "
                   f"playlist {m['playlist'] or '-'}")
+            if m["masked"]:
+                print(f"      masked banned words in {', '.join(m['masked'])}: fix the Kitsu columns too")
         return
 
     yt = service(paths)

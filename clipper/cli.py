@@ -257,7 +257,7 @@ def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_schedule(cfg: dict, args: argparse.Namespace) -> None:
     from . import schedule
 
-    if args.show:
+    if args.list_only:
         schedule.show(cfg, args.days)
         return
     schedule.run(cfg, sync_first=not args.no_sync, write_kitsu=not args.no_kitsu,
@@ -361,7 +361,7 @@ def cmd_shows(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_analytics(cfg: dict, args: argparse.Namespace) -> None:
     from . import analytics
 
-    analytics.show(cfg) if args.show else analytics.run(cfg, sign_in=args.sign_in)
+    analytics.show(cfg) if args.list_only else analytics.run(cfg, sign_in=args.sign_in)
 
 
 def cmd_warroom(cfg: dict, args: argparse.Namespace) -> None:
@@ -596,8 +596,10 @@ def main() -> None:
     p.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     p.add_argument("--reshuffle", action="store_true",
                    help="re-place automatic entries not yet uploaded (pinned/uploaded stay)")
-    p.add_argument("--show", action="store_true", help="list upcoming schedule.json entries, no replan")
-    p.add_argument("--days", type=int, default=7, help="with --show: how far ahead (default 7)")
+    p.add_argument("--list", dest="list_only", action="store_true",
+                   help="list upcoming schedule.json entries, no replan")
+    p.add_argument("--show", dest="list_only", action="store_true", help=argparse.SUPPRESS)  # old spelling
+    p.add_argument("--days", type=int, default=7, help="with --list: how far ahead (default 7)")
     p.set_defaults(fn=cmd_schedule)
 
     p = sub.add_parser("upload", help="upload due schedule.json entries to YouTube (private + publishAt)")
@@ -654,7 +656,8 @@ def main() -> None:
 
     p = sub.add_parser("analytics", help="YouTube stats of uploads -> analytics.json (feeds scoring)")
     p.add_argument("--sign-in", action="store_true", help="once: grant read-only YouTube Analytics")
-    p.add_argument("--show", action="store_true", help="print analytics.json, best first")
+    p.add_argument("--list", dest="list_only", action="store_true", help="print analytics.json, best first")
+    p.add_argument("--show", dest="list_only", action="store_true", help=argparse.SUPPRESS)  # old spelling
     p.set_defaults(fn=cmd_analytics)
 
     p = sub.add_parser("warroom", help="local dashboard: live shows, pipeline, review queue, schedule")
