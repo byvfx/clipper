@@ -523,6 +523,17 @@ reviewed, then posted ASAP**.
   started 00:07 PT after the Kino review, cut 75 min, review 72 min, in review 03:26 PT. The next
   recording is the fast lane's first real run: check its run.json "clips_ready" vs meta.json ended_at.
 
+## Hashtags: meta prompt v2 (2026-10-22)
+- User asked whether more hashtags would help. No: YouTube shows only the first 3 above the title,
+  ignores all of them past 60, and treats over-tagging as spam; they are a small discovery signal.
+  User wants better picks going forward, no rerun of `meta` on existing streams.
+- prompts/meta_v2.md (chapters_v2.md is a copy of v1) and `[meta] prompt_version = "v2"` in config.py,
+  clipper.toml, clipper.example.toml. Still exactly 3, now ordered: main person as fans search it,
+  a second person or a broad tag the audience browses (#StreamerDrama, #Lolcow, #Kick), then the show
+  (#KinoCasino). Bans generic words (#Groceries) and two tags for one person (#DSP + #DarksydePhil).
+  Shorts prepend #Shorts, so only the first two of ours show there; that's why the show tag is last.
+- Takes effect at the next stream's `meta` stage (the worker). Not committed.
+
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
    recordings. Added `[transcribe] backend = "mlx"` (mlx-whisper, `uv sync --extra mac`, optional

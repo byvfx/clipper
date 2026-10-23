@@ -173,7 +173,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "meta": {
         "model": "claude-opus-5-5",
         "effort": "medium",
-        "prompt_version": "v1",   # prompts/meta_<v>.md, chapters_<v>.md
+        "prompt_version": "v2",   # prompts/meta_<v>.md, chapters_<v>.md
         "concurrency": 4,
         "show_name": "",
         # Upload titles: {title}, {show} or {SHOW} (upper case). Not applied to a title
