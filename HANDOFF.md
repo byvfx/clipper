@@ -46,8 +46,12 @@ run tonight's Kino show through and get lots of good Shorts. Built for it:
   distinct Ethan/Hila moments aren't duplicates and the 2-per-category / 2-per-30-min limits don't
   apply to them; priority = true. The worker picks it up when the recording ends (no restart needed).
 - `kick_first_hours = 0` in its file (user, 2026-10-23): no Kick-first wait, out as soon as approved
-  (schedule.py reads kick_first_hours per stream since 5af27f9). Still 3 Short slots a day
-  (10:00/15:00/20:00), so 20 Shorts take about a week.
+  (schedule.py reads kick_first_hours per stream since 5af27f9).
+- **6 Short slots a day** (user, 2026-10-23, while the story is hot): clipper.toml short_times
+  09/10/13/15/18/20, segment_times lost 09/13/18 (8 a day); still 15 a day, 60 min apart. Reshuffled
+  (`clipper schedule --reshuffle`, backup schedule.before_h3_shorts_2026-10-23.json). Also
+  `[youtube] upload_ahead_hours` 48 -> 8 so backlog uploads don't lock slots before tonight's Shorts
+  are approved. **Revert both** once the H3 Shorts are out (the clipper.toml comments say how).
 - After this night, delete or leave the file; it only affects that stream.
 
 ## Last run (finished 23:41)
