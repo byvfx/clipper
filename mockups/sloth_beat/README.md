@@ -19,7 +19,26 @@ real covers cut the face from the video's frames the way the enquirer style does
 is mockup copy. The sloth is a placeholder drawn in SVG; the real mascot is a Runway job
 (flat sticker style, transparent background, a few poses) like Mother Moo was.
 
-## Anatomy
+## v2: the Bop references (user sent two Bop covers, July 1995 and ~2007)
+`*_v2.html/jpg` + `contact_sheet_v2.jpg`, built against the references rather than a tidy pastel
+layout. What they add over v1:
+- Stacked bubble masthead: Titan One, pink with white horizontal stripes, five extruded layers
+  (white / pink alternating), black outline. The main face sits *in front of* the masthead's tail
+  and bleeds off the bottom; small cutouts (white or yellow sticker outline) fill every corner.
+- Coverlines in shapes, one fact or tease per person: top ribbon ("The truth about X's
+  obsession" / "12 HUGE POSTERS!"), purple triangle ("2 X centerfolds plus pinup"), pink heart
+  ("How to know if X is flirting with you"), yellow circle ("Who's X in love with?", "OMG did X
+  get in a fight?"), red starburst with a big number + vertical stacked word ("22 PINUPS",
+  "16 SEASONS"), cyan box ("What gets X's motor running?"), pink quote box ("X: 'I look for...'"),
+  black window ("THE SHOW at play"), orange "POSTER SPECIAL" panel with a mini photo strip, a
+  posters list. Price and barcode bottom-left.
+- Two backgrounds: 1995 crayon scribble (multicolour gradient + SVG turbulence, `crayon` /
+  `scribble2`) and 2007 flat cyan with sun rays (`flat`).
+- Copy register: teases *about the person*, questions, numbers, "only in Sloth Beat".
+The thumbs-stage version would pick 4-6 of these slots per cover from the stream's other items
+(the teaser band's job on the enquirer style) and fill the names from meta, not hand-write them.
+
+## Anatomy (v1)
 - Masthead: SLOTH (white) BEAT (yellow, pink or whichever accent the palette gives) in
   Luckiest Guy, black stroke, black + accent offset shadow. Tagline "THE SLOWEST FAN MAG ON
   YOUTUBE" and an issue line (No. 1 · 75¢ · date). The sloth hangs off the end of BEAT.

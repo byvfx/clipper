@@ -386,6 +386,10 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
 - **Mockups:** `mockups/sloth_beat/` (README): three 1280x720 covers, one per subject (Papa Meat pink,
   Ben Avery cyan, On Cinema yellow) + contact sheet. Faces are placeholder cutouts (no image host is
   reachable from the cloud session), the sloth is a placeholder SVG; copy is mockup copy, no "hosts".
+  **v2** (same day, after the user sent two Bop covers, 1995 and ~2007, as the reference): dense
+  Bop layouts, striped extruded bubble masthead, main face in front of it, 4-5 faces, coverlines in
+  shapes (triangle, heart, circle, starburst + vertical word, quote box), crayon-scribble or flat+rays
+  backgrounds. `*_v2.*`, README has the slot list. Waiting on the user's reaction.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
   template rendered by headless Chromium (Playwright), not Pillow. Figma's REST API is read/export only
   and an Illustrator MCP needs the app open in a logged-in session, so neither can be the pipeline
