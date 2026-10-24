@@ -825,6 +825,20 @@ reviewed, then posted ASAP**.
   carry pid + a per-process counter + random bytes.
 - The recorder's part needs the NAS redeploy (`bash deploy/record/deploy.sh`, no show live).
 
+## War room quick wins (2026-10-23, #19 #21 #26 pop-out; #6 closed as not needed)
+- #19: `actions.style_issues(show_cfg, values)` warns (never raises): "host(s)", words the
+  bleeper would mask, title over 100 with the show prefix, description + hashtags over 5000
+  bytes, tags over 480. Rows carry `issues` (card badge ⚠ n); the item window shows them under
+  each field and rechecks as you type (POST /api/check). First pass: 22 of 302 items, mostly
+  "hosts" in descriptions of approved Shorts (not fixed; they upload as written).
+- #21: `warroom.upload_status` (24 h count like `clipper upload`, room, when room frees, next
+  6 with "due" in upload_ahead_hours) and `last_upload_run` from bot.log + bot.log.1 (the bot
+  logs a job's output only when it ends; a start in the same minute as the replan's end shows
+  as "uploading now"). Uploaded schedule slots show views (analytics.json) and a YouTube link.
+- #26 (first half): ⧉ on cards / "Pop out" in the item window / key O opens `/watch?src=` (a
+  bare player, same cookie) at the current time. "Open the full recording at a clip" is still open.
+- #6: republishing would reset approved items to waiting; uploads already send the fixed cuts.
+
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
    recordings. Added `[transcribe] backend = "mlx"` (mlx-whisper, `uv sync --extra mac`, optional

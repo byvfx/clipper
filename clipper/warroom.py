@@ -182,9 +182,12 @@ def for_stream_show_name(cfg: dict, key: str) -> str:
 def stream_rows(cfg: dict, sdir: Path) -> list[dict]:
     sc = for_stream(cfg, sdir)
     ls = review.Listing()
-    return [{**row_json(sdir, r, ls), "show": sc["show"]["key"],
+    rows = [{**row_json(sdir, r, ls), "show": sc["show"]["key"],
              "show_name": sc["meta"]["show_name"] or ""}
             for r in actions.describe(cfg, sdir).values()]
+    for r in rows:  # #19: the card's warning badge
+        r["issues"] = actions.style_issues(sc, {f: r.get(f) or "" for f in actions.STYLE_FIELDS})
+    return rows
 
 
 def all_rows(cfg: dict, streams: list | None = None) -> list[dict]:
@@ -230,6 +233,74 @@ def health(cfg: dict) -> dict:
             "sync": SYNC}
 
 
+def upload_status(cfg: dict, sched: dict) -> dict:
+    """#21: the 24 h cap like `clipper upload` counts it, the last automatic run from the
+    bot log, and what's due next."""
+    yc, now = cfg["youtube"], datetime.now(UTC)
+    recent = sorted(datetime.fromisoformat(e["uploaded_at"]) for e in sched.get("entries", [])
+                    if e.get("uploaded_at")
+                    and now - datetime.fromisoformat(e["uploaded_at"]) < timedelta(hours=24))
+    cap = yc["max_per_24h"]
+    frees = recent[len(recent) - cap] + timedelta(hours=24) if cap and len(recent) >= cap else None
+    nxt = sorted((e for e in sched.get("entries", []) if e.get("status") == "scheduled"),
+                 key=lambda e: e["publish_at"])[:6]
+    horizon = now + timedelta(hours=yc["upload_ahead_hours"])
+    return {"last_24h": len(recent), "max_per_24h": cap, "room": max(0, cap - len(recent)),
+            "frees_at": frees.isoformat() if frees else "",
+            "auto_minutes": yc["auto_upload_minutes"], "last_run": last_upload_run(cfg),
+            "next": [{"key": e["key"], "title": e["title"], "kind": e["kind"],
+                      "publish_at": e["publish_at"],
+                      "due": datetime.fromisoformat(e["publish_at"]) <= horizon} for e in nxt]}
+
+
+def last_upload_run(cfg: dict) -> dict:
+    """The bot's last finished `clipper upload` (not the replan before it): when, exit code,
+    what went up and any warnings or errors, from the tail of the bot log (and the rotated
+    one before it). The bot logs a job's output when it ends, so one in progress only shows
+    as running."""
+    bot_log = cfg["paths"]["bot_log"]
+    if not bot_log or not Path(bot_log).exists():
+        return {}
+    lines: list[str] = []
+    for p in (Path(f"{bot_log}.1"), Path(bot_log)):  # RotatingFileHandler's previous file first
+        if p.exists():
+            with open(p, "rb") as f:
+                f.seek(max(0, p.stat().st_size - 600_000))
+                lines += f.read().decode("utf-8", "replace").splitlines()
+    runs, cur, prev_done = [], None, ""
+    for line in lines:
+        if " clipper.bot: upload: " not in line:
+            continue
+        at, msg = line[:19], line.split(" clipper.bot: upload: ", 1)[1]
+        if msg == "starting":
+            # The bot replans, then uploads straight after: a start in the same minute as
+            # the replan's end is the upload, even before its output is in the log.
+            cur = {"at": at, "lines": [], "after_replan": prev_done[:16] == at[:16]}
+        elif cur is not None and msg.startswith("done (exit"):
+            prev_done = at
+            cur["exit"] = msg[len("done (exit "):].rstrip(")")
+            runs.append(cur)
+            cur = None
+        elif cur is not None:
+            cur["lines"].append(msg)
+    done = [r for r in runs if any(" due within " in x for x in r["lines"])]  # not the replans
+    out: dict = {}
+    if done:
+        r = done[-1]
+        keep = ("uploading ", "https://youtu.be/", "warning", "error", "Error", "failed",
+                "missed slot", "uploaded in the last", " due within ", "+ ")
+        out = {"at": r["at"], "exit": r["exit"],
+               "lines": [x[:300] for x in r["lines"] if any(k in x for k in keep)][-14:]}
+    if cur and cur["after_replan"]:
+        out["running_since"] = cur["at"]
+    return out
+
+
+def views_by_video(cfg: dict) -> dict[str, int]:
+    a = load(cfg["paths"]["schedule"].with_name("analytics.json"), {}) or {}
+    return {vid: v.get("views") for vid, v in a.items() if isinstance(v, dict)}
+
+
 def overview(cfg: dict) -> dict:
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     now = datetime.now(tz)
@@ -250,7 +321,7 @@ def overview(cfg: dict) -> dict:
         counts["held"] += bool(r["hold"])
     sched = load(cfg["paths"]["schedule"], {}) or {}
     by_ref = {r["ref"]: r for r in rows}
-    entries = []
+    entries, views = [], views_by_video(cfg)
     for e in sched.get("entries", []):
         when = datetime.fromisoformat(e["publish_at"]).astimezone(tz)
         if when < now - timedelta(days=2) or when > now + timedelta(days=21):
@@ -261,7 +332,8 @@ def overview(cfg: dict) -> dict:
                                                     "source", "url", "video_id")},
                         "publish_at": when.isoformat(), "show_name": r.get("show_name") or
                         for_stream(cfg, sd)["meta"]["show_name"],
-                        "thumbnail_url": r.get("thumbnail_url", "")})
+                        "thumbnail_url": r.get("thumbnail_url", ""),
+                        "views": views.get(e.get("video_id") or "")})
     entries.sort(key=lambda e: e["publish_at"])
     sc = cfg["schedule"]
     return {"generated_at": now.isoformat(), "timezone": sc["timezone"],
@@ -272,7 +344,8 @@ def overview(cfg: dict) -> dict:
                 "uploaded": sum(e.get("status") == "uploaded" for e in sched.get("entries", []))},
             "streams": infos[:20],
             "items": rows, "schedule": entries, "schedule_generated_at": sched.get("generated_at"),
-            "retakes": retakes(cfg), "health": health(cfg), "stages": worker.STAGES}
+            "retakes": retakes(cfg), "health": health(cfg), "stages": worker.STAGES,
+            "uploads": upload_status(cfg, sched)}
 
 
 # ---------- actions ----------
@@ -341,6 +414,21 @@ def sync_all(cfg: dict, stream: str | None = None) -> None:
 
 # ---------- HTTP ----------
 
+def watch_page(qs: dict) -> bytes:
+    """#26: a bare player for one item's video, to pop out next to the war room."""
+    import html
+
+    src = (qs.get("src") or [""])[0]
+    if not src.startswith("/media/"):
+        raise SystemExit("no such video")
+    title = html.escape((qs.get("title") or ["clipper"])[0])
+    t = float((qs.get("t") or ["0"])[0] or 0)
+    return (f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title>
+<style>html,body{{margin:0;height:100%;background:#000}}video{{display:block;width:100%;height:100%;object-fit:contain}}</style>
+</head><body><video src="{html.escape(src)}#t={t:.1f}" controls autoplay></video></body></html>""").encode()
+
+
 def make_handler(cfg: dict):
     wc = cfg["warroom"]
     streams_root = cfg["paths"]["streams"].resolve()
@@ -401,6 +489,13 @@ def make_handler(cfg: dict):
                     self.send_json(all_rows(cfg))
                 elif u.path == "/api/live":
                     self.send_json(kick_live(cfg))
+                elif u.path == "/watch":
+                    body = watch_page(qs)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
                 elif u.path == "/api/lowres":
                     self.send_json(lowres_status(cfg, (qs.get("src") or [""])[0]))
                 elif u.path == "/api/retakes":
@@ -421,7 +516,11 @@ def make_handler(cfg: dict):
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}")
             try:
-                if u.path == "/api/action":
+                if u.path == "/api/check":  # #19: style warnings while typing
+                    item = actions.resolve(cfg, body.get("ref", ""))
+                    sc = for_stream(cfg, item.stream_dir)
+                    self.send_json({"issues": actions.style_issues(sc, body.get("values") or {})})
+                elif u.path == "/api/action":
                     self.send_json(do_action(cfg, body))
                 elif u.path == "/api/sync":
                     sync_all(cfg, body.get("stream"))

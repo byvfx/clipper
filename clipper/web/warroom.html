@@ -174,6 +174,21 @@ dialog::backdrop { background: #000b; }
 .tap span b { font-size: 46px; line-height: 1; }
 .tap .alt { font-size: 12px; text-decoration: underline; }
 nav.views { display: none; }
+.issues { color: var(--amber); cursor: help; }
+.warn-line { font-size: 12px; color: var(--amber); margin-top: 4px; }
+.pop { position: absolute; bottom: 7px; left: 7px; padding: 1px 7px; border-radius: 4px; border: 0; background: #000c;
+  color: var(--text); font-size: 12px; opacity: 0; transition: opacity .15s; }
+.thumb:hover .pop { opacity: 1; }
+.uploads { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--dim); display: grid; gap: 6px; }
+.uploads .cap { display: flex; align-items: center; gap: 8px; }
+.uploads .meter { flex: 1; height: 6px; border-radius: 3px; background: #262e38; overflow: hidden; }
+.uploads .meter i { display: block; height: 100%; background: var(--green); }
+.uploads .meter i.full { background: var(--amber); }
+.uploads .log { font: 11px/1.45 var(--mono); color: var(--faint); white-space: pre-wrap; word-break: break-word; max-height: 150px; overflow: auto;
+  background: var(--panel2); border-radius: 6px; padding: 6px 8px; }
+.uploads .log .bad { color: var(--red); } .uploads .log .ok { color: var(--green); }
+.uploads .nx { display: grid; grid-template-columns: 78px 1fr; gap: 2px 8px; }
+.uploads .nx .due { color: var(--accent); }
 .queue-bar .tabs { display: contents; }
 
 /* phones (#25): one view at a time, bottom tabs, a full-screen item with the decisions at the thumb */
@@ -231,6 +246,7 @@ nav.views { display: none; }
   nav.views button b { font-size: 18px; }
   nav.views button.on { color: var(--accent); }
   nav.views .n { font-family: var(--mono); }
+  .pop { display: none; }
   #dock { right: 8px; left: 8px; width: auto; bottom: calc(70px + env(safe-area-inset-bottom)); }
   #dock.big { width: auto; }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
@@ -265,6 +281,7 @@ nav.views { display: none; }
 
   <section class="panel" id="vSched">
     <h2>Schedule <span class="sp" id="schedSub"></span></h2>
+    <div class="uploads" id="uploads"></div>
     <div class="sched" id="schedule"></div>
   </section>
 </main>
@@ -382,7 +399,7 @@ function render() {
     ["Next 7 d", c.scheduled_7d, ""], ["Uploaded", c.uploaded, ""],
   ].map(([l, n, k]) => `<div class="counter ${k}"><b>${n}</b><span>${l}</span></div>`).join("");
   const first = !$("#schedule").children.length;
-  renderStreams(); renderRetakes(); renderHealth(); renderQueue(); renderSchedule(); renderLive(); tick();
+  renderStreams(); renderRetakes(); renderHealth(); renderQueue(); renderUploads(); renderSchedule(); renderLive(); tick();
   if (first && document.body.dataset.view === "schedule") setView("schedule");  // opened on it: go to today
   if (OPEN) { const r = s.items.find(i => i.ref === OPEN); if (r && !$("#modal").contains(document.activeElement)) fillModalState(r); }
 }
@@ -463,10 +480,10 @@ function card(i) {
     <div class="thumb ${vertical ? "vertical" : ""}" data-open="${esc(i.ref)}">${media}
       <span class="kind ${i.kind}">${KIND[i.kind] || i.kind}</span>
       <span class="state ${i.decision}">${DEC[i.decision] || i.decision}${i.hold ? " · held" : ""}</span>
-      <span class="dur">${mmss(i.duration_s)}</span></div>
+      <span class="dur">${mmss(i.duration_s)}</span>${i.video_url ? `<button class="pop" data-pop="${esc(i.ref)}" title="Open the video in its own window">⧉</button>` : ""}</div>
     <div class="body">
       <div class="title" data-open="${esc(i.ref)}">${esc(i.title)}</div>
-      <div class="sub"><span>${esc(i.show_name)}</span><span>${esc(i.date)}</span><span>${esc(i.short.split("/")[1])}</span>${i.score ? `<span>★ ${esc(i.score)}</span>` : ""}${sched ? `<span>${sched}</span>` : ""}</div>
+      <div class="sub"><span>${esc(i.show_name)}</span><span>${esc(i.date)}</span><span>${esc(i.short.split("/")[1])}</span>${i.score ? `<span>★ ${esc(i.score)}</span>` : ""}${sched ? `<span>${sched}</span>` : ""}${i.issues?.length ? `<span class="issues" title="${esc(i.issues.map(x => x.msg).join("\n"))}">⚠ ${i.issues.length}</span>` : ""}</div>
       ${i.hook ? `<div class="hook">${esc(i.hook)}</div>` : ""}
       ${i.decision === "changes_requested" && i.comment ? `<div class="note">✎ ${esc(i.comment)}</div>` : ""}
     </div>
@@ -490,7 +507,7 @@ function renderSchedule() {
       ${days[d].map(e => `<div class="slot" data-open="${esc(e.key)}">
         <span class="tm">${new Date(e.publish_at).toLocaleTimeString([], { timeZone: tz, hour: "2-digit", minute: "2-digit" })}</span>
         <span class="bar ${e.kind}"></span>
-        <span><div class="tt">${esc(e.title)}</div><div class="ss">${esc(e.show_name || "")} · ${e.kind}${e.status === "uploaded" ? ` · <span class="up">uploaded</span>` : e.source === "pinned" ? " · pinned" : ""}</div></span></div>`).join("")
+        <span><div class="tt">${esc(e.title)}</div><div class="ss">${esc(e.show_name || "")} · ${e.kind}${e.status === "uploaded" ? ` · <span class="up">uploaded</span>${e.views != null ? ` · ${Number(e.views).toLocaleString()} views` : ""}${e.url ? ` · <a href="${esc(e.url)}" target="_blank" rel="noopener">YouTube</a>` : ""}` : e.source === "pinned" ? " · pinned" : ""}</div></span></div>`).join("")
       || `<div class="slot" style="cursor:default"><span></span><span></span><span class="ss">—</span></div>`}</div>`;
   }).join("");
 }
@@ -518,6 +535,9 @@ document.addEventListener("click", e => {
   const v = e.target.closest("#views button, [data-move]");  // not body[data-view]
   if (v?.dataset.view) { setView(v.dataset.view); return; }
   if (v?.dataset.move) { move(+v.dataset.move); return; }
+  const pop = e.target.closest("[data-pop]");
+  if (pop) { popOut(pop.dataset.pop); return; }
+  if (e.target.closest("a[href]")) return;  // links inside a clickable row (YouTube) just open
   const t = e.target.closest("[data-tab],[data-act],[data-open]");
   if (!t) return;
   if (t.dataset.tab) { TAB = t.dataset.tab; SEL = null; renderQueue(); return; }
@@ -556,6 +576,7 @@ function openModal(ref) {
         ${!i.video_url ? `<div class="empty">No preview file</div>` : PHONE.matches
           ? `<button class="tap ${i.kind === "short" ? "vertical" : ""}" id="mTap">${i.thumbnail_url ? `<img src="${i.thumbnail_url}" alt="">` : ""}<span><b>▶</b>Play (phone size)</span></button>`
           : `<video controls preload="metadata" src="${i.video_url}"></video>`}
+        ${i.video_url && !PHONE.matches ? `<div class="row" style="margin-top:6px"><button class="btn" data-pop="${esc(i.ref)}" title="Open the video in its own window (O)">⧉ Pop out</button></div>` : ""}
         ${i.thumbnail_url ? `<img src="${i.thumbnail_url}" alt="thumbnail">` : ""}
         <div class="kv">
           <b>Length</b><span>${mmss(i.duration_s)}</span>
@@ -571,11 +592,11 @@ function openModal(ref) {
         <label>Ask for changes (clipper does the retake)</label>
         <textarea id="fChanges" placeholder="e.g. start 5 s earlier · the thumbnail shows the back of his head · use the cams layout"></textarea>
         <div class="row"><button class="btn warn" id="bChanges">✎ Send retake note</button><button class="btn bad" id="bReject">✕ Reject with this as the reason</button></div>
-        <label>YouTube title</label><input id="fTitle" maxlength="100">
-        <label>Description</label><textarea id="fDesc" style="min-height:120px"></textarea>
-        <label>Hashtags</label><input id="fTags">
+        <label>YouTube title</label><input id="fTitle" maxlength="100" data-check="title"><div class="warn-line" id="w_title"></div>
+        <label>Description</label><textarea id="fDesc" style="min-height:120px" data-check="description"></textarea><div class="warn-line" id="w_description"></div>
+        <label>Hashtags</label><input id="fTags" data-check="hashtags"><div class="warn-line" id="w_hashtags"></div>
         <div class="row"><button class="btn" id="bSave">Save title / description / hashtags</button></div>
-        ${i.kind !== "short" ? `<label>Thumbnail words</label><input id="fThumb" maxlength="40"><div class="row"><button class="btn" id="bThumb">Re-render thumbnail</button></div>` : ""}
+        ${i.kind !== "short" ? `<label>Thumbnail words</label><input id="fThumb" maxlength="40" data-check="thumb_text"><div class="warn-line" id="w_thumb_text"></div><div class="row"><button class="btn" id="bThumb">Re-render thumbnail</button></div>` : ""}
         <label>Pin release time</label><input id="fPin" type="datetime-local">
         <div class="hint" id="pinHint"></div>
         <div class="row"><button class="btn" id="bPin">Pin</button><button class="btn" id="bUnpin">Unpin</button></div>
@@ -595,6 +616,8 @@ function openModal(ref) {
   if ($("#bThumb")) $("#bThumb").onclick = () => act(ref, "thumbtext", { text: $("#fThumb").value });
   $("#bPin").onclick = () => { const v = $("#fPin").value; if (!v) return toast("Pick a date and time.", true); act(ref, "pin", { text: v.replace("T", " ") }); };
   $("#bUnpin").onclick = () => act(ref, "pin", { text: "" });
+  showIssues(i.issues || []);
+  m.querySelectorAll("[data-check]").forEach(el => el.addEventListener("input", () => checkSoon(ref)));
   if ($("#mTap")) $("#mTap").onclick = e => playLow(i, !!e.target.closest("[data-full]"));
   if (!m.open) m.showModal();  // J / K swap the item in an open window
   m.querySelector(".m-body").scrollTop = 0;
@@ -617,6 +640,56 @@ function fillModalState(i, fields) {
     if (i.publish_at) $("#fPin").value = i.publish_at.replace(" ", "T").slice(0, 16);
   }
 }
+// ---------- style checks (#19) ----------
+
+let CHECK_T = null;
+function showIssues(issues) {
+  document.querySelectorAll("#modal .warn-line").forEach(w => { w.textContent = ""; });
+  for (const x of issues) { const w = $(`#w_${x.field}`); if (w) w.textContent += (w.textContent ? " · " : "⚠ ") + x.msg; }
+}
+function checkSoon(ref) {  // same rules as the server, as you type
+  clearTimeout(CHECK_T);
+  CHECK_T = setTimeout(async () => {
+    if (OPEN !== ref) return;
+    const values = {};
+    document.querySelectorAll("#modal [data-check]").forEach(el => { values[el.dataset.check] = el.value; });
+    try { const r = await api("/api/check", { ref, values }); if (OPEN === ref) showIssues(r.issues); } catch { /* keep the last */ }
+  }, 400);
+}
+
+// ---------- pop-out (#26) ----------
+
+function popOut(ref) {
+  const i = STATE.items.find(x => x.ref === ref);
+  if (!i?.video_url) return;
+  const v = OPEN === ref ? $("#modal video") : null;
+  const t = v ? v.currentTime : 0;
+  if (v) v.pause();
+  window.open(`/watch?src=${encodeURIComponent(i.video_url)}&t=${t.toFixed(1)}&title=${encodeURIComponent(i.short + " · " + i.title)}`,
+    `clipper-watch-${ref.replace(/\W/g, "_")}`, "popup,width=960,height=560");
+}
+
+// ---------- uploads (#21) ----------
+
+function renderUploads() {
+  const u = STATE.uploads, el = $("#uploads");
+  if (!u) { el.innerHTML = ""; return; }
+  const tz = STATE.timezone, hm = iso => new Date(iso).toLocaleTimeString([], { timeZone: tz, hour: "2-digit", minute: "2-digit" });
+  const pct = u.max_per_24h ? Math.min(100, 100 * u.last_24h / u.max_per_24h) : 0;
+  const r = u.last_run || {};
+  const runAt = r.at ? new Date(r.at.replace(" ", "T")) : null;
+  const logLine = x => `<div class="${/error|Error|failed|Traceback|Exceeded/.test(x) ? "bad" : /youtu\.be/.test(x) ? "ok" : ""}">${esc(x.trim())}</div>`;
+  el.innerHTML = `
+    <div class="cap"><b style="color:var(--text)">Uploads</b> ${u.last_24h} / ${u.max_per_24h} in 24 h
+      <span class="meter"><i class="${u.room ? "" : "full"}" style="width:${pct}%"></i></span>
+      ${u.room ? `${u.room} more now` : u.frees_at ? `next room ${hm(u.frees_at)}` : "at the cap"}</div>
+    <div>${u.auto_minutes ? `Automatic every ${u.auto_minutes} min` : "By hand (clipper upload)"}${r.running_since
+      ? ` · <span style="color:var(--accent)">uploading now (since ${esc(r.running_since.slice(11, 16))})</span>` : ""}${runAt
+      ? ` · last run ${ago(runAt.toISOString())}, ${r.exit === "0" ? `<span style="color:var(--green)">ok</span>` : `<span style="color:var(--red)">exit ${esc(r.exit)}</span>`}` : ""}</div>
+    ${r.lines?.length ? `<div class="log">${r.lines.map(logLine).join("")}</div>` : ""}
+    ${u.next.length ? `<div class="nx">${u.next.map(e => `<span class="${e.due ? "due" : ""}">${new Date(e.publish_at).toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit" })}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.title)}">${esc(e.title)}</span>`).join("")}</div>` : ""}`;
+}
+
 function closeModal() { OPEN = null; const v = $("#modal video"); if (v) v.pause(); $("#modal").close(); }
 $("#modal").addEventListener("close", () => { OPEN = null; const v = $("#modal video"); if (v) v.pause(); });
 
@@ -669,7 +742,7 @@ const KEYS = [
   ["Queue", [["J K", "next / previous item (in the item window too)"], ["Enter", "open the item"], ["Esc", "close the window, or clear the selection"]]],
   ["Decide", [["A", "approve (in the item window: then the next item)"], ["R", "reject, asks why"], ["C", "retake note"],
               ["H", "hold / release"], ["P", "pin a release time"], ["U", "reopen an approved item"]]],
-  ["Video (item window)", [["Space", "play / pause"], ["← →", "back / forward 5 s"], ["F", "pop out (picture in picture)"]]],
+  ["Video (item window)", [["Space", "play / pause"], ["← →", "back / forward 5 s"], ["F", "picture in picture"], ["O", "open the video in its own window"]]],
   ["Other", [["1 2 3 4 5 6", "queue tabs"], ["/", "search"], ["L", "watch the live show"], ["?", "this list"]]],
 ];
 function showKeys() {
@@ -726,6 +799,7 @@ document.addEventListener("keydown", e => {
     if (document.pictureInPictureElement) document.exitPictureInPicture();
     else if (video.requestPictureInPicture) video.requestPictureInPicture().catch(err => toast(err.message, true));
   }
+  else if (k === "o" && (OPEN || SEL)) { take(); popOut(OPEN || SEL); }
   else if (/^[1-6]$/.test(k) && !OPEN) { take(); TAB = Object.keys(TABS)[+k - 1]; SEL = null; renderQueue(); }
   else if (k === "/" && !OPEN) { take(); $("#q").focus(); }
   else if (k === "l") {

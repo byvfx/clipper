@@ -28,6 +28,7 @@ that item.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -217,6 +218,47 @@ def check_tags(text: str) -> str:
 
 def check_playlist(text: str) -> str:
     return _no_empty("playlist", " ".join((text or "").split()))
+
+
+STYLE_FIELDS = {"title": "title", "description": "description", "hashtags": "hashtags",
+                "tags": "tags", "thumb_text": "thumbnail words"}
+
+
+def style_issues(cfg: dict, values: dict[str, str]) -> list[dict]:
+    """Warnings for viewer-facing text (#19), shown in the war room while editing and as a
+    badge on cards. Never raises. values: title / description / hashtags / tags / thumb_text;
+    cfg: the item's show config (its title prefix)."""
+    from .bleep import Bleeper
+
+    out: list[dict] = []
+    bleeper = Bleeper({**cfg["bleep"], "mode": "bleep"})
+    for field, text in values.items():
+        text = text or ""
+        name = STYLE_FIELDS.get(field, field)
+        m = re.search(r"\bhosts?\b", text, re.IGNORECASE)
+        if m:
+            out.append({"field": field, "msg": f'{name} says "{m.group(0)}": name Andy and PPP '
+                                                 "(or the show) instead"})
+        bad = sorted({bleeper.mask(w) for w in re.findall(r"[\w'@$*-]+", text) if bleeper.hit(w)})
+        if bad:
+            out.append({"field": field, "msg": f"{name} has {', '.join(bad)} unmasked "
+                                                 "(upload masks it; better fixed here)"})
+    title = " ".join((values.get("title") or "").split())
+    if title:
+        full = review.full_title(cfg, title)
+        if len(full) > 100:
+            out.append({"field": "title", "msg": f"{len(full)} characters with the show prefix; "
+                                                 "YouTube cuts titles at 100"})
+    desc = (values.get("description") or "").strip()
+    tags_line = review.hashtag_line(values.get("hashtags") or "")
+    if desc and _yt_bytes(f"{desc}\n\n{tags_line}") > 5000:
+        out.append({"field": "description", "msg": f"{_yt_bytes(desc)} bytes plus hashtags; "
+                                                   "YouTube allows 5000"})
+    tags = [t.strip() for t in (values.get("tags") or "").split(",") if t.strip()]
+    if sum(len(t) + 1 for t in tags) > TAG_BUDGET:
+        out.append({"field": "tags", "msg": f"tags come to {sum(len(t) + 1 for t in tags)} "
+                                            f"characters; upload keeps the first {TAG_BUDGET}"})
+    return out
 
 
 # Kitsu column: (check, what the "[clipper] ..." note calls it)
