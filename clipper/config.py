@@ -350,6 +350,16 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_videos": 5,          # a show needs this many uploads with 7-day numbers first
         "examples": 4,            # best and worst shown to Pass B
     },
+    "notify": {
+        # #22: the bot DMs you when something needs you (clipper/alerts.py). `clipper alert test`.
+        "enabled": True,
+        "user_id": "",            # who gets the DMs; "" = the first [discord] allowed_user_ids
+        "kinds": ["ready", "upload", "failure", "recorder", "disk", "digest"],
+        "quiet_hours": "00:00-08:00",  # [schedule] timezone; held, then sent together; "" = never quiet
+        "cooldown_hours": 6,      # the same problem at most once per this long
+        "digest_time": "09:00",   # daily digest (out today, tomorrow, waiting); "" = none
+        "disk_free_gb": 50,       # warn when the streams share has less free than this; 0 = off
+    },
     "warroom": {
         # `clipper warroom`: the local dashboard (schedule, pipeline, review queue, retakes).
         "host": "127.0.0.1",      # 0.0.0.0 to open it to the LAN (then set token)

@@ -806,6 +806,25 @@ reviewed, then posted ASAP**.
   (`clipper warroom --tailnet status` prints the phone link; same key).
 - User opened it on the phone and added it to the home screen; #10 closed 2026-10-23.
 
+## Notifications as Discord DMs (2026-10-23, #22, user chose DMs over a channel or web push)
+- clipper/alerts.py: any process `alerts.send(cfg, kind, text, key)` -> one JSON file in
+  streams/.notify/outbox/ (on the share, so the NAS recorder can write too); the bot's
+  notify_loop picks them up every minute and DMs [notify] user_id (default the first allowed
+  user). Kinds ready / upload / failure / recorder / disk / digest; same key once per
+  cooldown_hours (6; default key = text with digits ignored); quiet_hours 00:00-08:00 hold them
+  and they arrive as one DM with [time] stamps; long batches split under 2000 chars. State
+  (cooldowns, digest day, disk check) in streams/.notify/state.json.
+- Sources: worker (ready when a stream reaches review, clips-first ready, failed with no retries
+  left, crash), recorder Alerts warnings (stalls, crashes, finalize failures; "is live" isn't
+  sent), the bot's background jobs exiting non-zero (upload/tiktok = upload kind, preshow /
+  retake / analytics = failure), disk under disk_free_gb (hourly), digest at 09:00 (out today,
+  tomorrow, waiting / changes / unslotted, failed streams), and the bot DMs directly if it
+  can't read the share. Ready/digest DMs end with the war room's tailnet link.
+- `clipper alert test` (a test DM), `clipper alert digest [--send]`.
+- Bug found while testing: same-tick sends overwrote each other (Windows clock); names now
+  carry pid + a per-process counter + random bytes.
+- The recorder's part needs the NAS redeploy (`bash deploy/record/deploy.sh`, no show live).
+
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
    recordings. Added `[transcribe] backend = "mlx"` (mlx-whisper, `uv sync --extra mac`, optional

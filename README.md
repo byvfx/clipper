@@ -134,6 +134,11 @@ decisions at the bottom and swipe to the next one, and videos play from a 360p c
 screen. From the phone away from home it goes through Tailscale: `clipper warroom --tailnet
 on` (SETUP.md, Phone access).
 
+The bot also DMs you when something needs you (`[notify]`): a stream ready for review, an
+upload failing, a stage failing after its retries, recorder trouble, the streams share
+filling up, and a daily digest at 09:00. Quiet hours (00:00-08:00) hold them until morning.
+`clipper alert test` sends a test DM; `clipper alert digest` prints the digest.
+
 ## Layout
 
 ```

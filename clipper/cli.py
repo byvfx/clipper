@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 from . import config
@@ -373,6 +374,21 @@ def cmd_warroom(cfg: dict, args: argparse.Namespace) -> None:
     warroom.run(cfg, port=args.port, open_browser=args.open)
 
 
+def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
+    from . import alerts
+
+    if args.what == "test":
+        alerts.send(cfg, "test", "Test from `clipper alert test`: clipper's DMs reach you.")
+        print(f"queued in {alerts.outbox(cfg)}; the bot DMs it within a minute "
+              f"(not during quiet hours {cfg['notify']['quiet_hours'] or 'none'})")
+    else:
+        text = alerts.digest(cfg)
+        print(text)
+        if args.send:
+            alerts.send(cfg, "digest", text, key=f"digest-now:{time.time():.0f}")
+            print("\nqueued; the bot DMs it within a minute")
+
+
 def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     from . import doctor
 
@@ -669,6 +685,11 @@ def main() -> None:
     p.add_argument("--tailnet", choices=("on", "off", "status"),
                    help="serve it on this machine's tailnet over HTTPS (tailscale serve), for the phone")
     p.set_defaults(fn=cmd_warroom)
+
+    p = sub.add_parser("alert", help="notifications (Discord DMs from the bot): test one, see the digest")
+    p.add_argument("what", choices=("test", "digest"))
+    p.add_argument("--send", action="store_true", help="digest: DM it now too")
+    p.set_defaults(fn=cmd_alert)
 
     p = sub.add_parser("doctor", help="check this machine: ffmpeg, GPU, fonts, keys, Kitsu/Discord/NAS")
     p.add_argument("--offline", action="store_true", help="skip the network checks")

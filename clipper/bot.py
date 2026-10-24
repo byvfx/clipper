@@ -41,7 +41,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord import app_commands
 
-from . import actions, cardsync, notify, preshow, retake, schedule
+from . import actions, alerts, cardsync, notify, preshow, retake, schedule
 from .config import _root
 
 log = logging.getLogger("clipper.bot")
@@ -180,6 +180,8 @@ class Bot(discord.Client):
             self.loop.create_task(self.refresh_cards())
         if preshow.watched(self.cfg) and self.cfg["preshow"]["poll_minutes"] > 0:
             self.loop.create_task(self.preshow_loop())
+        if self.cfg["notify"]["enabled"]:
+            self.loop.create_task(self.notify_loop())
 
     async def on_ready(self) -> None:
         log.info(f"clipper bot ready as {self.user} in guild {self.guild_id}; "
@@ -236,6 +238,44 @@ class Bot(discord.Client):
                 self.loop.create_task(self._clipper_bg("preshow", ["preshow", "check", "--run"]))
             await asyncio.sleep(every)
 
+    async def notify_loop(self) -> None:
+        """DM the queued notifications (#22, clipper/alerts.py) every minute."""
+        await self.wait_until_ready()
+        nc = self.cfg["notify"]
+        uid = int(nc["user_id"] or min(self.allowed, default=0))
+        if not uid:
+            log.warning("notify: no [notify] user_id or [discord] allowed_user_ids; no DMs")
+            return
+        link = ""
+        if self.cfg["warroom"]["tailnet"]:
+            from . import warroom
+
+            link = (await asyncio.to_thread(warroom.tailnet_status, self.cfg))["served"]
+        share_down = 0.0
+        while not self.is_closed():
+            try:
+                msgs, files, st = await asyncio.to_thread(alerts.pending, self.cfg, link)
+                if msgs:
+                    user = self.get_user(uid) or await self.fetch_user(uid)
+                    for m in msgs:
+                        await user.send(m)
+                    log.info(f"notify: sent {len(files)} notification(s) in {len(msgs)} DM(s)")
+                if files:  # sent, or skipped (kind off, cooldown): either way handled
+                    await asyncio.to_thread(alerts.done, self.cfg, files, st)
+                share_down = 0.0
+            except OSError as e:  # the outbox lives on the streams share: say so directly
+                log.warning(f"notify: {e}")
+                if time.monotonic() - share_down > nc["cooldown_hours"] * 3600:
+                    share_down = time.monotonic()
+                    try:
+                        user = self.get_user(uid) or await self.fetch_user(uid)
+                        await user.send(f"❌ clipper bot can't read the streams share: {e}")
+                    except Exception:
+                        log.exception("notify: DM failed")
+            except Exception:
+                log.exception("notify pass failed")
+            await asyncio.sleep(60)
+
     def start_retake(self) -> None:
         """`clipper retake` in the background: act on retake notes, republish for review.
         A request while one runs makes it run once more when it ends."""
@@ -262,6 +302,12 @@ class Bot(discord.Client):
                 if line.strip() and not line.startswith("["):  # skip ffmpeg decoder noise
                     log.info(f"{name}: {line}")
             log.info(f"{name}: done (exit {proc.returncode})")
+            if proc.returncode:  # #22: a background job failing is worth a DM (once per cooldown)
+                last = next((x.strip() for x in reversed(out.decode("utf-8", "replace").splitlines())
+                             if x.strip() and not x.startswith("[")), "")
+                alerts.send(self.cfg, "upload" if name in ("upload", "tiktok") else "failure",
+                            f"`clipper {' '.join(args)}` failed (exit {proc.returncode}): {last[:400]}",
+                            key=f"bg:{' '.join(args)}")
             return proc.returncode
         except Exception:
             log.exception(f"{name} run failed")

@@ -307,6 +307,19 @@ replan = true                  # rerun `clipper schedule` after each decision fr
 refresh_minutes = 10           # `clipper bot` updates cards for decisions made in Kitsu or the CLI; 0 = off
 refresh_days = 30              # ...on streams started within this many days (0 = all)
 
+[notify]
+# The bot DMs you when something needs you: a stream ready for review, an upload or TikTok
+# failing (limits, expired sign-in), a stage failing after its retries, recorder trouble,
+# the streams share filling up, and a daily digest. Every machine queues them in
+# streams/.notify/outbox/; the bot sends them. `clipper alert test` sends a test DM.
+enabled = true
+user_id = ""                 # "" = the first [discord] allowed_user_ids
+kinds = ["ready", "upload", "failure", "recorder", "disk", "digest"]
+quiet_hours = "00:00-08:00"  # [schedule] timezone; held, then sent together; "" = never quiet
+cooldown_hours = 6           # the same problem at most once per this long
+digest_time = "09:00"        # "" = no digest
+disk_free_gb = 50            # 0 = no disk check
+
 [warroom]
 # `clipper warroom`: a local dashboard at http://127.0.0.1:8765/ with which shows are live,
 # each stream's pipeline, the review queue (approve / changes / reject / hold / pin / edit),

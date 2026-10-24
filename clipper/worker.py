@@ -373,7 +373,22 @@ def since_end(stream_dir: Path, t: float) -> str:
     return f"{(time.time() - t) / 60:.0f} min"
 
 
+def ready_text(cfg: dict, d: Path, what: str) -> str:
+    """'Kino Casino 10/22: 31 items ready for review' for the DM."""
+    from zoneinfo import ZoneInfo
+
+    meta = read_json(d / "meta.json")
+    show = for_stream(cfg, d)["meta"]["show_name"] or meta.get("channel", d.name)
+    when = ""
+    if meta.get("started_at"):
+        t = datetime.fromisoformat(meta["started_at"]).astimezone(ZoneInfo(cfg["schedule"]["timezone"]))
+        when = f" {t.month}/{t.day}"
+    n = len(read_json(d / "review_state.json"))
+    return f"{show}{when}: {what}" + (f" ({n} items in Kitsu)" if n else "") + f", {d.name}"
+
+
 def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None:
+    from . import alerts
     from .record import Alerts
 
     wc = cfg["worker"]
@@ -393,21 +408,26 @@ def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None
                 alert(f"clipper worker: {d.name} " + (
                     "had no picks or segments to cut; nothing to review"
                     if run.get("nothing_cut") else "is in review")
-                    + f" ({since_end(d, t)})", level=logging.INFO)
+                    + f" ({since_end(d, t)})", level=logging.INFO, kind=None)
+                if not run.get("nothing_cut"):
+                    alerts.send(cfg, "ready", ready_text(cfg, d, "ready for review"), key=f"ready:{d.name}")
             elif lane == "fast" and run.get("clips_ready") and cut_videos(d, ("clips",)):
                 alert(f"clipper worker: {d.name} clips and Shorts are in review ({since_end(d, t)});"
-                      " segments next", level=logging.INFO)
+                      " segments next", level=logging.INFO, kind=None)
+                alerts.send(cfg, "ready", ready_text(cfg, d, "clips and Shorts ready for review, "
+                                                     "segments next"), key=f"clips:{d.name}")
         except Busy as e:
             log.info("%s", e)
         except Exception as e:
             log.exception("%s: run crashed", d.name)
-            alert(f"clipper worker: {d.name} crashed: {e}")
+            alert(f"clipper worker: {d.name} crashed: {e}", kind="failure", key=f"crash:{d.name}")
         run = read_json(d / "run.json")
         if run.get("status") == "failed":
             left = wc["max_attempts"] - run.get("attempts", 0)
             alert(f"clipper worker: {d.name} failed: {run.get('error', '')[:600]}"
                   + (f" (retry in {wc['retry_minutes']} min, {left} left)" if left > 0
-                     else " (no retries left: fix it, then `clipper run " + d.name + "`)"))
+                     else " (no retries left: fix it, then `clipper run " + d.name + "`)"),
+                  kind=None if left > 0 else "failure", key=f"failed:{d.name}")  # DM once retries ran out
 
     reported_offline = False
     while True:
@@ -417,7 +437,7 @@ def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None
             reported_offline = False
         except OSError as e:  # share not mounted / NAS asleep
             if not reported_offline:
-                alert(f"clipper worker ({socket.gethostname()}): can't read {root}: {e}")
+                alert(f"clipper worker ({socket.gethostname()}): can't read {root}: {e}", kind=None)
                 reported_offline = True
             todo = []
         if wc["fast_lane"]:

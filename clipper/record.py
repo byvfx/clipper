@@ -97,8 +97,15 @@ class Alerts:
         self.cfg = cfg
         self.mention = rc["alert_mention"]
 
-    def __call__(self, text: str, level: int = logging.WARNING) -> None:
+    def __call__(self, text: str, level: int = logging.WARNING, kind: str | None = "auto",
+                 key: str = "") -> None:
         log.log(level, "ALERT %s", text)
+        if kind == "auto":  # the recorder's: warnings are DMs (#22), news like "is live" isn't
+            kind = "recorder" if level >= logging.WARNING else None
+        if kind:
+            from . import alerts
+
+            alerts.send(self.cfg, kind, text, key)
         body = f"{self.mention} {text}".strip() if level >= logging.WARNING else text
         try:
             if self.webhook:
