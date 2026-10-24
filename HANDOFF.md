@@ -32,6 +32,20 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
 
+## Back up the taste layer (user, 2026-10-24)
+The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
+like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built).
+- **In git (push it):** `prompts/` (every version, never edit one that produced reviewed output),
+  `clipper.example.toml`, `mockups/`, `research_notes/`, `reports/`, `streamers.json`, this file.
+- **Not in git, copy by hand or script:** `clipper.toml` and the `clipper.before_*.toml` backups
+  (show tables, house_style, stream_context, scoring rules), each `streams/<id>/config.toml`
+  (per-stream overrides; lost with the stream folder), `secrets/` (YouTube/TikTok tokens are a
+  re-consent to recreate), the photos share `//192.168.0.155/docker/clipper/photos`, `layouts/`
+  (Shorts layout references per show), `schedule.json` and its `schedule.before_*.json` backups,
+  `deploy/*/env.local`, and the Kitsu volumes on the NAS (every review decision and note).
+- Also the project memory `~/.claude/projects/C--clipper/memory/` on the laptop: it holds decisions
+  that never made it into HANDOFF.
+
 ## Whale-fall night: Ethan Klein / H3 (2026-10-23)
 User: Ethan Klein (H3) was caught cheating on Hila, divorce coming; "backlog will have to wait",
 run tonight's Kino show through and get lots of good Shorts. Built for it:
