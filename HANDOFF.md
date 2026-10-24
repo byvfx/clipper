@@ -373,6 +373,29 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   but it waits on hardware logistics the user is still working out (desktop / storage). Don't start
   the pull until they say so.
 
+## Second channel: Sloth Beat (#46, name and look chosen 2026-10-24)
+- **Name: Sloth Beat.** The user's favourite animals: bears, sloths, dogs, otters, monkeys. Chosen over
+  "Tiger Bear" (the user's typo for Tiger Beat, kept as a candidate). The look is a teen fan magazine
+  (Tiger Beat / Bop / 16): pastel, starbursts, hearts, cutout faces with white sticker borders, the
+  sloth hanging off the masthead. Picked over a Weekly World News tabloid because that reads as a
+  sibling of Lolcow Cinema's Enquirer covers and keeps the exposé register; this channel adores its
+  subjects, which also helps the permission asks. Dogs, otters and monkeys can rotate through an inset.
+- **Handles:** this cloud session cannot reach youtube.com (network policy), so @slothbeat is unchecked.
+  Web search found no channel or social account by that name. The user should try youtube.com/@slothbeat
+  (and the TikTok/Instagram handles) by hand before committing.
+- **Mockups:** `mockups/sloth_beat/` (README): three 1280x720 covers, one per subject (Papa Meat pink,
+  Ben Avery cyan, On Cinema yellow) + contact sheet. Faces are placeholder cutouts (no image host is
+  reachable from the cloud session), the sloth is a placeholder SVG; copy is mockup copy, no "hosts".
+- **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
+  template rendered by headless Chromium (Playwright), not Pillow. Figma's REST API is read/export only
+  and an Illustrator MCP needs the app open in a logged-in session, so neither can be the pipeline
+  renderer; both are fine for *designing* the master cover. Bridge: design in Illustrator, export SVG
+  with named layers, the compose step swaps text and image hrefs and screenshots it. Playwright on the
+  worker = pip install + ~150 MB Chromium download (doctor check + SETUP step when built). Lolcow
+  Cinema's enquirer covers stay on Pillow. Nothing in `clipper/` built yet.
+- Next: user reacts to the covers; then mascot art in Runway (flat sticker, transparent, several
+  poses), master cover in Illustrator (MCP on the user's machine), then `[thumbnail] style = "fanmag"`.
+
 ## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
 2026-10-22: Posts take at most 5 images (Google Help; recommends 1:1, feed shows square, tap for
 full). Issue 01 (`mockups/weekly/tiktok/`, 10 pages, 3:4) goes out as two posts of five; text in
