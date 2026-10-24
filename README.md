@@ -31,6 +31,11 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
   Descriptions link to the longer video each one comes from (a clip to its segment at the clip's
   offset, a segment to its compilation) once that video is public; every upload run adds the link
   to videos already up when their longer video goes public (`[youtube] source_links`).
+- **pick**: Shorts from a stretch you name, when you watched the show and know where the good bits are:
+  `clipper pick <stream> --from 4:05:00 --to 4:25:00 --about "the Quartering bit"` (or `--at 4:50:00`, or
+  only `--about`, which searches the stream's summary first; `--find <word>` lists transcript lines for free).
+  Times are the Kick VOD's clock. The moments found join the stream's picks (ids `h01`...) and go through
+  cut, meta, thumbs, Shorts and review like scored ones; `--dry-run` shows them without saving.
 - **tiktok / rumble**: `clipper tiktok --items ...` sends Shorts to the TikTok app's drafts (you post from the
   phone; the caption comes to Discord); `--auto`, which the bot runs every `[tiktok] auto_send_minutes`,
   sends the next ones in YouTube-schedule order up to `max_per_24h`. `clipper rumble` prepares folders

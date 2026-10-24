@@ -353,6 +353,12 @@ tailnet = false
 auto = true
 model = "claude-sonnet-5-5"
 
+[pick]
+# `clipper pick <stream> --from 4:05:00 --to 4:25:00 --about "..."`: Shorts from a stretch you
+# name, appended to the stream's picks (ids h01...) and sent to review like scored ones.
+model = "claude-sonnet-5-5"
+max_clips = 3
+
 [schedule]
 # Release planning for `clipper schedule` -> schedule.json (the upload step reads it).
 # In Kitsu: "Hold" skips an item, "Publish at" pins it ("2026-10-20 15:00", or a date for

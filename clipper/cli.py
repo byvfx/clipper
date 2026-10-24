@@ -208,6 +208,18 @@ def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
                missing=args.missing)
 
 
+def cmd_pick(cfg: dict, args: argparse.Namespace) -> None:
+    from . import pick
+
+    d = stream_dir(cfg, args.stream)
+    if args.find:
+        pick.find(d, cfg, args.find, args.clock)
+        return
+    pick.run(d, cfg, about=args.about, start=args.start, end=args.end, at=args.at,
+             clock_use=args.clock, dry_run=args.dry_run, make=not args.no_run,
+             notify=not args.no_notify, allow_overlap=args.allow_overlap)
+
+
 def cmd_shorts(cfg: dict, args: argparse.Namespace) -> None:
     from . import shorts
 
@@ -602,6 +614,23 @@ def main() -> None:
     p.add_argument("--write", nargs="?", const="03,04,05", metavar="PAGES",
                    help="write the articles again with the writer prompt (03 cover story, 04, 05; default all three)")
     p.set_defaults(fn=cmd_weekly)
+
+    p = sub.add_parser("pick", help="Shorts from a stretch you name: find, cut, render, send to review")
+    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    p.add_argument("--from", dest="start", metavar="TIME", help="start, e.g. 4:05:00 or 4:05 (H:MM)")
+    p.add_argument("--to", dest="end", metavar="TIME", help="end, e.g. 4:25:00")
+    p.add_argument("--at", metavar="TIME", help="a [pick] span_s stretch around this time")
+    p.add_argument("--about", default="", help="what to look for (without a time: located "
+                                               "in the stream summary first)")
+    p.add_argument("--find", metavar="TEXT", help="list transcript lines with TEXT, no model calls")
+    p.add_argument("--clock", choices=["stream", "video"], default="stream",
+                   help="times as Kick's VOD shows them (default) or the recording's own")
+    p.add_argument("--dry-run", action="store_true", help="show the moments found, save nothing")
+    p.add_argument("--no-run", action="store_true", help="only add the picks to candidates.json")
+    p.add_argument("--no-notify", action="store_true", help="don't post review cards to Discord")
+    p.add_argument("--allow-overlap", action="store_true",
+                   help="keep moments that overlap an existing pick")
+    p.set_defaults(fn=cmd_pick)
 
     p = sub.add_parser("review", help="Kitsu review: publish, sync, and per-item decisions")
     rsub = p.add_subparsers(dest="action", required=True)
