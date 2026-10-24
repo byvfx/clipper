@@ -464,7 +464,7 @@ dials out. After #9/#64 (one writer first). Covers #7 for Linux; #13 can shrink 
   Next: the user performs Mother Moo's shots to the mix (`clipper perform`). Panel 4 could still be sharper. Jer archive restarted
   detached (CREATE_NEW_PROCESS_GROUP) after an app-restart Ctrl+C killed the first run at 1,283.
 
-  Test-take script: `mockups/udder_truth/test_take_script.md` (phone take is fine).
+  Test-take script: `mockups/udder_truth/scripts/test_take_script.md` (phone take is fine).
   Sound design plan on #58 (comment 2026-10-23): no model audio, audio-first; studio vs. field
   acoustics; a reusable show sound kit (theme, stings, beds) from a library; mix in Fairlight at
   -14 LUFS. User can get a sound library (e.g. **Artlist**); register the channel for Content ID
