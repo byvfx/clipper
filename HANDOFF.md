@@ -51,7 +51,14 @@ run tonight's Kino show through and get lots of good Shorts. Built for it:
   09/10/13/15/18/20, segment_times lost 09/13/18 (8 a day); still 15 a day, 60 min apart. Reshuffled
   (`clipper schedule --reshuffle`, backup schedule.before_h3_shorts_2026-10-23.json). Also
   `[youtube] upload_ahead_hours` 48 -> 8 so backlog uploads don't lock slots before tonight's Shorts
-  are approved. **Revert both** once the H3 Shorts are out (the clipper.toml comments say how).
+  are approved. **Reverted 2026-10-24 11:15** (user): short_times 10/15/20 again, segments 11 a
+  day, upload_ahead_hours 48; reshuffled (backup schedule.before_revert_2026-10-24.json).
+- Bug found and fixed while reverting: a priority jump freed today's not-uploaded slots but the
+  refill started tomorrow (`[schedule] start` default), so 10-24 15:00-22:00 sat empty. A jump now
+  refills from today. Filled 10-24 by hand with a one-off `CLIPPER_SCHEDULE_START=2026-10-24
+  clipper schedule --reshuffle`: H3 items from 15:00.
+- kick-133940023/config.toml stays (priority, no Kick-first wait): it only affects that stream, so
+  its H3 items keep going ahead of the backlog until they're all out.
 - After this night, delete or leave the file; it only affects that stream.
 
 ## Last run (finished 23:41)

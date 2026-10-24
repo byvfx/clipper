@@ -229,7 +229,8 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
         waiting = [it for it in items if it["kind"] == k and it["key"] not in placed and not it.get("bad")]
         parts = [sorted((it for it in waiting if it["priority"] == p), key=order) for p in (True, False)]
         queue[k] = [it for q in parts for it in (take_turns(q) if sc["mix_shows"] else q)]
-    all_slots = slots(sc, tz, start)
+    # Freed slots can be today's: refill from today then, or they stay empty.
+    all_slots = slots(sc, tz, min(start, now.date()) if jump else start)
 
     def fill(kinds: tuple[str, ...]) -> None:
         for when, kind in all_slots:
