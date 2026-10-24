@@ -155,6 +155,10 @@ TikTok (user wants an account, 2026-10-20), also under #14: #27 account/permissi
 decisions; clipper can't create accounts), #28 send Shorts to the phone as drafts (route the user
 chose: Content Posting API upload to inbox, user taps post), #29 direct posting after TikTok's app audit
 (later, optional; unaudited direct posts are private only).
+Single-owner daemon (2026-10-24, issue only): #64 `clipper serve`, the one process that writes
+review.json / review_state.json / schedule.json and runs the bot's background jobs; bot, war room and CLI
+call its API through actions.py. Replaces #9's lock/request files. Asked the same day whether Go would
+suit the UI/daemon: no, the bottlenecks are SMB and multiple writers, not the language; stay in Python.
 
 ## TikTok drafts (#28, built 2026-10-21)
 - User made the TikTok account and a developer app (Login Kit desktop + Content Posting API, scopes
