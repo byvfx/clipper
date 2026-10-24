@@ -87,6 +87,20 @@ gitignored), `clipper doctor` checks the six fonts. README and SETUP describe it
   Ethan Ralph has no usable face frame this week (the taco frame is pinned as "EXHIBIT A");
   Blade's avatar on page 06 is a scene, not a face. #41's cast library would fix both.
 
+## Back up the taste layer (user, 2026-10-24)
+The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
+like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built).
+- **In git (push it):** `prompts/` (every version, never edit one that produced reviewed output),
+  `clipper.example.toml`, `mockups/`, `research_notes/`, `reports/`, `streamers.json`, this file.
+- **Not in git, copy by hand or script:** `clipper.toml` and the `clipper.before_*.toml` backups
+  (show tables, house_style, stream_context, scoring rules), each `streams/<id>/config.toml`
+  (per-stream overrides; lost with the stream folder), `secrets/` (YouTube/TikTok tokens are a
+  re-consent to recreate), the photos share `//192.168.0.155/docker/clipper/photos`, `layouts/`
+  (Shorts layout references per show), `schedule.json` and its `schedule.before_*.json` backups,
+  `deploy/*/env.local`, and the Kitsu volumes on the NAS (every review decision and note).
+- Also the project memory `~/.claude/projects/C--clipper/memory/` on the laptop: it holds decisions
+  that never made it into HANDOFF.
+
 ## Whale-fall night: Ethan Klein / H3 (2026-10-23)
 User: Ethan Klein (H3) was caught cheating on Hila, divorce coming; "backlog will have to wait",
 run tonight's Kino show through and get lots of good Shorts. Built for it:
@@ -217,6 +231,13 @@ TikTok (user wants an account, 2026-10-20), also under #14: #27 account/permissi
 decisions; clipper can't create accounts), #28 send Shorts to the phone as drafts (route the user
 chose: Content Posting API upload to inbox, user taps post), #29 direct posting after TikTok's app audit
 (later, optional; unaudited direct posts are private only).
+Single-owner daemon (2026-10-24, issue only): #64 `clipper serve`, the one process that writes
+review.json / review_state.json / schedule.json and runs the bot's background jobs; bot, war room and CLI
+call its API through actions.py. Replaces #9's lock/request files. Asked the same day whether Go would
+suit the UI/daemon: no, the bottlenecks are SMB and multiple writers, not the language; stay in Python.
+Off-site control (2026-10-24, issue only): #65 Claude Code on the NAS, a `claude remote-control`
+container so the user drives clipper from the phone with the laptop asleep; no network exposure, the NAS
+dials out. After #9/#64 (one writer first). Covers #7 for Linux; #13 can shrink or close.
 
 ## TikTok drafts (#28, built 2026-10-21)
 - User made the TikTok account and a developer app (Login Kit desktop + Content Posting API, scopes
