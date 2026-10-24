@@ -755,6 +755,19 @@ reviewed, then posted ASAP**.
   up again (or created) and the add retried once. `--playlists` backfill treats it as empty.
 - Uploads run as `clipper upload` subprocesses, so no bot restart was needed.
 
+## War room: live chips and keyboard (2026-10-23, #15 #16)
+- #15: a live chip opens a menu: watch here (a dock bottom-right with Kick's embed,
+  `player.kick.com/<slug>`, no frame blocking; ⤢ bigger, ↗ to kick.com) or a new window.
+  "Always do this" remembers it per browser (localStorage); shift-click asks again. The chip
+  shows how long it has been live and ● REC / ○ no rec (a stream of that channel whose
+  `live/state.json` is recording/paused/finalizing). Offline chips open the channel.
+- #16: J/K (also swaps the item in the open window), Enter, Esc, A (in the window: approve and
+  go to the next), R (asks why), C, H, P, U reopen, Space, arrows ±5 s, F picture in picture,
+  1-6 tabs, / search, L watch live, ? list. Off while typing. Tested in the bot's live war room
+  with the page's `act` stubbed, so no Kitsu decisions were made.
+- The page is read per request, so the bot needed no restart.
+- Not done: #25 phone layout, #26 pop-out / open the recording at a clip.
+
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
    recordings. Added `[transcribe] backend = "mlx"` (mlx-whisper, `uv sync --extra mac`, optional

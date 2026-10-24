@@ -124,6 +124,10 @@ Review happens in [Kitsu](https://www.cg-wire.com/kitsu), with one production pe
 one episode per stream. `deploy/kitsu` runs it in Docker. The Discord bot mirrors each item
 as a card with buttons, and the war room (`clipper warroom`, a local web page) shows what is
 live, where each stream is in the pipeline, the review queue and the upload schedule.
+Click a live show's chip to watch it in a player on the page or on kick.com in a new
+window; the chip also says whether the NAS is recording it. The review queue works from the
+keyboard (J/K to move, A approve, R reject, C retake note, H hold, Space/arrows for the
+video); press `?` in the war room for the full list.
 
 ## Layout
 

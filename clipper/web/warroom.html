@@ -30,6 +30,27 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
 .live.on { color: var(--text); border-color: #ff3b4e88; background: #2a0e13; }
 .live.on .dot { background: var(--red); box-shadow: 0 0 0 0 #ff3b4e; animation: pulse 1.6s infinite; }
+.live { cursor: pointer; position: relative; }
+.live:hover { border-color: #3a4552; }
+.live .rec { font: 700 10px var(--mono); color: var(--red); letter-spacing: .05em; }
+.live .rec.off { color: var(--faint); }
+.livemenu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 230px; padding: 6px; border-radius: 10px;
+  background: var(--panel2); border: 1px solid var(--line); box-shadow: 0 8px 30px #000a; display: grid; gap: 4px; cursor: default; }
+.livemenu .btn { text-align: left; }
+.livemenu label { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--dim); padding: 4px 4px 0; cursor: pointer; }
+.livemenu .info { font-size: 11px; color: var(--faint); padding: 2px 4px 4px; }
+#dock { position: fixed; right: 18px; bottom: 18px; z-index: 30; width: 480px; max-width: calc(100vw - 36px); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 40px #000c; }
+#dock.big { width: 960px; }
+#dock .d-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid var(--line); }
+#dock .d-head .btn { padding: 2px 8px; font-size: 12px; }
+#dock .d-head .sp { margin-left: auto; }
+#dock iframe { display: block; width: 100%; aspect-ratio: 16/9; border: 0; background: #000; }
+.card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+#keys { width: min(560px, 94vw); }
+#keys .k-body { padding: 8px 18px 18px; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 13px; }
+#keys h4 { grid-column: 1 / -1; margin: 10px 0 0; font: 700 11px var(--mono); color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
+kbd { font: 600 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); border-bottom-width: 2px; background: var(--panel2); white-space: nowrap; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 #ff3b4e99; } 70% { box-shadow: 0 0 0 8px #ff3b4e00; } 100% { box-shadow: 0 0 0 0 #ff3b4e00; } }
 .counters { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 .counter { padding: 4px 10px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); text-align: center; min-width: 74px; }
@@ -148,6 +169,7 @@ dialog::backdrop { background: #000b; }
   <div class="tools">
     <button class="btn" id="syncBtn" title="Read decisions and edits from Kitsu now">⟳ Sync Kitsu</button>
     <button class="btn" id="replanBtn" title="Rerun clipper schedule">Replan</button>
+    <button class="btn" id="keysBtn" title="Keyboard shortcuts (?)">?</button>
   </div>
 </header>
 
@@ -171,6 +193,8 @@ dialog::backdrop { background: #000b; }
 </main>
 
 <dialog id="modal"></dialog>
+<dialog id="keys"></dialog>
+<div id="dock" hidden></div>
 
 <script>
 const $ = (s, el = document) => el.querySelector(s);
@@ -178,6 +202,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const KIND = { pick: "Clip", short: "Short", segment: "Segment", compilation: "Comp" };
 const DEC = { pending: "waiting", changes_requested: "changes", approved: "approved", rejected: "rejected" };
 let STATE = null, TAB = "waiting", SHOW = "", KINDF = "", Q = "", BUSY = new Set(), OPEN = null;
+let VISIBLE = [], SEL = null, SEL_AT = 0;  // the queue in display order; the keyboard's item
 
 function mmss(s) { if (s == null) return ""; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; }
@@ -202,10 +227,68 @@ async function refresh() {
   try { STATE = await api("/api/overview"); render(); }
   catch (e) { toast("Refresh failed: " + e.message, true); }
 }
+// ---------- live shows ----------
+
+let LIVE = [], LIVEMENU = null;
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* private window */ } } };
+function since(iso) {  // Kick gives "2026-10-23 01:02:03" in UTC
+  if (!iso) return "";
+  const t = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso.replace(" ", "T") + "Z");
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  return isNaN(m) ? "" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+}
+function recording(l) {  // the NAS recorder's stream for this channel, if it's on it now
+  return (STATE?.streams || []).find(s => s.channel === l.channel && ["recording", "paused", "finalizing"].includes(s.recording));
+}
 async function refreshLive() {
-  try { const live = await api("/api/live"); $("#lives").innerHTML = live.map(l =>
-    `<span class="live ${l.live ? "on" : ""}" title="${esc(l.title || (l.live ? "" : "offline"))}"><span class="dot"></span>${esc(l.show_name)}${l.live ? ` · LIVE${l.viewers != null ? " · " + l.viewers.toLocaleString() : ""}` : ""}</span>`).join(""); }
+  try { LIVE = await api("/api/live"); renderLive(); }
   catch (e) { /* Kick unreachable: keep the last state */ }
+}
+function renderLive() {
+  $("#lives").innerHTML = LIVE.map((l, n) => {
+    const rec = l.live ? recording(l) : null;
+    const tip = l.live ? `${l.title || ""}\nlive ${since(l.since)} · ${rec ? "recording " + rec.id : "NOT recording"}` : `${l.channel}: offline, click for the channel`;
+    return `<span class="live ${l.live ? "on" : ""}" data-live="${n}" title="${esc(tip)}"><span class="dot"></span>${esc(l.show_name)}${l.live
+      ? ` · LIVE${l.viewers != null ? " · " + l.viewers.toLocaleString() : ""}${l.since ? " · " + since(l.since) : ""} <span class="rec ${rec ? "" : "off"}">${rec ? "● REC" : "○ no rec"}</span>` : ""}${LIVEMENU === n ? liveMenu(l, rec) : ""}</span>`;
+  }).join("");
+}
+function liveMenu(l, rec) {
+  return `<div class="livemenu" data-menu>
+    <div class="info">${esc(l.channel)} · ${rec ? `recording ${esc(rec.id)} (${esc(rec.recording)})` : "the NAS isn't recording it"}</div>
+    <button class="btn" data-watch="here" data-ch="${esc(l.channel)}">▶ Watch here</button>
+    <button class="btn" data-watch="window" data-ch="${esc(l.channel)}">↗ Open in a new window</button>
+    <label><input type="checkbox" id="liveRemember"> Always do this (shift-click a chip to ask again)</label></div>`;
+}
+function watch(ch, where) {
+  const name = LIVE.find(l => l.channel === ch)?.show_name || ch;
+  if (where === "window") { window.open(`https://kick.com/${encodeURIComponent(ch)}`, `kick-${ch}`); return; }
+  const d = $("#dock"); d.hidden = false;
+  d.innerHTML = `<div class="d-head"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:var(--red)"></span><b>${esc(name)}</b><span style="color:var(--faint)">${esc(ch)}</span>
+    <span class="sp"></span><button class="btn" id="dSize" title="Bigger / smaller">⤢</button>
+    <button class="btn" id="dPop" title="Open on kick.com in a new window instead">↗</button>
+    <button class="btn" id="dClose" title="Close the player">×</button></div>
+    <iframe src="https://player.kick.com/${encodeURIComponent(ch)}?autoplay=true" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+  d.classList.toggle("big", !!store.get("warroom.dock.big"));
+  $("#dSize").onclick = () => { d.classList.toggle("big"); store.set("warroom.dock.big", d.classList.contains("big") ? "1" : null); };
+  $("#dPop").onclick = () => { closeDock(); watch(ch, "window"); };
+  $("#dClose").onclick = closeDock;
+}
+function closeDock() { const d = $("#dock"); d.innerHTML = ""; d.hidden = true; }
+function liveClick(e, t) {
+  if (e.target.closest("[data-menu]")) {
+    const w = e.target.closest("[data-watch]");
+    if (!w) return;
+    if ($("#liveRemember")?.checked) store.set("warroom.watch", w.dataset.watch);
+    LIVEMENU = null; renderLive(); watch(w.dataset.ch, w.dataset.watch);
+    return;
+  }
+  const n = +t.dataset.live, l = LIVE[n];
+  if (!l.live) { window.open(`https://kick.com/${encodeURIComponent(l.channel)}`, "_blank"); return; }
+  const remembered = store.get("warroom.watch");
+  if (remembered && !e.shiftKey) { watch(l.channel, remembered); return; }
+  if (e.shiftKey) store.set("warroom.watch", null);  // shift-click: forget the choice, ask
+  LIVEMENU = LIVEMENU === n ? null : n; renderLive();
 }
 
 function render() {
@@ -215,7 +298,7 @@ function render() {
     ["Approved", c.approved || 0, ""], ["Unslotted", c.approved_unscheduled, c.approved_unscheduled ? "warn" : ""],
     ["Next 7 d", c.scheduled_7d, ""], ["Uploaded", c.uploaded, ""],
   ].map(([l, n, k]) => `<div class="counter ${k}"><b>${n}</b><span>${l}</span></div>`).join("");
-  renderStreams(); renderRetakes(); renderHealth(); renderQueue(); renderSchedule(); tick();
+  renderStreams(); renderRetakes(); renderHealth(); renderQueue(); renderSchedule(); renderLive(); tick();
   if (OPEN) { const r = s.items.find(i => i.ref === OPEN); if (r && !$("#modal").contains(document.activeElement)) fillModalState(r); }
 }
 
@@ -278,6 +361,9 @@ function renderQueue() {
        <select id="kindSel"><option value="">All kinds</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}" ${KINDF === k ? "selected" : ""}>${v}s</option>`).join("")}</select>
        <input class="search" id="q" placeholder="Search titles…" value="${esc(Q)}">`;
   const items = base.filter(TABS[TAB]).sort((a, b) => (b.date || "").localeCompare(a.date || "") || a.ref.localeCompare(b.ref));
+  VISIBLE = items.map(i => i.ref);
+  if (SEL && !VISIBLE.includes(SEL)) SEL = VISIBLE[Math.min(SEL_AT, VISIBLE.length - 1)] || null;  // acted on: the next one
+  SEL_AT = SEL ? VISIBLE.indexOf(SEL) : 0;
   $("#queueSub").textContent = `${items.length} shown`;
   $("#grid").innerHTML = items.map(card).join("") || `<div class="empty">Nothing here${TAB === "waiting" ? " — all caught up" : ""}.</div>`;
 }
@@ -287,7 +373,7 @@ function card(i) {
   const media = i.thumbnail_url ? `<img loading="lazy" src="${i.thumbnail_url}" alt="">`
     : i.video_url ? `<video muted preload="metadata" src="${i.video_url}#t=3"></video>` : "";
   const sched = i.scheduled ? `⏱ ${new Date(i.scheduled).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : i.publish_at ? `📌 ${esc(i.publish_at)}` : "";
-  return `<div class="card ${BUSY.has(i.ref) ? "busy" : ""}" data-ref="${esc(i.ref)}">
+  return `<div class="card ${BUSY.has(i.ref) ? "busy" : ""} ${SEL === i.ref ? "sel" : ""}" data-ref="${esc(i.ref)}">
     <div class="thumb ${vertical ? "vertical" : ""}" data-open="${esc(i.ref)}">${media}
       <span class="kind ${i.kind}">${KIND[i.kind] || i.kind}</span>
       <span class="state ${i.decision}">${DEC[i.decision] || i.decision}${i.hold ? " · held" : ""}</span>
@@ -340,9 +426,12 @@ async function act(ref, action, extra = {}) {
 function ask(label, required) { const t = prompt(label); if (t === null) return null; if (required && !t.trim()) { toast("That needs some text.", true); return null; } return t.trim(); }
 
 document.addEventListener("click", e => {
+  const lv = e.target.closest("[data-live]");
+  if (lv) { liveClick(e, lv); return; }
+  if (LIVEMENU !== null) { LIVEMENU = null; renderLive(); }
   const t = e.target.closest("[data-tab],[data-act],[data-open]");
   if (!t) return;
-  if (t.dataset.tab) { TAB = t.dataset.tab; renderQueue(); return; }
+  if (t.dataset.tab) { TAB = t.dataset.tab; SEL = null; renderQueue(); return; }
   if (t.dataset.act) {
     const ref = t.dataset.ref, a = t.dataset.act;
     if (a === "changes") { const n = ask("What should change? clipper will re-cut / re-thumbnail it from this note:", true); if (n) act(ref, "changes", { text: n }); }
@@ -350,7 +439,7 @@ document.addEventListener("click", e => {
     else act(ref, a);
     return;
   }
-  if (t.dataset.open) openModal(t.dataset.open);
+  if (t.dataset.open) { if (VISIBLE.includes(t.dataset.open)) SEL = t.dataset.open; openModal(t.dataset.open); }
 });
 document.addEventListener("change", e => {
   if (e.target.id === "showSel") { SHOW = e.target.value; renderQueue(); }
@@ -414,7 +503,7 @@ function openModal(ref) {
   if ($("#bThumb")) $("#bThumb").onclick = () => act(ref, "thumbtext", { text: $("#fThumb").value });
   $("#bPin").onclick = () => { const v = $("#fPin").value; if (!v) return toast("Pick a date and time.", true); act(ref, "pin", { text: v.replace("T", " ") }); };
   $("#bUnpin").onclick = () => act(ref, "pin", { text: "" });
-  m.showModal();
+  if (!m.open) m.showModal();  // J / K swap the item in an open window
 }
 function fillModalState(i, fields) {
   if (!i || !$("#mActs")) return;
@@ -431,6 +520,79 @@ function fillModalState(i, fields) {
 }
 function closeModal() { OPEN = null; const v = $("#modal video"); if (v) v.pause(); $("#modal").close(); }
 $("#modal").addEventListener("close", () => { OPEN = null; const v = $("#modal video"); if (v) v.pause(); });
+
+// ---------- keyboard ----------
+
+const KEYS = [
+  ["Queue", [["J K", "next / previous item (in the item window too)"], ["Enter", "open the item"], ["Esc", "close the window, or clear the selection"]]],
+  ["Decide", [["A", "approve (in the item window: then the next item)"], ["R", "reject, asks why"], ["C", "retake note"],
+              ["H", "hold / release"], ["P", "pin a release time"], ["U", "reopen an approved item"]]],
+  ["Video (item window)", [["Space", "play / pause"], ["← →", "back / forward 5 s"], ["F", "pop out (picture in picture)"]]],
+  ["Other", [["1 2 3 4 5 6", "queue tabs"], ["/", "search"], ["L", "watch the live show"], ["?", "this list"]]],
+];
+function showKeys() {
+  const k = $("#keys");
+  k.innerHTML = `<div class="m-head"><b>Keyboard shortcuts</b><button class="x" onclick="this.closest('dialog').close()">×</button></div>
+    <div class="k-body">${KEYS.map(([h, rows]) => `<h4>${h}</h4>` + rows.map(([a, b]) =>
+      `<span>${a.split(" ").map(x => `<kbd>${esc(x)}</kbd>`).join(" ")}</span><span>${esc(b)}</span>`).join("")).join("")}
+    <span></span><span style="color:var(--faint);font-size:12px;margin-top:8px">Off while you type in a box (Esc leaves the box).</span></div>`;
+  k.showModal();
+}
+$("#keysBtn").onclick = showKeys;
+
+function move(d) {
+  if (!VISIBLE.length) return;
+  const at = VISIBLE.indexOf(OPEN || SEL);
+  SEL = VISIBLE[at < 0 ? 0 : Math.max(0, Math.min(VISIBLE.length - 1, at + d))];
+  renderQueue();
+  if (OPEN) { if (SEL !== OPEN) openModal(SEL); return; }
+  $(".card.sel")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function keyAct(key, ref) {
+  const i = STATE.items.find(x => x.ref === ref);
+  if (!i) return;
+  if (key === "a") {
+    if (i.decision === "approved") return toast("Already approved.");
+    const at = VISIBLE.indexOf(ref), next = VISIBLE[at + 1] || VISIBLE[at - 1];
+    act(ref, "approve");
+    if (OPEN) { if (next && next !== ref) { SEL = next; openModal(next); } else closeModal(); }
+  } else if (key === "u") { if (i.decision === "approved") act(ref, "reopen"); else toast("Only approved items reopen."); }
+  else if (key === "r") { const n = ask(`Reject ${i.short}? Say why (kept as a scoring example):`, true); if (n) act(ref, "reject", { text: n }); }
+  else if (key === "c") {
+    if (OPEN) { $("#fChanges").focus(); return; }
+    const n = ask("What should change? clipper will re-cut / re-thumbnail it from this note:", true); if (n) act(ref, "changes", { text: n });
+  } else if (key === "h") act(ref, "hold", { on: !i.hold });
+  else if (key === "p") { if (OPEN !== ref) openModal(ref); $("#fPin").scrollIntoView({ block: "center" }); $("#fPin").focus(); }
+}
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || !STATE) return;
+  const tg = e.target;
+  if (tg.matches?.("input, textarea, select, [contenteditable]")) { if (e.key === "Escape" && OPEN) { e.preventDefault(); tg.blur(); } return; }
+  if ($("#keys").open) { if (e.key === "?") $("#keys").close(); return; }
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key, video = OPEN ? $("#modal video") : null;
+  const take = () => e.preventDefault();
+  if (k === "?") { take(); showKeys(); }
+  else if (k === "j" || k === "k") { take(); move(k === "j" ? 1 : -1); }
+  else if (k === "Enter" && !OPEN && SEL && !tg.closest?.("button, a")) { take(); openModal(SEL); }
+  else if (k === "Escape" && !OPEN) { if (LIVEMENU !== null) { LIVEMENU = null; renderLive(); } else if (SEL) { SEL = null; renderQueue(); } }
+  else if ("arhcpu".includes(k) && k.length === 1 && (OPEN || SEL)) { take(); keyAct(k, OPEN || SEL); }
+  else if (k === " " && video && tg !== video) { take(); video.paused ? video.play() : video.pause(); }
+  else if ((k === "ArrowLeft" || k === "ArrowRight") && video && tg !== video) { take(); video.currentTime += k === "ArrowRight" ? 5 : -5; }
+  else if (k === "f" && video) {
+    take();
+    if (document.pictureInPictureElement) document.exitPictureInPicture();
+    else if (video.requestPictureInPicture) video.requestPictureInPicture().catch(err => toast(err.message, true));
+  }
+  else if (/^[1-6]$/.test(k) && !OPEN) { take(); TAB = Object.keys(TABS)[+k - 1]; SEL = null; renderQueue(); }
+  else if (k === "/" && !OPEN) { take(); $("#q").focus(); }
+  else if (k === "l") {
+    const on = LIVE.filter(l => l.live);
+    if (!on.length) return toast("Nothing is live right now.");
+    take();
+    if (on.length === 1) watch(on[0].channel, store.get("warroom.watch") || "here");
+    else { LIVEMENU = LIVE.indexOf(on[0]); renderLive(); }
+  }
+});
 
 refresh(); refreshLive();
 setInterval(refresh, 15000);
