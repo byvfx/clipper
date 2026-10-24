@@ -105,8 +105,11 @@ def transcribe_mlx(wav: Path, tc: dict) -> tuple[list[dict], float]:
     return segments, dur
 
 
-def transcribe_modal(wav: Path, tc: dict) -> tuple[list[dict], float, dict]:
-    """Segments from WhisperX on Modal, plus what the run cost."""
+def transcribe_modal(wav: Path, tc: dict, runs: Path | None = None) -> tuple[list[dict], float, dict]:
+    """Segments from WhisperX on Modal, plus what the run cost (also logged to `runs`,
+    [paths] modal_runs, for `clipper modal` and the war room)."""
+    from .modalmon import tracked
+
     suffix, codec = {"flac": (".flac", ["-c:a", "flac"]),
                      "opus": (".ogg", ["-c:a", "libopus", "-b:a", "48k"])}[tc["modal_audio"]]
     enc = wav.with_name(f"audio.modal{suffix}")
@@ -117,9 +120,12 @@ def transcribe_modal(wav: Path, tc: dict) -> tuple[list[dict], float, dict]:
     enc.unlink()
     print(f"encoded {len(data) / 1e6:.0f} MB {tc['modal_audio']} in {time.time() - t1:.0f}s", flush=True)
 
-    t2 = time.time()
-    out = modal_worker(tc, tc["modal_gpu"]).transcribe.remote(data, suffix, modal_settings(tc))
-    cost = modal_cost(tc["modal_gpu"], time.time() - t2, out)
+    with tracked(runs, "stream", wav.parent.name, tc["modal_gpu"],
+                 max(0, wav.stat().st_size - 44) / 32000) as rec:  # 16 kHz mono s16
+        t2 = time.time()
+        out = modal_worker(tc, tc["modal_gpu"]).transcribe.remote(data, suffix, modal_settings(tc))
+        cost = modal_cost(tc["modal_gpu"], time.time() - t2, out)
+        rec.update(cost, audio_s=round(out["dur"], 1))
     print(f"modal {out['gpu']}: {cost['call_s']:.0f}s call ({out['timings']}), ~${cost['est_usd']:.2f}",
           flush=True)
     return out["segments"], out["dur"], cost
@@ -147,14 +153,14 @@ def modal_cost(gpu: str, wall: float, out: dict) -> dict:
             "est_usd": round((wall + 30) / 3600 * price, 3)}
 
 
-def run(stream_dir: Path, tc: dict) -> None:
+def run(stream_dir: Path, tc: dict, runs: Path | None = None) -> None:
     t0 = time.time()
     wav = extract_audio(stream_dir)
     if tc["backend"] == "mlx":
         segments, dur = transcribe_mlx(wav, tc)
         return write(stream_dir, tc, segments, dur, t0)
     if tc["backend"] == "modal":
-        segments, dur, cost = transcribe_modal(wav, tc)
+        segments, dur, cost = transcribe_modal(wav, tc, runs)
         return write(stream_dir, tc, segments, dur, t0, {"modal": cost})
     if tc["backend"] != "whisperx":
         raise SystemExit(f"[transcribe] backend must be whisperx, mlx or modal, not {tc['backend']!r}")

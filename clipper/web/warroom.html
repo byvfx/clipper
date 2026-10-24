@@ -189,6 +189,17 @@ nav.views { display: none; }
 .uploads .log .bad { color: var(--red); } .uploads .log .ok { color: var(--green); }
 .uploads .nx { display: grid; grid-template-columns: 78px 1fr; gap: 2px 8px; }
 .uploads .nx .due { color: var(--accent); }
+.cloud { padding: 10px 14px; font-size: 12px; color: var(--dim); display: grid; gap: 7px; }
+.cloud .row { display: flex; align-items: center; gap: 8px; }
+.cloud .big { font: 700 16px var(--mono); color: var(--text); }
+.cloud .meter { flex: 1; height: 6px; border-radius: 3px; background: #262e38; overflow: hidden; }
+.cloud .meter i { display: block; height: 100%; background: var(--green); }
+.cloud .meter i.warn { background: var(--amber); } .cloud .meter i.over { background: var(--red); }
+.cloud .runs { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 10px; font: 11px/1.45 var(--mono); }
+.cloud .runs .w { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.cloud .bad { color: var(--red); } .cloud .now { color: var(--accent); } .cloud .f { color: var(--faint); }
+.cloud .sub { font: 700 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-top: 3px; }
+.cloud a { color: var(--blue); }
 .queue-bar .tabs { display: contents; }
 
 /* phones (#25): one view at a time, bottom tabs, a full-screen item with the decisions at the thumb */
@@ -271,6 +282,7 @@ nav.views { display: none; }
     <section class="panel"><h2>Pipeline <span class="sp" id="pipeSub"></span></h2><div id="streams"></div></section>
     <section class="panel"><h2>Retakes <span class="sp" id="retakeSub"></span></h2><div class="feed" id="retakes"></div></section>
     <section class="panel"><h2>Health</h2><div class="health" id="health"></div></section>
+    <section class="panel"><h2>Modal <span class="sp" id="cloudSub"></span></h2><div class="cloud" id="cloud"><div class="empty">Asking Modal…</div></div></section>
   </div>
 
   <section class="panel" id="vQueue">
@@ -690,6 +702,39 @@ function renderUploads() {
     ${u.next.length ? `<div class="nx">${u.next.map(e => `<span class="${e.due ? "due" : ""}">${new Date(e.publish_at).toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit" })}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.title)}">${esc(e.title)}</span>`).join("")}</div>` : ""}`;
 }
 
+// ---------- Modal (#49) ----------
+
+let CLOUD = null;
+async function refreshCloud() {
+  try { CLOUD = await api("/api/modal"); } catch (e) { CLOUD = { error: e.message }; }
+  renderCloud();
+}
+function renderCloud() {
+  const m = CLOUD, el = $("#cloud");
+  if (!m) return;
+  if (m.error) { el.innerHTML = `<div class="bad">${esc(m.error)}</div>`; $("#cloudSub").textContent = ""; return; }
+  const usd = v => "$" + (+v || 0).toFixed(2), hrs = s => (s / 3600).toFixed(1) + " h", mins = s => Math.round(s / 60) + " min";
+  const sp = m.spend || {}, up = (m.containers?.apps || {})[m.app] || [];
+  const cap = m.budget || sp.credits || 0, pct = cap ? Math.min(100, 100 * sp.metered / cap) : 0;
+  const level = m.budget ? (sp.metered > m.budget ? "over" : pct > 80 ? "warn" : "") : sp.metered > sp.credits ? "over" : "";
+  const run = r => `<span class="w" title="${esc(r.what)}">${esc(r.kind === "stream" ? r.what : r.what.replace("/", " · "))}</span>`;
+  $("#cloudSub").textContent = m.running.length ? `${m.running.length} running` : up.length ? `${up.length} up` : "idle";
+  el.innerHTML = `
+    ${sp.error ? `<div class="bad">billing: ${esc(sp.error)}</div>` : `
+    <div class="row"><span class="big">${usd(sp.metered)}</span><span>this month${m.budget ? ` of your ${usd(m.budget)} budget` : ` · ${usd(sp.credits)} credit`}</span></div>
+    <div class="row"><span class="meter"><i class="${level}" style="width:${pct}%"></i></span><span class="${sp.billed > 0 ? "bad" : ""}">${usd(sp.billed)} billed</span></div>
+    <div><span class="${sp.per_hour > 0 ? "now" : ""}">${usd(sp.per_hour)}/h now</span> · ${usd(sp.last_24h)} last 24 h · ${Object.entries(sp.by_app || {}).map(([a, v]) => `${esc(a.replace("clipper-", ""))} ${usd(v)}`).join(", ")}</div>
+    <div class="f" title="Each run's call time + 30 s idle at the GPU's price. Modal's billing (above) is the real number.">our per-run estimates: ${usd(m.est_month_usd)} this month, ${usd(m.est_24h_usd)} in 24 h</div>`}
+    <div>GPUs: <b style="color:var(--text)">${up.length}</b> / ${m.max_containers} up${up.length ? `, oldest since ${esc(new Date(up[0]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}` : ""}${m.containers?.error ? ` <span class="bad">(${esc(m.containers.error)})</span>` : ""}</div>
+    ${m.running.length ? `<div class="sub">Running now</div><div class="runs">${m.running.slice(0, 8).map(r => `${run(r)}<span class="now">${mins(r.elapsed_s)}</span><span>${esc(r.gpu || "default")} · ${hrs(r.audio_s)}</span>`).join("")}</div>` : ""}
+    ${m.failures_24h.length ? `<div class="sub">Failed in 24 h</div><div class="runs">${m.failures_24h.slice(0, 5).map(r => `${run(r)}<span class="f">${esc(ago(r.at))}</span><span class="bad" title="${esc(r.error)}">${esc((r.error || "").slice(0, 40))}</span>`).join("")}</div>` : ""}
+    ${m.recent.length ? `<div class="sub">Recent runs</div><div class="runs">${m.recent.slice(0, 6).map(r => `${run(r)}<span title="${esc(r.gpu)}, call ${mins(r.call_s || 0)}">${hrs(r.audio_s || 0)}${r.call_s ? " · " + Math.round(r.audio_s / r.call_s) + "×" : ""}</span><span class="${r.ok === false ? "bad" : "f"}">${r.ok === false ? "failed" : "~" + usd(r.est_usd)}</span>`).join("")}</div>` : ""}
+    ${m.archives.map(a => `<div class="sub">Archive · ${esc(a.subject)}</div>
+      <div class="row"><span class="meter"><i style="width:${a.items ? 100 * a.done / a.items : 0}%"></i></span><span>${a.done.toLocaleString()} / ${a.items.toLocaleString()}</span></div>
+      <div>${Math.round(a.hours_done).toLocaleString()} / ${Math.round(a.hours_total).toLocaleString()} h${a.errors ? ` · <span class="bad">${a.errors} errors</span>` : ""}${a.items_per_hour ? ` · ${a.items_per_hour}/h, ETA ${a.eta_h} h` : a.left ? ` · ${a.left} left, not running` : " · done"} · ~${usd(a.est_usd)}</div>`).join("")}
+    ${m.links?.[m.app] ? `<div><a href="${esc(m.links[m.app])}" target="_blank" rel="noopener">Open ${esc(m.app)} on modal.com ↗</a></div>` : ""}`;
+}
+
 function closeModal() { OPEN = null; const v = $("#modal video"); if (v) v.pause(); $("#modal").close(); }
 $("#modal").addEventListener("close", () => { OPEN = null; const v = $("#modal video"); if (v) v.pause(); });
 
@@ -811,9 +856,10 @@ document.addEventListener("keydown", e => {
   }
 });
 
-refresh(); refreshLive();
+refresh(); refreshLive(); refreshCloud();
 setInterval(refresh, 15000);
 setInterval(refreshLive, 60000);
+setInterval(refreshCloud, 60000);
 </script>
 </body>
 </html>

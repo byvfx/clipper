@@ -29,6 +29,7 @@ GPU_PRICES = {  # $ per hour (modal.com/pricing, 2026-10-23), for the cost line 
 }
 SPEED = {"L4": 24.5, "L40S": 46.5, "H100": 55.0}  # x realtime, 8 h stream incl. align (2026-10-23)
 BAKED_MODEL = "large-v3"
+MAX_CONTAINERS = 10  # GPUs at once across every caller; the war room shows containers against it
 
 
 def _bake_models() -> None:
@@ -53,7 +54,7 @@ image = (
 app = modal.App(APP_NAME, image=image)
 
 
-@app.cls(gpu=DEFAULT_GPU, timeout=4 * 3600, scaledown_window=30, max_containers=10)
+@app.cls(gpu=DEFAULT_GPU, timeout=4 * 3600, scaledown_window=30, max_containers=MAX_CONTAINERS)
 class WhisperX:
     @modal.enter()
     def load(self) -> None:

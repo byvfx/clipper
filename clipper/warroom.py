@@ -350,6 +350,16 @@ def overview(cfg: dict) -> dict:
 
 # ---------- actions ----------
 
+def modal_status(cfg: dict) -> dict:
+    """#49: the Modal panel (clipper/modalmon.py). Modal's token stays on this machine."""
+    try:
+        from . import modalmon
+
+        return modalmon.status(cfg)
+    except Exception as e:  # noqa: BLE001  # no modal extra installed, or signed out
+        return {"error": f"{type(e).__name__}: {e}"[:300]}
+
+
 def start_retake(cfg: dict) -> bool:
     if (cfg["paths"]["streams"] / ".retake.lock").exists():
         return False
@@ -500,6 +510,8 @@ def make_handler(cfg: dict):
                     self.send_json(lowres_status(cfg, (qs.get("src") or [""])[0]))
                 elif u.path == "/api/retakes":
                     self.send_json(retakes(cfg, 50))
+                elif u.path == "/api/modal":
+                    self.send_json(modal_status(cfg))
                 elif u.path.startswith("/media/"):
                     self.send_media(unquote(u.path[len("/media/"):]))
                 else:
@@ -688,6 +700,7 @@ def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
             overview(cfg)
         except Exception as e:  # noqa: BLE001
             print(f"warroom: warm-up: {type(e).__name__}: {e}", flush=True)
+        modal_status(cfg)  # billing and the archive folders take seconds the first time
     threading.Thread(target=warm, name="warroom-warm", daemon=True).start()
     threading.Thread(target=_lowres_worker, args=(cfg,), name="warroom-lowres", daemon=True).start()
     if wc["lowres_prewarm"]:

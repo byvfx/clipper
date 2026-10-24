@@ -12,7 +12,8 @@ process that is always up and has the Discord token, picks them up every minute 
 - only the kinds in [notify] kinds: ready (a stream is in review), upload (upload or TikTok
   failed, YouTube limits, sign-in expired), failure (a stage failed after its retries, a
   crash, a background job failing), recorder (stalls, crashes, finalize failures), disk
-  (the streams share filling up), digest (daily summary at digest_time);
+  (the streams share filling up), digest (daily summary at digest_time), spend (Modal's
+  month passing each [modal] alert_every_usd, checked hourly);
 - the same problem (same key) at most once per cooldown_hours;
 - nothing during quiet_hours: held, then sent together when they end.
 The bot itself adds the disk check, the digest and "can't read the streams share" (which
@@ -37,7 +38,7 @@ log = logging.getLogger("clipper.alerts")
 
 _SEQ = itertools.count()
 ICON = {"ready": "🎬", "upload": "📤", "failure": "❌", "recorder": "🔴", "disk": "💾",
-        "digest": "📰", "test": "🔔"}
+        "digest": "📰", "spend": "💸", "test": "🔔"}
 
 
 def outbox(cfg: dict) -> Path:
@@ -120,6 +121,13 @@ def checks(cfg: dict, st: dict, now: datetime) -> None:
             and (now.hour, now.minute) >= _hm(nc["digest_time"]):
         st["digest"] = now.date().isoformat()
         send(cfg, "digest", digest(cfg, now), key=f"digest:{now.date()}")
+    if "spend" in nc["kinds"]:
+        try:  # #49: once an hour, Modal's billing for the month
+            from .modalmon import spend_alert
+
+            spend_alert(cfg, st)
+        except Exception as e:  # noqa: BLE001  # no modal extra, signed out, Modal down
+            log.debug("modal spend check: %s", e)
 
 
 def pending(cfg: dict, link: str = "") -> tuple[list[str], list[Path], dict]:

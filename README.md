@@ -102,6 +102,7 @@ clipper archive add jer https://www.youtube.com/@TheQuartering   # list long-for
 clipper archive transcribe jer --limit 100 --dry-run              # hours and estimated cost
 clipper archive transcribe jer --limit 100                        # WhisperX on Modal, 8 at once
 clipper archive status
+clipper modal                                                     # GPUs up, runs, spend, archive ETA
 ```
 
 It needs the Modal backend set up (SETUP.md, "Transcribe on Modal"). YouTube audio is
@@ -138,7 +139,9 @@ Titles, descriptions, hashtags and cover words are checked as you type ("hosts",
 swearing, YouTube's length limits with the show prefix), and cards with a problem carry a
 ⚠ badge. Above the schedule, the upload panel shows uploads in the last 24 h against the cap,
 the last automatic run and its errors, and what goes next; uploaded slots show views and a
-YouTube link. On a phone it switches to one view at a
+YouTube link. The Modal panel (under Health) shows the month's Modal bill, the spend rate,
+GPUs up, transcriptions running and failed, and each archive's progress (`clipper modal`
+prints the same). On a phone it switches to one view at a
 time (Review, Schedule, Pipeline tabs at the bottom), items open full screen with the
 decisions at the bottom and swipe to the next one, and videos play from a 360p copy
 (`lowres/` beside each preview, about a quarter of the data). It can be added to the home

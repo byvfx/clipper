@@ -33,6 +33,7 @@ from pathlib import Path
 import requests
 
 from . import transcribe
+from .modalmon import head_record, tracked
 from .preshow import ytdlp
 
 log = logging.getLogger(__name__)
@@ -136,6 +137,16 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
     meta = dict(it)
     t0 = time.time()
     worker = transcribe.modal_worker(tc, gpu)
+
+    def call(fn, *args) -> tuple[dict, dict]:  # logged for `clipper modal` and the war room
+        with tracked(cfg["paths"]["modal_runs"], "archive", f"{idir.parent.name}/{it['id']}", gpu,
+                     meta.get("duration_s") or 0) as rec:
+            t1 = time.time()
+            out = fn.remote(*args)
+            cost = transcribe.modal_cost(gpu, time.time() - t1, out)
+            rec.update(cost, audio_s=round(out["dur"], 1))
+        return out, cost
+
     if it["source"] == "youtube":
         r = ytdlp("-f", cfg["archive"]["youtube_format"], "--write-info-json", "--no-playlist",
                   "-o", str(idir / "audio.%(ext)s"), it["url"])
@@ -150,14 +161,11 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
                     duration_s=float(info.get("duration") or it["duration_s"]),
                     date=datetime.fromtimestamp(ts, UTC).date().isoformat() if ts else None)
         data = audio[0].read_bytes()
-        t1 = time.time()
-        out = worker.transcribe.remote(data, audio[0].suffix, transcribe.modal_settings(tc))
+        out, cost = call(worker.transcribe, data, audio[0].suffix, transcribe.modal_settings(tc))
         audio[0].unlink()
     else:
         media = odysee("get", {"uri": it["url"]})["streaming_url"]
-        t1 = time.time()
-        out = worker.transcribe_url.remote(media, transcribe.modal_settings(tc))
-    cost = transcribe.modal_cost(gpu, time.time() - t1, out)
+        out, cost = call(worker.transcribe_url, media, transcribe.modal_settings(tc))
     meta["transcribed_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     (idir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     transcribe.write(idir, tc, out["segments"], out["dur"], t0, {"modal": cost})
@@ -217,9 +225,8 @@ def status(cfg: dict, subject: str | None) -> None:
         done = [it for it in cat.values() if (d / it["id"] / "words.jsonl").exists()]
         errors = [it for it in cat.values() if (d / it["id"] / "error.txt").exists()]
         cost = 0.0
-        for it in done:
-            t = json.loads((d / it["id"] / "transcript.json").read_text(encoding="utf-8"))
-            cost += (t.get("modal") or {}).get("est_usd", 0.0)
+        for it in done:  # the cost record heads the file: skip reading the segments
+            cost += (head_record(d / it["id"] / "transcript.json") or {}).get("est_usd", 0.0)
         hours = sum(i["duration_s"] for i in done) / 3600
         total = sum(i["duration_s"] for i in cat.values()) / 3600
         print(f"{s}: {len(done)}/{len(cat)} transcribed ({hours:.0f}/{total:.0f} h), "

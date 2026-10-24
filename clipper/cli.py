@@ -123,6 +123,15 @@ def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
         archive.status(cfg, args.subject)
 
 
+def cmd_modal(cfg: dict, args: argparse.Namespace) -> None:
+    from . import modalmon
+
+    if args.backfill:
+        modalmon.backfill(cfg)
+    else:
+        modalmon.print_status(cfg)
+
+
 def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
     from . import transcribe
 
@@ -130,7 +139,7 @@ def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
         return transcribe.deploy()
     if not args.stream:
         raise SystemExit("clipper transcribe <stream>, or --deploy")
-    transcribe.run(stream_dir(cfg, args.stream), cfg["transcribe"])
+    transcribe.run(stream_dir(cfg, args.stream), cfg["transcribe"], cfg["paths"]["modal_runs"])
 
 
 def cmd_signals(cfg: dict, args: argparse.Namespace) -> None:
@@ -497,6 +506,11 @@ def main() -> None:
     r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
     r = rsub.add_parser("status", help="items, hours transcribed, errors, cost")
     r.add_argument("subject", nargs="?")
+
+    p = sub.add_parser("modal", help="Modal now: containers, runs, failures, this month's spend, archives")
+    p.add_argument("--backfill", action="store_true",
+                   help="add runs from before the run log (transcript.json cost records), once")
+    p.set_defaults(fn=cmd_modal)
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")

@@ -893,6 +893,30 @@ reviewed, then posted ASAP**.
   only, so look at one description after that run.
 - #26: pop-out shipped; "open in source" not built (closed anyway). #31: closed unanswered.
 
+## Modal monitoring (2026-10-24, #49)
+- clipper/modalmon.py + `clipper modal [--backfill]`; war room `/api/modal`, panel under
+  Health (polls 60 s). Run log `[paths] modal_runs` (logs/modal_runs.jsonl): `tracked()` writes
+  start + end (ok, or error) around every `.remote` in transcribe_modal and archive items.
+  "Running" = a start with no end, under 4.5 h old. Backfilled once 2026-10-24: 11,490 runs
+  from transcript.json heads (`head_record` reads the first 4 KB; `archive status` uses it now
+  too, it used to read every 5 MB transcript and hung on jer).
+- Spend is `modal.Workspace.billing` (summary for the month; report daily for whole UTC days,
+  hourly for today + last 24 h, since hourly reports can't span over 7 days; reports hold whole
+  intervals only). Cached 5 min; containers via `python -m modal container list --json`
+  (no public API; cached 30 s); archive folders scanned every 2 min. Live queue stats
+  (`get_current_stats`) don't see `with_options(gpu=...)` variants, so not used.
+- Alert: `alerts.checks` -> `spend_alert` hourly, DM kind "spend" (added to default kinds)
+  when the month passes each multiple of `[modal] alert_every_usd` (25), once per multiple.
+  `monthly_budget_usd` (0) only changes the meter. No stop button (issue said optional).
+- Found 2026-10-23 night: `archive transcribe jer` (started 05:50, parallel 8 L4) ran ~17 h at
+  ~$6.50-7/h; the month reached $129.97 metered, $99.96 billed past the $30 credit. User chose
+  to let it run; it finished 22:51 (11,488/11,571, 83 failures: YouTube 403s / age gates).
+  Our per-run estimates for jer sum to ~$182, above the real bill, so they overcount on
+  parallel archive runs; trust the billing line.
+- MAX_CONTAINERS moved to a constant in modal_app.py (same value 10): no redeploy needed.
+- The bot (which serves the war room) picks the new endpoint up on its next restart; until
+  then the panel says "not found". Tested on a second war room (launch.json warroom-test).
+
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
    recordings. Added `[transcribe] backend = "mlx"` (mlx-whisper, `uv sync --extra mac`, optional

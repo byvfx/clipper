@@ -15,6 +15,13 @@ discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 bot_log = "logs/bot.log"                       # clipper bot log, rotated; "" = console only
 rumble = "rumble"                              # clipper rumble upload folders
 layouts = "layouts"                            # reference screenshots per show layout (clipper shorts --save-example)
+modal_runs = "logs/modal_runs.jsonl"           # every Modal call's start and end (clipper modal, war room)
+
+[modal]
+# `clipper modal` and the war room's Modal panel: containers, runs, failures, archive
+# progress, and the month's spend from Modal's own billing (needs MODAL_TOKEN_ID/SECRET).
+monthly_budget_usd = 0       # your ceiling for a month's metered cost, shown against it; 0 = none
+alert_every_usd = 25         # the bot DMs ([notify] kind "spend") each time the month passes a multiple
 
 [kick]
 channel = ""               # set per show ([shows.<key>] channels); a stream uses its own
@@ -314,7 +321,7 @@ refresh_days = 30              # ...on streams started within this many days (0 
 # streams/.notify/outbox/; the bot sends them. `clipper alert test` sends a test DM.
 enabled = true
 user_id = ""                 # "" = the first [discord] allowed_user_ids
-kinds = ["ready", "upload", "failure", "recorder", "disk", "digest"]
+kinds = ["ready", "upload", "failure", "recorder", "disk", "digest", "spend"]
 quiet_hours = "00:00-08:00"  # [schedule] timezone; held, then sent together; "" = never quiet
 cooldown_hours = 6           # the same problem at most once per this long
 digest_time = "09:00"        # "" = no digest

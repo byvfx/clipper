@@ -30,6 +30,12 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
         "archive": "archive",     # `clipper archive` subjects: <subject>/catalog.json + one dir per item
+        "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
+    },
+    "modal": {
+        # `clipper modal` and the war room's Modal panel (#49): spend is Modal's own billing.
+        "monthly_budget_usd": 0,  # your ceiling for a month's metered cost, shown against it; 0 = none
+        "alert_every_usd": 25,    # the bot DMs (kind "spend") each time the month passes a multiple; 0 = off
     },
     "narrate": {
         # `clipper narrate`: a performance re-voiced by the ElevenLabs Voice Changer (#57).
@@ -365,7 +371,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # #22: the bot DMs you when something needs you (clipper/alerts.py). `clipper alert test`.
         "enabled": True,
         "user_id": "",            # who gets the DMs; "" = the first [discord] allowed_user_ids
-        "kinds": ["ready", "upload", "failure", "recorder", "disk", "digest"],
+        "kinds": ["ready", "upload", "failure", "recorder", "disk", "digest", "spend"],
         "quiet_hours": "00:00-08:00",  # [schedule] timezone; held, then sent together; "" = never quiet
         "cooldown_hours": 6,      # the same problem at most once per this long
         "digest_time": "09:00",   # daily digest (out today, tomorrow, waiting); "" = none
