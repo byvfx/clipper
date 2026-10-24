@@ -45,8 +45,9 @@ run tonight's Kino show through and get lots of good Shorts. Built for it:
   max_picks 20, scan_max_per_block 5, Ethan/Hila in known_figures, and a stream_context note that
   distinct Ethan/Hila moments aren't duplicates and the 2-per-category / 2-per-30-min limits don't
   apply to them; priority = true. The worker picks it up when the recording ends (no restart needed).
-- Still in force for it: `kick_first_hours = 24` (no reason recorded) and 3 Short slots a day.
-  Asked the user whether to relax them for this story.
+- `kick_first_hours = 0` in its file (user, 2026-10-23): no Kick-first wait, out as soon as approved
+  (schedule.py reads kick_first_hours per stream since 5af27f9). Still 3 Short slots a day
+  (10:00/15:00/20:00), so 20 Shorts take about a week.
 - After this night, delete or leave the file; it only affects that stream.
 
 ## Last run (finished 23:41)
