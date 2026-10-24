@@ -804,6 +804,7 @@ reviewed, then posted ASAP**.
   command hid that link behind captured output. Now `on` streams tailscale's output and waits.
 - Localhost asks for the key too now: open http://127.0.0.1:8765/?key=<token> once on the laptop
   (`clipper warroom --tailnet status` prints the phone link; same key).
+- User opened it on the phone and added it to the home screen; #10 closed 2026-10-23.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
