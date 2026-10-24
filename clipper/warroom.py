@@ -658,8 +658,11 @@ def tailnet(cfg: dict, action: str) -> None:
             tok_file.parent.mkdir(parents=True, exist_ok=True)
             tok_file.write_text(secrets.token_urlsafe(9), encoding="utf-8")
             print(f"made a war room token in {tok_file} (restart the bot so it asks for it)")
-        r = _ts("serve", "--bg", "--https=443", f"http://127.0.0.1:{wc['port']}", timeout=90)
-        print((r.stdout + r.stderr).strip())
+        # Not captured, no timeout: the first time it prints a link to enable Serve / HTTPS for
+        # the tailnet and waits until that's done in the browser.
+        print("starting tailscale serve (if it shows a link, open it and allow; this waits)", flush=True)
+        r = subprocess.run([tailscale_exe(), "serve", "--bg", "--https=443",
+                            f"http://127.0.0.1:{wc['port']}"], check=False)
         if r.returncode:
             raise SystemExit("tailscale serve failed (above). If it asks to enable HTTPS, do that in "
                              "the Tailscale admin console (DNS: MagicDNS and HTTPS certificates), then rerun")

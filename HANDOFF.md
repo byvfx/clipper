@@ -796,9 +796,14 @@ reviewed, then posted ASAP**.
   prints the phone link with ?key= once (terminal only). `[warroom] tailnet = true` makes doctor
   (--role bot/all) check install, sign-in, serve, token, and fetch the manifest through the name.
 - The bot used to log the war room URL with ?key=; it now logs it without. Cookie SameSite is Lax.
-- Tested with a faked tailscale CLI only: Tailscale isn't installed on the laptop yet.
-- User to do: install Tailscale on the laptop and phone (same account), MagicDNS + HTTPS in the
-  admin console, then `clipper warroom --tailnet on`, restart the bot, tailnet = true, open the link.
+- Live 2026-10-23 17:44: laptop is `thor.taile415cd.ts.net` (Tailscale 1.104.2), war room at
+  https://thor.taile415cd.ts.net/, token in secrets/warroom_token.txt, `[warroom] tailnet = true`
+  in clipper.toml, bot restarted. Checked: no key -> 401 (page and API), manifest 200, ?key= sets
+  the year cookie, API and low-res work with the cookie, doctor "on the tailnet ... (answers)".
+- First `serve` hung: the tailnet needed Serve enabled (login.tailscale.com/f/serve link) and the
+  command hid that link behind captured output. Now `on` streams tailscale's output and waits.
+- Localhost asks for the key too now: open http://127.0.0.1:8765/?key=<token> once on the laptop
+  (`clipper warroom --tailnet status` prints the phone link; same key).
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS

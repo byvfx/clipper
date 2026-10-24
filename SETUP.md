@@ -153,6 +153,8 @@ own Tailscale devices, nothing on the LAN or the internet, no port forwarding.
    on the phone (App Store / Play Store), and sign in to the same account on both.
 2. In the Tailscale admin console, DNS page: turn on MagicDNS and HTTPS certificates
    (`tailscale serve` asks for this the first time if it is off).
+   The first `on` may also print a link to enable Serve for the tailnet: open it, allow, and
+   the command carries on.
 3. `clipper warroom --tailnet on`. It makes a war room token in `secrets/warroom_token.txt`
    if `[warroom] token` is empty, starts `tailscale serve` (it persists across reboots), and
    prints the link to open once on the phone (`https://<name>.ts.net/?key=...`). The key
