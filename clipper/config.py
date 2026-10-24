@@ -31,6 +31,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
         "archive": "archive",     # `clipper archive` subjects: <subject>/catalog.json + one dir per item
         "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
+        "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
     },
     "modal": {
         # `clipper modal` and the war room's Modal panel (#49): spend is Modal's own billing.
@@ -89,6 +90,38 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_description_chars": 5000,
         "link": "hardlink",       # hardlink (no extra disk, copy across drives) | copy
         "kitsu": True,            # Rumble / Rumble URL columns
+    },
+    "weekly": {
+        # `clipper weekly`: the week's streams -> a ten-page tabloid issue (1080x1440 pages
+        # for a TikTok carousel or two YouTube Posts). The model drafts issue.json from
+        # prompts/weekly_<v>.md; edit it and `clipper weekly --render`.
+        "model": "claude-opus-5-5",
+        "effort": "high",
+        "prompt_version": "v1",
+        "write_articles": True,   # after a draft, write the three articles again, one call each...
+        "article_prompt_version": "v1",  # ...with prompts/weekly_article_<v>.md...
+        "article_example": "weekly_article_example.md",  # ...and this piece (in prompts/) as the voice to match
+        "first_issue": 1,         # number of the first issue this install makes
+        "masthead": ["LOLCOW", "CINEMA"],  # red word, chrome word (then "WEEKLY" inside)
+        "byline": "BY THE LOLCOW DESK",
+        "price": "$1.39 US",      # on the cover's barcode block
+        # Words counted in the week's transcripts for the numbers page (the model picks from them).
+        "words": ["grift", "coffee", "cameo", "sub", "clip", "lawsuit", "divorce"],
+        # Fonts, first that exists: the cover headline (Impact), a condensed family with
+        # named styles (Bahnschrift), a serif italic and bold italic (Georgia), a black and
+        # a bold sans for the masthead and barcode.
+        "headline_fonts": ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
+                           "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf"],
+        "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/RobotoCondensed-Bold.ttf",
+                            "/Library/Fonts/RobotoCondensed-Bold.ttf"],
+        "serif_italic_fonts": ["C:/Windows/Fonts/georgiai.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Italic.ttf",
+                               "/Library/Fonts/Georgia Italic.ttf", "/System/Library/Fonts/Supplemental/Georgia Italic.ttf"],
+        "serif_bold_italic_fonts": ["C:/Windows/Fonts/georgiaz.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Bold_Italic.ttf",
+                                    "/Library/Fonts/Georgia Bold Italic.ttf", "/System/Library/Fonts/Supplemental/Georgia Bold Italic.ttf"],
+        "black_fonts": ["C:/Windows/Fonts/ariblk.ttf", "/usr/share/fonts/truetype/msttcorefonts/Arial_Black.ttf",
+                        "/Library/Fonts/Arial Black.ttf", "/System/Library/Fonts/Supplemental/Arial Black.ttf"],
+        "bold_fonts": ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+                       "/Library/Fonts/Arial Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"],
     },
     "tiktok": {
         # `clipper tiktok`: Shorts to the TikTok app's drafts; you post from the phone.

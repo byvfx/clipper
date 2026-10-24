@@ -51,6 +51,17 @@ off the end): transcribe, one segment, cut, meta, thumbs, review. No clips and n
 "asap", outside the release slots, and the next `clipper upload` publishes it at once.
 `clipper preshow list` shows the feed; `clipper preshow fetch <url>` grabs an older one.
 
+**Weekly issue.** `clipper weekly` turns the week's streams (Sun-Sat) into *Lolcow Cinema
+Weekly*, a ten-page tabloid for a TikTok carousel or two YouTube Posts: a cover, contents,
+the cover story and two features, news in brief, the quote of the week, the week in numbers,
+a marketplace of parody ads, and next week's schedule with a readers' poll. It gathers the
+week (segments, chat, transcripts, the thumbnail stage's faces) into `weekly/<saturday>/week.json`,
+has the `[weekly]` model draft the copy into `issue.json` (about $0.35), writes the three articles
+again one call each with a writer prompt and the owner's own piece as the voice to match (about
+$0.10 each), and renders 1080x1440 pages. `--headline "..."` tells the draft what the cover story is; edit `issue.json` (copy, or
+`faces` to pin a frame for someone) and `clipper weekly --render`. Posting is by hand
+(`post_text.md` has the captions).
+
 ## Roles
 
 | Role | Runs | Where |

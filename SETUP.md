@@ -251,6 +251,33 @@ ways the API reports badly, so do these before the first big upload run.
    `clipper upload --links --dry-run` shows what it would change. Change the wording per show
    with `clip_source` / `segment_source` in `[shows.<key>.youtube]`.
 
+## Weekly issue
+
+`clipper weekly` builds the week's ten-page tabloid issue into `weekly/<saturday>/` (the
+folder is `[paths] weekly`). It needs Impact, Bahnschrift, Georgia (italic and bold italic)
+and Arial (bold and black), all standard on Windows; `clipper doctor` warns when any is
+missing, and `[weekly] *_fonts` take other paths. The cover subject is cut out with
+torchvision DeepLabV3 (the worker's torch install; the weights download once), otherwise the
+cover shows a photo panel instead.
+
+1. `clipper weekly --headline "Ethan Klein: ..."` on Saturday, after Friday's show is
+   processed: gathers the week, drafts `issue.json` with `[weekly] model` and renders.
+2. Look at `contact_sheet.jpg`. Fix copy in `issue.json`; pin a better frame for a face
+   with `"faces": {"Name": "<stream>/segments/s16_x"}` (that stream's thumbnail frame) or
+   `{"frame": "<stream>/thumbs/.../05_1.0.jpg", "face": {x, y, width, height}, "bottom": 0.73}`,
+   or a portrait you drop in the issue folder: `{"photo": "hila_klein.png"}`. The cover can
+   take `"background": "towers.png"` (a picture shown as a dark shadow behind the subject,
+   `background_focus: [x, y]` picks the crop) and `subject_height` (pixels, default 940).
+   Then `clipper weekly --render` (`--only 01,03` for a few pages). `--draft` writes a new
+   draft and keeps the old file as a backup. `--write 04,05` has the writer prompt redo
+   those articles (deck, columns, pull quote) from the week's summaries, matching the voice
+   of `prompts/weekly_article_example.md`; a draft that would run off the page is sent back
+   once to be cut. Replace the example with a piece of your own to change the voice.
+3. Post by hand: TikTok takes all ten pages as one carousel; YouTube Posts take five images,
+   so pages 01-05 and 06-10 go as two posts with the captions in `post_text.md`.
+
+Issue numbers continue from `[weekly] first_issue` across the folders in `weekly/`.
+
 ## TikTok drafts
 
 `clipper tiktok` sends scheduled Shorts to the TikTok app's drafts (Content Posting API,

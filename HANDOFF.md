@@ -32,6 +32,61 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
 
+## Weekly issue 02: `clipper weekly` built (2026-10-24, Saturday)
+User: "run the magazine for the week", Ethan Klein as the headline. The stage from the
+roadmap below (#35) is now real: `clipper/weekly.py`, `prompts/weekly_v1.md`, `[weekly]` in
+config (model Opus, first_issue, words to count, font lists), `paths.weekly` (`weekly/`,
+gitignored), `clipper doctor` checks the six fonts. README and SETUP describe it.
+- `clipper weekly [--week D] [--headline ...] [--gather|--draft|--render] [--only 01,03]`:
+  gather the Sun-Sat week from the NAS (segments, hooks as a verbatim quote pool, chat
+  stats, transcript word counts, thumbnails.json faces) -> week.json + stats.json; Opus drafts
+  issue.json (streamed JSON, no structured output: the full schema was too large a grammar
+  and a free object isn't allowed); render 10 pages 1080x1440 + contact_sheet.jpg +
+  post_text.md. Faces: the thumbnail stage's frame + face box per person (boxes wider than
+  0.36 or taller than 0.55 are skipped: the model boxes whole screenshots), then
+  [thumbnail] photos, then initials. Cover cut-out: DeepLabV3 person mask, cached as
+  cutout_<person>_<frame>.png in the issue folder.
+- issue.json `faces` pins a frame per person: `"Jer": "kick-133940023/segments/s21_the-quartering"`
+  (that stream's thumbnail entry) or `{"frame": ..., "face": {...}, "bottom": 0.73}` (any
+  frame; bottom keeps a burned-in caption out of the cut-out) or `{"photo": "hila_klein.png"}`
+  (a portrait in the issue folder). A pinned person always shows that frame. The cover takes
+  `background` (a picture as a dark shadow behind the subject, `background_focus`) and
+  `subject_height`. Edit copy there, `--render`.
+- User's edits round 1 (2026-10-24 afternoon): cover headline "ETHAN'S / KLEIN/11!!" (the
+  show's own bit), the twin towers photo (user-supplied, weekly/2026-10-24/twintowers.png) as
+  the shadow behind him, hila_klein.png for the inset (the clip frame was Tamara), no "wife
+  guy" anywhere, and the cover story now opens on the "family emergency" and ends on the
+  rumor that Tamara is pregnant (written as a rumor, unconfirmed).
+- Round 2 (user): "more room for the headline story, more details". The cover story page now
+  uses a 300 px photo, 96 px headline and 24 px body (the other two features keep the bigger
+  layout), about twice the words; copy rewritten with the crew statement, Tamara evidence,
+  the 60% estimate, the old clips, the grave-dancers and the pregnancy rumor.
+- Round 3 (user): the inset role reads "H3 co-founder, and soon to be ex-wife"; the renderer
+  splits a role at ", " or " | " into two lines and widens the strip. Final pages rendered
+  (no overflow warnings); still not posted, still not committed.
+- Round 4 (user): the cover story copy is the user's own text, pasted in verbatim (deck, two
+  left paragraphs, pull quote, right column). The feature layout is now 230 px photo, 84 px
+  headline, 27 px deck, 22 px body (23 overflows); `para()` takes blank lines as paragraph breaks.
+- Round 5 (user: "build the writer pass", "very sharp, witty, hints of British"): `write_articles()`
+  in weekly.py, `prompts/weekly_article_v1.md` (the user's piece inlined from
+  `prompts/weekly_article_example.md`, voice notes: dry understatement, formal phrase for the
+  squalid thing, no parody Britishisms), `[weekly] write_articles` (on by default after a
+  draft), `article_prompt_version`, `article_example`; `clipper weekly --write [03,04,05]`.
+  Budgets per layout in `BUDGET`; each draft is test-rendered and sent back once if it
+  overflows. Ran it on 04 (Huck Blend) and 05 (DSP) for $0.20, both fit first try; page 03
+  keeps the user's own text. Backup: issue.before_write_2026-10-24_1519.json.
+- **Issue 02 (Oct 18-24)** is in `weekly/2026-10-24/`: cover "ETHAN'S KLEIN/11!!" (Ethan, Off
+  the Rails frame s17 06_137.2, Hila inset), features Huck Blend and DSP's $4 whale, brief,
+  quote ("better off accused of being a serial killer"), numbers (Jer 15h 32m, more than the
+  chart put together: asserted), marketplace (Huck Blend $70), next week + poll (Ethan /
+  Jer / DSP). Draft cost $0.34; copy was hand-trimmed on page 03 and rows 6 of contents.
+  Not posted yet: the user posts by hand (TikTok carousel of 10, or YouTube Posts 01-05 +
+  06-10 with post_text.md). Nothing committed.
+- Known rough edges: the model's quote credits are to the show, not the speaker (no
+  speaker labels); the page-03 overflow check is strict (warns ~20 px before the rule);
+  Ethan Ralph has no usable face frame this week (the taco frame is pinned as "EXHIBIT A");
+  Blade's avatar on page 06 is a scene, not a face. #41's cast library would fix both.
+
 ## Whale-fall night: Ethan Klein / H3 (2026-10-23)
 User: Ethan Klein (H3) was caught cheating on Hila, divorce coming; "backlog will have to wait",
 run tonight's Kino show through and get lots of good Shorts. Built for it:
@@ -416,8 +471,8 @@ and #34 reader polls (suggested first), #35 weekly issue carousel, #36 blind ite
   User (2026-10-22): "a good test"; posting this issue to TikTok by hand. Next: pick the weekly's
   day (suggested: week = Sun-Sat, build Saturday after Friday's Kino is processed, post Sunday
   late morning PT before Channel 404's 5 PM show), then build it as a `clipper weekly` stage. Person cut-out via torchvision DeepLabV3 (weights cached
-  in ~/.cache/torch on this laptop). Render scripts were scratch files, not in the repo; a real
-  `clipper weekly` stage is not built.
+  in ~/.cache/torch on this laptop). Render scripts were scratch files, not in the repo; **`clipper weekly` built 2026-10-24**
+  (see the issue 02 section near the top).
 - #41 (user, 2026-10-22): a cast library, 3-4 photos per person (`photos/<Person>/<label>.jpg`),
   `clipper cast grab` (best face frames from a stream) and `clipper cast add`. Cast to start (user;
   adds more as they come up): Andy, PPP, Jer, Blade, Chef, Geezer, Mel, Jim Bakker, Mr. Morrow,
@@ -471,6 +526,19 @@ and #34 reader polls (suggested first), #35 weekly issue carousel, #36 blind ite
 Open work is now tracked as GitHub issues (byvfx/clipper #1-#7, created 2026-10-20): Shorts covers,
 backlog catch-up, "hosts" in t20 titles, stale playlist cache, source links, Kitsu republish (0 below),
 MacBook setup (6 below). Add new work there; this list stays for history.
+8. **Weekly: write the articles with a writer agent: BUILT 2026-10-24 (see the issue 02 section).** Original notes: The Opus draft of
+   issue 02 was serviceable but short and list-like; the user rewrote the cover story by hand
+   and wants that voice: a real feature, long sentences with em-dashes, "the official line was",
+   "behind the scenes", "back-of-the-napkin math", a paragraph of context then a paragraph of
+   evidence, the rumor saved for the last line. Plan: split `clipper weekly draft` in two. The
+   current call keeps the issue's shape (headlines, cover lines, briefs, ads, numbers, poll);
+   a second pass, one call per article with a writer prompt (`prompts/weekly_article_<v>.md`)
+   and the user's piece as the example (`prompts/weekly_article_example.md`, saved today), writes
+   `deck`, `col1`, `col2` for the cover story and the two features from the segment summaries,
+   the quote pool and the first draft's headline, to the word budgets the page holds (cover
+   story: ~150 + ~115 words at the 22 px layout; features: ~70 + ~45). Keep verbatim quotes
+   from the pool only, keep the private-people rule. Model: Opus, high effort; a few cents per
+   article. `--rewrite 03` should redo one article without touching the rest of issue.json.
 0. **Republish re-cut videos to Kitsu (user said not yet, 2026-10-19).** Segments + compilations of
    kick-132733064, -133040747, -133095550, -133112185 were re-cut (seek fix, see Gotchas) and SRTs
    rewritten; Kitsu still has the old previews with the silent 2-4 s head (132733064: 24 wfa,

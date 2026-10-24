@@ -462,6 +462,12 @@ max_window_s = 240         # overlapping windows merge up to this length
 top_n = 30
 
 
+[weekly]
+# `clipper weekly`: the week's streams (Sun-Sat) -> a ten-page tabloid issue under
+# paths.weekly/<saturday>/. Pages are 1080x1440 (a TikTok carousel, or two YouTube Posts).
+first_issue = 1
+words = ["grift", "coffee", "cameo", "sub", "clip", "lawsuit", "divorce"]  # counted on the numbers page
+
 # ---------- shows ----------
 # One table per show. A stream belongs to the show whose `channels` include the Kick
 # channel in its meta.json (recordings and `clipper fetch` both write it), and that

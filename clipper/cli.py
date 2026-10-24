@@ -318,6 +318,13 @@ def cmd_tiktok(cfg: dict, args: argparse.Namespace) -> None:
         tiktok.status(cfg, args.stream, check=not args.dry_run)
 
 
+def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
+    from . import weekly
+
+    weekly.run(cfg, day=args.week, headline=args.headline or "", gather_only=args.gather,
+               redraft=args.draft, render_only=args.render, only=args.only or "", write=args.write or "")
+
+
 def config_path(args: argparse.Namespace) -> str:
     return str(Path(args.config or os.environ.get("CLIPPER_CONFIG") or "clipper.toml").resolve())
 
@@ -571,6 +578,17 @@ def main() -> None:
                    help="save the stream's frame at --at as LAYOUT's reference screenshot (scene matching)")
     p.add_argument("--at", type=float, help="with --save-example: seconds into the stream")
     p.set_defaults(fn=cmd_shorts)
+
+    p = sub.add_parser("weekly", help="the week's streams -> a ten-page tabloid issue (weekly/<saturday>/)")
+    p.add_argument("--week", help="any day of the wanted Sun-Sat week, YYYY-MM-DD (default: this week)")
+    p.add_argument("--headline", help="editor's note for the draft: the cover story, e.g. \"Ethan Klein\"")
+    p.add_argument("--gather", action="store_true", help="only rebuild week.json and stats.json")
+    p.add_argument("--draft", action="store_true", help="draft issue.json again (the old one is kept as a backup)")
+    p.add_argument("--render", action="store_true", help="only render the pages from issue.json")
+    p.add_argument("--only", help="render only these pages, e.g. 01,07")
+    p.add_argument("--write", nargs="?", const="03,04,05", metavar="PAGES",
+                   help="write the articles again with the writer prompt (03 cover story, 04, 05; default all three)")
+    p.set_defaults(fn=cmd_weekly)
 
     p = sub.add_parser("review", help="Kitsu review: publish, sync, and per-item decisions")
     rsub = p.add_subparsers(dest="action", required=True)

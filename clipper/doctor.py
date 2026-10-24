@@ -181,6 +181,14 @@ def check_fonts(cfg: dict) -> None:
         cond = next((f for f in tc["condensed_fonts"] if Path(f).exists()), None)
         (ok if cond else warn)("fonts", f"condensed font {cond}" if cond else "no condensed font for enquirer covers",
                                "" if cond else "install Bahnschrift / Roboto Condensed or set [thumbnail] condensed_fonts")
+    wc = cfg["weekly"]
+    missing = [k for k in ("headline", "condensed", "serif_italic", "serif_bold_italic", "black", "bold")
+               if not any(Path(f).exists() for f in wc[f"{k}_fonts"])]
+    if missing:
+        warn("fonts", f"weekly issue fonts missing: {', '.join(missing)}",
+             "install Impact, Bahnschrift (or Roboto Condensed), Georgia and Arial, or set [weekly] *_fonts")
+    else:
+        ok("fonts", "weekly issue fonts (Impact, condensed, Georgia italic, Arial)")
     sc = cfg["shorts"]
     name = sc["caption_font"].lower().replace(" ", "")
     dirs = [Path(sc["caption_fontsdir"])] if sc["caption_fontsdir"] else font_dirs()
