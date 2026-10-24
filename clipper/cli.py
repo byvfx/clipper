@@ -119,6 +119,10 @@ def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
         ac = cfg["archive"]
         archive.run_transcribe(cfg, args.subject, args.limit, args.oldest, args.gpu or ac["gpu"],
                                args.parallel or ac["parallel"], args.dry_run)
+    elif args.action == "check":
+        archive.check_links(cfg, args.subject, args.ids, args.all, args.limit)
+    elif args.action == "links":
+        archive.list_links(cfg, args.subject, args.status)
     else:
         archive.status(cfg, args.subject)
 
@@ -493,8 +497,17 @@ def main() -> None:
     r.add_argument("--gpu", help="Modal GPU (default [archive] gpu)")
     r.add_argument("--parallel", type=int, help="items at once (default [archive] parallel)")
     r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
-    r = rsub.add_parser("status", help="items, hours transcribed, errors, cost")
+    r = rsub.add_parser("status", help="items, hours transcribed, errors, cost, link checks")
     r.add_argument("subject", nargs="?")
+    r = rsub.add_parser("check", help="are the source links still up? (no downloads, no cost)")
+    r.add_argument("subject")
+    r.add_argument("--ids", nargs="+", help="just these items (default: not checked in "
+                   "[archive] link_recheck_days)")
+    r.add_argument("--all", action="store_true", help="every item, however recently checked")
+    r.add_argument("--limit", type=int, help="at most this many items")
+    r = rsub.add_parser("links", help="items by link status (default: every link not alive)")
+    r.add_argument("subject")
+    r.add_argument("--status", choices=["dead", "restricted", "alive", "all"])
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")

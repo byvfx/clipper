@@ -1,0 +1,51 @@
+{
+ "yt-A": {
+  "id": "yt-A",
+  "source": "youtube",
+  "url": "https://www.youtube.com/watch?v=A",
+  "title": "video A",
+  "duration_s": 600.0
+ },
+ "yt-B": {
+  "id": "yt-B",
+  "source": "youtube",
+  "url": "https://www.youtube.com/watch?v=B",
+  "title": "video B",
+  "duration_s": 600.0
+ },
+ "yt-C": {
+  "id": "yt-C",
+  "source": "youtube",
+  "url": "https://www.youtube.com/watch?v=C",
+  "title": "video C",
+  "duration_s": 600.0
+ },
+ "yt-D": {
+  "id": "yt-D",
+  "source": "youtube",
+  "url": "https://www.youtube.com/watch?v=D",
+  "title": "video D",
+  "duration_s": 600.0
+ },
+ "yt-E": {
+  "id": "yt-E",
+  "source": "youtube",
+  "url": "https://www.youtube.com/watch?v=E",
+  "title": "video E",
+  "duration_s": 600.0
+ },
+ "od-1": {
+  "id": "od-1",
+  "source": "odysee",
+  "url": "lbry://x#1",
+  "title": "od one",
+  "duration_s": 900.0
+ },
+ "od-2": {
+  "id": "od-2",
+  "source": "odysee",
+  "url": "lbry://y#2",
+  "title": "od two",
+  "duration_s": 900.0
+ }
+}

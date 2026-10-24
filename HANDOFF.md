@@ -243,6 +243,19 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   on Modal preferred). Character: a salacious, campy gossip dame in the Joan Rivers / Harvey Fierstein
   *type*, but an original face, voice and name (not recognizable as either). **Name: Mother Moo**
   (user, 2026-10-23), the Lolcow Cinema host. Bit ideas on #57 (not decided).
+- **Archive link checks (built 2026-10-24, user's idea):** `clipper archive check <subject>
+  [--ids ...] [--all] [--limit N]` asks whether each catalog item's source link still plays
+  (YouTube oEmbed: 200 alive, 401/403 restricted = private or embedding off, 400/404/410 dead;
+  Odysee resolve: NOT_FOUND dead, BLOCKED etc. restricted). No downloads, no API quota, no cost.
+  `<subject>/links.json` per item: status, reason, checked_at, since. A link that can't be checked
+  (429, network) keeps its last result; 20 in a row stops the check (`stop_after_failures`).
+  Rechecks items older than `[archive] link_recheck_days` (7); reruns print alive -> dead changes.
+  `clipper archive links <subject> [--status]` lists them (default: not alive), `status` adds
+  counts, `transcribe` skips dead links (they would only fail and count toward the stop streak).
+  **Not run against the real services yet**: built in a cloud session whose network blocks YouTube
+  and Odysee, tested with stubbed responses only. First real run: `clipper archive check jer
+  --limit 50`, then compare a few dead/restricted ones in a browser. Not in the bot loop. Ideas
+  not built: Kick VOD links in `streams/<id>/meta.json`, a war room view, "went dead" DMs.
 - **#58 The Udder Truth** (user, 2026-10-23): weekly Brass Eye-style show (the 1997 Channel 4 one)
   hosted by Mother Moo; same weekly data as the magazine (its parody ads become TV spots), The
   Receipt Drawer is a segment (#48). Pipeline in the issue: Claude script → user's webcam take →

@@ -67,6 +67,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_duration_s": 60,     # skip shorter items (Shorts)
         "youtube_format": "bestaudio[abr<=96]/bestaudio",  # ~40 MB per hour of audio
         "stop_after_failures": 20,  # in a row (e.g. YouTube's bot check); 0 = never stop
+        "link_parallel": 4,       # `archive check`: oEmbed requests at once
+        "link_recheck_days": 7,   # `archive check` skips links checked more recently
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.

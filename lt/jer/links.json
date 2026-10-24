@@ -1,0 +1,38 @@
+{
+ "od-1": {
+  "status": "alive",
+  "reason": "",
+  "checked_at": "2026-10-24T04:18:00+00:00",
+  "since": "2026-10-24T04:18:00+00:00"
+ },
+ "od-2": {
+  "status": "dead",
+  "reason": "NOT_FOUND",
+  "checked_at": "2026-10-24T04:18:00+00:00",
+  "since": "2026-10-24T04:18:00+00:00"
+ },
+ "yt-B": {
+  "status": "dead",
+  "reason": "http 404",
+  "checked_at": "2026-10-24T04:18:00+00:00",
+  "since": "2026-10-24T04:18:00+00:00"
+ },
+ "yt-A": {
+  "status": "alive",
+  "reason": "",
+  "checked_at": "2026-10-24T04:18:00+00:00",
+  "since": "2026-10-24T04:18:00+00:00"
+ },
+ "yt-C": {
+  "status": "restricted",
+  "reason": "http 401: private or embedding off",
+  "checked_at": "2026-10-24T04:18:00+00:00",
+  "since": "2026-10-24T04:18:00+00:00"
+ },
+ "yt-D": {
+  "status": "dead",
+  "reason": "http 404",
+  "checked_at": "2026-10-24T04:18:00+00:00",
+  "since": "2026-10-24T04:18:00+00:00"
+ }
+}
