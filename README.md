@@ -114,7 +114,15 @@ clipper archive transcribe jer --limit 100 --dry-run              # hours and es
 clipper archive transcribe jer --limit 100                        # WhisperX on Modal, 8 at once
 clipper archive status
 clipper modal                                                     # GPUs up, runs, spend, archive ETA
+clipper archive check jer                                         # which source links still play
+clipper archive links jer                                         # the dead and restricted ones
 ```
+
+`check` downloads nothing and costs nothing: YouTube's oEmbed endpoint and Odysee's resolve say
+whether each item is alive, restricted (private, embedding off, blocked) or dead, kept in
+`links.json` with when it changed, and reruns report what died since. A dead link with a
+transcript is a receipt whose source is gone; `transcribe` skips dead links.
+`clipper archive check jer --ids yt-<id> ...` checks just the items you are about to link to.
 
 It needs the Modal backend set up (SETUP.md, "Transcribe on Modal"). YouTube audio is
 downloaded on this machine and uploaded; Odysee is meant to be fetched in the cloud (not

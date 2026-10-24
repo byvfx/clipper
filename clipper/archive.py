@@ -5,6 +5,8 @@ Usage:
     clipper archive transcribe <subject> [--limit N] [--oldest] [--gpu L4] [--parallel N]
                                          [--dry-run]
     clipper archive status [<subject>]
+    clipper archive check <subject> [--ids ID...] [--all] [--limit N]
+    clipper archive links <subject> [--status dead|restricted|alive|all]
 
 A subject (e.g. "jer", issue #48) is paths.archive/<subject>/: catalog.json (every item
 found: source, url, title, duration) and one folder per item with meta.json and the same
@@ -19,15 +21,23 @@ Sources:
     Odysee channels (https://odysee.com/@name): listed with the Odysee API; Modal fetches the
         media itself (WhisperX.transcribe_url), so nothing passes through this machine.
 Items shorter than [archive] min_duration_s are skipped. Catalog order is newest first.
+
+Link checks (`check`) ask whether each item's source url still plays, without downloading
+anything: YouTube's oEmbed endpoint (no key, no quota) and Odysee's resolve. Results go in
+<subject>/links.json: status alive | restricted (private, embedding off, or blocked) | dead,
+the reason, when it was checked and since when it has had that status. A link that cannot be
+checked (network, rate limit) keeps its last result. Items not checked within
+[archive] link_recheck_days are checked again; `transcribe` skips items whose link is dead.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -39,6 +49,7 @@ from .preshow import ytdlp
 log = logging.getLogger(__name__)
 
 ODYSEE_API = "https://api.na-backend.odysee.com/api/v1/proxy"
+YT_OEMBED = "https://www.youtube.com/oembed"
 
 
 def subject_dir(cfg: dict, subject: str) -> Path:
@@ -50,11 +61,20 @@ def load_catalog(d: Path) -> dict[str, dict]:
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 
 
-def save_catalog(d: Path, cat: dict[str, dict]) -> None:
+def save_json(d: Path, name: str, data: dict) -> None:
     d.mkdir(parents=True, exist_ok=True)
-    tmp = d / "catalog.json.tmp"
-    tmp.write_text(json.dumps(cat, indent=1, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(d / "catalog.json")
+    tmp = d / f"{name}.tmp"
+    tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(d / name)
+
+
+def save_catalog(d: Path, cat: dict[str, dict]) -> None:
+    save_json(d, "catalog.json", cat)
+
+
+def load_links(d: Path) -> dict[str, dict]:
+    p = d / "links.json"
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 
 
 # ---------- listing ----------
@@ -180,6 +200,11 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
     if not cat:
         raise SystemExit(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
     todo = [it for it in cat.values() if not (d / it["id"] / "words.jsonl").exists()]
+    links = load_links(d)
+    dead = {i for i, lk in links.items() if lk["status"] == "dead"}
+    if skipped := sum(1 for it in todo if it["id"] in dead):
+        print(f"{subject}: {skipped} skipped, source link dead (clipper archive links {subject})")
+        todo = [it for it in todo if it["id"] not in dead]
     if oldest:
         todo.reverse()
     todo = todo[:limit] if limit else todo
@@ -231,3 +256,156 @@ def status(cfg: dict, subject: str | None) -> None:
         total = sum(i["duration_s"] for i in cat.values()) / 3600
         print(f"{s}: {len(done)}/{len(cat)} transcribed ({hours:.0f}/{total:.0f} h), "
               f"{len(errors)} errors, ~${cost:.2f} spent")
+        links = load_links(d)
+        if links:
+            n = {k: sum(1 for i in cat if links.get(i, {}).get("status") == k)
+                 for k in ("alive", "restricted", "dead")}
+            kept = sum(1 for i in cat if links.get(i, {}).get("status") == "dead"
+                       and (d / i / "words.jsonl").exists())
+            print(f"  links: {n['alive']} alive, {n['restricted']} restricted, {n['dead']} dead "
+                  f"({kept} of them transcribed), {len(cat) - sum(n.values())} unchecked")
+
+
+# ---------- link checks ----------
+
+def check_youtube(url: str, session: requests.Session) -> tuple[str, str]:
+    """(status, reason) from YouTube's oEmbed endpoint; unknown when it can't be asked."""
+    reason = ""
+    for attempt in range(3):
+        try:
+            r = session.get(YT_OEMBED, params={"url": url, "format": "json"}, timeout=30)
+        except requests.RequestException as e:
+            reason = type(e).__name__
+        else:
+            if r.status_code == 200:
+                return "alive", ""
+            if r.status_code in (401, 403):  # private, or embedding turned off (still plays on YouTube)
+                return "restricted", f"http {r.status_code}: private or embedding off"
+            if r.status_code in (400, 404, 410):  # deleted, removed, or the channel terminated
+                return "dead", f"http {r.status_code}"
+            reason = f"http {r.status_code}"  # 429 and 5xx: back off and retry
+        time.sleep(5 * 2 ** attempt)
+    return "unknown", reason
+
+
+def check_odysee(urls: list[str]) -> dict[str, tuple[str, str]]:
+    try:
+        res = odysee("resolve", {"urls": urls})
+    except (requests.RequestException, KeyError, ValueError) as e:
+        return {u: ("unknown", type(e).__name__) for u in urls}
+    out = {}
+    for u in urls:
+        c = res.get(u)
+        err = (c or {}).get("error")
+        if c is None:
+            out[u] = ("unknown", "not in resolve result")
+        elif not err:
+            out[u] = ("alive", "")
+        elif err.get("name") == "NOT_FOUND":
+            out[u] = ("dead", "NOT_FOUND")
+        else:  # e.g. BLOCKED (filtered by Odysee)
+            out[u] = ("restricted", err.get("name") or "error")
+    return out
+
+
+def check_links(cfg: dict, subject: str, ids: list[str] | None, everything: bool,
+                limit: int | None) -> None:
+    d = subject_dir(cfg, subject)
+    cat = load_catalog(d)
+    if not cat:
+        raise SystemExit(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
+    ac = cfg["archive"]
+    links = load_links(d)
+    if ids:
+        missing = [i for i in ids if i not in cat]
+        if missing:
+            raise SystemExit(f"not in {subject}'s catalog: {' '.join(missing)}")
+        todo = [cat[i] for i in ids]
+    else:
+        cutoff = datetime.now(UTC) - timedelta(days=ac["link_recheck_days"])
+        todo = [it for it in cat.values() if everything or it["id"] not in links
+                or datetime.fromisoformat(links[it["id"]]["checked_at"]) < cutoff]
+    todo = todo[:limit] if limit else todo
+    print(f"{subject}: checking {len(todo)} links")
+    counts = {"alive": 0, "restricted": 0, "dead": 0, "unknown": 0}
+    changed: list[tuple[dict, str, str]] = []
+    streak = 0
+    stop_after = ac["stop_after_failures"]
+
+    def record(it: dict, status: str, reason: str) -> None:
+        nonlocal streak
+        counts[status] += 1
+        if status == "unknown":  # keep the last result; it is checked again next time
+            streak += 1
+            log.warning("%s: could not check (%s)", it["id"], reason)
+            return
+        streak = 0
+        now = datetime.now(UTC).isoformat(timespec="seconds")
+        old = links.get(it["id"], {})
+        if old and old["status"] != status:
+            changed.append((it, old["status"], status))
+        links[it["id"]] = {"status": status, "reason": reason, "checked_at": now,
+                           "since": old["since"] if old.get("status") == status else now}
+
+    def progress() -> None:
+        n = sum(counts.values())
+        if n % 200 == 0 or n == len(todo):
+            save_json(d, "links.json", links)
+            print(f"[{n}/{len(todo)}] {counts}", flush=True)
+
+    od = [it for it in todo if it["source"] == "odysee"]
+    for i in range(0, len(od), 50):
+        batch = od[i:i + 50]
+        res = check_odysee([it["url"] for it in batch])
+        for it in batch:
+            record(it, *res[it["url"]])
+            progress()
+
+    yt = [it for it in todo if it["source"] == "youtube"]
+    local = threading.local()
+
+    def one(it: dict) -> tuple[str, str]:
+        if not hasattr(local, "session"):
+            local.session = requests.Session()
+        return check_youtube(it["url"], local.session)
+
+    with ThreadPoolExecutor(ac["link_parallel"]) as pool:
+        jobs = {pool.submit(one, it): it for it in yt}
+        for job in as_completed(jobs):
+            if job.cancelled():
+                continue
+            record(jobs[job], *job.result())
+            progress()
+            if stop_after and streak >= stop_after:
+                # YouTube refusing this IP: stop before it also blocks pre-show grabs
+                log.warning("%d links in a row could not be checked: stopping (rerun to resume)", streak)
+                pool.shutdown(wait=True, cancel_futures=True)
+                break
+    save_json(d, "links.json", links)
+    print(f"{subject}: {counts['alive']} alive, {counts['restricted']} restricted, "
+          f"{counts['dead']} dead, {counts['unknown']} could not be checked")
+    for it, was, now in changed:
+        kept = " (transcript kept)" if (d / it["id"] / "words.jsonl").exists() else ""
+        print(f"  {was} -> {now}{kept}: {it['id']} {it['title'][:60]!r} {it['url']}")
+    if ids:
+        for it in todo:
+            lk = links.get(it["id"], {"status": "unknown", "reason": "could not be checked"})
+            print(f"  {lk['status']:<10} {it['id']} {it['title'][:60]!r} {it['url']} {lk['reason']}")
+    elif counts["dead"] + counts["restricted"]:
+        print(f"list them: clipper archive links {subject}")
+
+
+def list_links(cfg: dict, subject: str, status: str | None) -> None:
+    """Items by link status, most recent change first; default every link that isn't alive."""
+    d = subject_dir(cfg, subject)
+    cat, links = load_catalog(d), load_links(d)
+    if not links:
+        raise SystemExit(f"no link checks for {subject!r} yet: clipper archive check {subject}")
+    rows = [(i, lk) for i, lk in links.items()
+            if (lk["status"] != "alive" if status is None else status in ("all", lk["status"]))]
+    for i, lk in sorted(rows, key=lambda r: r[1]["since"], reverse=True):
+        it = cat.get(i, {})
+        kept = "transcribed" if (d / i / "words.jsonl").exists() else ""
+        print(f"{lk['status']:<10} since {lk['since'][:10]}  {kept:<11}  {i}  "
+              f"{it.get('title', '')[:60]!r}  {it.get('url', '')}  {lk['reason']}")
+    print(f"{len(rows)} items")

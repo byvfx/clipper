@@ -15,6 +15,7 @@ discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 bot_log = "logs/bot.log"                       # clipper bot log, rotated; "" = console only
 rumble = "rumble"                              # clipper rumble upload folders
 layouts = "layouts"                            # reference screenshots per show layout (clipper shorts --save-example)
+archive = "archive"                            # clipper archive subjects (other channels' back catalogs)
 modal_runs = "logs/modal_runs.jsonl"           # every Modal call's start and end (clipper modal, war room)
 
 [modal]
@@ -442,6 +443,16 @@ hashtags = []                  # added to every caption, e.g. ["lolcowcinema"]
 max_caption_chars = 2200
 redirect_port = 3455
 caption_channel_id = ""        # Discord channel for captions; empty = [record] alert channel/webhook
+
+[archive]
+# `clipper archive`: other channels' back catalogs, transcribed on Modal, never uploaded.
+gpu = "L4"                     # Modal GPU for bulk runs
+parallel = 8                   # items at once (the Modal app allows 10 containers)
+min_duration_s = 60            # skip shorter items (Shorts)
+youtube_format = "bestaudio[abr<=96]/bestaudio"
+stop_after_failures = 20       # in a row (YouTube's bot check); 0 = never stop
+link_parallel = 4              # `clipper archive check`: are source links up? (oEmbed / Odysee resolve)
+link_recheck_days = 7          # links checked more recently are skipped; --all rechecks them
 
 [signals]
 chat_lag_s = 6             # shift chat earlier: stream delay + typing time
