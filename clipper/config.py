@@ -112,6 +112,17 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "add_to_playlist": True,  # the metadata draft's playlist, created on first use
         "show_playlist": "{show}",  # ...and every upload in its show's playlist too; "" = off
         "playlist_privacy": "public",
+        # A line in the description linking each video to the longer one it comes from: a clip
+        # to its segment (at the clip's offset), a segment to its compilation. Only once that
+        # video is public (or will be by the time this one is); every `clipper upload` run also
+        # adds, fixes or drops the line on videos already up. {url}, {title}: the longer video's.
+        "source_links": True,
+        "clip_source": "Full segment: {url}",
+        "segment_source": "The whole story in one video: {url}",
+        "part_links": False,      # segments also link the stream's previous and next segment
+        "previous_part": "Previous part: {url}",
+        "next_part": "Next part: {url}",
+        "link_updates_per_run": 20,  # description updates per run (50 quota units each)
     },
     "kick": {
         "channel": "",

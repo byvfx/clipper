@@ -234,6 +234,12 @@ ways the API reports badly, so do these before the first big upload run.
    looks the name up again and makes a new one if needed. A playlist renamed in Studio keeps
    its id, so videos keep going into it. Playlist names come from each item's Kitsu
    "Playlist" column.
+7. **Source links** (`[youtube] source_links`, on by default) add a line such as "Full
+   segment: <link>" to a clip's or segment's description once its longer video is public.
+   They are not in Kitsu. Each upload run edits at most `link_updates_per_run` (20)
+   descriptions of videos already up (about 51 quota units each).
+   `clipper upload --links --dry-run` shows what it would change. Change the wording per show
+   with `clip_source` / `segment_source` in `[shows.<key>.youtube]`.
 
 ## TikTok drafts
 

@@ -488,7 +488,7 @@ MacBook setup (6 below). Add new work there; this list stays for history.
    deploy/discord); deploy/*/env.local hold machine-specific values (keep them out of any shared copy);
    `[review] host` must be set per machine (no default since 2026-10-18); the NAS still runs the old
    recorder until `bash deploy/record/deploy.sh` is run between shows.
-7. **Link videos to their longer source (user wants it, brainstormed 2026-10-19, not built).** In the
+7. **Link videos to their longer source: BUILT 2026-10-23 (#5, "Source links in descriptions").** Original notes: In the
    description: clip -> its segment with a `?t=` timestamp at the clip's offset; segment -> its
    compilation; segments of one stream -> previous/next part (optional). Compilations already have
    chapters. Add the link at upload time as a per-show footer template (e.g. "Full segment: {url}"),
@@ -860,6 +860,24 @@ reviewed, then posted ASAP**.
 - #26 (first half): ⧉ on cards / "Pop out" in the item window / key O opens `/watch?src=` (a
   bare player, same cookie) at the current time. "Open the full recording at a clip" is still open.
 - #6: republishing would reset approved items to waiting; uploads already send the fixed cuts.
+
+## Source links in descriptions (2026-10-23, #5; #26 and #31 closed at the user's request)
+- `[youtube] source_links` (default on): clip -> its segment `?t=<clip in_s - segment cut_start_s>`,
+  segment -> each compilation it's in; `part_links` (off) adds previous/next segment. Templates
+  `clip_source` / `segment_source` / `previous_part` / `next_part`, {url} {title}. Shorts and
+  compilations get none (issue scope).
+- Added at upload (and `--attach`) only if the parent is public, or private with publishAt at or
+  before this video's slot (one videos.list status call). Never in Kitsu. The line goes above a
+  closing hashtag paragraph. What was added is kept in the schedule entry's `source_links`.
+- Backfill: every `clipper upload` run (so the bot hourly) recomputes the line for uploaded
+  clips/segments and, where it differs, re-reads the live snippet and writes it back with the
+  old line swapped (title/tags/language preserved, Studio edits kept). Max `link_updates_per_run`
+  (20). Retake trims change the offset and so get fixed; a deleted parent drops the line.
+  `clipper upload --links [--dry-run] [--max N]` runs only that.
+- First dry run 2026-10-23: 12 videos (10 segments -> their compilation, 2 clips -> segment).
+  Not written by hand; the bot's next hourly upload run does it. Checked with a fake client
+  only, so look at one description after that run.
+- #26: pop-out shipped; "open in source" not built (closed anyway). #31: closed unanswered.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS

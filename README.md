@@ -28,6 +28,9 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **schedule / upload**: approved items get release slots and go to YouTube as private videos with a publish time
   (or stay private for you to publish by hand: `[youtube] manual_publish`). Past the channel's daily
   upload limit, upload the file in Studio and `clipper upload --attach <item> <link>` fills in the rest.
+  Descriptions link to the longer video each one comes from (a clip to its segment at the clip's
+  offset, a segment to its compilation) once that video is public; every upload run adds the link
+  to videos already up when their longer video goes public (`[youtube] source_links`).
 - **tiktok / rumble**: `clipper tiktok --items ...` sends Shorts to the TikTok app's drafts (you post from the
   phone; the caption comes to Discord); `--auto`, which the bot runs every `[tiktok] auto_send_minutes`,
   sends the next ones in YouTube-schedule order up to `max_per_24h`. `clipper rumble` prepares folders

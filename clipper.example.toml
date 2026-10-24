@@ -391,6 +391,12 @@ add_to_playlist = true         # the metadata draft's playlist, created on first
 show_playlist = "{show}"       # ...and every upload in its show's playlist ("Kino Casino"); "" = off
                                # backfill videos already up: clipper upload --playlists [--max N]
 playlist_privacy = "public"
+source_links = true            # clip -> its segment (?t=), segment -> its compilation, once public;
+                               # each upload run fixes videos already up (or: clipper upload --links)
+clip_source = "Full segment: {url}"
+segment_source = "The whole story in one video: {url}"
+part_links = false             # segments also link the stream's previous / next segment
+link_updates_per_run = 20      # description updates per run, ~51 quota units each
 
 [rumble]
 # `clipper rumble <stream>`: Rumble has no upload API and its terms forbid automating the

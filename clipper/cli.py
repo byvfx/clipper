@@ -276,7 +276,8 @@ def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
         youtube.attach(cfg, args.attach[0], args.attach[1], dry_run=args.dry_run)
         return
     youtube.run(cfg, sign_in=args.sign_in, dry_run=args.dry_run, limit=args.max,
-                thumbnails_only=args.thumbnails, playlists_only=args.playlists)
+                thumbnails_only=args.thumbnails, playlists_only=args.playlists,
+                links_only=args.links)
 
 
 def cmd_rumble(cfg: dict, args: argparse.Namespace) -> None:
@@ -631,6 +632,9 @@ def main() -> None:
     p.add_argument("--playlists", action="store_true",
                    help="only add uploaded videos to playlists they're missing from, e.g. their show's "
                         "([youtube] show_playlist); 50 quota units each, --max N to spread it out")
+    p.add_argument("--links", action="store_true",
+                   help="only add, fix or drop source links (clip -> segment, segment -> compilation) "
+                        "on uploaded videos; every upload run does this too ([youtube] source_links)")
     p.add_argument("--next", type=int, metavar="N",
                    help="list the next N videos to upload, with their files (for uploading in Studio)")
     p.add_argument("--attach", nargs=2, metavar=("ITEM", "LINK"),

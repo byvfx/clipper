@@ -17,6 +17,11 @@ the link goes into the Kitsu "YouTube URL" column. A pre-show placed "asap" by
 With [youtube] manual_publish = true every upload stays private (no publishAt) and you
 make it public in YouTube Studio; the slot is then only the suggested time.
 
+Source links ([youtube] source_links): a clip's description links its segment at the clip's
+offset, a segment's its compilation, once that longer video is public or will be by the time
+this one is. The line is added here, not in Kitsu, since the longer video's link doesn't exist
+at review time; each run then adds, fixes or drops it on videos already up (`--links` alone).
+
 Uploaded by hand in Studio instead (e.g. past the channel's daily upload limit, which the
 API hits first): `clipper upload --next 5` lists what's next with its file; upload the
 file in Studio (private, no details), then `clipper upload --attach <item> <link>` sets
@@ -151,6 +156,140 @@ def refresh_review(cfg: dict, entries: list[dict]) -> None:
             review.sync(sdir, cfg, keys=keys, quiet=True)
         except (Exception, SystemExit) as e:  # noqa: BLE001
             print(f"  Kitsu not read for {stream} ({e}); using review.json as last synced")
+
+
+# ---------- links to the longer source ----------
+
+def stream_sources(sdir: Path, cache: dict) -> tuple[list[dict], dict[str, list[str]]]:
+    """A stream's segment sidecars in stream order, and each compilation's segment ids."""
+    if sdir not in cache:
+        load = lambda p: json.loads(p.read_text(encoding="utf-8"))
+        segs = sorted((load(p) for p in (sdir / "segments").glob("*.json")),
+                      key=lambda s: s["start_s"])
+        comps = {f"comp-{p.stem}": load(p).get("segments", [])
+                 for p in sorted((sdir / "compilations").glob("*.json"))}
+        cache[sdir] = segs, comps
+    return cache[sdir]
+
+
+def source_parents(cfg: dict, e: dict, entries: list[dict], cache: dict) -> list[tuple[str, dict, int]]:
+    """(template key, entry, start second) for each longer video e comes from: a clip's
+    segment at the clip's offset, a segment's compilations, with part_links its neighbours."""
+    sdir = cfg["paths"]["streams"] / e["stream"]
+    yc = for_stream(cfg, sdir)["youtube"]
+    if not yc["source_links"] or e["kind"] not in ("clip", "segment"):
+        return []
+    mine = {(x["kind"], x["id"]): x for x in entries if x["stream"] == e["stream"]}
+    segs, comps = stream_sources(sdir, cache)
+    out = []
+    if e["kind"] == "clip":
+        side = sdir / "clips" / f"{Path(e['file']).stem}.json"
+        if side.exists():
+            c = json.loads(side.read_text(encoding="utf-8"))
+            for s in segs:
+                a = s.get("cut_start_s", s["start_s"])
+                if a <= c["in_s"] < s["end_s"] and (p := mine.get(("segment", s["id"]))):
+                    out.append(("clip_source", p, int(c["in_s"] - a)))
+                    break
+        return out
+    out += [("segment_source", mine[("compilation", cid)], 0) for cid, ids in comps.items()
+            if e["id"] in ids and ("compilation", cid) in mine]
+    if yc["part_links"]:  # the nearest scheduled segment either side (intros etc. have none)
+        listed = [s["id"] for s in segs if ("segment", s["id"]) in mine]
+        i = listed.index(e["id"]) if e["id"] in listed else -1
+        if i > 0:
+            out.append(("previous_part", mine[("segment", listed[i - 1])], 0))
+        if 0 <= i < len(listed) - 1:
+            out.append(("next_part", mine[("segment", listed[i + 1])], 0))
+    return out
+
+
+def privacy(yt, ids) -> dict[str, dict]:
+    """Video id -> its status (privacyStatus, publishAt); deleted videos are left out.
+    1 quota unit per 50 videos."""
+    ids, out = list(dict.fromkeys(i for i in ids if i)), {}
+    for i in range(0, len(ids), 50):
+        res = execute_with_retry(yt.videos().list(part="status", id=",".join(ids[i:i + 50])))
+        out |= {v["id"]: v["status"] for v in res.get("items", [])}
+    return out
+
+
+def source_links(cfg: dict, e: dict, parents: list[tuple[str, dict, int]], status: dict) -> str:
+    """The description line(s) for e: each longer video that is public by the time e is."""
+    if not parents:
+        return ""
+    yc = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])["youtube"]
+    now = datetime.now(UTC)
+    release = max(now, datetime.fromisoformat(e["publish_at"])) if e.get("publish_at") else now
+    lines = []
+    for key, p, t in parents:
+        st = status.get(p.get("video_id")) or {}
+        at = st.get("publishAt")
+        if st.get("privacyStatus") == "public" or (
+                st.get("privacyStatus") == "private" and at
+                and datetime.fromisoformat(at) <= release):
+            url = f"https://youtu.be/{p['video_id']}" + (f"?t={t}" if t else "")
+            lines.append(yc[key].format(url=url, title=p["title"]))
+    return "\n".join(dict.fromkeys(lines))
+
+
+def with_links(description: str, old: str, new: str) -> str:
+    """The description with the links clipper added last time (`old`) swapped for `new`,
+    which goes above a closing hashtag line."""
+    import re
+
+    text = description.strip()
+    if old and old in text:
+        text = re.sub(r"\n{3,}", "\n\n", text.replace(old, "")).strip()
+    if not new:
+        return text
+    paras = text.split("\n\n")
+    if len(paras) > 1 and paras[-1].lstrip().startswith("#"):
+        return "\n\n".join([*paras[:-1], new, paras[-1]])
+    return f"{text}\n\n{new}".strip()
+
+
+def note_links(sched_path: Path, key: str, links: str) -> None:
+    sched = json.loads(sched_path.read_text(encoding="utf-8"))  # the bot may have replanned
+    for e in sched["entries"]:
+        if e["key"] == key:
+            e["source_links"] = links
+    sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def backfill_links(cfg: dict, sched: dict, sched_path: Path, dry_run: bool,
+                   limit: int | None, yt=None) -> None:
+    """Add, fix or drop the source links on uploaded videos whose longer video went public,
+    was re-cut or was deleted since. Checking costs 1 quota unit per 50 videos; each
+    description update 51 (read + write), at most [youtube] link_updates_per_run a run."""
+    cache: dict = {}
+    up = [(e, ps) for e in sched["entries"] if e.get("status") == "uploaded" and e.get("video_id")
+          for ps in [source_parents(cfg, e, sched["entries"], cache)] if ps or e.get("source_links")]
+    if not up:
+        return
+    yt = yt or service(cfg["paths"])
+    status = privacy(yt, [p.get("video_id") for _, ps in up for _, p, _ in ps])
+    todo = [(e, want) for e, ps in up for want in [source_links(cfg, e, ps, status)]
+            if want != e.get("source_links", "")]
+    cap = limit or cfg["youtube"]["link_updates_per_run"]
+    print(f"{len(todo)} videos need their source links set" + (" (dry run)" if dry_run else "")
+          + (f"; {cap} this run" if len(todo) > cap else ""))
+    for e, want in todo[:cap]:
+        print(f"  {e['url']} {e['title'][:60]}\n    " + (want.replace("\n", "\n    ") or "(links removed)"))
+        if dry_run:
+            continue
+        found = yt.videos().list(part="snippet", id=e["video_id"]).execute().get("items", [])
+        if not found:
+            print("    not on YouTube any more; skipped")
+            continue
+        sn = found[0]["snippet"]  # an update replaces the whole snippet: send back what's there
+        body = {k: sn[k] for k in ("title", "categoryId", "tags", "defaultLanguage",
+                                   "defaultAudioLanguage") if k in sn}
+        body["description"] = clean(with_links(sn.get("description", ""),
+                                               e.get("source_links", ""), want), 5000)
+        execute_with_retry(yt.videos().update(part="snippet",
+                                              body={"id": e["video_id"], "snippet": body}))
+        note_links(sched_path, e["key"], want)
 
 
 # ---------- upload ----------
@@ -384,8 +523,9 @@ def kitsu_url(cfg: dict, meta: dict, url: str) -> None:
 
 
 def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | None = None,
-        thumbnails_only: bool = False, playlists_only: bool = False) -> None:
-    yc, paths = cfg["youtube"], cfg["paths"]
+        thumbnails_only: bool = False, playlists_only: bool = False,
+        links_only: bool = False) -> None:
+    paths = cfg["paths"]
     if sign_in:
         service(paths, sign_in=True)
         print(f"signed in; token saved to {paths['youtube_token']}")
@@ -400,6 +540,20 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     if playlists_only:
         backfill_playlists(cfg, sched, sched_path, dry_run, limit)
         return
+    if links_only:
+        backfill_links(cfg, sched, sched_path, dry_run, limit)
+        return
+    yt = upload_due(cfg, sched, sched_path, dry_run, limit)
+    try:  # links on videos already up whose longer video went public since
+        backfill_links(cfg, json.loads(sched_path.read_text(encoding="utf-8")), sched_path,
+                       dry_run, None, yt)
+    except (Exception, SystemExit) as ex:  # noqa: BLE001  # the uploads are done either way
+        print(f"  warning: source links: {type(ex).__name__}: {ex}")
+
+
+def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: int | None):
+    """Upload what's due; returns the YouTube client if it made one."""
+    yc, paths = cfg["youtube"], cfg["paths"]
     tz = ZoneInfo(sched["timezone"])
     now = datetime.now(UTC)
     horizon = now + timedelta(hours=yc["upload_ahead_hours"])
@@ -430,24 +584,31 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     print(f"{len(due)} due within {yc['upload_ahead_hours']} h" + (" (dry run)" if dry_run else "")
           + ("; uploads stay private ([youtube] manual_publish)" if yc["manual_publish"] else ""))
     if not due:
-        return
+        return None
+    sources: dict = {}
     if dry_run:
         for e in due:
             m = metadata(e, cfg)
+            parents = source_parents(cfg, e, sched["entries"], sources)
             print(f"  {datetime.fromisoformat(e['publish_at']).astimezone(tz):%a %m-%d %H:%M} "
                   f"{e['kind']:<11} {m['title']}\n      tags {len(m['tags'])}, "
                   f"captions {'yes' if m['srt'] else 'no'}, "
                   f"thumbnail {m['thumb'].name if m['thumb'] else 'no'}, "
-                  f"playlist {m['playlist'] or '-'}")
+                  f"playlist {m['playlist'] or '-'}, "
+                  f"links to {', '.join(p['id'] for _, p, _ in parents) or '-'} (if public by then)")
             if m["masked"]:
                 print(f"      masked banned words in {', '.join(m['masked'])}: fix the Kitsu columns too")
-        return
+        return None
 
     yt = service(paths)
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
     playlists = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     for e in due:
         m = metadata(e, cfg)
+        parents = source_parents(cfg, e, sched["entries"], sources)
+        links = source_links(cfg, e, parents, privacy(yt, [p.get("video_id") for _, p, _ in parents])
+                             if parents else {})
+        m["description"] = clean(with_links(m["description"], "", links), 5000)
         publish_utc = datetime.fromisoformat(e["publish_at"]).astimezone(UTC)
         at_once = publish_utc <= datetime.now(UTC) + timedelta(minutes=yc["min_lead_minutes"])
         slot = f"{publish_utc.astimezone(tz):%a %m-%d %H:%M}"
@@ -472,7 +633,8 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
         # Record the upload before the optional extras, so a failure there can't
         # make the next run upload the same video twice.
         done = {"status": "uploaded", "video_id": vid, "url": url,
-                "uploaded_at": datetime.now(UTC).isoformat(timespec="seconds")}
+                "uploaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "source_links": links}
         e.update(done)
         # Re-read first: `clipper rumble` may have written other platforms' marks meanwhile.
         fresh = json.loads(sched_path.read_text(encoding="utf-8"))
@@ -482,8 +644,9 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
         else:  # replanned away meanwhile; the upload must still be on record
             fresh["entries"].append(e)
         sched_path.write_text(json.dumps(fresh, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"  {url} ({time.time() - t:.0f}s)", flush=True)
+        print(f"  {url} ({time.time() - t:.0f}s)" + (f", links {links!r}" if links else ""), flush=True)
         finish(yt, cfg, e, m, vid, playlists, cache_path, sched, sched_path)
+    return yt
 
 
 # ---------- videos uploaded by hand ----------
@@ -567,6 +730,9 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
           f"thumbnail {'yes' if m['thumb'] else 'no'}, playlist {m['playlist'] or '-'}")
     if dry_run:
         return
+    parents = source_parents(cfg, e, sched["entries"], {})
+    links = source_links(cfg, e, parents, privacy(yt, [p.get("video_id") for _, p, _ in parents]))
+    m["description"] = clean(with_links(m["description"], "", links), 5000)
     execute_with_retry(yt.videos().update(part="snippet", body={"id": vid, "snippet": {
         "title": m["title"], "description": m["description"], "tags": m["tags"],
         "categoryId": yc["category_id"], "defaultLanguage": yc["language"],
@@ -575,7 +741,8 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
     # Recorded as out now, so any slot it had goes to the next item at the next replan.
     e.update({"publish_at": now.astimezone(ZoneInfo(sched["timezone"])).isoformat(timespec="seconds"),
               "source": "studio", "status": "uploaded", "video_id": vid,
-              "url": f"https://youtu.be/{vid}", "uploaded_at": now.isoformat(timespec="seconds")})
+              "url": f"https://youtu.be/{vid}", "uploaded_at": now.isoformat(timespec="seconds"),
+              "source_links": links})
     fresh = json.loads(sched_path.read_text(encoding="utf-8"))  # clipper rumble may have written
     fresh["entries"] = [x for x in fresh["entries"] if x["key"] != key] + [e]
     fresh["unscheduled"] = [x for x in fresh.get("unscheduled", []) if x["key"] != key]
