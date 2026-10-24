@@ -845,7 +845,14 @@ reviewed, then posted ASAP**.
 - `clipper alert test` (a test DM), `clipper alert digest [--send]`.
 - Bug found while testing: same-tick sends overwrote each other (Windows clock); names now
   carry pid + a per-process counter + random bytes.
-- The recorder's part needs the NAS redeploy (`bash deploy/record/deploy.sh`, no show live).
+- NAS recorder redeployed 2026-10-24 02:06 (no show live, recordings done; code at 11c25ac):
+  healthy, watching kinocasinogaming + donflurgundy. `docker exec clipper-record-record-1
+  clipper alert test` wrote to the shared outbox from the container; held for quiet hours.
+  The recorder still also posts to its webhook channel (deploy/record/env.local), so recorder
+  warnings arrive twice (channel + DM) until that webhook is dropped (user's call).
+- First real alert (2026-10-23 18:52): `clipper analytics` failed reading an empty
+  review.json mid-rewrite. review.sync now writes it whole (worker.write_json: tmp + replace,
+  retries while a reader holds it on the share).
 
 ## War room quick wins (2026-10-23, #19 #21 #26 pop-out; #6 closed as not needed)
 - #19: `actions.style_issues(show_cfg, values)` warns (never raises): "host(s)", words the

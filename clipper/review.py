@@ -760,7 +760,9 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
     if thumb_edits:
         apply_thumbnail_text(stream_dir, cfg, gazu, fmap, thumb_edits)
     out = {k: out[k] for k in state if k in out}  # state order; drops items no longer published
-    review_path.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    from .worker import write_json
+
+    write_json(review_path, out)  # whole file or nothing: upload, analytics and the war room read it
     if quiet:
         return out
     counts: dict[str, int] = {}
