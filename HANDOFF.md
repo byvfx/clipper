@@ -256,6 +256,8 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   and Odysee, tested with stubbed responses only. First real run: `clipper archive check jer
   --limit 50`, then compare a few dead/restricted ones in a browser. Not in the bot loop. Ideas
   not built: Kick VOD links in `streams/<id>/meta.json`, a war room view, "went dead" DMs.
+  Same session, #63 (user brainstorm, ideas only): fun with the archive as a database (ask it
+  questions, guess the year, prediction tracker, the Memory Hole, receipt radar, Lolcow Almanac).
 - **#58 The Udder Truth** (user, 2026-10-23): weekly Brass Eye-style show (the 1997 Channel 4 one)
   hosted by Mother Moo; same weekly data as the magazine (its parody ads become TV spots), The
   Receipt Drawer is a segment (#48). Pipeline in the issue: Claude script → user's webcam take →
