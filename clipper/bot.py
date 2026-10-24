@@ -563,7 +563,7 @@ def run(cfg: dict) -> None:
         try:
             srv = warroom.server(cfg)
             threading.Thread(target=srv.serve_forever, daemon=True, name="warroom").start()
-            log.info(f"war room on {warroom.url(cfg)}")
+            log.info(f"war room on {warroom.url(cfg, with_key=False)}")  # no token in the log
         except OSError as e:
             log.warning(f"war room not started: {e}")
     try:

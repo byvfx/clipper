@@ -787,6 +787,19 @@ reviewed, then posted ASAP**.
   kick-133761201 s11_the-quartering.
 - Phone access itself is #10 (Tailscale): the user agreed it's needed, next up.
 
+## Phone access through Tailscale (2026-10-23, #10, code done, user steps open)
+- Not the NAS plan in the issue: `tailscale serve` on whichever machine runs the bot (the
+  laptop for now) proxies https://<name>.<tailnet>.ts.net/ to the war room on 127.0.0.1:8765.
+  Tailnet devices only; HTTPS also lets the phone install it as an app. Same on the NAS later (#9).
+- `clipper warroom --tailnet on|off|status`. `on` makes `secrets/warroom_token.txt` (12 chars)
+  if `[warroom] token` is empty, runs `tailscale serve --bg --https=443 http://127.0.0.1:<port>`,
+  prints the phone link with ?key= once (terminal only). `[warroom] tailnet = true` makes doctor
+  (--role bot/all) check install, sign-in, serve, token, and fetch the manifest through the name.
+- The bot used to log the war room URL with ?key=; it now logs it without. Cookie SameSite is Lax.
+- Tested with a faked tailscale CLI only: Tailscale isn't installed on the laptop yet.
+- User to do: install Tailscale on the laptop and phone (same account), MagicDNS + HTTPS in the
+  admin console, then `clipper warroom --tailnet on`, restart the bot, tailnet = true, open the link.
+
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
    recordings. Added `[transcribe] backend = "mlx"` (mlx-whisper, `uv sync --extra mac`, optional

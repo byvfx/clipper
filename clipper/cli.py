@@ -367,6 +367,9 @@ def cmd_analytics(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_warroom(cfg: dict, args: argparse.Namespace) -> None:
     from . import warroom
 
+    if args.tailnet:
+        warroom.tailnet(cfg, args.tailnet)
+        return
     warroom.run(cfg, port=args.port, open_browser=args.open)
 
 
@@ -663,6 +666,8 @@ def main() -> None:
     p = sub.add_parser("warroom", help="local dashboard: live shows, pipeline, review queue, schedule")
     p.add_argument("--port", type=int, help="default [warroom] port (8765)")
     p.add_argument("--open", action="store_true", help="open it in the browser")
+    p.add_argument("--tailnet", choices=("on", "off", "status"),
+                   help="serve it on this machine's tailnet over HTTPS (tailscale serve), for the phone")
     p.set_defaults(fn=cmd_warroom)
 
     p = sub.add_parser("doctor", help="check this machine: ffmpeg, GPU, fonts, keys, Kitsu/Discord/NAS")

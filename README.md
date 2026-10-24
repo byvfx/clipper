@@ -131,7 +131,8 @@ video); press `?` in the war room for the full list. On a phone it switches to o
 time (Review, Schedule, Pipeline tabs at the bottom), items open full screen with the
 decisions at the bottom and swipe to the next one, and videos play from a 360p copy
 (`lowres/` beside each preview, about a quarter of the data). It can be added to the home
-screen. Reaching it from the phone needs the war room open beyond localhost (issue #10).
+screen. From the phone away from home it goes through Tailscale: `clipper warroom --tailnet
+on` (SETUP.md, Phone access).
 
 ## Layout
 

@@ -25,6 +25,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "sync_key": "secrets/sync_api_key.txt",  # sync.so, if not in [perform] sync_key_env
         "tiktok_client": "secrets/tiktok_client.json",  # {"client_key", "client_secret"}
         "tiktok_token": "secrets/tiktok_token.json",    # written by `clipper tiktok --sign-in`
+        "warroom_token": "secrets/warroom_token.txt",   # war room token, if not [warroom] token
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
@@ -357,6 +358,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "with_bot": True,         # `clipper bot` serves it too, so it's up whenever the bot runs
         "lowres_height": 360,     # phones play a copy this tall (short side), in lowres/ beside the preview
         "lowres_prewarm": True,   # make those copies ahead for items waiting for review
+        "tailnet": False,         # served on this machine's tailnet (clipper warroom --tailnet on); doctor checks it
     },
     "retake": {
         # `clipper retake`: a "retake" note -> edits (trim, layout, title, thumbnail) ->

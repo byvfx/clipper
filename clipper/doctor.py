@@ -436,6 +436,36 @@ def check_photos(cfg: dict) -> None:
     ok("photos", f"{len(names)} in {d}: {', '.join(names)}" if names else f"none yet in {d}")
 
 
+def check_tailnet(cfg: dict, offline: bool) -> None:
+    """[warroom] tailnet: the phone reaches the war room through `tailscale serve` here."""
+    if not cfg["warroom"]["tailnet"]:
+        return
+    from .warroom import tailnet_status, token
+
+    hint = "SETUP.md, Phone access (Tailscale)"
+    st = tailnet_status(cfg)
+    if not st["installed"]:
+        return fail("warroom", "[warroom] tailnet is on but Tailscale isn't installed", hint)
+    if st["state"] != "Running":
+        return fail("warroom", f"Tailscale is {st['state'] or 'not running'}", "sign in from its tray icon")
+    if not st["served"]:
+        return fail("warroom", f"Tailscale is up as {st['name']}, but the war room isn't served",
+                    "clipper warroom --tailnet on")
+    if not token(cfg):
+        warn("warroom", "no war room token: any device on the tailnet can open it",
+             "clipper warroom --tailnet on makes one in secrets/")
+    if offline:
+        return ok("warroom", f"on the tailnet at {st['served']}")
+    import requests
+    try:  # through the tailnet proxy to the running war room (the bot's)
+        r = requests.get(st["served"].rstrip("/") + "/manifest.webmanifest", timeout=10)
+        r.raise_for_status()
+        ok("warroom", f"on the tailnet at {st['served']} (answers)")
+    except Exception as e:  # noqa: BLE001
+        fail("warroom", f"{st['served']} doesn't answer ({type(e).__name__})",
+             "is the bot (or clipper warroom) running here?")
+
+
 def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     RESULTS.clear()
     check_python()
@@ -450,6 +480,8 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     check_keys(cfg, role)
     if role in ("all", "gpu"):
         check_narrate(cfg)
+    if role in ("all", "bot"):
+        check_tailnet(cfg, offline)
     if not offline:
         check_online(cfg, role)
     width = max(len(a) for _, a, _, _ in RESULTS)

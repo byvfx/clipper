@@ -10,6 +10,7 @@ youtube_client_secret = "secrets/youtube_client_secret.json"
 youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sign-in
 tiktok_client = "secrets/tiktok_client.json"   # {"client_key": ..., "client_secret": ...}
 tiktok_token = "secrets/tiktok_token.json"     # written by clipper tiktok --sign-in
+warroom_token = "secrets/warroom_token.txt"    # made by clipper warroom --tailnet on, if [warroom] token is ""
 discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 bot_log = "logs/bot.log"                       # clipper bot log, rotated; "" = console only
 rumble = "rumble"                              # clipper rumble upload folders
@@ -320,6 +321,10 @@ with_bot = true
 # (one ffmpeg at a time, low priority).
 lowres_height = 360
 lowres_prewarm = true
+# The phone, away from home: `clipper warroom --tailnet on` serves it at
+# https://<this machine>.<tailnet>.ts.net/ through Tailscale (tailnet devices only). Set true
+# afterwards so `clipper doctor` checks it. See SETUP.md, Phone access.
+tailnet = false
 
 [retake]
 # A "retake" note in Kitsu or Discord -> clipper re-cuts / re-thumbnails the item and sends

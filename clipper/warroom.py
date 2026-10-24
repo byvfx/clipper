@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -391,7 +392,7 @@ def make_handler(cfg: dict):
                     if wc["token"] and qs.get("key"):
                         # A year, so the home-screen app (#25) stays signed in after it closes.
                         self.send_header("Set-Cookie", f"wr={wc['token']}; Path=/; Max-Age=31536000; "
-                                                       "HttpOnly; SameSite=Strict")
+                                                       "HttpOnly; SameSite=Lax")  # Lax: links from Discord etc. keep it
                     self.end_headers()
                     self.wfile.write(body)
                 elif u.path == "/api/overview":
@@ -570,8 +571,15 @@ def lowres_status(cfg: dict, url: str) -> dict:
             "full_mb": round(src.stat().st_size / 1e6), "error": LOWRES["error"]}
 
 
+def token(cfg: dict) -> str:
+    """[warroom] token, else the one `clipper warroom --tailnet on` keeps in [paths] warroom_token."""
+    wc, f = _root(cfg)["warroom"], Path(cfg["paths"]["warroom_token"])
+    return wc["token"] or (f.read_text(encoding="utf-8").strip() if f.is_file() else "")
+
+
 def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
     cfg = _root(cfg)
+    cfg = {**cfg, "warroom": {**cfg["warroom"], "token": token(cfg)}}
     wc = cfg["warroom"]
     if wc["host"] not in ("127.0.0.1", "localhost", "::1") and not wc["token"]:
         raise SystemExit("[warroom] host is reachable from other machines: set [warroom] token too")
@@ -588,10 +596,86 @@ def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
     return ThreadingHTTPServer((wc["host"], port or wc["port"]), make_handler(cfg))
 
 
-def url(cfg: dict, port: int | None = None) -> str:
-    wc = _root(cfg)["warroom"]
+def url(cfg: dict, port: int | None = None, with_key: bool = True) -> str:
+    wc, key = _root(cfg)["warroom"], token(cfg)
     host = "127.0.0.1" if wc["host"] in ("0.0.0.0", "::") else wc["host"]
-    return f"http://{host}:{port or wc['port']}/" + (f"?key={wc['token']}" if wc["token"] else "")
+    return f"http://{host}:{port or wc['port']}/" + (f"?key={key}" if key and with_key else "")
+
+
+# ---------- tailnet: the phone, through `tailscale serve` (#10) ----------
+
+def tailscale_exe() -> str | None:
+    exe = shutil.which("tailscale")
+    if not exe and os.name == "nt":
+        p = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Tailscale" / "tailscale.exe"
+        exe = str(p) if p.is_file() else None
+    return exe
+
+
+def _ts(*args: str, timeout: int = 20) -> subprocess.CompletedProcess:
+    return subprocess.run([tailscale_exe() or "tailscale", *args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=timeout, check=False)
+
+
+def tailnet_status(cfg: dict) -> dict:
+    """Is Tailscale installed and up here, this machine's tailnet name, and the https URL
+    `tailscale serve` proxies to the war room (if it does)."""
+    if not tailscale_exe():
+        return {"installed": False, "state": "", "name": "", "served": ""}
+    st = json.loads(_ts("status", "--json").stdout or "{}")
+    out = {"installed": True, "state": st.get("BackendState", ""),
+           "name": ((st.get("Self") or {}).get("DNSName") or "").rstrip("."), "served": ""}
+    port = _root(cfg)["warroom"]["port"]
+    sv = json.loads(_ts("serve", "status", "--json").stdout or "{}")
+    for hostport, web in (sv.get("Web") or {}).items():  # {"name:443": {"Handlers": {"/": {"Proxy": ...}}}}
+        for path, h in (web.get("Handlers") or {}).items():
+            if (h.get("Proxy") or "").rstrip("/") in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
+                out["served"] = f"https://{hostport.removesuffix(':443')}{path}"
+    return out
+
+
+def tailnet(cfg: dict, action: str) -> None:
+    """`clipper warroom --tailnet on|off|status`: put the war room on this machine's tailnet
+    name over HTTPS (tailnet devices only; nothing on the LAN or the internet)."""
+    cfg = _root(cfg)
+    wc, tok_file = cfg["warroom"], Path(cfg["paths"]["warroom_token"])
+    st = tailnet_status(cfg)
+    if not st["installed"]:
+        raise SystemExit("Tailscale isn't installed here: install it from https://tailscale.com/download, "
+                         "sign in, and put the phone on the same tailnet (SETUP.md, Phone access)")
+    if st["state"] != "Running":
+        raise SystemExit(f"Tailscale is {st['state'] or 'not running'}: sign in from its tray icon "
+                         "(or `tailscale up`), then run this again")
+    if action == "off":
+        r = _ts("serve", "--https=443", "off")
+        print((r.stdout + r.stderr).strip() or "the war room is off the tailnet")
+        return
+    if action == "on" and not st["served"]:
+        if wc["host"] not in ("127.0.0.1", "localhost", "0.0.0.0", "::"):
+            raise SystemExit(f"[warroom] host is {wc['host']}; tailscale serve proxies to 127.0.0.1")
+        if not token(cfg):  # the tailnet is the boundary; the token is the second check
+            import secrets
+            tok_file.parent.mkdir(parents=True, exist_ok=True)
+            tok_file.write_text(secrets.token_urlsafe(9), encoding="utf-8")
+            print(f"made a war room token in {tok_file} (restart the bot so it asks for it)")
+        r = _ts("serve", "--bg", "--https=443", f"http://127.0.0.1:{wc['port']}", timeout=90)
+        print((r.stdout + r.stderr).strip())
+        if r.returncode:
+            raise SystemExit("tailscale serve failed (above). If it asks to enable HTTPS, do that in "
+                             "the Tailscale admin console (DNS: MagicDNS and HTTPS certificates), then rerun")
+        st = tailnet_status(cfg)
+    if not st["served"]:
+        print(f"Tailscale is up as {st['name']}; the war room isn't on the tailnet "
+              "(clipper warroom --tailnet on)")
+        return
+    key = token(cfg)
+    print(f"war room on the tailnet: {st['served']}")
+    if key:  # printed here only, never logged: open it once on the phone, the cookie keeps it
+        print(f"open once on the phone (signs it in for a year): {st['served'].rstrip('/')}/?key={key}")
+    else:
+        print("no war room token: any device on the tailnet can open it")
+    if not wc["tailnet"]:
+        print("set [warroom] tailnet = true in clipper.toml so `clipper doctor` checks it")
 
 
 def run(cfg: dict, port: int | None = None, open_browser: bool = False) -> None:
