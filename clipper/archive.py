@@ -21,6 +21,8 @@ Sources:
     Odysee channels (https://odysee.com/@name): listed with the Odysee API; Modal fetches the
         media itself (WhisperX.transcribe_url), so nothing passes through this machine.
 Items shorter than [archive] min_duration_s are skipped. Catalog order is newest first.
+`transcribe` logs progress and failures to <subject>/transcribe.log as well as the console,
+and a failed item leaves <subject>/<id>/error.txt until a rerun succeeds.
 
 Link checks (`check`) ask whether each item's source url still plays, without downloading
 anything: YouTube's oEmbed endpoint (no key, no quota) and Odysee's resolve. Results go in
@@ -213,6 +215,19 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
           f"~${estimate_usd(hours, gpu):.2f} (measured speed; upload and cold starts extra)")
     if dry_run or not todo:
         return
+    # Our own log next to the data: a detached run's shell redirect once wrote nothing (2026-10-23).
+    fh = logging.FileHandler(d / "transcribe.log", encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"))
+    log.addHandler(fh)
+    try:
+        _transcribe_all(cfg, d, subject, todo, gpu, parallel)
+    finally:
+        log.removeHandler(fh)
+        fh.close()
+
+
+def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str, parallel: int) -> None:
+    log.info("%s: started, %d items on %s x%d", subject, len(todo), gpu, parallel)
     spent, done, failed, streak = 0.0, 0, 0, 0
     stop_after = cfg["archive"]["stop_after_failures"]
     with ThreadPoolExecutor(parallel) as pool:
@@ -231,14 +246,14 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
                 (d / it["id"]).mkdir(parents=True, exist_ok=True)
                 (d / it["id"] / "error.txt").write_text(f"{type(e).__name__}: {e}", encoding="utf-8")
                 log.warning("%s failed: %s: %s", it["id"], type(e).__name__, str(e)[:200])
-            print(f"[{done + failed}/{len(todo)}] {it['id']} {it['title'][:50]!r}  "
-                  f"(spent ~${spent:.2f})", flush=True)
+            log.info("[%d/%d] %s %r  (spent ~$%.2f)", done + failed, len(todo), it["id"],
+                     it["title"][:50], spent)
             if stop_after and streak >= stop_after:
                 # e.g. YouTube's bot check on this IP: stop before it also blocks pre-show grabs
                 log.warning("%d failures in a row: stopping (rerun to resume)", streak)
                 pool.shutdown(wait=True, cancel_futures=True)
                 break
-    print(f"{subject}: {done} transcribed, {failed} failed, ~${spent:.2f}")
+    log.info("%s: %d transcribed, %d failed, ~$%.2f", subject, done, failed, spent)
 
 
 def status(cfg: dict, subject: str | None) -> None:
