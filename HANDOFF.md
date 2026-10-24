@@ -75,6 +75,22 @@ gitignored), `clipper doctor` checks the six fonts. README and SETUP describe it
   Budgets per layout in `BUDGET`; each draft is test-rendered and sent back once if it
   overflows. Ran it on 04 (Huck Blend) and 05 (DSP) for $0.20, both fit first try; page 03
   keeps the user's own text. Backup: issue.before_write_2026-10-24_1519.json.
+- Posting issue 02 (user: "send the mag to my tiktok drafts", then "make them artifacts and I
+  can add by hand"): the ten pages are a private artifact the user opens on the phone and saves
+  from, with the caption and a copy button: https://claude.ai/artifact/PMGLgB152kUhbo1sMiza1d.
+  Not sent through the API: TikTok photo posts (`/v2/post/publish/content/init/`, media_type
+  PHOTO) take images only by PULL_FROM_URL from a URL prefix or domain verified in the
+  developer portal (byvfx.com is DNS-verified, so pages hosted under byvfx.com would work; the
+  Squarespace site has no upload API). Open idea for `clipper tiktok --issue`: host the pages
+  somewhere under a verified prefix (a GitHub Pages site verified by URL prefix would be
+  automatable), then one content/init call per issue.
+- Square pages for YouTube Posts (user, 2026-10-24: "the aspect ratio is 1"): `[weekly] formats`
+  = ["tiktok", "youtube"]; the youtube set is the same layout on a 1440x1440 canvas (module W/CW
+  swapped for the render, columns wider, nothing re-laid) scaled to 1080x1080 in `youtube/`.
+  The cover scales its strip widths, kicker and inset with the width but keeps the headline
+  width and the subject's offset, so the face stays clear of the headline; the teaser headline
+  size is capped so four lines fit the strip. `--format` picks the set. The artifact page has
+  both sets and the two YouTube captions.
 - **Issue 02 (Oct 18-24)** is in `weekly/2026-10-24/`: cover "ETHAN'S KLEIN/11!!" (Ethan, Off
   the Rails frame s17 06_137.2, Hila inset), features Huck Blend and DSP's $4 whale, brief,
   quote ("better off accused of being a serial killer"), numbers (Jer 15h 32m, more than the
@@ -333,7 +349,13 @@ dials out. After #9/#64 (one writer first). Covers #7 for Linux; #13 can shrink 
   2026-10-23 03:25 PT (user: "run em all")**: 11,468 items / 2,711 h, expect ~23 h and ~$110-130,
   detached process (survives the session; Win32_Process create), log `logs/archive-jer.log`,
   progress `clipper archive status jer`. Stops itself after 20 failures in a row (YouTube bot
-  check) and a rerun resumes. The laptop must stay awake and online for the downloads. Odysee CDN refuses direct ffmpeg pulls
+  check) and a rerun resumes. The laptop must stay awake and online for the downloads.
+  **Finished by 2026-10-24:** 11,488/11,571 transcribed, `status` estimate ~$180 (it runs high; check
+  Modal billing), `archive/jer` ~20-25 GB of text (audio is deleted after upload). 83 failed: 63
+  yt-dlp "HTTP Error 403", 16 age-restricted ("Sign in to confirm your age", needs cookies), 4
+  network. The restarted run's `>> logs/archive-jer.log` redirect wrote nothing (cause unknown), so
+  `transcribe` now also logs to `archive/<subject>/transcribe.log` itself. Retry 2026-10-24: 66 more
+  (~$0.99), so **11,554/11,571**; left: the 16 age-restricted (need YouTube cookies, user's call) and 1 403. Odysee CDN refuses direct ffmpeg pulls
   (401 then 429), so Jerry needs yt-dlp's extractor (#44). #49 (user): Modal monitoring in the war
   room, on the #14 roadmap. #50 (user): running P&L, a costs.jsonl ledger (Claude costs are only
   printed today) plus YouTube estimatedRevenue once monetized (needs the monetary analytics scope).

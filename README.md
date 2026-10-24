@@ -63,7 +63,8 @@ a marketplace of parody ads, and next week's schedule with a readers' poll. It g
 week (segments, chat, transcripts, the thumbnail stage's faces) into `weekly/<saturday>/week.json`,
 has the `[weekly]` model draft the copy into `issue.json` (about $0.35), writes the three articles
 again one call each with a writer prompt and the owner's own piece as the voice to match (about
-$0.10 each), and renders 1080x1440 pages. `--headline "..."` tells the draft what the cover story is; edit `issue.json` (copy, or
+$0.10 each), and renders 1080x1440 pages plus a square 1080x1080 set in `youtube/` for YouTube
+Posts, which show images square (`[weekly] formats`). `--headline "..."` tells the draft what the cover story is; edit `issue.json` (copy, or
 `faces` to pin a frame for someone) and `clipper weekly --render`. Posting is by hand
 (`post_text.md` has the captions).
 
@@ -116,7 +117,7 @@ receipts and supercuts), kept apart from the streams folder so nothing in them i
 ```bash
 clipper archive add jer https://www.youtube.com/@TheQuartering   # list long-form videos
 clipper archive transcribe jer --limit 100 --dry-run              # hours and estimated cost
-clipper archive transcribe jer --limit 100                        # WhisperX on Modal, 8 at once
+clipper archive transcribe jer --limit 100                        # WhisperX on Modal, 8 at once; log in archive/jer/transcribe.log
 clipper archive status
 clipper modal                                                     # GPUs up, runs, spend, archive ETA
 clipper archive check jer                                         # which source links still play

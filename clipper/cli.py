@@ -338,7 +338,8 @@ def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
     from . import weekly
 
     weekly.run(cfg, day=args.week, headline=args.headline or "", gather_only=args.gather,
-               redraft=args.draft, render_only=args.render, only=args.only or "", write=args.write or "")
+               redraft=args.draft, render_only=args.render, only=args.only or "", write=args.write or "",
+               fmt=args.format or "")
 
 
 def config_path(args: argparse.Namespace) -> str:
@@ -611,6 +612,8 @@ def main() -> None:
     p.add_argument("--draft", action="store_true", help="draft issue.json again (the old one is kept as a backup)")
     p.add_argument("--render", action="store_true", help="only render the pages from issue.json")
     p.add_argument("--only", help="render only these pages, e.g. 01,07")
+    p.add_argument("--format", help="tiktok (1080x1440), youtube (1080x1080 in youtube/) or both, comma-separated; "
+                                    "default [weekly] formats")
     p.add_argument("--write", nargs="?", const="03,04,05", metavar="PAGES",
                    help="write the articles again with the writer prompt (03 cover story, 04, 05; default all three)")
     p.set_defaults(fn=cmd_weekly)

@@ -273,8 +273,10 @@ cover shows a photo panel instead.
    those articles (deck, columns, pull quote) from the week's summaries, matching the voice
    of `prompts/weekly_article_example.md`; a draft that would run off the page is sent back
    once to be cut. Replace the example with a piece of your own to change the voice.
-3. Post by hand: TikTok takes all ten pages as one carousel; YouTube Posts take five images,
-   so pages 01-05 and 06-10 go as two posts with the captions in `post_text.md`.
+3. Post by hand: TikTok takes all ten 3:4 pages as one carousel. YouTube Posts show images
+   square and take five per post, so use `youtube/01-10` (the same pages on a square canvas) as
+   two posts, 01-05 and 06-10, with the captions in `post_text.md`. `--format youtube` renders
+   only the square set.
 
 Issue numbers continue from `[weekly] first_issue` across the folders in `weekly/`.
 

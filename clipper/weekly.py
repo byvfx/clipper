@@ -10,6 +10,7 @@
   clipper weekly --only 01,07             render only these pages
   clipper weekly --write 04,05            write these articles again with the writer prompt
                                           (default after a fresh draft: all three)
+  clipper weekly --format youtube         only the square pages (default: [weekly] formats)
 
 Three idempotent steps in one folder:
 - gather: every stream started in the week (shows and pre-shows) -> week.json (segments
@@ -25,7 +26,9 @@ Three idempotent steps in one folder:
   Edit issue.json by hand and --render; a draft never overwrites an edited file unless
   --draft is given, and --write redoes only the articles named.
 - render: 1080x1440 pages 01-10 (cover, contents, cover story, two features, news in brief,
-  quote, numbers, marketplace, next week + poll), contact_sheet.jpg and post_text.md.
+  quote, numbers, marketplace, next week + poll), contact_sheet.jpg and post_text.md; and,
+  for YouTube Posts (which show images square), the same pages laid out on a 1440x1440
+  canvas and scaled to 1080x1080 in youtube/ ([weekly] formats).
 
 Faces come from the streams' thumbnails.json (the frame the thumbnail model picked and its
 face box, by main_person), then [thumbnail] photos, else initials. The cover subject is cut
@@ -779,7 +782,8 @@ class Renderer:
             cx += d.textlength(t, font=f)
         return y + size + 18
 
-    def title(self, d, text, y, size=132, fill=INK, max_w=CW) -> int:
+    def title(self, d, text, y, size=132, fill=INK, max_w=0) -> int:
+        max_w = max_w or CW
         size = min(size, fit(text, self.F.impact, max_w, size))
         d.text((MX - 4, y), text, font=self.F.impact(size), fill=fill)
         return y + int(size * 1.08)
@@ -840,8 +844,9 @@ class Renderer:
         page.paste(bg, (M, MAIN_TOP))
 
         # top strip: three teasers
+        k = W / 1080  # the square canvas is wider: scale the cover's horizontal constants
         STRIP_Y, STRIP_H = M, 312
-        widths = [340, 370, W - 2 * M - 340 - 370 - 16]
+        widths = [int(340 * k), int(370 * k), W - 2 * M - int(340 * k) - int(370 * k) - 16]
         styles = [((30, 70, 190), YELLOW, WHITE, False), ((255, 255, 255), RED, INK, True), ((14, 120, 60), YELLOW, WHITE, False)]
         d = ImageDraw.Draw(page)
         KH, PW = 50, 0.44
@@ -853,6 +858,7 @@ class Renderer:
         k_size = min(fit(p["kicker"], lambda s: F.bahn(s), p["w"] - 28, 36, 36) for p in panels)
         h_size = min(fit(up(line), lambda s: F.bahn(s), p["w"] - int(p["w"] * PW) - 34, 90, (STRIP_H - KH - 22) // 4)
                      for p in panels for line in p["headline"])
+        h_size = min(h_size, int((STRIP_H - KH - 22) / max(len(p["headline"]) for p in panels) / 0.95))  # all lines fit the strip
         kf, hf = F.bahn(k_size), F.bahn(h_size)
         for p in panels:
             x, w = p["x"], p["w"]
@@ -936,13 +942,13 @@ class Renderer:
         KY = MAIN_TOP + 334
         kf = F.bahn(50)
         kw = max(d.textlength(c["kicker"] + " " + c["kicker_hot"], font=kf), d.textlength(c["kicker_line2"], font=kf)) + 40
-        d.rectangle([M + 26, KY, M + 26 + max(520, int(kw)), KY + 118], fill=RED)
+        d.rectangle([M + 26, KY, M + 26 + max(int(520 * k), int(kw)), KY + 118], fill=RED)
         rich_line(d, M + 44, KY + 6, [(c["kicker"] + " ", WHITE), (c["kicker_hot"], YELLOW)], kf)
         rich_line(d, M + 44, KY + 60, [(c["kicker_line2"], WHITE)], kf)
 
         # headline
         lines = [up(line) for line in c["headline"]]
-        HX, HY, HW = M + 26, KY + 134, 620
+        HX, HY, HW = M + 26, KY + 134, 620  # the headline keeps its width on the square canvas: the subject needs the room
         HB = H - M - 3 * 58 - 18 - 14
         size = min(min(fit(line, F.impact, HW, 230) for line in lines), int((HB - HY) / len(lines) / 0.96 / 1.02))
         hf = F.impact(size)
@@ -960,7 +966,7 @@ class Renderer:
         # the role under the name may run to two lines ("H3 co-founder, soon to be ex-wife":
         # split at ", " or " | "); the strip widens and the inset moves up to make room
         role = [r.strip() for r in re.split(r"\s*\|\s*|,\s+", c["inset_role"]) if r.strip()][:2]
-        IX, IY = 548, H - M - 205 - 66 - (24 if len(role) > 1 else 0)
+        IX, IY = int(548 * k), H - M - 205 - 66 - (24 if len(role) > 1 else 0)
         d.ellipse([IX - 9, IY - 9, IX + D + 9, IY + D + 9], fill=WHITE)
         page.paste(inset, (IX, IY), circ)
         nf, sf = F.bahn(30), F.bahn(22)
@@ -1283,7 +1289,18 @@ class Renderer:
         d.text((MX + 30, oy + oh + 30), c["note"], font=F.bahn(28, "Regular"), fill=GREY)
         return p
 
-    def render(self, only: set[str] | None = None) -> list[Path]:
+    def render(self, only: set[str] | None = None, square: bool = False) -> list[Path]:
+        """square: lay the pages out on a 1440x1440 canvas (the same vertical layout, wider
+        columns) and scale them to 1080x1080 in youtube/, for YouTube Posts."""
+        global W, CW
+        if square:
+            W, CW = H, H - 2 * MX
+        try:
+            return self._render(only, square)
+        finally:
+            W, CW = 1080, 1080 - 2 * MX
+
+    def _render(self, only: set[str] | None, square: bool) -> list[Path]:
         fns = {"01_cover": self.p_cover, "02_contents": self.p_contents,
                "03_feature": lambda: self.p_article(3, self.issue["feature"], feature=True),
                "04_article": lambda: self.p_article(4, self.issue["articles"][0]),
@@ -1296,7 +1313,10 @@ class Renderer:
                 continue
             self.faces.used.clear()
             img = fns[name]().convert("RGB")
-            dst = self.here / f"{name}.jpg"
+            if square:
+                img = img.resize((1080, 1080), Image.LANCZOS)
+                (self.here / "youtube").mkdir(exist_ok=True)
+            dst = self.here / ("youtube" if square else "") / f"{name}.jpg"
             img.save(dst, quality=92)
             out.append(dst)
             print(f"  {dst.name}")
@@ -1324,7 +1344,8 @@ def next_week(cfg: dict, week: dict) -> list[tuple[str, str, str, str]]:
 
 
 def contact_sheet(pages: list[Path], dst: Path) -> None:
-    tw, th = 360, 480
+    first = Image.open(pages[0])
+    tw, th = 360, int(360 * first.height / first.width)
     cols = 5
     rows = (len(pages) + cols - 1) // cols
     sheet = Image.new("RGB", (cols * (tw + 10) + 10, rows * (th + 10) + 10), (40, 40, 40))
@@ -1338,7 +1359,8 @@ def post_text(issue: dict, here: Path) -> None:
     n = int(issue.get("issue") or 1)
     post = issue.get("post") or {}
     text = (f"# {issue.get('week')}: issue {n:02d}\n\n"
-            f"Pages: 01-10 (1080x1440). TikTok: one carousel of all ten. YouTube Posts take 5 images: part 1 = 01-05, part 2 = 06-10.\n\n"
+            f"Pages: 01-10 (1080x1440). TikTok: one carousel of all ten. YouTube Posts show images square: "
+            f"use youtube/01-10 (1080x1080), 5 per post: part 1 = 01-05, part 2 = 06-10.\n\n"
             f"## Part 1 (01-05)\n\n{post.get('part1', '')}\n\n## Part 2 (06-10)\n\n{post.get('part2', '')}\n")
     (here / "post_text.md").write_text(text, encoding="utf-8")
 
@@ -1346,7 +1368,8 @@ def post_text(issue: dict, here: Path) -> None:
 # ---------- entry ----------
 
 def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool = False,
-        redraft: bool = False, render_only: bool = False, only: str = "", write: str = "") -> Path:
+        redraft: bool = False, render_only: bool = False, only: str = "", write: str = "",
+        fmt: str = "") -> Path:
     start, end = week_of(cfg, day)
     here = issue_dir(cfg, start)
     here.mkdir(parents=True, exist_ok=True)
@@ -1385,12 +1408,19 @@ def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool
         issue = write_articles(cfg, here, week, stats, issue, pages, headline)
         ij.write_text(json.dumps(issue, indent=1, ensure_ascii=False), encoding="utf-8")
         print(f"  issue.json updated (previous copy: {backup.name})")
-    print("rendering...")
+    formats = [f.strip() for f in fmt.split(",") if f.strip()] or list(cfg["weekly"]["formats"])
+    bad = [f for f in formats if f not in ("tiktok", "youtube")]
+    if bad:
+        raise SystemExit(f"--format takes tiktok and/or youtube, not {', '.join(bad)}")
     r = Renderer(cfg, here, week, stats, issue)
-    pages = r.render({x.strip() for x in only.split(",") if x.strip()} or None)
+    which = {x.strip() for x in only.split(",") if x.strip()} or None
+    for f in formats:
+        print(f"rendering {f} ({'1080x1080' if f == 'youtube' else '1080x1440'})...")
+        pages = r.render(which, square=(f == "youtube"))
+        if not only:
+            contact_sheet(pages, (here / "youtube" if f == "youtube" else here) / "contact_sheet.jpg")
     if not only:
-        contact_sheet(pages, here / "contact_sheet.jpg")
         post_text(issue, here)
-    for w in r.warnings:
+    for w in sorted(set(r.warnings)):
         print(f"  ! {w}", file=sys.stderr)
     return here

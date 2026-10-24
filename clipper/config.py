@@ -104,6 +104,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "article_prompt_version": "v1",  # ...with prompts/weekly_article_<v>.md...
         "article_example": "weekly_article_example.md",  # ...and this piece (in prompts/) as the voice to match
         "first_issue": 1,         # number of the first issue this install makes
+        "formats": ["tiktok", "youtube"],  # tiktok: 1080x1440 pages; youtube: the same pages square (youtube/)
         "masthead": ["LOLCOW", "CINEMA"],  # red word, chrome word (then "WEEKLY" inside)
         "byline": "BY THE LOLCOW DESK",
         "price": "$1.39 US",      # on the cover's barcode block
