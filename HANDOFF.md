@@ -159,6 +159,9 @@ Single-owner daemon (2026-10-24, issue only): #64 `clipper serve`, the one proce
 review.json / review_state.json / schedule.json and runs the bot's background jobs; bot, war room and CLI
 call its API through actions.py. Replaces #9's lock/request files. Asked the same day whether Go would
 suit the UI/daemon: no, the bottlenecks are SMB and multiple writers, not the language; stay in Python.
+Off-site control (2026-10-24, issue only): #65 Claude Code on the NAS, a `claude remote-control`
+container so the user drives clipper from the phone with the laptop asleep; no network exposure, the NAS
+dials out. After #9/#64 (one writer first). Covers #7 for Linux; #13 can shrink or close.
 
 ## TikTok drafts (#28, built 2026-10-21)
 - User made the TikTok account and a developer app (Login Kit desktop + Content Posting API, scopes
