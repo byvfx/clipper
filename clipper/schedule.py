@@ -62,13 +62,14 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
         state = json.loads((sdir / "review_state.json").read_text(encoding="utf-8"))
         meta = json.loads((sdir / "meta.json").read_text(encoding="utf-8"))
         started = datetime.fromisoformat(meta["started_at"])
-        earliest = started + timedelta(seconds=meta["duration_s"], hours=sc["kick_first_hours"])
+        ssc = for_stream(cfg, sdir)["schedule"]  # a stream's config.toml may change these
+        earliest = started + timedelta(seconds=meta["duration_s"], hours=ssc["kick_first_hours"])
         # A pre-show is already public on the show's own channel: no Kick-first wait.
         asap = (meta.get("kind") == "preshow"
                 and for_stream(cfg, sdir)["preshow"]["publish"] == "asap")
         if meta.get("kind") == "preshow":
             earliest = started
-        priority = bool(for_stream(cfg, sdir)["schedule"]["priority"])
+        priority = bool(ssc["priority"])
         approved_segments = set()
         for key, r in review.items():
             kind = KINDS[r["kind"]]
