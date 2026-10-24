@@ -32,6 +32,23 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
 
+## Whale-fall night: Ethan Klein / H3 (2026-10-23)
+User: Ethan Klein (H3) was caught cheating on Hila, divorce coming; "backlog will have to wait",
+run tonight's Kino show through and get lots of good Shorts. Built for it:
+- **Per-stream config:** `streams/<id>/config.toml` (same sections; unknown keys refused) on top
+  of the show, via `config.for_stream`. `clipper signals` now resolves per stream too (it used the
+  base config before).
+- **`[schedule] priority`** (set in a stream's file): its items go first in each kind's queue, and a
+  newly approved one frees other streams' automatic, not-uploaded slots of that kind. Uploaded and
+  pinned entries stay. Dry run with no priority stream: identical plan to the old code (261 entries).
+- **kick-133940023** (tonight, recording since 17:32) has config.toml: signals top_n 45,
+  max_picks 20, scan_max_per_block 5, Ethan/Hila in known_figures, and a stream_context note that
+  distinct Ethan/Hila moments aren't duplicates and the 2-per-category / 2-per-30-min limits don't
+  apply to them; priority = true. The worker picks it up when the recording ends (no restart needed).
+- Still in force for it: `kick_first_hours = 24` (no reason recorded) and 3 Short slots a day.
+  Asked the user whether to relax them for this story.
+- After this night, delete or leave the file; it only affects that stream.
+
 ## Last run (finished 23:41)
 - kick-131151926 fully recut with profanity bleeps, captions re-masked, and republished to Kitsu
   (`--no-notify`): all 23 items at new revisions, 23 thumbnails attached, compilation playlists updated.

@@ -426,6 +426,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "kick_first_hours": 24,   # nothing goes out until this long after the stream ended
         "clip_order": "score",    # score (best first) or stream (oldest stream first)
         "mix_shows": True,        # shows take turns in each kind's queue; false = one queue
+        "priority": False,        # set in a stream's config.toml: its items go ahead of every
+                                  # other stream's (their automatic, not-uploaded slots are freed)
     },
     "signals": {
         "chat_lag_s": 6,          # stream delay + typing time
@@ -558,6 +560,7 @@ def show_of_channel(cfg: dict, channel: str) -> str:
 
 
 _CHANNELS: dict[str, str] = {}   # a stream's channel never changes; meta.json may be on the NAS
+STREAM_CONFIG = "config.toml"    # streams/<id>/config.toml: that stream's own overrides
 
 
 def stream_channel(sdir: Path) -> str:
@@ -606,6 +609,29 @@ def for_show(cfg: dict, key: str, channel: str = "") -> dict:
 
 
 def for_stream(cfg: dict, sdir: Path) -> dict:
-    """The config for this stream's show, picked by the Kick channel in its meta.json."""
-    channel = stream_channel(Path(sdir))
-    return for_show(cfg, show_of_channel(cfg, channel), channel)
+    """The config for this stream's show, picked by the Kick channel in its meta.json, then
+    the stream's own streams/<id>/config.toml if it has one (a one-off night: more picks, a
+    big story in stream_context, schedule priority). Env vars still win."""
+    sdir = Path(sdir)
+    channel = stream_channel(sdir)
+    out = for_show(cfg, show_of_channel(cfg, channel), channel)
+    path = sdir / STREAM_CONFIG
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return out
+    root = _root(cfg)
+    cache_key = ("stream", str(sdir), channel, mtime)
+    if cache_key in root["_resolved"]:
+        return root["_resolved"][cache_key]
+    overrides = tomllib.loads(path.read_text(encoding="utf-8"))
+    res = {k: copy.deepcopy(v) for k, v in out.items() if not k.startswith("_")}
+    for section, values in overrides.items():
+        unknown = [k for k in values if k not in res.get(section, {})] if isinstance(values, dict) else [""]
+        if unknown:
+            raise SystemExit(f"{path}: unknown setting [{section}] {', '.join(unknown)}")
+        res[section].update(copy.deepcopy(values))
+    _apply_env(res, set(overrides))
+    res["_root"] = root
+    root["_resolved"][cache_key] = res
+    return res

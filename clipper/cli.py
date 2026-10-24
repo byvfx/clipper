@@ -136,7 +136,8 @@ def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_signals(cfg: dict, args: argparse.Namespace) -> None:
     from . import signals
 
-    signals.run(stream_dir(cfg, args.stream), cfg["signals"])
+    sdir = stream_dir(cfg, args.stream)
+    signals.run(sdir, config.for_stream(cfg, sdir)["signals"])
 
 
 def cmd_score(cfg: dict, args: argparse.Namespace) -> None:

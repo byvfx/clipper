@@ -13,8 +13,9 @@ whenever behaviour changes.
 - A stream is `streams/<id>/`; stages read and write files there and are idempotent, so
   `clipper run` can skip what is done. Review state is `review.json`, retakes `retakes.json`.
 - Config: defaults in `clipper/config.py` < `clipper.toml` < `CLIPPER_<SECTION>_<KEY>` env.
-  `config.for_stream(cfg, sdir)` resolves the show from the stream's `meta.json` channel;
-  use it rather than the base config whenever a stream is known.
+  `config.for_stream(cfg, sdir)` resolves the show from the stream's `meta.json` channel,
+  then the stream's own `streams/<id>/config.toml` if any; use it rather than the base config
+  whenever a stream is known.
 - Shows: `[shows.<key>]` tables; a show's sub-tables override base sections. Each show has
   its own Kitsu production. Everything uploads to one YouTube channel.
 - Prompts are `prompts/<name>_<version>.md`; the version in use is a config key. Add a new

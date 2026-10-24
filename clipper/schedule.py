@@ -68,6 +68,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                 and for_stream(cfg, sdir)["preshow"]["publish"] == "asap")
         if meta.get("kind") == "preshow":
             earliest = started
+        priority = bool(for_stream(cfg, sdir)["schedule"]["priority"])
         approved_segments = set()
         for key, r in review.items():
             kind = KINDS[r["kind"]]
@@ -77,7 +78,8 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                     "title": fields.get("YouTube title") or key,
                     "score": float(fields.get("Score") or 0), "stream_start": started,
                     "earliest": earliest, "entity": (ENTITY[kind], state[key]["entity_id"]),
-                    "override_text": fields.get("Publish at") or "", "asap": asap}
+                    "override_text": fields.get("Publish at") or "", "asap": asap,
+                    "priority": priority}
             if r["decision"] != "approved":
                 skipped.append({"key": item["key"], "reason": r["decision"]})
             elif truthy(fields.get("Hold")):
@@ -109,7 +111,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                           "id": comp["topic"], "file": str(video.resolve()),
                           "title": comp["title"], "score": 0, "stream_start": started,
                           "earliest": earliest, "entity": None, "override_text": "",
-                          "segment_keys": seg_keys(comp)})
+                          "segment_keys": seg_keys(comp), "priority": priority})
     return items, skipped
 
 
@@ -205,10 +207,13 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
     for it in items:
         if it["key"] not in placed and it.get("asap") and not it.get("bad"):
             place(it, max(now, it["earliest"]), "asap")
-    # 2. Keep earlier assignments that are still ahead of us (or already uploaded).
+    # 2. Keep earlier assignments that are still ahead of us (or already uploaded). A newly
+    #    approved priority item frees the automatic slots of other streams' items of its kind.
+    jump = {it["kind"] for it in items if it["priority"] and it["key"] not in old}
     for it in items:
         prev = old.get(it["key"])
-        if it["key"] in placed or it.get("bad") or not prev or (reshuffle and prev["source"] == "auto"):
+        if it["key"] in placed or it.get("bad") or not prev or (prev["source"] == "auto" and (
+                reshuffle or (it["kind"] in jump and not it["priority"]))):
             continue
         when = datetime.fromisoformat(prev["publish_at"]).astimezone(tz)
         if when > now and when >= it["earliest"]:
@@ -218,10 +223,11 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
         if it["kind"] in ("clip", "short") and sc["clip_order"] == "score":
             return (-it["score"], it["stream_start"], it["key"])
         return (it["stream_start"], it["key"])
-    queue = {k: sorted((it for it in items if it["kind"] == k and it["key"] not in placed
-                        and not it.get("bad")), key=order) for k in ("clip", "short", "segment", "compilation")}
-    if sc["mix_shows"]:
-        queue = {k: take_turns(q) for k, q in queue.items()}
+    queue = {}
+    for k in ("clip", "short", "segment", "compilation"):
+        waiting = [it for it in items if it["kind"] == k and it["key"] not in placed and not it.get("bad")]
+        parts = [sorted((it for it in waiting if it["priority"] == p), key=order) for p in (True, False)]
+        queue[k] = [it for q in parts for it in (take_turns(q) if sc["mix_shows"] else q)]
     all_slots = slots(sc, tz, start)
 
     def fill(kinds: tuple[str, ...]) -> None:

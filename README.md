@@ -80,6 +80,9 @@ That lets one shared `clipper.toml` serve every machine, with per-machine differ
 
 Each Kick channel is a show: a `[shows.<key>]` table with its channels, show name, scoring
 context and Shorts layouts. A show's sub-tables override the base sections for that show.
+One stream can go further with its own `streams/<id>/config.toml` (same sections), for a big
+night: more picks, the breaking story in `[scoring] stream_context`, and `[schedule]
+priority = true` so its items go out ahead of the backlog. Unknown keys there are refused.
 `clipper.example.toml` documents every key. `clipper.toml` itself is gitignored because it
 holds your Discord ids and Kitsu address.
 
