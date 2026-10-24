@@ -127,7 +127,11 @@ live, where each stream is in the pipeline, the review queue and the upload sche
 Click a live show's chip to watch it in a player on the page or on kick.com in a new
 window; the chip also says whether the NAS is recording it. The review queue works from the
 keyboard (J/K to move, A approve, R reject, C retake note, H hold, Space/arrows for the
-video); press `?` in the war room for the full list.
+video); press `?` in the war room for the full list. On a phone it switches to one view at a
+time (Review, Schedule, Pipeline tabs at the bottom), items open full screen with the
+decisions at the bottom and swipe to the next one, and videos play from a 360p copy
+(`lowres/` beside each preview, about a quarter of the data). It can be added to the home
+screen. Reaching it from the phone needs the war room open beyond localhost (issue #10).
 
 ## Layout
 

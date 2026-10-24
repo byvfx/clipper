@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="War Room">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>Clipper War Room</title>
 <style>
 :root {
@@ -158,6 +165,76 @@ dialog::backdrop { background: #000b; }
 .kv b { color: var(--faint); font-weight: 500; }
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 10px; z-index: 50; box-shadow: 0 8px 30px #000a; font-size: 13px; max-width: 80vw; }
 .toast.err { border-color: #7a2230; color: #ff98a3; }
+
+#mActs .nav { padding: 6px 12px; }
+.tap { position: relative; display: block; width: 100%; aspect-ratio: 16/9; border: 0; padding: 0; border-radius: 8px; overflow: hidden; background: #000; }
+.tap.vertical { aspect-ratio: 9/16; max-height: 62vh; }
+.tap img { width: 100%; height: 100%; object-fit: contain; display: block; opacity: .75; }
+.tap span { position: absolute; inset: 0; display: grid; place-content: center; gap: 6px; text-align: center; font-size: 13px; color: #fff; text-shadow: 0 1px 4px #000; }
+.tap span b { font-size: 46px; line-height: 1; }
+.tap .alt { font-size: 12px; text-decoration: underline; }
+nav.views { display: none; }
+.queue-bar .tabs { display: contents; }
+
+/* phones (#25): one view at a time, bottom tabs, a full-screen item with the decisions at the thumb */
+@media (max-width: 700px) {
+  html, body { font-size: 15px; }
+  header { position: static; gap: 8px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
+  .brand { font-size: 13px; }
+  .clock, #keysBtn { display: none; }
+  .tools { margin-left: auto; }
+  .tools .btn { padding: 8px 10px; }
+  .lives { order: 3; width: 100%; flex-wrap: nowrap; overflow-x: auto; }
+  .live { padding: 6px 10px; white-space: nowrap; }
+  .livemenu .btn { padding: 12px; }
+  .counters { order: 4; width: 100%; margin: 0; flex-wrap: nowrap; overflow-x: auto; }
+  .counter { min-width: 66px; flex: none; }
+  main { display: block; padding: 10px 0 calc(74px + env(safe-area-inset-bottom)); }
+  #vPipe, #vQueue, #vSched { display: none; }
+  body[data-view="queue"] #vQueue, body[data-view="schedule"] #vSched, body[data-view="pipeline"] #vPipe { display: flex; }
+  #vQueue, #vSched { flex-direction: column; }
+  section.panel { border-radius: 0; border-left: 0; border-right: 0; }
+  .queue-bar { gap: 8px; }
+  .queue-bar .tabs { display: flex; gap: 6px; overflow-x: auto; width: 100%; padding-bottom: 2px; }
+  .tab { padding: 8px 13px; font-size: 13px; white-space: nowrap; }
+  .queue-bar .sep { display: none; }
+  .queue-bar select { flex: 1; padding: 9px; font-size: 14px; }
+  input.search { width: 100%; margin: 0; padding: 10px; font-size: 16px; }  /* 16px: iOS doesn't zoom */
+  .grid { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
+  .card:hover { transform: none; }
+  .card .acts .btn { padding: 12px 0; font-size: 14px; }
+  .sched { max-height: none; }
+  .slot { padding: 8px 12px; grid-template-columns: 64px 6px 1fr; }
+  .slot .tm { white-space: nowrap; }
+  .slot .tt { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  dialog#modal { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  dialog#modal { overflow-x: hidden; }
+  #modal .m-head { padding-top: max(10px, env(safe-area-inset-top)); gap: 8px; }
+  #modal .m-head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #modal .m-head .tag { display: none; }
+  #modal .m-head .x { font-size: 30px; padding: 0 6px; }
+  #modal .m-body { display: block; padding: 0 0 calc(84px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 54px); }
+  #modal .player { padding: 0 0 4px; }
+  #modal .player video, #modal .tap { border-radius: 0; max-height: 56vh; }
+  #modal .tap + img { display: none; }  /* the cover is already behind the play button */
+  #modal .player > img, #modal .kv, #modal .player > .form { margin-left: 12px; margin-right: 12px; width: calc(100% - 24px); }
+  #modal .form { padding: 0 12px; }
+  .form input, .form textarea { font-size: 16px; padding: 10px; }
+  .form .row .btn { padding: 11px 14px; }
+  #mActs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; margin: 0; padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    background: #0e1115f2; border-top: 1px solid var(--line); flex-wrap: nowrap; gap: 6px; }
+  #mActs .btn { flex: 1; padding: 13px 0; font-size: 15px; white-space: nowrap; }
+  #mActs .nav { flex: 0 0 44px; }
+  nav.views { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: #0e1115f2; backdrop-filter: blur(6px);
+    border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  nav.views button { flex: 1; background: none; border: 0; padding: 12px 0 10px; color: var(--dim); font-size: 12px; display: grid; gap: 2px; }
+  nav.views button b { font-size: 18px; }
+  nav.views button.on { color: var(--accent); }
+  nav.views .n { font-family: var(--mono); }
+  #dock { right: 8px; left: 8px; width: auto; bottom: calc(70px + env(safe-area-inset-bottom)); }
+  #dock.big { width: auto; }
+  .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
 </style>
 </head>
 <body>
@@ -174,23 +251,28 @@ dialog::backdrop { background: #000b; }
 </header>
 
 <main>
-  <div class="col">
+  <div class="col" id="vPipe">
     <section class="panel"><h2>Pipeline <span class="sp" id="pipeSub"></span></h2><div id="streams"></div></section>
     <section class="panel"><h2>Retakes <span class="sp" id="retakeSub"></span></h2><div class="feed" id="retakes"></div></section>
     <section class="panel"><h2>Health</h2><div class="health" id="health"></div></section>
   </div>
 
-  <section class="panel">
+  <section class="panel" id="vQueue">
     <h2>Review queue <span class="sp" id="queueSub"></span></h2>
     <div class="queue-bar" id="queueBar"></div>
     <div class="grid" id="grid"></div>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="vSched">
     <h2>Schedule <span class="sp" id="schedSub"></span></h2>
     <div class="sched" id="schedule"></div>
   </section>
 </main>
+<nav class="views" id="views">
+  <button data-view="queue"><b>☰</b>Review <span class="n" id="vnQueue"></span></button>
+  <button data-view="schedule"><b>◷</b>Schedule</button>
+  <button data-view="pipeline"><b>⚙</b>Pipeline</button>
+</nav>
 
 <dialog id="modal"></dialog>
 <dialog id="keys"></dialog>
@@ -203,6 +285,7 @@ const KIND = { pick: "Clip", short: "Short", segment: "Segment", compilation: "C
 const DEC = { pending: "waiting", changes_requested: "changes", approved: "approved", rejected: "rejected" };
 let STATE = null, TAB = "waiting", SHOW = "", KINDF = "", Q = "", BUSY = new Set(), OPEN = null;
 let VISIBLE = [], SEL = null, SEL_AT = 0;  // the queue in display order; the keyboard's item
+const PHONE = matchMedia("(max-width: 700px)");
 
 function mmss(s) { if (s == null) return ""; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; }
@@ -298,7 +381,9 @@ function render() {
     ["Approved", c.approved || 0, ""], ["Unslotted", c.approved_unscheduled, c.approved_unscheduled ? "warn" : ""],
     ["Next 7 d", c.scheduled_7d, ""], ["Uploaded", c.uploaded, ""],
   ].map(([l, n, k]) => `<div class="counter ${k}"><b>${n}</b><span>${l}</span></div>`).join("");
+  const first = !$("#schedule").children.length;
   renderStreams(); renderRetakes(); renderHealth(); renderQueue(); renderSchedule(); renderLive(); tick();
+  if (first && document.body.dataset.view === "schedule") setView("schedule");  // opened on it: go to today
   if (OPEN) { const r = s.items.find(i => i.ref === OPEN); if (r && !$("#modal").contains(document.activeElement)) fillModalState(r); }
 }
 
@@ -356,7 +441,7 @@ const TAB_LABEL = { waiting: "Waiting", changes: "Changes", approved: "Approved"
 function renderQueue() {
   const base = filtered();
   const shows = STATE.shows;
-  $("#queueBar").innerHTML = Object.keys(TABS).map(t => `<button class="tab ${TAB === t ? "on" : ""}" data-tab="${t}">${TAB_LABEL[t]}<span class="n">${base.filter(TABS[t]).length}</span></button>`).join("")
+  $("#queueBar").innerHTML = `<span class="tabs">${Object.keys(TABS).map(t => `<button class="tab ${TAB === t ? "on" : ""}" data-tab="${t}">${TAB_LABEL[t]}<span class="n">${base.filter(TABS[t]).length}</span></button>`).join("")}</span>`
     + `<span class="sep"></span><select id="showSel"><option value="">All shows</option>${shows.map(s => `<option value="${s.key}" ${SHOW === s.key ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
        <select id="kindSel"><option value="">All kinds</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}" ${KINDF === k ? "selected" : ""}>${v}s</option>`).join("")}</select>
        <input class="search" id="q" placeholder="Search titles…" value="${esc(Q)}">`;
@@ -365,13 +450,14 @@ function renderQueue() {
   if (SEL && !VISIBLE.includes(SEL)) SEL = VISIBLE[Math.min(SEL_AT, VISIBLE.length - 1)] || null;  // acted on: the next one
   SEL_AT = SEL ? VISIBLE.indexOf(SEL) : 0;
   $("#queueSub").textContent = `${items.length} shown`;
+  $("#vnQueue").textContent = STATE.counts.pending || "";
   $("#grid").innerHTML = items.map(card).join("") || `<div class="empty">Nothing here${TAB === "waiting" ? " — all caught up" : ""}.</div>`;
 }
 
 function card(i) {
   const vertical = i.kind === "short";
   const media = i.thumbnail_url ? `<img loading="lazy" src="${i.thumbnail_url}" alt="">`
-    : i.video_url ? `<video muted preload="metadata" src="${i.video_url}#t=3"></video>` : "";
+    : i.video_url ? `<video muted preload="${PHONE.matches ? "none" : "metadata"}" src="${i.video_url}#t=3"></video>` : "";
   const sched = i.scheduled ? `⏱ ${new Date(i.scheduled).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : i.publish_at ? `📌 ${esc(i.publish_at)}` : "";
   return `<div class="card ${BUSY.has(i.ref) ? "busy" : ""} ${SEL === i.ref ? "sel" : ""}" data-ref="${esc(i.ref)}">
     <div class="thumb ${vertical ? "vertical" : ""}" data-open="${esc(i.ref)}">${media}
@@ -429,6 +515,9 @@ document.addEventListener("click", e => {
   const lv = e.target.closest("[data-live]");
   if (lv) { liveClick(e, lv); return; }
   if (LIVEMENU !== null) { LIVEMENU = null; renderLive(); }
+  const v = e.target.closest("#views button, [data-move]");  // not body[data-view]
+  if (v?.dataset.view) { setView(v.dataset.view); return; }
+  if (v?.dataset.move) { move(+v.dataset.move); return; }
   const t = e.target.closest("[data-tab],[data-act],[data-open]");
   if (!t) return;
   if (t.dataset.tab) { TAB = t.dataset.tab; SEL = null; renderQueue(); return; }
@@ -436,6 +525,7 @@ document.addEventListener("click", e => {
     const ref = t.dataset.ref, a = t.dataset.act;
     if (a === "changes") { const n = ask("What should change? clipper will re-cut / re-thumbnail it from this note:", true); if (n) act(ref, "changes", { text: n }); }
     else if (a === "reject") { const n = ask("Why reject it? (kept as a scoring example)", true); if (n) act(ref, "reject", { text: n }); }
+    else if (a === "approve" && OPEN === ref) keyAct("a", ref);  // in the item window: then the next item
     else act(ref, a);
     return;
   }
@@ -463,7 +553,9 @@ function openModal(ref) {
       <button class="x" onclick="closeModal()">×</button></div>
     <div class="m-body">
       <div class="player">
-        ${i.video_url ? `<video controls preload="metadata" src="${i.video_url}"></video>` : `<div class="empty">No preview file</div>`}
+        ${!i.video_url ? `<div class="empty">No preview file</div>` : PHONE.matches
+          ? `<button class="tap ${i.kind === "short" ? "vertical" : ""}" id="mTap">${i.thumbnail_url ? `<img src="${i.thumbnail_url}" alt="">` : ""}<span><b>▶</b>Play (phone size)</span></button>`
+          : `<video controls preload="metadata" src="${i.video_url}"></video>`}
         ${i.thumbnail_url ? `<img src="${i.thumbnail_url}" alt="thumbnail">` : ""}
         <div class="kv">
           <b>Length</b><span>${mmss(i.duration_s)}</span>
@@ -503,13 +595,20 @@ function openModal(ref) {
   if ($("#bThumb")) $("#bThumb").onclick = () => act(ref, "thumbtext", { text: $("#fThumb").value });
   $("#bPin").onclick = () => { const v = $("#fPin").value; if (!v) return toast("Pick a date and time.", true); act(ref, "pin", { text: v.replace("T", " ") }); };
   $("#bUnpin").onclick = () => act(ref, "pin", { text: "" });
+  if ($("#mTap")) $("#mTap").onclick = e => playLow(i, !!e.target.closest("[data-full]"));
   if (!m.open) m.showModal();  // J / K swap the item in an open window
+  m.querySelector(".m-body").scrollTop = 0;
 }
 function fillModalState(i, fields) {
   if (!i || !$("#mActs")) return;
   $("#mState").className = `state ${i.decision}`; $("#mState").textContent = (DEC[i.decision] || i.decision) + (i.hold ? " · held" : "");
-  $("#mActs").innerHTML = (i.decision !== "approved" ? `<button class="btn good" data-act="approve" data-ref="${esc(i.ref)}">✓ Approve</button>` : `<button class="btn" data-act="reopen" data-ref="${esc(i.ref)}">↺ Reopen</button>`)
-    + `<button class="btn" id="bHold">${i.hold ? "▶ Release hold" : "⏸ Hold"}</button>`;
+  const r = esc(i.ref), queued = VISIBLE.includes(i.ref);
+  $("#mActs").innerHTML = (queued ? `<button class="btn nav" data-move="-1" title="Previous (K, or swipe right)">‹</button>` : "")
+    + (i.decision !== "approved" ? `<button class="btn good" data-act="approve" data-ref="${r}" title="Approve, then the next item (A)">✓ Approve</button>` : `<button class="btn" data-act="reopen" data-ref="${r}">↺ Reopen</button>`)
+    + `<button class="btn warn" data-act="changes" data-ref="${r}" title="Retake note (C)">✎</button>`
+    + `<button class="btn bad" data-act="reject" data-ref="${r}" title="Reject (R)">✕</button>`
+    + `<button class="btn" id="bHold" title="${i.hold ? "Release hold" : "Hold"} (H)">${i.hold ? "▶" : "⏸"}${PHONE.matches ? "" : i.hold ? " Release" : " Hold"}</button>`
+    + (queued ? `<button class="btn nav" data-move="1" title="Next (J, or swipe left)">›</button>` : "");
   $("#bHold").onclick = () => act(i.ref, "hold", { on: !i.hold });
   $("#pinHint").textContent = i.scheduled ? `Scheduled ${new Date(i.scheduled).toLocaleString()}${i.publish_at ? " (pinned)" : ""}` : i.decision === "approved" ? "Approved, waiting for a free slot" : "Gets a slot once approved";
   if (fields) {
@@ -520,6 +619,49 @@ function fillModalState(i, fields) {
 }
 function closeModal() { OPEN = null; const v = $("#modal video"); if (v) v.pause(); $("#modal").close(); }
 $("#modal").addEventListener("close", () => { OPEN = null; const v = $("#modal video"); if (v) v.pause(); });
+
+// ---------- phone ----------
+
+function setView(v) {
+  document.body.dataset.view = v; store.set("warroom.view", v);
+  document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  const today = v === "schedule" && PHONE.matches && $(".day.today");
+  today ? today.scrollIntoView({ block: "start" }) : scrollTo(0, 0);
+}
+setView(store.get("warroom.view") || "queue");
+
+async function playLow(i, full) {  // phones: a 360p copy made by the server (lowres/ beside the preview)
+  const tap = $("#mTap");
+  if (!tap || (tap.dataset.wait && !full)) return;
+  const play = url => {
+    const v = document.createElement("video");
+    Object.assign(v, { controls: true, playsInline: true, autoplay: true, src: url, poster: i.thumbnail_url || "" });
+    tap.replaceWith(v); v.play().catch(() => { /* needs a tap after waiting: the controls are there */ });
+  };
+  if (full) return play(i.video_url);
+  try {
+    const r = await api("/api/lowres?src=" + encodeURIComponent(i.video_url));
+    if (OPEN !== i.ref || !$("#mTap")) return;
+    if (r.ready) return play(r.url);
+    tap.dataset.wait = "1";
+    tap.querySelector("span").innerHTML = `<b>⏳</b>Making a phone-size copy${r.ahead ? ` (${r.ahead} ahead of it)` : ""}…
+      <span class="alt" data-full style="position:static">Play full quality instead (${r.full_mb} MB)</span>`;
+    setTimeout(() => { if (OPEN === i.ref && $("#mTap")) { delete $("#mTap").dataset.wait; playLow(i); } }, 8000);
+  } catch (e) { toast(e.message, true); }
+}
+
+let TOUCH = null;  // swipe left / right in the item window: next / previous
+$("#modal").addEventListener("touchstart", e => {
+  const t = e.touches[0], v = e.target.closest("video");
+  TOUCH = e.touches.length > 1 || e.target.closest("input, textarea") || (v && t.clientY > v.getBoundingClientRect().bottom - 60)
+    ? null : { x: t.clientX, y: t.clientY, at: Date.now() };  // not on the video's scrub bar
+}, { passive: true });
+$("#modal").addEventListener("touchend", e => {
+  if (!TOUCH) return;
+  const t = e.changedTouches[0], dx = t.clientX - TOUCH.x, dy = t.clientY - TOUCH.y;
+  if (Date.now() - TOUCH.at < 700 && Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) move(dx < 0 ? 1 : -1);
+  TOUCH = null;
+}, { passive: true });
 
 // ---------- keyboard ----------
 
@@ -543,6 +685,7 @@ $("#keysBtn").onclick = showKeys;
 function move(d) {
   if (!VISIBLE.length) return;
   const at = VISIBLE.indexOf(OPEN || SEL);
+  if (OPEN && at < 0) return;  // opened from the schedule: not in the queue list
   SEL = VISIBLE[at < 0 ? 0 : Math.max(0, Math.min(VISIBLE.length - 1, at + d))];
   renderQueue();
   if (OPEN) { if (SEL !== OPEN) openModal(SEL); return; }

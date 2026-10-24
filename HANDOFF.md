@@ -766,7 +766,26 @@ reviewed, then posted ASAP**.
   1-6 tabs, / search, L watch live, ? list. Off while typing. Tested in the bot's live war room
   with the page's `act` stubbed, so no Kitsu decisions were made.
 - The page is read per request, so the bot needed no restart.
-- Not done: #25 phone layout, #26 pop-out / open the recording at a clip.
+- Not done: #26 pop-out / open the recording at a clip.
+
+## War room on the phone (2026-10-23, #25)
+- Under 700 px wide: header scrolls away, bottom tabs Review / Schedule / Pipeline (remembered
+  per browser; Schedule opens at today), one-column cards with 46 px buttons, the item window
+  full screen with a fixed bar at the thumb (‹ Approve ✎ ✕ Hold ›; Approve then goes to the
+  next item, on desktop too), swipe left/right for next/previous (not on the video's scrub bar).
+- Low-res: phones tap to play a 360p copy, `lowres/<stem>.mp4` beside the preview (libx264
+  crf 30, max 700k, low priority, one at a time). Made on first play (`/api/lowres`, jumps the
+  queue; the page polls and offers full quality meanwhile) and ahead for pending/changes items
+  every 5 min (`[warroom] lowres_prewarm`, `lowres_height` 360). 14.5 min segment: 70 MB ->
+  19 MB in 21 s. Nothing scans the cut folders recursively, so the copies can't become items.
+- Home screen: /manifest.webmanifest + icons (served without the token); the token cookie now
+  lasts a year (was a session cookie), so the installed app stays signed in.
+- Python changed (warroom.py, config.py): the bot serves the war room in-process, so it needs a
+  restart before /api/lowres, the manifest and the cookie work there. The HTML alone was live.
+- Tested on a second instance (`.claude/launch.json` "warroom-test", port 8766, prewarm off) at
+  375x812 with the page's actions stubbed. First copies made: kick-133597196 review/lowres/v01_t40,
+  kick-133761201 s11_the-quartering.
+- Phone access itself is #10 (Tailscale): the user agreed it's needed, next up.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS

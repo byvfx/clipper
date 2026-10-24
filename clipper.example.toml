@@ -315,6 +315,11 @@ host = "127.0.0.1"
 port = 8765
 token = ""
 with_bot = true
+# On a phone (narrow screen) videos play from a low-res copy (lowres/ beside each preview),
+# made on first play, or ahead of time for items waiting for review when lowres_prewarm is on
+# (one ffmpeg at a time, low priority).
+lowres_height = 360
+lowres_prewarm = true
 
 [retake]
 # A "retake" note in Kitsu or Discord -> clipper re-cuts / re-thumbnails the item and sends

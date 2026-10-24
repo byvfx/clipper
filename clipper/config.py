@@ -355,6 +355,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "port": 8765,
         "token": "",              # required off localhost: open it as http://host:port/?key=<token>
         "with_bot": True,         # `clipper bot` serves it too, so it's up whenever the bot runs
+        "lowres_height": 360,     # phones play a copy this tall (short side), in lowres/ beside the preview
+        "lowres_prewarm": True,   # make those copies ahead for items waiting for review
     },
     "retake": {
         # `clipper retake`: a "retake" note -> edits (trim, layout, title, thumbnail) ->

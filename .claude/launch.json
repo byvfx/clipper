@@ -3,9 +3,16 @@
   "configurations": [
     {
       "name": "warroom",
-      "runtimeExecutable": "C:\\clipper\\.venv\\Scripts\\clipper.exe",
+      "runtimeExecutable": "C:/clipper/.venv/Scripts/clipper.exe",
       "runtimeArgs": ["warroom"],
       "port": 8765
+    },
+    {
+      "name": "warroom-test",
+      "runtimeExecutable": "C:/clipper/.venv/Scripts/clipper.exe",
+      "runtimeArgs": ["warroom", "--port", "8766"],
+      "env": {"CLIPPER_WARROOM_LOWRES_PREWARM": "false"},
+      "port": 8766
     }
   ]
 }
