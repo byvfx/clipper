@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-from .config import _root
+from .config import _root, for_show
 
 RESULTS: list[tuple[str, str, str, str]] = []  # (status, area, what, hint)
 
@@ -201,8 +201,19 @@ def check_fonts(cfg: dict) -> None:
              "install it, or set [shorts] caption_fontsdir to a folder with the .ttf")
 
 
+def diarizing(cfg: dict) -> list[str]:
+    """Shows (or "base") with [transcribe] diarize on."""
+    return [k or "base" for k in ["", *_root(cfg)["shows"]] if for_show(cfg, k)["transcribe"]["diarize"]]
+
+
 def check_gpu(cfg: dict) -> None:
     tc = cfg["transcribe"]
+    if diarizing(cfg) and tc["backend"] == "whisperx":
+        if os.environ.get("HF_TOKEN"):
+            ok("gpu", "HF_TOKEN set for diarization")
+        else:
+            fail("gpu", f"[transcribe] diarize is on ({', '.join(diarizing(cfg))}) but HF_TOKEN isn't set",
+                 "see SETUP.md (Speaker labels): a Hugging Face read token with the pyannote terms accepted")
     if tc["backend"] == "mlx":
         try:
             import mlx_whisper  # noqa: F401
@@ -405,6 +416,19 @@ def check_online(cfg: dict, role: str) -> None:
         except Exception as e:  # noqa: BLE001
             fail("online", f"Modal app {cfg['transcribe']['modal_app']!r}: {type(e).__name__}: {str(e)[:120]}",
                  "clipper transcribe --deploy (after setting the Modal token)")
+        if diarizing(cfg):
+            try:
+                import modal
+
+                from .modal_app import HF_SECRET
+                modal.Secret.from_name(HF_SECRET).hydrate()
+                ok("online", f"Modal secret {HF_SECRET!r} for diarization")
+            except ImportError:
+                pass
+            except Exception as e:  # noqa: BLE001
+                fail("online", f"diarize is on but the Modal secret {HF_SECRET!r}: {type(e).__name__}",
+                     "see SETUP.md (Speaker labels): modal secret create huggingface HF_TOKEN=..., "
+                     "then clipper transcribe --deploy")
     if role in ("all", "gpu"):  # the worker grabs pre-shows
         from . import preshow
         for key, sc in preshow.watched(_root(cfg)):

@@ -1188,6 +1188,31 @@ reviewed, then posted ASAP**.
 - The bot (which serves the war room) picks the new endpoint up on its next restart; until
   then the panel says "not found". Tested on a second war room (launch.json warroom-test).
 
+## Speaker labels (2026-10-25, #52, code done, waiting on the user's HF token)
+User: #52 "sounds really important", ahead of #55 (face-follow crop can then follow the talker).
+- `[transcribe] diarize` (off): pyannote `speaker-diarization-community-1` in the same Modal call
+  (`_diarize` in modal_app.py; also local whisperx). Writes `diarization.json` (turns
+  [start, end, SPEAKER_xx] + one embedding per speaker + cost). Turns are audio times, so they
+  survive a re-transcribe. `WhisperX.diarize` = diarization alone (`clipper speakers <id> --diarize`).
+- `clipper speakers <id> [--diarize] [--name SPEAKER_01=Andy] [--enroll]` (clipper/speakers.py):
+  matches each speaker's embedding against `[paths] voices`/<show>.json (cosine, `[speakers]
+  match` 0.5, untested on real voices), hand names win, rewrites words.jsonl `speaker` to the
+  name (or SPEAKER_xx), speakers.json keeps scores. `clipper transcribe` calls it when
+  diarization.json exists, and now uses `config.for_stream` (per-show [transcribe]).
+- voices/ is gitignored and local (C:\clipper\voices) for now; point `[paths] voices` at the NAS
+  share when the NAS runs the worker.
+- Doctor: HF_TOKEN env (whisperx backend), Modal secret `huggingface` (online) when any show diarizes.
+- 2026-10-25: Modal secret `huggingface` made (user's HF account granted community-1), app
+  redeployed. kick-131151926 `--diarize`: 18 speakers, 476 s diarize / 514 s call on L40S,
+  **~$0.29 for 7.85 h**. User named: 15 PPP, 04 Andy, 16 PPP (impressions and character
+  voices: hand name only, not enrolled), 09 Jer, 14 Mr. Morrow, 06 music (intro songs; not
+  enrolled: scores 0.63 against PPP). Same voice scored 0.88 (PPP 15 vs 16), different people
+  <= 0.46, so `match` default is 0.6. voices/kino.json = PPP, Andy, Jer, Mr. Morrow (1 ref each).
+  Listening samples in logs/speaker_samples/. Next: diarize a second Kino stream to see the
+  auto-match across days, then `[shows.kino.transcribe] diarize = true`, then commit.
+- Not done yet (follow-ups): scoring/meta/weekly prompts don't read `speaker` yet (new prompt
+  versions); archive transcribe never diarizes (modal_settings default).
+
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
    recordings. Added `[transcribe] backend = "mlx"` (mlx-whisper, `uv sync --extra mac`, optional

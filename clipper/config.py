@@ -33,6 +33,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "youtube_cookies": "secrets/youtube_cookies.txt",  # optional, Netscape cookies.txt: `archive` age-restricted items
         "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
+        "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
     },
     "modal": {
         # `clipper modal` and the war room's Modal panel (#49): spend is Modal's own billing.
@@ -252,6 +253,18 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "compute_type": "float16",
         "batch_size": 8,
         "device": "cuda",
+        "diarize": False,         # speaker turns too (pyannote, issue #52): whisperx or modal backend,
+                                  # needs a Hugging Face token (SETUP); `clipper speakers` names them
+        "diarize_model": "pyannote/speaker-diarization-community-1",
+        "min_speakers": 0,        # 0 = let pyannote decide
+        "max_speakers": 0,
+    },
+    "speakers": {
+        # `clipper speakers`: SPEAKER_xx -> a name, by voice against the show's enrolled voices.
+        "match": 0.6,             # lowest cosine similarity to name a speaker (kick-131151926: same
+                                  # voice 0.88, different people <= 0.46; music beds near the co-hosts)
+        "min_talk_s": 20,         # speakers with less talk time are listed but never named
+        "max_refs": 10,           # embeddings kept per enrolled voice (newest win)
     },
     "segments": {
         "model": "claude-opus-5-5",   # one call over the whole transcript

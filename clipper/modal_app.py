@@ -11,12 +11,19 @@ write; transcribe.write() turns them into transcript.json and words.jsonl as bef
 `WhisperX.transcribe_url` does the same for a URL ffmpeg can read, so archive sources
 (Odysee, Rumble) are fetched in the cloud and never pass through the home connection.
 
+Speaker turns (issue #52): with `diarize` in the settings, the same call also runs pyannote's
+diarization and returns `turns` ([start, end, SPEAKER_xx]) and one voice embedding per speaker;
+`WhisperX.diarize` does that alone, for a stream transcribed before. The pyannote model is gated:
+the Modal secret HF_SECRET holds HF_TOKEN for a Hugging Face account that accepted its terms, and
+the deploy bakes the model into the image with it.
+
 This file is self-contained (no clipper imports): `modal deploy` loads it as a top-level
 module.
 """
 
 from __future__ import annotations
 
+import os
 import time
 
 import modal
@@ -29,6 +36,8 @@ GPU_PRICES = {  # $ per hour (modal.com/pricing, 2026-10-23), for the cost line 
 }
 SPEED = {"L4": 24.5, "L40S": 46.5, "H100": 55.0}  # x realtime, 8 h stream incl. align (2026-10-23)
 BAKED_MODEL = "large-v3"
+DIARIZE_MODEL = "pyannote/speaker-diarization-community-1"  # [transcribe] diarize_model default
+HF_SECRET = "huggingface"  # Modal secret with HF_TOKEN (modal.com -> Secrets)
 MAX_CONTAINERS = 10  # GPUs at once across every caller; the war room shows containers against it
 
 
@@ -37,6 +46,12 @@ def _bake_models() -> None:
 
     whisperx.load_model(BAKED_MODEL, "cpu", compute_type="int8", language="en")
     whisperx.load_align_model(language_code="en", device="cpu")
+
+
+def _bake_diarizer() -> None:
+    from pyannote.audio import Pipeline
+
+    Pipeline.from_pretrained(DIARIZE_MODEL, token=os.environ["HF_TOKEN"])
 
 
 image = (
@@ -49,17 +64,20 @@ image = (
                  "torch==2.8.0", "torchaudio==2.8.0")
     .env({"HF_HOME": "/models/hf", "TORCH_HOME": "/models/torch"})
     .run_function(_bake_models)
+    .run_function(_bake_diarizer, secrets=[modal.Secret.from_name(HF_SECRET, required_keys=["HF_TOKEN"])])
 )
 
 app = modal.App(APP_NAME, image=image)
 
 
-@app.cls(gpu=DEFAULT_GPU, timeout=4 * 3600, scaledown_window=30, max_containers=MAX_CONTAINERS)
+@app.cls(gpu=DEFAULT_GPU, timeout=4 * 3600, scaledown_window=30, max_containers=MAX_CONTAINERS,
+         secrets=[modal.Secret.from_name(HF_SECRET, required_keys=["HF_TOKEN"])])
 class WhisperX:
     @modal.enter()
     def load(self) -> None:
         self.models: dict = {}
         self.aligners: dict = {}
+        self.diarizers: dict = {}
 
     def _model(self, tc: dict):
         import whisperx
@@ -77,6 +95,20 @@ class WhisperX:
             self.aligners[language] = whisperx.load_align_model(language_code=language, device="cuda")
         return self.aligners[language]
 
+    def _diarize(self, audio, tc: dict) -> dict:
+        """Speaker turns and one embedding per speaker (the same space for every stream, so
+        clipper can match them against a show's enrolled voices)."""
+        from whisperx.diarize import DiarizationPipeline
+
+        name = tc.get("diarize_model") or DIARIZE_MODEL
+        if name not in self.diarizers:
+            self.diarizers = {name: DiarizationPipeline(model_name=name, token=os.environ.get("HF_TOKEN"),
+                                                        device="cuda")}
+        df, emb = self.diarizers[name](audio, min_speakers=tc.get("min_speakers") or None,
+                                       max_speakers=tc.get("max_speakers") or None, return_embeddings=True)
+        return {"model": name, "embeddings": emb or {},
+                "turns": [[round(a, 3), round(b, 3), spk] for a, b, spk in zip(df["start"], df["end"], df["speaker"])]}
+
     def _run(self, path: str, tc: dict, t0: float) -> dict:
         import torch
         import whisperx
@@ -89,10 +121,14 @@ class WhisperX:
         result = whisperx.align(result["segments"], align_model, meta, audio, "cuda",
                                 return_char_alignments=False)
         t3 = time.time()
-        return {"segments": result["segments"], "dur": len(audio) / 16000,
-                "gpu": torch.cuda.get_device_name(0),
-                "timings": {"load_s": round(t1 - t0, 1), "transcribe_s": round(t2 - t1, 1),
-                            "align_s": round(t3 - t2, 1)}}
+        out = {"segments": result["segments"], "dur": len(audio) / 16000,
+               "gpu": torch.cuda.get_device_name(0),
+               "timings": {"load_s": round(t1 - t0, 1), "transcribe_s": round(t2 - t1, 1),
+                           "align_s": round(t3 - t2, 1)}}
+        if tc.get("diarize"):
+            out["diarization"] = self._diarize(audio, tc)
+            out["timings"]["diarize_s"] = round(time.time() - t3, 1)
+        return out
 
     @modal.method()
     def transcribe(self, audio: bytes, suffix: str, tc: dict) -> dict:
@@ -115,3 +151,19 @@ class WhisperX:
         out = self._run(path, tc, time.time())
         out["timings"]["fetch_s"] = round(time.time() - t0 - sum(out["timings"].values()), 1)
         return out
+
+    @modal.method()
+    def diarize(self, audio: bytes, suffix: str, tc: dict) -> dict:
+        """Speaker turns alone, for a stream transcribed before diarization was on."""
+        import torch
+        import whisperx
+
+        t0 = time.time()
+        path = f"/tmp/audio{suffix}"
+        with open(path, "wb") as f:
+            f.write(audio)
+        samples = whisperx.load_audio(path)
+        t1 = time.time()
+        return {"diarization": self._diarize(samples, tc), "dur": len(samples) / 16000,
+                "gpu": torch.cuda.get_device_name(0),
+                "timings": {"load_s": round(t1 - t0, 1), "diarize_s": round(time.time() - t1, 1)}}

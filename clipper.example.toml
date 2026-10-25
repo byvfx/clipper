@@ -17,6 +17,7 @@ rumble = "rumble"                              # clipper rumble upload folders
 layouts = "layouts"                            # reference screenshots per show layout (clipper shorts --save-example)
 archive = "archive"                            # clipper archive subjects (other channels' back catalogs)
 modal_runs = "logs/modal_runs.jsonl"           # every Modal call's start and end (clipper modal, war room)
+voices = "voices"                              # enrolled voices per show (clipper speakers --enroll); the NAS share once it runs everything
 
 [modal]
 # `clipper modal` and the war room's Modal panel: containers, runs, failures, archive
@@ -96,6 +97,15 @@ language = "en"
 compute_type = "float16"   # int8_float16 if VRAM is tight
 batch_size = 8
 device = "cuda"
+# diarize = true           # speaker turns too (pyannote); needs the Hugging Face token: SETUP.md
+                           # "Speaker labels". Usually per show: [shows.kino.transcribe] diarize = true
+# min_speakers = 0         # 0 = let pyannote decide
+# max_speakers = 0
+
+[speakers]
+# `clipper speakers`: SPEAKER_xx -> a name by voice, against the show's enrolled voices.
+match = 0.6                # lowest cosine similarity to name a speaker (same voice ~0.9, others < 0.5)
+min_talk_s = 20            # less talk than this: listed, never named
 
 [scoring]
 # Needs ANTHROPIC_API_KEY (or an `ant auth login` profile) in the environment.

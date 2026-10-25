@@ -7,6 +7,8 @@ Reads the first source.* file in the stream dir, extracts 16 kHz mono
 audio.wav (skipped if present), transcribes it with word timings and writes:
     transcript.json  raw WhisperX segments (aligned)
     words.jsonl      one word per line: word, start, end, score, speaker, seg
+    diarization.json with [transcribe] diarize: speaker turns and voice embeddings (pyannote,
+                     issue #52); `clipper speakers` then names them and fills `speaker`
 
 [transcribe] backend:
     whisperx  faster-whisper on CUDA + wav2vec2 word alignment (the GPU worker; `uv sync
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import gc
 import json
+import os
 import subprocess
 import sys
 import time
@@ -105,9 +108,10 @@ def transcribe_mlx(wav: Path, tc: dict) -> tuple[list[dict], float]:
     return segments, dur
 
 
-def transcribe_modal(wav: Path, tc: dict, runs: Path | None = None) -> tuple[list[dict], float, dict]:
-    """Segments from WhisperX on Modal, plus what the run cost (also logged to `runs`,
-    [paths] modal_runs, for `clipper modal` and the war room)."""
+def transcribe_modal(wav: Path, tc: dict, runs: Path | None = None, method: str = "transcribe") -> tuple[dict, dict]:
+    """WhisperX on Modal: the call's result (segments, dur, diarization) plus what it cost (also
+    logged to `runs`, [paths] modal_runs, for `clipper modal` and the war room). method
+    "diarize" gets the speaker turns alone."""
     from .modalmon import tracked
 
     suffix, codec = {"flac": (".flac", ["-c:a", "flac"]),
@@ -120,15 +124,16 @@ def transcribe_modal(wav: Path, tc: dict, runs: Path | None = None) -> tuple[lis
     enc.unlink()
     print(f"encoded {len(data) / 1e6:.0f} MB {tc['modal_audio']} in {time.time() - t1:.0f}s", flush=True)
 
-    with tracked(runs, "stream", wav.parent.name, tc["modal_gpu"],
+    with tracked(runs, "stream" if method == "transcribe" else method, wav.parent.name, tc["modal_gpu"],
                  max(0, wav.stat().st_size - 44) / 32000) as rec:  # 16 kHz mono s16
         t2 = time.time()
-        out = modal_worker(tc, tc["modal_gpu"]).transcribe.remote(data, suffix, modal_settings(tc))
+        worker = modal_worker(tc, tc["modal_gpu"])
+        out = getattr(worker, method).remote(data, suffix, modal_settings(tc, diarize=tc["diarize"] or method == "diarize"))
         cost = modal_cost(tc["modal_gpu"], time.time() - t2, out)
         rec.update(cost, audio_s=round(out["dur"], 1))
     print(f"modal {out['gpu']}: {cost['call_s']:.0f}s call ({out['timings']}), ~${cost['est_usd']:.2f}",
           flush=True)
-    return out["segments"], out["dur"], cost
+    return out, cost
 
 
 def modal_worker(tc: dict, gpu: str):
@@ -139,8 +144,47 @@ def modal_worker(tc: dict, gpu: str):
     return (cls.with_options(gpu=gpu) if gpu else cls)()
 
 
-def modal_settings(tc: dict) -> dict:
-    return {k: tc[k] for k in ("model", "language", "compute_type", "batch_size")}
+def modal_settings(tc: dict, diarize: bool = False) -> dict:
+    keys = ("model", "language", "compute_type", "batch_size")
+    if diarize:
+        keys += ("diarize", "diarize_model", "min_speakers", "max_speakers")
+    return {k: tc[k] for k in keys}
+
+
+def diarize_local(audio, tc: dict) -> dict:
+    """The Modal app's _diarize on this machine's GPU (backend whisperx). Needs HF_TOKEN."""
+    import os
+
+    from whisperx.diarize import DiarizationPipeline
+
+    pipe = DiarizationPipeline(model_name=tc["diarize_model"], token=os.environ.get("HF_TOKEN"),
+                               device=tc["device"])
+    df, emb = pipe(audio, min_speakers=tc["min_speakers"] or None, max_speakers=tc["max_speakers"] or None,
+                   return_embeddings=True)
+    return {"model": tc["diarize_model"], "embeddings": emb or {},
+            "turns": [[round(a, 3), round(b, 3), spk] for a, b, spk in zip(df["start"], df["end"], df["speaker"])]}
+
+
+def write_diarization(stream_dir: Path, diarization: dict, cost: dict | None = None) -> None:
+    turns = diarization["turns"]
+    (stream_dir / "diarization.json").write_text(
+        json.dumps({**diarization, **({"modal": cost} if cost else {})}), encoding="utf-8")
+    print(f"diarized: {len(turns)} turns, {len(diarization['embeddings'])} speakers", flush=True)
+
+
+def diarize(stream_dir: Path, tc: dict, runs: Path | None = None) -> None:
+    """Speaker turns for a stream already transcribed (no new transcript): diarization.json."""
+    wav = extract_audio(stream_dir)
+    if tc["backend"] == "modal":
+        out, cost = transcribe_modal(wav, tc, runs, method="diarize")
+        return write_diarization(stream_dir, out["diarization"], cost)
+    if tc["backend"] != "whisperx":
+        raise SystemExit("diarization needs [transcribe] backend = whisperx or modal")
+    import whisperx
+
+    t0 = time.time()
+    write_diarization(stream_dir, diarize_local(whisperx.load_audio(str(wav)), tc))
+    print(f"in {time.time() - t0:.0f}s", flush=True)
 
 
 def modal_cost(gpu: str, wall: float, out: dict) -> dict:
@@ -157,11 +201,15 @@ def run(stream_dir: Path, tc: dict, runs: Path | None = None) -> None:
     t0 = time.time()
     wav = extract_audio(stream_dir)
     if tc["backend"] == "mlx":
+        if tc["diarize"]:
+            print("[transcribe] diarize needs backend whisperx or modal; skipped on mlx", flush=True)
         segments, dur = transcribe_mlx(wav, tc)
         return write(stream_dir, tc, segments, dur, t0)
     if tc["backend"] == "modal":
-        segments, dur, cost = transcribe_modal(wav, tc, runs)
-        return write(stream_dir, tc, segments, dur, t0, {"modal": cost})
+        out, cost = transcribe_modal(wav, tc, runs)
+        if out.get("diarization"):
+            write_diarization(stream_dir, out["diarization"], cost)
+        return write(stream_dir, tc, out["segments"], out["dur"], t0, {"modal": cost})
     if tc["backend"] != "whisperx":
         raise SystemExit(f"[transcribe] backend must be whisperx, mlx or modal, not {tc['backend']!r}")
     import torch
@@ -188,6 +236,13 @@ def run(stream_dir: Path, tc: dict, runs: Path | None = None) -> None:
     gc.collect()
     torch.cuda.empty_cache()
     print(f"aligned in {time.time() - t2:.0f}s", flush=True)
+
+    if tc["diarize"]:
+        t3 = time.time()
+        write_diarization(stream_dir, diarize_local(audio, tc))
+        gc.collect()
+        torch.cuda.empty_cache()
+        print(f"diarized in {time.time() - t3:.0f}s", flush=True)
 
     write(stream_dir, tc, result["segments"], dur, t0)
 
@@ -226,4 +281,6 @@ def deploy() -> None:
     """Deploy (or update) the Modal app in clipper/modal_app.py."""
     from . import modal_app
 
-    subprocess.run([sys.executable, "-m", "modal", "deploy", modal_app.__file__], check=True)
+    # UTF-8: modal prints a check mark, which cp1252 can't encode when output is piped.
+    subprocess.run([sys.executable, "-m", "modal", "deploy", modal_app.__file__], check=True,
+                   env={**os.environ, "PYTHONIOENCODING": "utf-8"})

@@ -156,7 +156,34 @@ def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
         return transcribe.deploy()
     if not args.stream:
         raise SystemExit("clipper transcribe <stream>, or --deploy")
-    transcribe.run(stream_dir(cfg, args.stream), cfg["transcribe"], cfg["paths"]["modal_runs"])
+    sdir = stream_dir(cfg, args.stream)
+    scfg = config.for_stream(cfg, sdir)
+    transcribe.run(sdir, scfg["transcribe"], cfg["paths"]["modal_runs"])
+    if (sdir / "diarization.json").exists():
+        from . import speakers
+        speakers.apply(sdir, scfg)
+
+
+def cmd_speakers(cfg: dict, args: argparse.Namespace) -> None:
+    from . import speakers, transcribe
+
+    sdir = stream_dir(cfg, args.stream)
+    scfg = config.for_stream(cfg, sdir)
+    if args.diarize:
+        transcribe.diarize(sdir, scfg["transcribe"], cfg["paths"]["modal_runs"])
+    elif not (sdir / "diarization.json").exists():
+        raise SystemExit(f"no diarization.json in {sdir}: clipper speakers {args.stream} --diarize")
+    if args.name:
+        names = dict(n.split("=", 1) for n in args.name if "=" in n)
+        if len(names) != len(args.name):
+            raise SystemExit("--name takes SPEAKER_xx=Name")
+        speakers.apply(sdir, scfg)  # speakers.json must exist before naming
+        speakers.set_names(sdir, names)
+    found = speakers.apply(sdir, scfg)
+    if args.enroll:
+        speakers.enroll(sdir, scfg, [k for k, v in names.items() if v] if args.name else
+                        [k for k, v in found.items() if v.get("by") == "hand"])
+    speakers.show(sdir, scfg, found)
 
 
 def cmd_signals(cfg: dict, args: argparse.Namespace) -> None:
@@ -486,6 +513,16 @@ def main() -> None:
     p.add_argument("--deploy", action="store_true",
                    help="deploy the Modal app for [transcribe] backend = \"modal\"")
     p.set_defaults(fn=cmd_transcribe)
+
+    p = sub.add_parser("speakers", help="name the diarized speakers (enrolled voices), fill words.jsonl speaker")
+    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    p.add_argument("--diarize", action="store_true",
+                   help="diarize first (a stream transcribed without [transcribe] diarize; one GPU call)")
+    p.add_argument("--name", action="append", metavar="SPEAKER_xx=Name",
+                   help="name a speaker by hand (repeatable; SPEAKER_xx= clears)")
+    p.add_argument("--enroll", action="store_true",
+                   help="keep the named voices (these --name ones, else every hand-named one) for the show")
+    p.set_defaults(fn=cmd_speakers)
 
     p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
     rsub = p.add_subparsers(dest="action", required=True)
