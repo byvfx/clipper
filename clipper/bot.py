@@ -200,7 +200,7 @@ class Bot(discord.Client):
                         edited += await self.blocking(cardsync.refresh_stream, self.cfg, d)
                     except UserError as e:
                         log.warning(f"card refresh {d.name}: {e}")
-            except Exception:
+            except (Exception, SystemExit):
                 log.exception("card refresh failed")
             if edited:
                 log.info(f"card refresh: {edited} card(s) updated")
@@ -225,7 +225,7 @@ class Bot(discord.Client):
             try:  # retake notes made in Kitsu since the last pass (review.json just synced)
                 if self.cfg["retake"]["auto"] and await asyncio.to_thread(retake.pending, self.cfg):
                     self.start_retake()
-            except Exception:
+            except (Exception, SystemExit):  # SystemExit would stop the event loop, and the bot
                 log.exception("retake check failed")
             await asyncio.sleep(every)
 
@@ -272,7 +272,7 @@ class Bot(discord.Client):
                         await user.send(f"❌ clipper bot can't read the streams share: {e}")
                     except Exception:
                         log.exception("notify: DM failed")
-            except Exception:
+            except (Exception, SystemExit):  # SystemExit would stop the event loop, and the bot
                 log.exception("notify pass failed")
             await asyncio.sleep(60)
 

@@ -199,9 +199,30 @@ def all_rows(cfg: dict, streams: list | None = None) -> list[dict]:
             continue
         try:
             rows += _cached(sdir, "rows", sig + (sched,), lambda d=sdir: stream_rows(cfg, d))
-        except Exception as e:  # noqa: BLE001 - one broken stream shouldn't blank the page
+        # SystemExit too: for_stream raises it on a bad streams/<id>/config.toml
+        except (Exception, SystemExit) as e:  # noqa: BLE001 - one broken stream shouldn't blank the page
             print(f"warroom: {sdir.name}: {type(e).__name__}: {e}", flush=True)
     return rows
+
+
+def stream_infos(cfg: dict, streams: list) -> list[dict]:
+    """stream_info for every recorded stream, newest first, skipping any that can't be read."""
+    infos = []
+    for d, names, sig in streams:
+        if "meta.json" not in names:
+            continue
+        try:
+            infos.append(_cached(d, "info", sig, lambda d=d: stream_info(cfg, d)))
+        except (Exception, SystemExit) as e:  # noqa: BLE001 - as in all_rows
+            print(f"warroom: {d.name}: {type(e).__name__}: {e}", flush=True)
+    return sorted(infos, key=lambda i: i["started_at"], reverse=True)
+
+
+def _show_name(cfg: dict, sdir: Path) -> str:
+    try:
+        return for_stream(cfg, sdir)["meta"]["show_name"]
+    except (Exception, SystemExit):  # noqa: BLE001 - a bad config.toml: fall back to the base show
+        return cfg["meta"]["show_name"]
 
 
 def retakes(cfg: dict, limit: int = 12) -> list[dict]:
@@ -306,9 +327,7 @@ def overview(cfg: dict) -> dict:
     now = datetime.now(tz)
     streams_dir: Path = cfg["paths"]["streams"]
     streams = _streams(cfg)
-    infos = sorted((_cached(d, "info", sig, lambda d=d: stream_info(cfg, d))
-                    for d, names, sig in streams if "meta.json" in names),
-                   key=lambda i: i["started_at"], reverse=True)
+    infos = stream_infos(cfg, streams)
     rows = all_rows(cfg, streams)
     counts = {"pending": 0, "changes": 0, "approved": 0, "approved_unscheduled": 0,
               "rejected": 0, "held": 0}
@@ -331,7 +350,7 @@ def overview(cfg: dict) -> dict:
         entries.append({**{k: e.get(k) for k in ("key", "stream", "kind", "id", "title", "status",
                                                     "source", "url", "video_id")},
                         "publish_at": when.isoformat(), "show_name": r.get("show_name") or
-                        for_stream(cfg, sd)["meta"]["show_name"],
+                        _show_name(cfg, sd),
                         "thumbnail_url": r.get("thumbnail_url", ""),
                         "views": views.get(e.get("video_id") or "")})
     entries.sort(key=lambda e: e["publish_at"])

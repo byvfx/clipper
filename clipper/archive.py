@@ -176,6 +176,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
     meta = dict(it)
     t0 = time.time()
     worker = transcribe.modal_worker(tc, gpu)
+    signed_in = False
 
     def call(fn, *args) -> tuple[dict, dict]:  # logged for `clipper modal` and the war room
         with tracked(cfg["paths"]["modal_runs"], "archive", f"{idir.parent.name}/{it['id']}", gpu,
@@ -191,9 +192,14 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
                 "-o", str(idir / "audio.%(ext)s"), it["url"]]
         r = ytdlp(*args)
         cookies = cfg["paths"]["youtube_cookies"]
-        if r.returncode and "Sign in to confirm" in r.stderr and cookies.is_file():
-            # age-restricted: only these go out signed in, so the account is seen as little as possible
+        # Age-restricted only: these go out signed in, so the account is seen as little as possible.
+        # Not "Sign in to confirm" alone: the bot check ("...you're not a bot") says that too, and
+        # retrying those signed in would put the whole run on the account and hide the block.
+        err = r.stderr.lower()
+        if r.returncode and ("confirm your age" in err or "age-restricted" in err) and cookies.is_file():
+            log.info("%s: age-restricted, retrying signed in", it["id"])
             r = ytdlp("--cookies", str(netscape_cookies(cookies)), *args)
+            signed_in = True
         audio = [p for p in idir.glob("audio.*") if p.suffix not in (".json", ".part")]
         if r.returncode or not audio:
             raise RuntimeError(f"yt-dlp: {r.stderr.strip().splitlines()[-1:]}")
@@ -214,7 +220,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
     (idir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     transcribe.write(idir, tc, out["segments"], out["dur"], t0, {"modal": cost})
     (idir / "error.txt").unlink(missing_ok=True)
-    return cost
+    return {**cost, "signed_in": signed_in}
 
 
 def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu: str,
@@ -250,7 +256,7 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
 
 def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str, parallel: int) -> None:
     log.info("%s: started, %d items on %s x%d", subject, len(todo), gpu, parallel)
-    spent, done, failed, streak = 0.0, 0, 0, 0
+    spent, done, failed, streak, signed_in = 0.0, 0, 0, 0, 0
     stop_after = cfg["archive"]["stop_after_failures"]
     with ThreadPoolExecutor(parallel) as pool:
         jobs = {pool.submit(transcribe_item, cfg, d / it["id"], it, gpu): it for it in todo}
@@ -259,7 +265,9 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
             if job.cancelled():
                 continue
             try:
-                spent += job.result()["est_usd"]
+                res = job.result()
+                spent += res["est_usd"]
+                signed_in += res["signed_in"]
                 done += 1
                 streak = 0
             except Exception as e:  # noqa: BLE001
@@ -275,7 +283,8 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
                 log.warning("%d failures in a row: stopping (rerun to resume)", streak)
                 pool.shutdown(wait=True, cancel_futures=True)
                 break
-    log.info("%s: %d transcribed, %d failed, ~$%.2f", subject, done, failed, spent)
+    log.info("%s: %d transcribed (%d signed in, age-restricted), %d failed, ~$%.2f",
+             subject, done, signed_in, failed, spent)
 
 
 def status(cfg: dict, subject: str | None) -> None:
