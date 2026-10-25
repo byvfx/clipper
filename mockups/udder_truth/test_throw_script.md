@@ -114,6 +114,8 @@ Every location shot carries the field sound: rain on the umbrella (#12), the rai
 locals line, or shorten the satellite delay.
 
 **To shoot for Rupert:** one take of shots 6 and 8 together (head and shoulders, holding anything as a
-mic, a finger to the ear), then the window V/O as a separate line. Test both ways from the plan: the
+mic, a finger to the ear), then the window V/O as a separate line. Hold the mic and an umbrella (or
+any stick) in the same hand, the shaft resting on your shoulder: WAN copies the take's hands, and
+his other hand is on the earpiece. Test both ways from the plan: the
 user films him (WAN 3 Prime, like Mother Moo) and a voice-only take driven by audio (HeyGen / Hedra /
 Kling Avatar). Rupert's voice is an original ElevenLabs voice over the user's own read.

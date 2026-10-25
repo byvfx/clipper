@@ -67,6 +67,39 @@ one drama dominates.
   shape and leave the content.
 - **Footage, jokes, music, emblem and catchphrases.** We use rhythm, structure and attitude only.
 
+## Studio look (from 20 frames, 2026-10-24)
+
+Twenty studio frames from the same upload, grabbed from a temporary 360p copy (deleted afterwards),
+are in `refs/brass_eye/` (gitignored, private reference; the file name is the time in the video).
+They are for describing qualities only: never pass them to an image model, and never copy the set,
+emblem or on-screen text.
+
+- **Dark, not bright.** The sets are mostly black. The presenter gets hard front light and the
+  background falls away into pools of colour. Nothing like an evenly lit newsroom
+  (0-26-40, 1-12-50, 2-37-20).
+- **Blue against orange.** Deep navy and electric blue throughout, cut with hot amber and flame
+  gradients on bezels, floors and graphics, with purple and red neon as accents (0-16-10, 0-53-50,
+  1-30-30).
+- **Every screen is alive.** Stacks of CRTs flank the presenter, showing the show's emblem, colour
+  bars or the story's footage; there is a gallery wall of dozens of monitors with a LIVE bug; big
+  projected images stand beside him. No screen is ever black (0-46-20, 1-47-50, 2-05-00, 2-20-40).
+- **The desk is a small island in a big void.** In the wides, a compact desk with the emblem lit on
+  its front panel sits in a huge dark space over a glowing red-orange floor grid (0-53-50, 2-17-10).
+- **Neon slogan boards.** Red and blue lit panels with sensational slogans surround the desk
+  (1-12-50, 1-30-30): a recurring gag we can do with our own text in Fusion.
+- **Interview set.** Guest in a dark leather chair against a starfield-blue backdrop with a
+  vertical blue light column and a chrome ribbon mic on the desk (1-15-40, 1-41-00, 2-17-00). Guests
+  are also shown "inside" an orange-bezelled monitor frame.
+- **Debate set.** Blue floor, tan geometric flats, a low round table and armchairs (0-07-00).
+- **Graphic boards.** The presenter stands beside a big flat graphic (a diagram, a scale) as a
+  physical set piece (0-34-30).
+- **2001 special.** Cooler and darker, like a control room: the presenter stands in front of banks of
+  small screens, and a two-handed desk has a large flat screen behind it (2-37-20, 2-40-50, 2-46-20).
+- **Camera.** Mid-shots and close-ups, centred, often a touch low, with slow push-ins; the wides
+  make the presenter small in a huge space.
+
+What it means for Mother Moo's set is in `cast.md` under @Desk.
+
 ## A first 12-minute running order (draft)
 
 | Time | Item | Made with |

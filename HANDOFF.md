@@ -91,6 +91,9 @@ gitignored), `clipper doctor` checks the six fonts. README and SETUP describe it
   width and the subject's offset, so the face stays clear of the headline; the teaser headline
   size is capped so four lines fit the strip. `--format` picks the set. The artifact page has
   both sets and the two YouTube captions.
+- **Issue 02 posted 2026-10-24** (user, by hand from the artifact page): TikTok carousel of the
+  ten 3:4 pages, and YouTube Posts from the square set. Issue 03 is next Saturday (Oct 31):
+  `clipper weekly --headline "..."`, check the contact sheets, post the same way.
 - **Issue 02 (Oct 18-24)** is in `weekly/2026-10-24/`: cover "ETHAN'S KLEIN/11!!" (Ethan, Off
   the Rails frame s17 06_137.2, Hila inset), features Huck Blend and DSP's $4 whale, brief,
   quote ("better off accused of being a serial killer"), numbers (Jer 15h 32m, more than the
@@ -508,6 +511,35 @@ dials out. After #9/#64 (one writer first). Covers #7 for Linux; #13 can shrink 
   cloudfront hosts are blocked), so the review moved to a local session: pull the frames into
   `mockups/udder_truth/storyboard/` (NN_name.jpg), contact sheet, check against the script.
   Seedance clips carry generated audio; strip it.
+  2026-10-24 (local): done, in `mockups/udder_truth/storyboards/test_throw/` (next to throw_v1, not a
+  new `storyboard/` dir): stills + silent clips + `contact_sheet.jpg`; review notes in its README.
+  (Only the barista edit actually had an audio track.) Waiting on the user: Rupert in shot 6 is
+  off-model (no glasses, younger, brown hair), so pick remake-6 vs update cast.md before making 8/9/11;
+  shot 5 turns to her left, not right (fix the script wording).
+  2026-10-24 later: user chose remake. Made the reference set (`mockups/udder_truth/cast/`: Rupert
+  sheet, café plate, desk plate, barista; task ids in cast.md) and shots 6 (remade), 8, 9, 11, all
+  Seedance 2.5 1080p; ~2,870 credits, 18,517 left. Storyboard complete. Open: shot 8 has no door gag
+  (door never opens) and a mic-to-ear moment; fix in the real take or an Aleph edit (~420 credits).
+  The local `runway` MCP dropped mid-session; the claude.ai Runway connector did the work.
+  get_task returns `_browser_preview.mp4` URLs (low bitrate); take the full file from list_recent.
+  Decisions (user, 2026-10-24): the user voices Rupert, and he is recurring (cast.md). Mother Moo's
+  framings = the storyboard's: re-render her take per shot with the desk stills as WAN references
+  (~6 pieces, ~55 s, ~1,550 credits; not started). First, the newsroom: screens read dead and the
+  layout changes shot to shot. User is bringing Brass Eye ref frames (`mockups/udder_truth/refs/`,
+  gitignored) and screen graphics; then one consistent set with blank screens for Fusion, new desk
+  plate + desk stills, then the WAN renders. Set brief in cast.md under @Desk.
+  Rupert's grip (user): mic and umbrella handle in one fist, shaft on the shoulder, other hand at the
+  earpiece. New sheet (f4b762e7) and shot 6/8 stills made with it (48 credits incl. one retry: the
+  model dropped the mic); old versions in `superseded/`. The 6/8/9 clips still show the old grip;
+  the user's take sets it (script's shooting note says so). Credits left: 18,469.
+  Lens: the location stills read wide-angle; a long-lens edit test of shot 6 (12 credits) barely
+  changed perspective. User: fine for the pilot, heavy editing in post (notes in the storyboard
+  README). Credits left: 18,457.
+  Brass Eye studio refs (user OK'd the download): 20 frames from a temporary 360p copy of the
+  full-series upload (deleted after) in `mockups/udder_truth/refs/brass_eye/` (gitignored, never fed
+  to a model). Findings: brass_eye_formats.md "Studio look"; the set changes they imply: cast.md
+  @Desk (dark void, one layout, live screens via Fusion, neon boards). Next: new desk plate + desk
+  stills, then Moo's WAN renders (~1,550 credits).
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
