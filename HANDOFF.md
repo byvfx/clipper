@@ -501,6 +501,13 @@ dials out. After #9/#64 (one writer first). Covers #7 for Linux; #13 can shrink 
   @Desk, Rupert Churn, @Cafe, barista; bench: Dr Fenella Whey, DS Colin Rennet, Trudy Skimm).
   Sound list: `test_sound_list.md` (cue numbers used in the script). Next: storyboard frames in
   Runway from a laptop session (the Runway MCP is local only).
+  2026-10-25: Runway is also a claude.ai connector now (workspace "brandon"). The storyboard pass
+  from 10/23 is in Runway's recent assets: gpt-image-2 stills + Seedance 2.5 clips for shots 2-7 and
+  10 (plus a barista head-shake edit). Missing: 8 (Rupert CU, earpiece), 9 (umbrella flip), 11
+  (sign-off wink; shot 2's wide still could stand in). Cloud sessions can't download them (the
+  cloudfront hosts are blocked), so the review moved to a local session: pull the frames into
+  `mockups/udder_truth/storyboard/` (NN_name.jpg), contact sheet, check against the script.
+  Seedance clips carry generated audio; strip it.
   Earlier: the user asked about cloud transcription; it's #11 (Modal, already chosen 2026-10-20).
   Starter plan has $30/month free; L4 $0.80/h; estimate ~$0.03-0.05 per audio hour, so live shows
   fit the free credits and archives cost ~$40-65 per 1,000 h, downloading in the cloud too. It also
