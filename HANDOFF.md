@@ -258,6 +258,23 @@ Off-site control (2026-10-24, issue only): #65 Claude Code on the NAS, a `claude
 container so the user drives clipper from the phone with the laptop asleep; no network exposure, the NAS
 dials out. After #9/#64 (one writer first). Covers #7 for Linux; #13 can shrink or close.
 
+## Roadmap: elaborate edits framed by the transcript (user's idea 2026-10-25, issues only, nothing built)
+Go past straight cuts: use `words.jsonl`, the segment summaries, chat heat and loudness to frame moments
+for the viewer. Tracking issue #66. Shape: a `clipper edit` stage where a model writes `edits/<key>.json`,
+timed events from a fixed menu **anchored to word indices, not seconds** (retake trims keep them in sync),
+and one renderer (ASS + ffmpeg overlays/zooms) makes a new Kitsu revision; the same events can export
+to FCPXML for Resolve (#60). Issues: #67 the stage + renderer (foundation, first), #68 context framing
+(open card, speaker/mention lower thirds, "reacting to" card, chapter cards), #69 receipts inserts
+(cut to the archive when the transcript points at the past; needs #53), #70 pacing (tighten gaps and
+filler, punch-ins on loudness/chat spikes, emphasis text), #71 war room transcript editor (strike words
+to cut, select words to add a card, through actions.py). Related: #52 speaker labels, #41/#54 names and
+faces, #55 face crop. Model (user wants it model-agnostic): the edit plan starts on Opus 5.5 at medium
+effort, then a side-by-side with Sonnet 5.5 on kick-131151926; #72 is a provider layer behind
+`scoring.Claude.json_call/text_call` (provider prefix in the model string, OpenAI-compatible adapter
+for OpenAI/Gemini/local). All on-screen text follows house_style and [bleep]. Waiting on the user: which
+item kinds get edits (suggested clips + Shorts first), edited version replaces or sits beside the plain
+cut, whether sound effects/stings are wanted (left out until they say), and which issue after #67.
+
 ## TikTok drafts (#28, built 2026-10-21)
 - User made the TikTok account and a developer app (Login Kit desktop + Content Posting API, scopes
   user.info.basic + video.upload, redirect `http://localhost:3455/callback/`). Privacy/terms copy for
