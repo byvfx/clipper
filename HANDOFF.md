@@ -94,6 +94,18 @@ gitignored), `clipper doctor` checks the six fonts. README and SETUP describe it
 - **Issue 02 posted 2026-10-24** (user, by hand from the artifact page): TikTok carousel of the
   ten 3:4 pages, and YouTube Posts from the square set. Issue 03 is next Saturday (Oct 31):
   `clipper weekly --headline "..."`, check the contact sheets, post the same way.
+- Bad cover caught by the user on the TV (2026-10-25): kick-133940023 s06 ("Hila Klein's
+  Statement", youtu.be/fXkPaevta0g) went up with a centre photo of an empty chair: the model's
+  frame had Andy leaning out of shot. Fixed by hand, the way to do it again: contact-sheet Andy's
+  cam from the segment video (ffmpeg fps=1/2 + the [shows.kino.shorts.layouts.watch] cam crop),
+  pick the laugh (306.5 s into s06), grab that full frame into thumbs/segments/s06_ethan-klein/
+  as 08_306.5.jpg, append it to the entry's `frames` in thumbnails.json, set `frame` (**1-based:
+  frame 9 of 9**), `t` and Andy's face box, `clipper thumbs kick-133940023 --ids s06
+  --compose-only` (Kitsu attached), then youtube.set_thumbnail on the video. schedule.json
+  untouched (thumbnail_set was already set; the bot writes that file). Backup:
+  thumbnails.before_s06_fix_2026-10-25.json. Worth adding to the thumbs stage: a face detector
+  on the picked frame, so a box with no face in it is rejected; and a `--frame-at <s>` flag so a
+  hand-picked moment doesn't need the JSON edit.
 - **Issue 02 (Oct 18-24)** is in `weekly/2026-10-24/`: cover "ETHAN'S KLEIN/11!!" (Ethan, Off
   the Rails frame s17 06_137.2, Hila inset), features Huck Blend and DSP's $4 whale, brief,
   quote ("better off accused of being a serial killer"), numbers (Jer 15h 32m, more than the
