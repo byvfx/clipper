@@ -1208,8 +1208,15 @@ User: #52 "sounds really important", ahead of #55 (face-follow crop can then fol
   voices: hand name only, not enrolled), 09 Jer, 14 Mr. Morrow, 06 music (intro songs; not
   enrolled: scores 0.63 against PPP). Same voice scored 0.88 (PPP 15 vs 16), different people
   <= 0.46, so `match` default is 0.6. voices/kino.json = PPP, Andy, Jer, Mr. Morrow (1 ref each).
-  Listening samples in logs/speaker_samples/. Next: diarize a second Kino stream to see the
-  auto-match across days, then `[shows.kino.transcribe] diarize = true`, then commit.
+  Listening samples in logs/speaker_samples/.
+- kick-133940023 `--diarize` (~$0.31, 8.23 h): auto-named PPP 0.96, Andy 0.98, Jer 0.98, PPP's
+  sub-read voice 0.86 (user confirmed). Intro songs matched the first stream's at 0.89 but Andy
+  at 0.59, so "music" IS enrolled (from this stream's SPEAKER_07; best match wins, co-hosts score
+  0.9+ on themselves). Its SPEAKER_04 is several clips: unnamed, correctly.
+- Combined call tested on a copy of yt-RGPltEFULV0 (16 min): 50 s, ~$0.04 (diarize 9 s),
+  PPP 0.92 / Andy 0.93 automatically. **`[shows.kino.transcribe] diarize = true` is on in
+  clipper.toml since 2026-10-25**: every new Kino stream gets names in words.jsonl (~$0.30 more
+  per 8 h). Committed 482e773.
 - Not done yet (follow-ups): scoring/meta/weekly prompts don't read `speaker` yet (new prompt
   versions); archive transcribe never diarizes (modal_settings default).
 
