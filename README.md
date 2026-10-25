@@ -122,7 +122,18 @@ clipper archive status
 clipper modal                                                     # GPUs up, runs, spend, archive ETA
 clipper archive check jer                                         # which source links still play
 clipper archive links jer                                         # the dead and restricted ones
+clipper archive index jer                                         # keyword index, index.sqlite (free)
+clipper archive search jer '"costco dog"' --by oldest             # hits: date, title, link at the moment
+clipper archive search jer 'huck' --years                         # how often, per year
+clipper archive ask jer "Jer saying he'd never take sponsor money"  # Haiku writes the searches, picks the fits (~1c)
 ```
+
+`search` takes FTS5 syntax (`a b` both words, `"a b"` the phrase, `OR`, `NOT`, `pre*`) with
+stemming, over ~30 s windows; each hit links to the moment, a few seconds early. It matches
+words, not meaning: "the warehouse store" won't find "Costco" (embeddings are #53). `ask`
+gets most of the way there cheaply: Haiku turns the question into up to 8 searches (synonyms,
+names, how Whisper misspells them), then reads the ~80 pooled windows and returns the ones
+that fit, strong or maybe, each with a quote, a reason and the link.
 
 `check` downloads nothing and costs nothing: YouTube's oEmbed endpoint and Odysee's resolve say
 whether each item is alive, restricted (private, embedding off, blocked) or dead, kept in

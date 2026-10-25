@@ -377,7 +377,15 @@ cut, whether sound effects/stings are wanted (left out until they say), and whic
   `transcribe` now also logs to `archive/<subject>/transcribe.log` itself. Retry 2026-10-24: 66 more
   (~$0.99); then the last 403 and the 16 age-restricted with the user's cookies (`[paths]
   youtube_cookies`, used only after a "Sign in to confirm" failure): **11,571/11,571, complete
-  2026-10-24.** The user was asked to sign that session out afterwards (cookies were pasted in chat). Odysee CDN refuses direct ffmpeg pulls
+  2026-10-24.** The user was asked to sign that session out afterwards (cookies were pasted in chat).
+  **Search (2026-10-25, user's idea for the cheap-LLM layer):** `clipper archive index jer` built
+  `archive/jer/index.sqlite` (FTS5, porter, 30 s windows: 277,351 windows, 236 MB, 20 min, free);
+  `archive search` takes FTS5 queries (normalized in code: AND around parentheses, punctuation
+  out); `archive ask` = Haiku writes up to 8 queries, pools 80 windows, Haiku picks strong/maybe
+  with quote + ?t= link, ~$0.003 a question. Tried on #48 stories: Costco pharmacy pills for his dog
+  (Aug 2026), Shorts "AI garbage" (Oct 2025) vs "millions of Shorts views, $200-500" (Mar 2026),
+  coffee gift boxes 2023-2025, "I'd never tell people to leave YouTube for Rumble" (2023); nothing
+  for World Series tickets (likely not on YouTube). Not yet judged by the user. Odysee CDN refuses direct ffmpeg pulls
   (401 then 429), so Jerry needs yt-dlp's extractor (#44). #49 (user): Modal monitoring in the war
   room, on the #14 roadmap. #50 (user): running P&L, a costs.jsonl ledger (Claude costs are only
   printed today) plus YouTube estimatedRevenue once monetized (needs the monetary analytics scope).

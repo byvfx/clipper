@@ -77,6 +77,14 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "stop_after_failures": 20,  # in a row (e.g. YouTube's bot check); 0 = never stop
         "link_parallel": 4,       # `archive check`: oEmbed requests at once
         "link_recheck_days": 7,   # `archive check` skips links checked more recently
+        "index_window_s": 30,     # `archive index`: seconds of transcript per searchable window
+        # `archive ask`: a cheap model writes the searches, then picks the windows that fit
+        "ask_model": "claude-haiku-5-5",
+        "ask_effort": "low",
+        "ask_prompt_version": "v1",  # prompts/archive_expand_<v>.md, archive_judge_<v>.md
+        "ask_max_queries": 8,
+        "ask_per_query": 25,      # best-ranked windows kept per query
+        "ask_candidates": 80,     # pooled windows the model reads (~25k tokens)
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.

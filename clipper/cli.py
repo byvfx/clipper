@@ -123,6 +123,19 @@ def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
         archive.check_links(cfg, args.subject, args.ids, args.all, args.limit)
     elif args.action == "links":
         archive.list_links(cfg, args.subject, args.status)
+    elif args.action == "index":
+        from . import archive_index
+
+        archive_index.build(cfg, args.subject, args.rebuild)
+    elif args.action == "search":
+        from . import archive_index
+
+        archive_index.search(cfg, args.subject, args.query, args.limit, args.since, args.before,
+                             args.by, args.years)
+    elif args.action == "ask":
+        from . import archive_index
+
+        archive_index.ask(cfg, args.subject, args.question, args.since, args.before, args.limit)
     else:
         archive.status(cfg, args.subject)
 
@@ -539,6 +552,24 @@ def main() -> None:
     r = rsub.add_parser("links", help="items by link status (default: every link not alive)")
     r.add_argument("subject")
     r.add_argument("--status", choices=["dead", "restricted", "alive", "all"])
+    r = rsub.add_parser("index", help="build the subject's keyword index (index.sqlite; no cost)")
+    r.add_argument("subject")
+    r.add_argument("--rebuild", action="store_true", help="start the index over")
+    r = rsub.add_parser("search", help="search the transcripts: hits with date, link at the moment")
+    r.add_argument("subject")
+    r.add_argument("query", help='FTS5: costco dog | "costco dog" | costco OR walmart | coff*')
+    r.add_argument("--limit", type=int, default=20)
+    r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
+    r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
+    r.add_argument("--by", choices=["rank", "date", "oldest"], default="rank",
+                   help="best match (default), newest first, or oldest first")
+    r.add_argument("--years", action="store_true", help="matching windows per year, not hits")
+    r = rsub.add_parser("ask", help="plain question: a cheap model searches the index, picks the fits")
+    r.add_argument("subject")
+    r.add_argument("question", help="e.g. 'Jer saying he would never sell out to a sponsor'")
+    r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
+    r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
+    r.add_argument("--limit", type=int, default=15, help="options shown")
 
     p = sub.add_parser("modal", help="Modal now: containers, runs, failures, this month's spend, archives")
     p.add_argument("--backfill", action="store_true",
