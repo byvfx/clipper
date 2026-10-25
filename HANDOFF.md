@@ -265,7 +265,10 @@ to FCPXML for Resolve (#60). Issues: #67 the stage + renderer (foundation, first
 (cut to the archive when the transcript points at the past; needs #53), #70 pacing (tighten gaps and
 filler, punch-ins on loudness/chat spikes, emphasis text), #71 war room transcript editor (strike words
 to cut, select words to add a card, through actions.py). Related: #52 speaker labels, #41/#54 names and
-faces, #55 face crop. All on-screen text follows house_style and [bleep]. Waiting on the user: which
+faces, #55 face crop. Model (user wants it model-agnostic): the edit plan starts on Opus 5.5 at medium
+effort, then a side-by-side with Sonnet 5.5 on kick-131151926; #72 is a provider layer behind
+`scoring.Claude.json_call/text_call` (provider prefix in the model string, OpenAI-compatible adapter
+for OpenAI/Gemini/local). All on-screen text follows house_style and [bleep]. Waiting on the user: which
 item kinds get edits (suggested clips + Shorts first), edited version replaces or sits beside the plain
 cut, whether sound effects/stings are wanted (left out until they say), and which issue after #67.
 
