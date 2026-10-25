@@ -152,6 +152,23 @@ def estimate_usd(hours: float, gpu: str) -> float:
     return hours / SPEED.get(gpu, 30.0) * GPU_PRICES.get(gpu, 0.0)
 
 
+def netscape_cookies(path: Path) -> Path:
+    """yt-dlp reads only Netscape cookies.txt; a browser extension's JSON export (a list of
+    {domain, path, secure, expirationDate, name, value}) is converted beside it."""
+    text = path.read_text(encoding="utf-8").lstrip()
+    if not text.startswith("["):
+        return path
+    lines = ["# Netscape HTTP Cookie File"]
+    for c in json.loads(text):
+        dom = c["domain"]
+        lines.append("\t".join([dom, "TRUE" if dom.startswith(".") else "FALSE", c.get("path") or "/",
+                                "TRUE" if c.get("secure") else "FALSE",
+                                str(int(c.get("expirationDate") or 0)), c["name"], c["value"]]))
+    out = path.with_name(f"{path.stem}.netscape.txt")
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
+
+
 def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
     """One item: words.jsonl and transcript.json in idir; returns the cost record."""
     tc = dict(cfg["transcribe"], backend="modal")
@@ -170,8 +187,13 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
         return out, cost
 
     if it["source"] == "youtube":
-        r = ytdlp("-f", cfg["archive"]["youtube_format"], "--write-info-json", "--no-playlist",
-                  "-o", str(idir / "audio.%(ext)s"), it["url"])
+        args = ["-f", cfg["archive"]["youtube_format"], "--write-info-json", "--no-playlist",
+                "-o", str(idir / "audio.%(ext)s"), it["url"]]
+        r = ytdlp(*args)
+        cookies = cfg["paths"]["youtube_cookies"]
+        if r.returncode and "Sign in to confirm" in r.stderr and cookies.is_file():
+            # age-restricted: only these go out signed in, so the account is seen as little as possible
+            r = ytdlp("--cookies", str(netscape_cookies(cookies)), *args)
         audio = [p for p in idir.glob("audio.*") if p.suffix not in (".json", ".part")]
         if r.returncode or not audio:
             raise RuntimeError(f"yt-dlp: {r.stderr.strip().splitlines()[-1:]}")

@@ -123,6 +123,14 @@ over the last 3 hours. The per-run estimates are only a guide; billing is the re
 The bot DMs (`[notify]` kind `spend`) each time the month passes a multiple of `[modal]
 alert_every_usd` (25); set `monthly_budget_usd` to show the month against your own ceiling.
 The process that serves the war room (the bot) needs the Modal token, as the worker does.
+
+**Age-restricted archive videos.** `clipper archive transcribe` downloads anonymously; a video
+YouTube won't serve without sign-in ("Sign in to confirm your age") is retried with `[paths]
+youtube_cookies` (`secrets/youtube_cookies.txt`) when that file exists. Export it as Netscape
+cookies.txt or as JSON (Cookie-Editor's default; converted to `youtube_cookies.netscape.txt`
+beside it) with a browser extension (e.g. "Get cookies.txt LOCALLY") from a private
+window signed in to an adult Google account (not the upload channel's, if you can avoid it),
+then close the window so the session isn't rotated. Rerun `transcribe` to pick up the failures.
 On a new install, `clipper modal --backfill` adds the runs from before the log, once.
 
 ## 2c. Narration voice (ElevenLabs, optional)

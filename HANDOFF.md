@@ -355,7 +355,9 @@ dials out. After #9/#64 (one writer first). Covers #7 for Linux; #13 can shrink 
   yt-dlp "HTTP Error 403", 16 age-restricted ("Sign in to confirm your age", needs cookies), 4
   network. The restarted run's `>> logs/archive-jer.log` redirect wrote nothing (cause unknown), so
   `transcribe` now also logs to `archive/<subject>/transcribe.log` itself. Retry 2026-10-24: 66 more
-  (~$0.99), so **11,554/11,571**; left: the 16 age-restricted (need YouTube cookies, user's call) and 1 403. Odysee CDN refuses direct ffmpeg pulls
+  (~$0.99); then the last 403 and the 16 age-restricted with the user's cookies (`[paths]
+  youtube_cookies`, used only after a "Sign in to confirm" failure): **11,571/11,571, complete
+  2026-10-24.** The user was asked to sign that session out afterwards (cookies were pasted in chat). Odysee CDN refuses direct ffmpeg pulls
   (401 then 429), so Jerry needs yt-dlp's extractor (#44). #49 (user): Modal monitoring in the war
   room, on the #14 roadmap. #50 (user): running P&L, a costs.jsonl ledger (Claude costs are only
   printed today) plus YouTube estimatedRevenue once monetized (needs the monetary analytics scope).

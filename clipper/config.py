@@ -30,6 +30,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
         "archive": "archive",     # `clipper archive` subjects: <subject>/catalog.json + one dir per item
+        "youtube_cookies": "secrets/youtube_cookies.txt",  # optional, Netscape cookies.txt: `archive` age-restricted items
         "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
     },
