@@ -1188,7 +1188,7 @@ reviewed, then posted ASAP**.
 - The bot (which serves the war room) picks the new endpoint up on its next restart; until
   then the panel says "not found". Tested on a second war room (launch.json warroom-test).
 
-## Speaker labels (2026-10-25, #52, code done, waiting on the user's HF token)
+## Speaker labels (2026-10-25, #52)
 User: #52 "sounds really important", ahead of #55 (face-follow crop can then follow the talker).
 - `[transcribe] diarize` (off): pyannote `speaker-diarization-community-1` in the same Modal call
   (`_diarize` in modal_app.py; also local whisperx). Writes `diarization.json` (turns
@@ -1217,8 +1217,36 @@ User: #52 "sounds really important", ahead of #55 (face-follow crop can then fol
   PPP 0.92 / Andy 0.93 automatically. **`[shows.kino.transcribe] diarize = true` is on in
   clipper.toml since 2026-10-25**: every new Kino stream gets names in words.jsonl (~$0.30 more
   per 8 h). Committed 482e773.
-- Not done yet (follow-ups): scoring/meta/weekly prompts don't read `speaker` yet (new prompt
-  versions); archive transcribe never diarizes (modal_settings default).
+- **Model stages read the names (2026-10-25).** `scoring.load_words` marks the words (`who`)
+  when a stream has at least one real name (not just SPEAKER_xx / music); `transcript_lines`
+  then splits a WhisperX line where the voice changes for 3+ words (`TURN_MIN_WORDS`: pyannote's
+  turn edges are a word off) and tags the first line of each turn: `[812.4] [PPP] ...`, `[?]`
+  for an unnamed voice (a new `[?]` when it is a different one), `[music]`. Streams without
+  names give byte-identical text (checked on kick-132548228, whole stream and every 15-min
+  block). New prompts explain the tags, credit lines to who said them, and count `[?]` /
+  other names as clip audio (third-party rule, source_audio_s): scoring **v5** (score_a,
+  score_b, summary, scan + rule files copied), segments **v3** (+ compilation copy), meta
+  **v3** (meta, chapters). No "hosts" in them ("the show's own people", named in
+  stream_context). Weekly **v2** (weekly, weekly_article): `weekly.said_by` finds each pick's
+  hook in its own window's words (>= `[weekly] quote_match` 0.75 token match) and the pool
+  line says "said by PPP" / "said in a clip they played or by a guest"; the prompt credits
+  the person then. kick-133940023: 9 of 20 hooks credited to PPP/Andy, 2 to clip voices (the
+  "quadrillion percent cooked" and "monetize our wedding" lines are not theirs); the rest are
+  paraphrased hooks, credited to the show as before. pick / preshow / retake pass
+  `speakers=False` (their prompts don't explain tags yet). `pick --about` falls back to the
+  newest older summary_v*.json, so streams scored with v4 still work.
+- Cost of the tags on kick-133940023 (8.2 h): whole transcript 179,312 -> 193,244 tokens
+  (+7.8%, count_tokens), 8,056 -> 8,536 lines, 2,373 tags. About +$0.06 on segments (Opus,
+  ~$0.91 before), +$0.02 on score ($0.30), up to +$0.06 on meta chapters ($0.79): ~$0.12
+  more per 8 h stream. No model call was run for this change; the v5/v3 prompts are untested
+  on real output (first real Kino stream, or a rerun on kick-131151926, will show it).
+- clipper.toml pins were moved too (scoring v5, segments v3, meta v3; it pinned v4/v2/v2,
+  which would have fed tags to prompts that say "no speaker labels"). Weekly isn't pinned.
+- Seen in the built text: songs are sometimes tagged PPP or [?] instead of music (the intro
+  song at 1762 s on kick-133940023). The prompts say tags can be wrong in songs/crosstalk.
+- Not done yet: archive transcribe never diarizes (modal_settings default); pick / preshow /
+  retake prompts with tags; weekly quotes are only as good as the hooks (often paraphrases):
+  a verbatim quote pool from the tagged transcript would credit more of them.
 
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS

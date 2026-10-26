@@ -153,6 +153,10 @@ The model is gated on Hugging Face:
    A stream transcribed before: `clipper speakers <stream> --diarize` (diarization alone).
    Enroll only someone's normal voice: name an impression or a music bed by hand on that
    stream, without `--enroll` (pass the `--name` flags you want enrolled in a separate call).
+6. Nothing else to set: once a stream has a named speaker, score, segments and meta read
+   speaker tags in the transcript (the v5 scoring and v3 segments/meta prompts explain them;
+   a `clipper.toml` that pins older `prompt_version`s gets tags the prompt doesn't expect, so
+   keep the pins current). Streams without names give the same text as before.
 
 ## 2c. Narration voice (ElevenLabs, optional)
 

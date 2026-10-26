@@ -15,6 +15,8 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **fetch / record**: a finished Kick VOD, or the live stream as it happens (NAS container), with chat.
 - **transcribe**: WhisperX (NVIDIA) or mlx-whisper (Apple Silicon) to word timestamps; with
   `[transcribe] diarize`, speaker turns too, named per show by `clipper speakers` (enrolled voices).
+  Once a stream has names, the transcript the model stages read tags each turn (`[PPP] ...`,
+  `[?]` for a voice nobody named, `[music]`), and the weekly credits a quote to whoever said it.
 - **signals**: chat activity and loudness into a heat curve.
 - **score**: Claude reads the transcript and heat curve and proposes moments and picks.
 - **segments**: Claude splits the stream into topic segments and compilations.

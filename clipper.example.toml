@@ -116,7 +116,7 @@ model_a = "claude-haiku-5-5"    # Pass A, one call per window + the stream summa
 model_b = "claude-sonnet-5-5"   # Pass B, one call per stream
 effort_a = "medium"
 effort_b = "high"
-prompt_version = "v4"           # prompts/<name>_<version>.md
+prompt_version = "v5"           # prompts/<name>_<version>.md (v5: reads speaker tags, #52)
 concurrency = 4
 lead_in_s = 120                 # transcript before each window, for context
 max_picks = 10
@@ -158,7 +158,7 @@ scan_max_overlap = 0.5     # skip scanned moments a chat window already covers t
 # whole transcript (~100k tokens for an 8 h stream).
 model = "claude-opus-5-5"
 effort = "medium"
-prompt_version = "v2"          # prompts/segments_<version>.md and compilation_<version>.md
+prompt_version = "v3"          # prompts/segments_<version>.md and compilation_<version>.md (v3: speaker tags)
 min_aside_s = 180              # fold shorter asides into the surrounding segment
 min_s = 180                    # only cut segments between min_s and max_s seconds
 max_s = 3600
@@ -191,7 +191,7 @@ profanity_patterns = [
 # Upload metadata drafts (`clipper meta`): SEO titles, descriptions, chapters, tags, SRT.
 model = "claude-opus-5-5"
 effort = "medium"
-prompt_version = "v2"          # prompts/meta_<v>.md and chapters_<v>.md (v2: better hashtag picks)
+prompt_version = "v3"          # prompts/meta_<v>.md and chapters_<v>.md (v2: better hashtag picks, v3: speaker tags)
 show_name = ""
 title_format = "{SHOW} | {title}"   # KINO CASINO | <title>; {show} keeps its case
 credit = "Clipped from {show}, streamed live on Kick {date}: https://kick.com/{channel}"

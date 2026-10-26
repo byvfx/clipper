@@ -109,10 +109,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # prompts/weekly_<v>.md; edit it and `clipper weekly --render`.
         "model": "claude-opus-5-5",
         "effort": "high",
-        "prompt_version": "v1",
+        "prompt_version": "v2",   # v2: quotes credited to who said them (speaker names, #52)
         "write_articles": True,   # after a draft, write the three articles again, one call each...
-        "article_prompt_version": "v1",  # ...with prompts/weekly_article_<v>.md...
+        "article_prompt_version": "v2",  # ...with prompts/weekly_article_<v>.md...
         "article_example": "weekly_article_example.md",  # ...and this piece (in prompts/) as the voice to match
+        "quote_match": 0.75,      # a hook this close to word for word in the Short is credited to its speaker
         "first_issue": 1,         # number of the first issue this install makes
         "formats": ["tiktok", "youtube"],  # tiktok: 1080x1440 pages; youtube: the same pages square (youtube/)
         "masthead": ["LOLCOW", "CINEMA"],  # red word, chrome word (then "WEEKLY" inside)
@@ -269,7 +270,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "segments": {
         "model": "claude-opus-5-5",   # one call over the whole transcript
         "effort": "medium",
-        "prompt_version": "v2",   # prompts/segments_<v>.md, compilation_<v>.md
+        "prompt_version": "v3",   # prompts/segments_<v>.md, compilation_<v>.md (v3: speaker tags, #52)
         "min_aside_s": 180,       # fold shorter asides into the surrounding segment
         "min_s": 180,             # only cut segments between min_s and max_s long
         "max_s": 3600,
@@ -297,7 +298,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "meta": {
         "model": "claude-opus-5-5",
         "effort": "medium",
-        "prompt_version": "v2",   # prompts/meta_<v>.md, chapters_<v>.md
+        "prompt_version": "v3",   # prompts/meta_<v>.md, chapters_<v>.md (v3: speaker tags, #52)
         "concurrency": 4,
         "show_name": "",
         # Upload titles: {title}, {show} or {SHOW} (upper case). Not applied to a title
@@ -542,7 +543,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "model_b": "claude-sonnet-5-5",
         "effort_a": "medium",
         "effort_b": "high",
-        "prompt_version": "v4",
+        "prompt_version": "v5",   # v5: speaker tags in the transcript (#52)
         "concurrency": 4,
         "lead_in_s": 120,
         "max_picks": 10,

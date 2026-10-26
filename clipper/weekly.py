@@ -141,21 +141,53 @@ def chat_stats(sdir: Path, meta: dict, hours: float) -> dict:
             "peak_at_s": peak_min * 60, "emotes": dict(emotes.most_common(8))}
 
 
-def word_counts(sdir: Path, words: list[str]) -> tuple[dict, int]:
+def load_words(sdir: Path) -> list[dict]:
     p = sdir / "words.jsonl"
     if not p.exists():
-        return {}, 0
-    text = []
+        return []
+    out = []
     with open(p, encoding="utf-8") as f:
         for line in f:
             try:
-                text.append(json.loads(line)["word"])
-            except (ValueError, KeyError):
-                pass
-    joined = " ".join(text).lower()
+                w = json.loads(line)
+            except ValueError:
+                continue
+            if "word" in w:
+                out.append(w)
+    return out
+
+
+def word_counts(spoken: list[dict], words: list[str]) -> tuple[dict, int]:
+    if not spoken:
+        return {}, 0
+    joined = " ".join(w["word"] for w in spoken).lower()
     counts = {w: len(re.findall(r"\b" + re.escape(w.lower()) + r"\b", joined)) for w in words}
     counts["_fuck"] = len(FWORD.findall(joined))
-    return counts, len(text)
+    return counts, len(spoken)
+
+
+TOKEN = re.compile(r"[a-z0-9']+")
+UNNAMED = re.compile(r"SPEAKER_\d+")
+
+
+def said_by(spoken: list[dict], hook: str, a: float, b: float, min_match: float) -> str:
+    """Who said the hook, when it is (nearly) word for word in [a, b) and the stream has
+    speaker names (#52): the name, "?" for a voice nobody named; "" when it is not there."""
+    want = Counter(TOKEN.findall(hook.lower()))
+    n = sum(want.values())
+    toks = [(t, w.get("speaker")) for w in spoken if a <= w["start"] < b
+            for t in TOKEN.findall(w["word"].lower())]
+    if n < 3 or not any(s and not UNNAMED.fullmatch(s) and s != "music" for _, s in toks):
+        return ""
+    best, at = 0.0, 0
+    for i in range(len(toks)):
+        got = sum((Counter(t for t, _ in toks[i:i + n]) & want).values()) / n
+        if got > best:
+            best, at = got, i
+    who = Counter(s for _, s in toks[at:at + n] if s).most_common(1)
+    if best < min_match or not who or who[0][0] == "music":
+        return ""
+    return "?" if UNNAMED.fullmatch(who[0][0]) else who[0][0]
 
 
 def faces_of(sdir: Path) -> list[dict]:
@@ -207,10 +239,18 @@ def gather(cfg: dict, start: datetime, end: datetime, here: Path) -> tuple[dict,
                              "kind": x.get("kind", ""), "duration_s": round(x.get("duration_s", 0), 1),
                              "cut": x.get("cut", True)})
         uploads = {k: v["fields"].get("YouTube URL") for k, v in review.items() if v.get("fields", {}).get("YouTube URL")}
-        hooks = [{"id": p["id"], "hook": p.get("hook", ""), "title": p.get("title", "")}
-                 for p in (cands.get("pass_b") or {}).get("picks", []) if p.get("hook")]
+        spoken = load_words(sdir)
+        found = {c["id"]: c for c in cands.get("pass_a") or [] if "id" in c}
+        hooks = []
+        for p in (cands.get("pass_b") or {}).get("picks", []):
+            if not p.get("hook"):
+                continue
+            c = found.get(p["id"], {})
+            ts = [c[k] for k in ("in_s", "out_s", "short_in_s", "short_out_s") if c.get(k)]
+            by = said_by(spoken, p["hook"], min(ts) - 5, max(ts) + 5, wc["quote_match"]) if ts else ""
+            hooks.append({"id": p["id"], "hook": p["hook"], "title": p.get("title", ""), "said_by": by})
         shorts = [k for k, v in review.items() if v.get("kind") == "short"]
-        counts, n_words = word_counts(sdir, wc["words"])
+        counts, n_words = word_counts(spoken, wc["words"])
         streams[sdir.name] = {
             "show": show, "show_name": show_name, "channel": meta.get("channel"),
             "preshow": preshow, "started_at": at.isoformat(), "day": DAYS[at.weekday()],
@@ -317,6 +357,14 @@ def hm(minutes: float) -> str:
     return f"{h}h {m:02d}m" if h else f"{m}m"
 
 
+def credit(hook: dict) -> str:
+    """The quote pool's "said by" (weekly v2 prompts); nothing for a stream without names."""
+    by = hook.get("said_by")
+    if not by:
+        return ""
+    return "said in a clip they played or by a guest; " if by == "?" else f"said by {by}; "
+
+
 def draft_user(week: dict, stats: dict, headline: str, issue: int, photos: dict[str, Path]) -> str:
     lines = [f"Issue {issue:02d}, week of {week['label']}.",
              f"Editor's note: {headline}" if headline else "Editor's note: none; pick the biggest story.", ""]
@@ -329,7 +377,7 @@ def draft_user(week: dict, stats: dict, headline: str, issue: int, photos: dict[
             lines.append(f"- {x['id']} [{x['topic']}] {round(x['duration_s'] / 60)} min: {x['title']}. {x['summary']}")
         if s["hooks"]:
             lines.append("  Verbatim lines from this stream (the quote pool; quote these and nothing else):")
-            lines += [f"  - \"{h['hook']}\" ({h['id']}: {h['title']})" for h in s["hooks"]]
+            lines += [f"  - \"{h['hook']}\" ({credit(h)}{h['id']}: {h['title']})" for h in s["hooks"]]
         lines.append("")
     lines.append("## Numbers (computed; use them as they are)")
     lines.append(f"- {stats['shows']} shows and {stats['preshows']} pre-shows, {stats['hours']:.1f} h live "
@@ -414,7 +462,7 @@ def article_user(week: dict, a: dict, page: int, budget: tuple, note: str = "") 
             else:
                 rest.append(line)
         for h in st["hooks"]:
-            pool.append(f"- \"{h['hook']}\" ({st['show_name']}, {st['day']} {st['date']}: {h['title']})")
+            pool.append(f"- \"{h['hook']}\" ({credit(h)}{st['show_name']}, {st['day']} {st['date']}: {h['title']})")
     lines += ["", "## The rest of the week (titles only, for context)"] + rest[:60]
     lines += ["", "## Quote pool (the only lines you may quote, verbatim)"] + pool
     return "\n".join(lines)

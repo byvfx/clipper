@@ -178,7 +178,7 @@ def find(sdir: Path, cfg: dict, text: str, clock_use: str = "stream", limit: int
     clock = Clock(meta, clock_use)
     words = load_words(sdir)
     needle = text.lower()
-    hits = [line for line in transcript_lines(words, 0, float("inf")) if needle in line.lower()]
+    hits = [line for line in transcript_lines(words, 0, float("inf"), speakers=False) if needle in line.lower()]
     print(f"{len(hits)} lines with {text!r}; {clock.describe()}")
     for line in hits[:limit]:
         t = float(line[1:line.index("]")])
@@ -190,7 +190,11 @@ def find(sdir: Path, cfg: dict, text: str, clock_use: str = "stream", limit: int
 def locate(sdir: Path, cfg: dict, about: str, claude: Claude, prompts: Prompts,
            clock: Clock) -> list[tuple[float, float]]:
     """Stretches (video clock) whose summary blocks match the request."""
-    summary = load(sdir / f"summary_{cfg['scoring']['prompt_version']}.json", None)
+    # this version's summary, else the newest older one (a stream scored before a prompt bump)
+    summary = load(sdir / f"summary_{cfg['scoring']['prompt_version']}.json", None) or next(
+        (load(p, None) for p in sorted(sdir.glob("summary_v*.json"),
+                                       key=lambda p: int(p.stem[9:]) if p.stem[9:].isdigit() else 0,
+                                       reverse=True)), None)
     if not summary:
         raise SystemExit("no stream summary to search (run `clipper score` first); "
                          "give --from/--to or --at instead")
@@ -214,8 +218,8 @@ def pick_stretch(sdir: Path, cfg: dict, a: float, b: float, about: str, picked: 
                  words: list[dict], sig: dict | None, claude: Claude, prompts: Prompts,
                  clock: Clock) -> tuple[list[dict], dict]:
     pc, sc = cfg["pick"], cfg["scoring"]
-    lead = transcript_lines(words, max(0.0, a - sc["lead_in_s"]), a)
-    body = transcript_lines(words, a, b)
+    lead = transcript_lines(words, max(0.0, a - sc["lead_in_s"]), a, speakers=False)
+    body = transcript_lines(words, a, b, speakers=False)
     if not body:
         return [], {"note": "no speech in this stretch"}
     near = [p for p in picked if overlap(short_window(p), (a, b)) > 0]

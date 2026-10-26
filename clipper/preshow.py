@@ -257,7 +257,7 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
     claude = Claude(cfg["scoring"]["workspace_id"])
     preflight(claude, pc["model"])
     user = (f"Original title: {meta['title']}\n\nOriginal description:\n{meta['description'][:2000]}"
-            "\n\nTranscript:\n" + "\n".join(transcript_lines(words, 0, end + 1)))
+            "\n\nTranscript:\n" + "\n".join(transcript_lines(words, 0, end + 1, speakers=False)))
     out, api = claude.json_call(pc["model"], prompts.get("preshow"), user, SCHEMA, pc["effort"],
                                 fallback=True)
     if out is None:

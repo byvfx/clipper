@@ -146,7 +146,7 @@ def context(cfg: dict, sdir: Path, key: str, st: dict, row: dict) -> str:
             parts = [(max(0, a - pad), b + pad, "the video and around it")]
         for x, y, label in parts:
             lines.append(f"\nTranscript {label} ({x:.0f}-{y:.0f} s):")
-            lines += transcript_lines(words, x, y)
+            lines += transcript_lines(words, x, y, speakers=False)
     return "\n".join(lines)
 
 
