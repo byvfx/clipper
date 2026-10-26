@@ -161,6 +161,9 @@ def normalize(query: str) -> str:
             # co-op / huck's: the index split them at the punctuation, so search the phrase
             tok = f'"{" ".join(words)}"' if len(words) > 1 else words[0] + ("*" if tok.endswith("*") else "")
         prev = out[-1] if out else None
+        if tok == "NOT" and prev == "AND":  # FTS5's NOT is already binary: a AND NOT b is an error
+            out.pop()
+            prev = out[-1] if out else None
         if prev and prev not in OPS and prev != "(" and tok not in OPS and tok != ")" \
                 and ("(" in (prev, tok) or ")" in (prev, tok)):
             out.append("AND")
@@ -227,10 +230,17 @@ JUDGE_SCHEMA = {
 }
 
 
-def ask(cfg: dict, subject: str, question: str, since: str | None, before: str | None,
-        limit: int) -> None:
-    """Question in plain words -> FTS5 queries (model) -> pooled hits -> the ones that fit (model)."""
-    from .scoring import Claude, Prompts, preflight
+def quiet_http() -> None:
+    for name in ("httpx", "httpx2"):  # the SDK's HTTP client logs a line per call at INFO
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def answer(cfg: dict, subject: str, question: str, since: str | None, before: str | None,
+           claude) -> list[dict]:
+    """Question in plain words -> FTS5 queries (model) -> pooled hits -> the ones that fit (model).
+    The fitting hits, strong first then oldest first, each with fit, quote and why added.
+    claude keeps the running cost (`clipper receipts` asks one question per story)."""
+    from .scoring import Prompts
 
     ac = cfg["archive"]
     db = open_index(cfg, subject)
@@ -239,10 +249,6 @@ def ask(cfg: dict, subject: str, question: str, since: str | None, before: str |
     prompts.version = ac["ask_prompt_version"]
     channels = ", ".join(sorted({i.get("channel") or "?" for i in cat.values()}))
     prompts.vars.update(subject=subject, channels=channels, max_queries=ac["ask_max_queries"])
-    claude = Claude(cfg["scoring"]["workspace_id"])
-    for name in ("httpx", "httpx2"):  # the SDK's HTTP client logs a line per call at INFO
-        logging.getLogger(name).setLevel(logging.WARNING)
-    preflight(claude, ac["ask_model"])
 
     out, _ = claude.json_call(ac["ask_model"], prompts.get("archive_expand"), question,
                               EXPAND_SCHEMA, ac["ask_effort"])
@@ -256,10 +262,10 @@ def ask(cfg: dict, subject: str, question: str, since: str | None, before: str |
         print(f"  {len(found):>3} for {normalize(q['fts'])}  ({q['why']})")
         for h in found:
             pool.setdefault((h["item"], h["start"]), h)
+    db.close()
     cands = list(pool.values())[:ac["ask_candidates"]]
     if not cands:
-        print(f"nothing in the index for {question!r} (~${claude.cost:.3f})")
-        return
+        return []
     listing = "\n\n".join(f"[{n}] {h['date'] or 'undated'} | {h['channel']} | {h['title']}\n{h['text']}"
                           for n, h in enumerate(cands))
     out, _ = claude.json_call(ac["ask_model"], prompts.get("archive_judge"),
@@ -267,11 +273,21 @@ def ask(cfg: dict, subject: str, question: str, since: str | None, before: str |
                               JUDGE_SCHEMA, ac["ask_effort"])
     picks = [p for p in (out or {}).get("picks", []) if 0 <= p["n"] < len(cands)]
     picks.sort(key=lambda p: (p["fit"] != "strong", cands[p["n"]]["date"] or ""))
-    print(f"\n{question!r}: {len(picks)} of {len(cands)} windows fit "
-          f"(~${claude.cost:.3f}, {ac['ask_model']})\n")
-    for k, p in enumerate(picks[:limit], 1):
-        h = cands[p["n"]]
-        print(f"{k:>2}. [{p['fit']}] {h['date'] or '????-??-??'}  {h['channel']}  {h['title'][:70]!r}")
+    print(f"  {len(picks)} of {len(cands)} windows fit")
+    return [{**cands[p["n"]], "fit": p["fit"], "quote": p["quote"], "why": p["why"]} for p in picks]
+
+
+def ask(cfg: dict, subject: str, question: str, since: str | None, before: str | None,
+        limit: int) -> None:
+    from .scoring import Claude, preflight
+
+    claude = Claude(cfg["scoring"]["workspace_id"])
+    quiet_http()
+    preflight(claude, cfg["archive"]["ask_model"])
+    picks = answer(cfg, subject, question, since, before, claude)
+    print(f"\n{question!r}: {len(picks)} fit (~${claude.cost:.3f}, {cfg['archive']['ask_model']})\n")
+    for k, h in enumerate(picks[:limit], 1):
+        print(f"{k:>2}. [{h['fit']}] {h['date'] or '????-??-??'}  {h['channel']}  {h['title'][:70]!r}")
         print(f"    {link(h['url'], h['source'], h['start'])}")
-        print(f"    \"{p['quote']}\"")
-        print(f"    {p['why']}\n")
+        print(f"    \"{h['quote']}\"")
+        print(f"    {h['why']}\n")

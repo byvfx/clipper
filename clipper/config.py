@@ -89,6 +89,41 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "ask_per_query": 25,      # best-ranked windows kept per query
         "ask_candidates": 80,     # pooled windows the model reads (~25k tokens)
     },
+    "receipts": {
+        # `clipper receipts`: a stream's stories about an archive subject -> old clips of him
+        # saying it (#48), cut into one video with source and date on screen, uploaded private.
+        "subject": "jer",         # the archive subject (paths.archive/<subject>)
+        "topics": ["The Quartering"],  # segments with one of these topics...
+        "figures": ["Jeremy Hambly", "Jer", "The Quartering"],  # ...or one of these figures
+        "model": "claude-sonnet-5-5",  # reads the segments, writes the stories and questions
+        "effort": "medium",
+        "prompt_version": "v2",   # prompts/receipts_stories_<v>.md
+        # `receipts script`: Mother Moo's voice-over (open, a line per story card, a lead-in per
+        # clip, close), voiced by `cut` with [narrate] voice_id and tts_settings (ElevenLabs).
+        "script_model": "claude-opus-5-5",
+        "script_effort": "medium",
+        "script_prompt_version": "v1",  # prompts/receipts_script_<v>.md
+        "vo_pad_s": 0.6,          # card time after a read ends
+        "lufs": -16,              # every card and clip normalized to this (ffmpeg loudnorm)
+        "max_stories": 6,
+        "per_story": 3,           # receipts kept (use = true) per story; the rest stay listed
+        "maybe": False,           # also use "maybe" fits (they need a look in context)
+        "lead_s": 6,              # clip starts this much before the quote (at a sentence start)
+        "tail_s": 5,              # and ends this much after it
+        "max_clip_s": 60,
+        "card_s": 3.5,            # story card before each story's receipts
+        # yt-dlp, per clip: HLS first, where a section is a few segments; a section of a DASH
+        # format had ffmpeg read from YouTube for 10+ minutes for a 20 s clip (2026-10-25)
+        "format": "bv*[height<=1080][protocol^=m3u8]+ba[protocol^=m3u8]/b[height<=1080][protocol^=m3u8]"
+                  "/bv*[height<=1080]+ba/b",
+        "codec": "libx264",       # like [cut] codec; every part is re-encoded to one format
+        "crf": 20,
+        "bug": "",                # corner text on every clip; "" = [scoring] channel_name
+        "fonts": ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
+                  "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf"],
+        "text_fonts": ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+                       "/Library/Fonts/Arial Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"],
+    },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.
         "upload_url": "https://rumble.com/upload.php",

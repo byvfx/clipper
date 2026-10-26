@@ -379,6 +379,22 @@ def cmd_tiktok(cfg: dict, args: argparse.Namespace) -> None:
         tiktok.status(cfg, args.stream, check=not args.dry_run)
 
 
+def cmd_receipts(cfg: dict, args: argparse.Namespace) -> None:
+    from . import receipts
+
+    d = stream_dir(cfg, args.stream)
+    if args.action == "find":
+        receipts.find(d, cfg, args.segments.split(",") if args.segments else None)
+    elif args.action == "script":
+        receipts.script(d, cfg)
+    elif args.action == "cut":
+        receipts.cut(d, cfg)
+    elif args.action == "upload":
+        receipts.upload(d, cfg, args.again)
+    else:
+        receipts.show(d)
+
+
 def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
     from . import weekly
 
@@ -691,6 +707,14 @@ def main() -> None:
     p.add_argument("--write", nargs="?", const="03,04,05", metavar="PAGES",
                    help="write the articles again with the writer prompt (03 cover story, 04, 05; default all three)")
     p.set_defaults(fn=cmd_weekly)
+
+    p = sub.add_parser("receipts", help="old clips of the archive subject for a stream's stories, "
+                                        "one video uploaded private (#48)")
+    p.add_argument("action", choices=["find", "list", "script", "cut", "upload"])
+    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    p.add_argument("--segments", help="find: only these segments, e.g. s02,s05 (default: by topic/figure)")
+    p.add_argument("--again", action="store_true", help="upload: a second copy even if one is up")
+    p.set_defaults(fn=cmd_receipts)
 
     p = sub.add_parser("pick", help="Shorts from a stretch you name: find, cut, render, send to review")
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")

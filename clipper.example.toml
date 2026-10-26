@@ -478,6 +478,13 @@ diarize = false                # speaker turns per item too (#52; --diarize): ~+
 link_parallel = 4              # `clipper archive check`: are source links up? (oEmbed / Odysee resolve)
 link_recheck_days = 7          # links checked more recently are skipped; --all rechecks them
 
+[receipts]
+# `clipper receipts <stream>`: old clips of the archive subject for the night's stories (#48),
+# one video with source and date on screen, uploaded private for the user to send on.
+subject = "jer"
+topics = ["The Quartering"]
+per_story = 3
+
 [signals]
 chat_lag_s = 6             # shift chat earlier: stream delay + typing time
 baseline_s = 300           # rolling median baseline

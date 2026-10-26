@@ -32,6 +32,44 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
 
+## Receipts video for Don: `clipper receipts` (built 2026-10-25, Sunday night)
+User: "after tonight's Don stream let's run a receipts segment we can send to Don, we do an
+edit etc, make it private at first." Don's stream kick-134300801 (started 17:01 PT, recorded
+by the NAS) is the first real run.
+- `clipper/receipts.py`, `[receipts]` config, `prompts/receipts_stories_v1.md` (viewer-facing,
+  house style applies). `find` -> Sonnet reads the stream's Jer segments (topic/figures),
+  writes up to 6 stories (story, now, a catalog question, optional before-date), each question
+  goes through `archive_index.answer` (the old `ask`, split so it returns picks); clip bounds
+  come from locating the Haiku quote in the item's words.jsonl, widened 6 s / 5 s to segment
+  edges, max 60 s. Up to 3 strong fits per story get use=true; quotes not found in the words
+  are never auto-used. `cut` -> yt-dlp section downloads (HLS formats: a DASH section stalled
+  ffmpeg for 10+ min), 1920x1080 lower third "THEN: CHANNEL · DATE" + video title, corner bug
+  (channel_name), story cards, bleep from the archive words, concat, description with links
+  and chapters. `upload` -> private, outside schedule.json, video id into receipts.json.
+- Test on kick-133761201 (10/22 404): find ~$0.19, 6 stories, 3 used (World Series tickets,
+  Huck seizure count, sick dog for content), 7 clips, 2:55 video cut in 99 s. Best receipt:
+  "He has not had a seizure ever since" (Aug 2025) vs. ten in a day now. Weak one: r6a (an
+  upper respiratory infection line, not "using him for content"); Haiku's "strong" needs a
+  human look. Test files stay in that stream's receipts/ (not uploaded).
+- archive_index.normalize now drops AND before NOT (FTS5 rejects `a AND NOT b`).
+- User on the test: World Series "doesn't hold up" (Brewers-fan clips are background; the
+  point would be Huck being sick + asking for money, which everyone already knows): dropped.
+  Seizure count "pretty good": keep, add a script voiced with ElevenLabs. So:
+  `prompts/receipts_stories_v2.md` (receipts must contradict a specific claim; no background,
+  nothing the audience already knows; now the default) and `clipper receipts script`: Opus
+  writes Mother Moo's read (open, story vo, a lead-in per clip over a THEN/date card, close)
+  into receipts.json, `prompts/receipts_script_v1.md`; `cut` voices each line once per text
+  via narrate.speak into receipts/vo/, cards last as long as the read, every part loudnorm'd
+  to -16 LUFS (reads and Jer's clips were -15 to -21). Test kick-133761201 now = seizure
+  count only, 2:03 with voice-over, ~$0.02 Opus + ~700 ElevenLabs characters. Not uploaded.
+- **Tonight, kick-134300801** (worker had segments at 22:36): find $0.09, 4 stories (scale-video
+  bet, skipped show for Huck's ER, monetizing Huck's illness, StubHub tickets); 2 with receipts.
+  My picks before the script: r2a off (2021 respiratory infection, not a receipt), r2d on ("I
+  skipped one day in the last two years"), r3b left off (2019 "as I exploited my dog's cancer
+  for likes" is sarcasm at critics; risky out of context). Script $0.02, cut -> draft 1, 2:21,
+  sent to the user. Waiting on the user's edit; then `clipper receipts upload kick-134300801`
+  (private). r2b's source title contains "Hosts" (Jer's own title, in the description).
+
 ## Weekly issue 02: `clipper weekly` built (2026-10-24, Saturday)
 User: "run the magazine for the week", Ethan Klein as the headline. The stage from the
 roadmap below (#35) is now real: `clipper/weekly.py`, `prompts/weekly_v1.md`, `[weekly]` in
