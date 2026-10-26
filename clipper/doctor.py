@@ -429,6 +429,21 @@ def check_online(cfg: dict, role: str) -> None:
                 fail("online", f"diarize is on but the Modal secret {HF_SECRET!r}: {type(e).__name__}",
                      "see SETUP.md (Speaker labels): modal secret create huggingface HF_TOKEN=..., "
                      "then clipper transcribe --deploy")
+    cc = cfg["cut"]
+    if role in ("all", "gpu") and cc["backend"] == "nas":
+        missing = [k for k in ("nas_host", "nas_data") if not cc[k]]
+        if missing:
+            fail("online", f"[cut] backend = \"nas\" without [cut] {', '.join(missing)}",
+                 "set them in clipper.toml (the ssh alias, and the recorder's CLIPPER_DATA)")
+        else:
+            probe = f"docker image inspect --format '{{{{.Id}}}}' {cc['nas_image']} && test -d {cc['nas_data']}/streams"
+            r = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", cc["nas_host"], probe])
+            if r.returncode == 0:
+                ok("online", f"cut on the NAS: {cc['nas_host']} has {cc['nas_image']} and {cc['nas_data']}/streams")
+            else:
+                fail("online", f"cut on the NAS: {(r.stderr or r.stdout).strip()[-160:]}",
+                     "key login to the NAS (ssh -o BatchMode=yes <host>), and deploy the recorder once "
+                     "(bash deploy/record/deploy.sh): its image does the cutting")
     if role in ("all", "gpu"):  # the worker grabs pre-shows
         from . import preshow
         for key, sc in preshow.watched(_root(cfg)):

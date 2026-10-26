@@ -284,6 +284,14 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # Segments and compilations are always stream-copied (lossless, keyframe starts).
         "clip_codec": "libx264",  # picks: libx264 | h264_qsv | h264_nvenc | h264_vaapi
         "crf": 20,                # quality for re-encodes (global_quality / cq / qp)
+        "parallel": 3,            # segments cut at once (each an ffmpeg: copy + AAC of the bleeped audio)
+        # "nas": segments and compilations are cut on the NAS beside the source (#51), in a
+        # one-off container of the recorder image (deploy/record) over ssh; picks stay here.
+        "backend": "local",       # local | nas
+        "nas_host": "",           # ssh host (alias) of the NAS, key login (BatchMode)
+        "nas_data": "",           # the NAS folder mounted as /data, holding streams/ (the recorder's CLIPPER_DATA)
+        "nas_user": "",           # uid:gid to write files as (the recorder's PUID:PGID); "" = the image's
+        "nas_image": "clipper-record:latest",
     },
     "bleep": {
         "mode": "off",            # off | bleep (1 kHz tone) | mute; applied by `clipper cut`

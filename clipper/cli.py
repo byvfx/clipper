@@ -214,6 +214,10 @@ def cmd_cut(cfg: dict, args: argparse.Namespace) -> None:
     bad = set(what) - {"segments", "compilations", "picks"}
     if bad:
         raise SystemExit(f"cut: unknown {sorted(bad)}; use segments, compilations, picks")
+    if config.for_stream(cfg, d)["cut"]["backend"] == "nas" and {"segments", "compilations"} & set(what):
+        # the copies run beside the source; picks re-encode a few minutes each, so stay here
+        cut.on_nas(d, cfg, [w for w in what if w != "picks"] + (["--ids", args.ids] if args.ids else []))
+        what = [w for w in what if w == "picks"]
     if "segments" in what:
         cut.cut_segments(d, cfg, args.ids.split(",") if args.ids else None)
     if "compilations" in what:
@@ -579,6 +583,7 @@ def main() -> None:
     r.add_argument("--gpu", help="Modal GPU (default [archive] gpu)")
     r.add_argument("--parallel", type=int, help="items at once (default [archive] parallel)")
     r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
+    r.add_argument("--diarize", action="store_true", help="speaker turns too (default [archive] diarize)")
     r = rsub.add_parser("status", help="items, hours transcribed, errors, cost, link checks")
     r.add_argument("subject", nargs="?")
     r = rsub.add_parser("check", help="are the source links still up? (no downloads, no cost)")
@@ -595,7 +600,6 @@ def main() -> None:
     r.add_argument("--rebuild", action="store_true", help="start the index over")
     r = rsub.add_parser("search", help="search the transcripts: hits with date, link at the moment")
     r.add_argument("subject")
-    r.add_argument("--diarize", action="store_true", help="speaker turns too (default [archive] diarize)")
     r.add_argument("query", help='FTS5: costco dog | "costco dog" | costco OR walmart | coff*')
     r.add_argument("--limit", type=int, default=20)
     r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")

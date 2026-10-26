@@ -170,6 +170,13 @@ compile_min_segments = 2       # topics with this many segments also get one lon
 # Segments and compilations are always stream-copied (lossless; start on a keyframe).
 clip_codec = "libx264"          # picks: libx264 | h264_qsv | h264_nvenc (driver 610+) | h264_vaapi
 crf = 20                       # quality for re-encodes
+parallel = 3                   # segments cut at once
+# "nas": segments and compilations cut on the NAS beside the source, in a one-off container
+# of the recorder image over ssh (SETUP.md, section 3); picks stay on this machine.
+backend = "local"              # local | nas
+nas_host = ""                   # ssh alias of the NAS, key login
+nas_data = ""                   # the recorder's CLIPPER_DATA, e.g. /volume1/docker/clipper
+nas_user = ""                   # the recorder's PUID:PGID, e.g. 1000:10
 
 [bleep]
 # Cover slurs in cut audio (`clipper cut`) and mask them in captions and metadata text.

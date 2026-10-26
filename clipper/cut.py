@@ -10,14 +10,21 @@ Segments use stream copy (lossless, instant). A copy can only start on a keyfram
 otherwise the video track starts late and players that ignore the offset play the
 audio seconds behind. Picks are short and must start on a word, so they re-encode
 (clip_codec) with frame-accurate seeking.
+
+Segments run [cut] parallel at once. With [cut] backend = "nas" the whole command runs on
+the NAS instead (on_nas), in a one-off container of the recorder image, next to the source.
 """
 
 from __future__ import annotations
 
 import bisect
+import io
 import json
+import shlex
 import subprocess
+import tarfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .config import for_stream
@@ -81,7 +88,9 @@ def ffmpeg_cut(src: Path, dst: Path, start: float, end: float, codec: str, crf: 
         spans = bleeper.intervals(words, start, end, seek)
         if spans:
             bleeper.filter_script(spans, end - seek, script)
-            maps = ["-/filter_complex", str(script), "-map", "0:v:0", "-map", "[aout]"]
+            # inline, not -/filter_complex <file>: the NAS image's ffmpeg 5.1 lacks that (the
+            # graph is one short line; the spans are in its .cmd file)
+            maps = ["-filter_complex", script.read_text(encoding="utf-8"), "-map", "0:v:0", "-map", "[aout]"]
             if codec == "copy":
                 codecs = ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
     try:
@@ -166,7 +175,9 @@ def cut_segments(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> N
     out_dir = stream_dir / "segments"
     out_dir.mkdir(exist_ok=True)
     bleep = make_bleep(stream_dir, cfg)
-    for s in segs:
+    keyframes(stream_dir, src)  # once, before the threads share the cache
+
+    def one(s: dict) -> None:
         dst = out_dir / s["file"]
         t = time.time()
         s["cut_start_s"], s["bleeps"] = copy_cut(stream_dir, src, dst, s["start_s"], s["end_s"],
@@ -174,7 +185,11 @@ def cut_segments(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> N
         write_sidecar(dst, s)
         print(f"{s['id']} {s['duration_s'] / 60:5.1f} min -> {dst.name} "
               f"(+{s['start_s'] - s['cut_start_s']:.1f}s lead-in, {s['bleeps']} bleeps, "
-              f"{time.time() - t:.0f}s)")
+              f"{time.time() - t:.0f}s)", flush=True)
+
+    # Each cut is one ffmpeg (copy + the bleeped audio's AAC encode), so a few run at once.
+    with ThreadPoolExecutor(max(1, cfg["cut"]["parallel"])) as pool:
+        list(pool.map(one, segs))
 
 
 def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = None) -> None:
@@ -242,3 +257,50 @@ def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None
                             "category": c["category"], "score_a": c["score"], "bleeps": n})
         print(f"{p['id']} {c['out_s'] - c['in_s']:5.0f}s -> {dst.name} "
               f"({n} bleeps, {time.time() - t:.0f}s)")
+
+
+# ---------- on the NAS ([cut] backend = "nas", #51) ----------
+# Cutting is copying: segments are stream copies plus an AAC encode of the bleeped audio. On
+# the laptop every byte crosses Wi-Fi twice (the share writes at ~23 MB/s), so a stream's cut
+# took 1.5-2.5 h; on the NAS it reads and writes its own disk. Measured 2026-10-26 on
+# kick-131151926, one 5 min segment: laptop to the share 20.4 s, on the NAS 10 s (0.5 s of it
+# the copy, the rest the AAC encode; three at once share the NAS's 6 cores).
+
+def on_nas(stream_dir: Path, cfg: dict, argv: list[str]) -> None:
+    """Run `clipper cut <argv>` in a one-off container of the recorder image on the NAS, with
+    this checkout's clipper/ package and config (the image's own copy may be older)."""
+    cc = for_stream(cfg, stream_dir)["cut"]
+    missing = [k for k in ("nas_host", "nas_data") if not cc[k]]
+    if missing:
+        raise SystemExit(f"[cut] backend = \"nas\" needs [cut] {', '.join(missing)} in clipper.toml")
+    if stream_dir.resolve().parent != Path(cfg["paths"]["streams"]).resolve():
+        raise SystemExit(f"{stream_dir} is not under paths.streams; the NAS only sees those "
+                         f"(CLIPPER_CUT_BACKEND=local to cut it here)")
+    toml = (cfg.get("_root") or cfg).get("_file")  # a resolved config keeps the loaded one in _root
+    if not toml:
+        raise SystemExit("[cut] backend = \"nas\" needs a clipper.toml to send along")
+    buf = io.BytesIO()
+    pkg = Path(__file__).parent
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        tar.add(pkg, "clipper", filter=lambda t: None if "__pycache__" in t.name else t)
+        tar.add(toml, "clipper.toml")
+    sid = stream_dir.name
+    env = {"PYTHONPATH": "/code", "CLIPPER_CONFIG": "/code/clipper.toml",
+           "CLIPPER_PATHS_STREAMS": "/data/streams", "CLIPPER_CUT_BACKEND": "local"}
+    docker = ["docker", "run", "--rm", "--init", "--name", f"clipper-cut-{sid}",
+              *(["--user", cc["nas_user"]] if cc["nas_user"] else []),
+              "-v", f"{cc['nas_data']}:/data",
+              *[a for k, v in env.items() for a in ("-e", f"{k}={v}")]]
+    run = [cc["nas_image"], "cut", sid, *argv]
+    # One folder per run (two cuts at once must not share code), gone when the run ends.
+    remote = ('set -e; d=$(mktemp -d "$HOME/clipper-cut.XXXXXX"); trap \'rm -rf "$d"\' EXIT; '
+              'tar -xzf - -C "$d"; chmod -R a+rX "$d"; '
+              + shlex.join(docker) + ' -v "$d":/code:ro ' + shlex.join(run))
+    print(f"cutting on {cc['nas_host']} ({cc['nas_image']}, {cc['parallel']} at once)", flush=True)
+    t = time.time()
+    r = subprocess.run(["ssh", "-o", "BatchMode=yes", cc["nas_host"], remote], input=buf.getvalue(),
+                       check=False)
+    if r.returncode:
+        raise SystemExit(f"cut on {cc['nas_host']} failed (exit {r.returncode}); a run still going "
+                         f"there: ssh {cc['nas_host']} docker rm -f clipper-cut-{sid}")
+    print(f"cut on {cc['nas_host']} in {time.time() - t:.0f}s", flush=True)

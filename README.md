@@ -20,7 +20,8 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **signals**: chat activity and loudness into a heat curve.
 - **score**: Claude reads the transcript and heat curve and proposes moments and picks.
 - **segments**: Claude splits the stream into topic segments and compilations.
-- **cut**: lossless segment cuts on keyframes, re-encoded picks, bleeps.
+- **cut**: lossless segment cuts on keyframes, re-encoded picks, bleeps; a few segments at once,
+  on the NAS beside the source with `[cut] backend = "nas"`.
 - **meta / thumbs / shorts**: upload metadata and SRT, tabloid-style thumbnails (a 9:16 one for each Short),
   vertical captioned Shorts. With `[shorts] window = "short"` each Short is the pick's scored hot-take
   moment (15-59 s here, under YouTube's 60 s Content ID block line), ending on a full sentence.

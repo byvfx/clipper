@@ -1255,6 +1255,27 @@ User: #52 "sounds really important", ahead of #55 (face-follow crop can then fol
 - Not done yet: pick / preshow / retake prompts with tags; weekly quotes are only as good as the hooks (often paraphrases):
   a verbatim quote pool from the tagged transcript would credit more of them.
 
+## Cut on the NAS (2026-10-26, #51; user chose this over Modal)
+- Measured first: cut is not compute. Segments are stream copies plus an AAC encode of the
+  bleeped audio; the laptop reads the share at ~100 MB/s but writes it at ~23 MB/s (Wi-Fi), so
+  a 5 min segment took 20.4 s to the share vs 4.7 s to local disk, and ~10 s on the NAS
+  (0.5 s of it the copy). Modal would have meant 25 GB up and ~50 GB of renders back.
+- `[cut] backend = "nas"` (on in clipper.toml since 2026-10-26; default "local"): `clipper cut`
+  sends segments/compilations to `cut.on_nas`: ssh `nas_host`, unpack this checkout's
+  `clipper/` + clipper.toml into a mktemp dir, `docker run --rm --init --name clipper-cut-<id>
+  --user nas_user -v nas_data:/data -v $d:/code:ro -e PYTHONPATH=/code ... clipper-record:latest
+  cut <id> ...`. So code changes need no recorder redeploy (deps do). Picks stay local
+  (h264_qsv re-encode). `[cut] parallel` (3) segments at once, on both backends.
+- ffmpeg on the image is 5.1 (bookworm): no `-/filter_complex <file>`, so the bleep graph is
+  passed inline now (it is one short line; spans stay in the .cmd file).
+- Test, kick-131151926 (15 segments, 416 min, 2 compilations): **911 s on the NAS** (laptop
+  ~12.5 s per segment minute, ~87 min + compilations). Every output matched the 2026-10-16
+  laptop cuts: same durations, bleep counts, cut_start_s, sizes; a/v offsets 0.016-0.034 s.
+  Startup overhead ~5 s. Doctor (`--role gpu`, online) checks ssh + image + streams dir;
+  Windows OpenSSH (what the scheduled tasks use) logs in too.
+- Gotcha: a cut killed half way can leave `clipper-cut-<id>` running on the NAS; the next run
+  of that stream fails on the name: `ssh nas docker rm -f clipper-cut-<id>`.
+
 ## Next projects (user wants these, in this order)
 1. **WhisperX worker: DONE 2026-10-18.** `clipper worker` runs the whole pipeline on finished NAS
    recordings. Added `[transcribe] backend = "mlx"` (mlx-whisper, `uv sync --extra mac`, optional
