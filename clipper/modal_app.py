@@ -35,6 +35,7 @@ GPU_PRICES = {  # $ per hour (modal.com/pricing, 2026-10-23), for the cost line 
     "A100": 2.10, "A100-40GB": 2.10, "A100-80GB": 2.50, "H100": 3.95,
 }
 SPEED = {"L4": 24.5, "L40S": 46.5, "H100": 55.0}  # x realtime, 8 h stream incl. align (2026-10-23)
+DIARIZE_SPEED = 59.0  # x realtime on L40S, pyannote alone (kick-131151926, 2026-10-25); others scaled by SPEED
 BAKED_MODEL = "large-v3"
 DIARIZE_MODEL = "pyannote/speaker-diarization-community-1"  # [transcribe] diarize_model default
 HF_SECRET = "huggingface"  # Modal secret with HF_TOKEN (modal.com -> Secrets)

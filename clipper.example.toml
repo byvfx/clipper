@@ -467,6 +467,7 @@ parallel = 8                   # items at once (the Modal app allows 10 containe
 min_duration_s = 60            # skip shorter items (Shorts)
 youtube_format = "bestaudio[abr<=96]/bestaudio"
 stop_after_failures = 20       # in a row (YouTube's bot check); 0 = never stop
+diarize = false                # speaker turns per item too (#52; --diarize): ~+80% GPU time
 link_parallel = 4              # `clipper archive check`: are source links up? (oEmbed / Odysee resolve)
 link_recheck_days = 7          # links checked more recently are skipped; --all rechecks them
 

@@ -76,6 +76,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_duration_s": 60,     # skip shorter items (Shorts)
         "youtube_format": "bestaudio[abr<=96]/bestaudio",  # ~40 MB per hour of audio
         "stop_after_failures": 20,  # in a row (e.g. YouTube's bot check); 0 = never stop
+        "diarize": False,         # speaker turns per item too (#52): diarization.json, words named against
+                                  # [paths] voices/<subject>.json; ~+80% GPU time (jer all: ~$70 more on L4)
         "link_parallel": 4,       # `archive check`: oEmbed requests at once
         "link_recheck_days": 7,   # `archive check` skips links checked more recently
         "index_window_s": 30,     # `archive index`: seconds of transcript per searchable window

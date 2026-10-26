@@ -44,7 +44,7 @@ from pathlib import Path
 
 import requests
 
-from . import transcribe
+from . import speakers, transcribe
 from .modalmon import head_record, tracked
 from .preshow import ytdlp
 
@@ -146,10 +146,12 @@ def add(cfg: dict, subject: str, urls: list[str]) -> None:
 
 # ---------- transcribing ----------
 
-def estimate_usd(hours: float, gpu: str) -> float:
-    from .modal_app import GPU_PRICES, SPEED
+def estimate_usd(hours: float, gpu: str, diarize: bool = False) -> float:
+    from .modal_app import DIARIZE_SPEED, GPU_PRICES, SPEED
 
-    return hours / SPEED.get(gpu, 30.0) * GPU_PRICES.get(gpu, 0.0)
+    speed = SPEED.get(gpu, 30.0)
+    gpu_h = hours / speed + (hours / (DIARIZE_SPEED * speed / SPEED["L40S"]) if diarize else 0)
+    return gpu_h * GPU_PRICES.get(gpu, 0.0)
 
 
 def netscape_cookies(path: Path) -> Path:
@@ -171,7 +173,8 @@ def netscape_cookies(path: Path) -> Path:
 
 def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
     """One item: words.jsonl and transcript.json in idir; returns the cost record."""
-    tc = dict(cfg["transcribe"], backend="modal")
+    tc = dict(cfg["transcribe"], backend="modal", diarize=cfg["archive"]["diarize"])
+    settings = transcribe.modal_settings(tc, diarize=tc["diarize"])
     idir.mkdir(parents=True, exist_ok=True)
     meta = dict(it)
     t0 = time.time()
@@ -211,14 +214,18 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
                     duration_s=float(info.get("duration") or it["duration_s"]),
                     date=datetime.fromtimestamp(ts, UTC).date().isoformat() if ts else None)
         data = audio[0].read_bytes()
-        out, cost = call(worker.transcribe, data, audio[0].suffix, transcribe.modal_settings(tc))
+        out, cost = call(worker.transcribe, data, audio[0].suffix, settings)
         audio[0].unlink()
     else:
         media = odysee("get", {"uri": it["url"]})["streaming_url"]
-        out, cost = call(worker.transcribe_url, media, transcribe.modal_settings(tc))
+        out, cost = call(worker.transcribe_url, media, settings)
     meta["transcribed_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     (idir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     transcribe.write(idir, tc, out["segments"], out["dur"], t0, {"modal": cost})
+    if out.get("diarization"):
+        # named against this subject's own voices (voices/<subject>.json), like a show's
+        transcribe.write_diarization(idir, out["diarization"], cost)
+        speakers.apply(idir, {**cfg, "show": {**cfg["show"], "key": idir.parent.name}})
     (idir / "error.txt").unlink(missing_ok=True)
     return {**cost, "signed_in": signed_in}
 
@@ -239,8 +246,9 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
         todo.reverse()
     todo = todo[:limit] if limit else todo
     hours = sum(it["duration_s"] for it in todo) / 3600
-    print(f"{subject}: {len(todo)} to transcribe, {hours:.1f} h, on {gpu} x{parallel}: "
-          f"~${estimate_usd(hours, gpu):.2f} (measured speed; upload and cold starts extra)")
+    diarize = " with speaker turns" if cfg["archive"]["diarize"] else ""
+    print(f"{subject}: {len(todo)} to transcribe{diarize}, {hours:.1f} h, on {gpu} x{parallel}: "
+          f"~${estimate_usd(hours, gpu, bool(diarize)):.2f} (measured speed; upload and cold starts extra)")
     if dry_run or not todo:
         return
     # Our own log next to the data: a detached run's shell redirect once wrote nothing (2026-10-23).

@@ -117,6 +117,7 @@ def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
         archive.add(cfg, args.subject, args.url)
     elif args.action == "transcribe":
         ac = cfg["archive"]
+        ac["diarize"] = ac["diarize"] or args.diarize
         archive.run_transcribe(cfg, args.subject, args.limit, args.oldest, args.gpu or ac["gpu"],
                                args.parallel or ac["parallel"], args.dry_run)
     elif args.action == "check":
@@ -594,6 +595,7 @@ def main() -> None:
     r.add_argument("--rebuild", action="store_true", help="start the index over")
     r = rsub.add_parser("search", help="search the transcripts: hits with date, link at the moment")
     r.add_argument("subject")
+    r.add_argument("--diarize", action="store_true", help="speaker turns too (default [archive] diarize)")
     r.add_argument("query", help='FTS5: costco dog | "costco dog" | costco OR walmart | coff*')
     r.add_argument("--limit", type=int, default=20)
     r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")

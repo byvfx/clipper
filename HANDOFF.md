@@ -1244,8 +1244,15 @@ User: #52 "sounds really important", ahead of #55 (face-follow crop can then fol
   which would have fed tags to prompts that say "no speaker labels"). Weekly isn't pinned.
 - Seen in the built text: songs are sometimes tagged PPP or [?] instead of music (the intro
   song at 1762 s on kick-133940023). The prompts say tags can be wrong in songs/crosstalk.
-- Not done yet: archive transcribe never diarizes (modal_settings default); pick / preshow /
-  retake prompts with tags; weekly quotes are only as good as the hooks (often paraphrases):
+- 2026-10-26: archive diarize: `[archive] diarize` (off) / `clipper archive transcribe <s>
+  --diarize` adds pyannote to the same Modal call per item, writes diarization.json and names
+  against `voices/<subject>.json` (empty for now, so SPEAKER_xx). Dry run prices it
+  (`DIARIZE_SPEED` 59x on L40S, scaled by SPEED: ~+80% GPU time, Jer's 2,732 h would be ~$70
+  more on L4). Tested through `transcribe_item` with yt-dlp stubbed (YouTube's bot check
+  blocked this IP that morning): 3 min, 47 s call, diarize 5.9 s, ~$0.02. Jer's existing items
+  are not diarized: their audio was deleted after upload, so that would mean downloading
+  everything again. #52 closed.
+- Not done yet: pick / preshow / retake prompts with tags; weekly quotes are only as good as the hooks (often paraphrases):
   a verbatim quote pool from the tagged transcript would credit more of them.
 
 ## Next projects (user wants these, in this order)

@@ -121,6 +121,7 @@ receipts and supercuts), kept apart from the streams folder so nothing in them i
 clipper archive add jer https://www.youtube.com/@TheQuartering   # list long-form videos
 clipper archive transcribe jer --limit 100 --dry-run              # hours and estimated cost
 clipper archive transcribe jer --limit 100                        # WhisperX on Modal, 8 at once; log in archive/jer/transcribe.log
+clipper archive transcribe jer --diarize                          # speaker turns too (~+80% GPU), named against voices/jer.json
 clipper archive status
 clipper modal                                                     # GPUs up, runs, spend, archive ETA
 clipper archive check jer                                         # which source links still play
