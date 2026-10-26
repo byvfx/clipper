@@ -138,12 +138,26 @@ def ytdlp(*args: str) -> subprocess.CompletedProcess:
                           errors="replace")
 
 
+def ytdlp_signed_in_if_blocked(cfg: dict, *args: str) -> subprocess.CompletedProcess:
+    """yt-dlp, and once more signed in with [paths] youtube_cookies when YouTube's bot check
+    stops it ("Sign in to confirm you're not a bot"). Pre-shows only (user, 2026-10-26): a few
+    videos a week, so the account is barely seen; `archive` keeps to age-restricted retries."""
+    r = ytdlp(*args)
+    cookies = cfg["paths"]["youtube_cookies"]
+    if r.returncode and "not a bot" in r.stderr and cookies.is_file():
+        from .archive import netscape_cookies  # archive imports this module
+
+        log.info("YouTube bot check, retrying signed in")
+        r = ytdlp("--cookies", str(netscape_cookies(cookies)), *args)
+    return r
+
+
 def fetch(cfg: dict, url: str, key: str) -> Path:
     """Download one video into streams/yt-<id>/; meta.json last, so a failed or partial
     download is retried (and resumed) by the next check."""
     sc = for_show(cfg, key)
     pc = sc["preshow"]
-    info = ytdlp("-J", "--no-playlist", url)
+    info = ytdlp_signed_in_if_blocked(cfg, "-J", "--no-playlist", url)
     if info.returncode:
         raise RuntimeError(f"yt-dlp: {info.stderr.strip().splitlines()[-1:]}")
     v = json.loads(info.stdout)
@@ -151,8 +165,9 @@ def fetch(cfg: dict, url: str, key: str) -> Path:
     d.mkdir(parents=True, exist_ok=True)
     src = d / "source.mp4"
     if not src.exists():
-        r = ytdlp("--no-playlist", "-f", pc["format"], "--merge-output-format", "mp4",
-                  "-o", str(d / "source.%(ext)s"), v["webpage_url"])
+        r = ytdlp_signed_in_if_blocked(cfg, "--no-playlist", "-f", pc["format"],
+                                       "--merge-output-format", "mp4",
+                                       "-o", str(d / "source.%(ext)s"), v["webpage_url"])
         if r.returncode or not src.exists():
             raise RuntimeError(f"yt-dlp download: {r.stderr.strip().splitlines()[-1:]}")
     published = datetime.fromtimestamp(v.get("timestamp") or v.get("release_timestamp")

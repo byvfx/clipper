@@ -131,6 +131,9 @@ cookies.txt or as JSON (Cookie-Editor's default; converted to `youtube_cookies.n
 beside it) with a browser extension (e.g. "Get cookies.txt LOCALLY") from a private
 window signed in to an adult Google account (not the upload channel's, if you can avoid it),
 then close the window so the session isn't rotated. Rerun `transcribe` to pick up the failures.
+Pre-shows use the same file more freely: when YouTube's bot check ("Sign in to confirm you're
+not a bot") stops a pre-show grab, `clipper preshow` retries it signed in. The archive never
+does that, so a bulk run doesn't put the account on a blocked IP.
 On a new install, `clipper modal --backfill` adds the runs from before the log, once.
 
 **Speaker labels (diarization, #52).** `[transcribe] diarize = true` adds pyannote's speaker

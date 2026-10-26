@@ -845,6 +845,22 @@ reviewed, then posted ASAP**.
   editable install.
 - Bot restarted 15:03 on this code. Upload with `clipper upload --max 1` to send only the pre-show
   (plain `clipper upload` also sends everything else due within 48 h).
+- 10/26 pre-show (yt-hZs5LrBJuG4, posted 13:30, 26 min): the bot's grab failed on YouTube's bot check
+  ("Sign in to confirm you're not a bot") for this IP. At the user's request it was grabbed **signed in**
+  with secrets/youtube_cookies.txt by a one-off script (preshow.fetch with `--cookies` added; no code
+  change), then the worker ran it: in Kitsu (Kino Casino / 2026-10-26) and Discord at 14:26, pending review.
+  Cover: "ANDY LOSES IT!", main = Andy (frame 1378.5 s), inset PPP. The bot log also has no pre-show
+  checks 12:41-14:15 that day (bot or laptop paused). Upload cap was full (15/15) at 14:17, so once
+  approved the pre-show waits for room, first in line.
+- **Bot-check retry (user, 2026-10-26):** `preshow.fetch` now goes through
+  `ytdlp_signed_in_if_blocked`: on "Sign in to confirm you're not a bot" it retries once with
+  [paths] youtube_cookies. Pre-shows only; archive/receipts still retry signed in only for
+  age-restricted videos. Tested on hZs5LrBJuG4 (blocked, then OK signed in). No restart needed.
+- **When Kino posts (YouTube API publishedAt, all 23 pre-shows 7/31-10/26):** 21 of 23 between 11:09
+  and 14:44 PT, median 12:48; 14 of 21 between 12:00 and 13:50. October alone: median 13:30, latest
+  14:44. Outliers: 10/3's went up Sun 10/4 04:02, 10/15's the evening before (Wed 10/14 18:47).
+  yt-dlp lookups were all bot-checked that day; `youtube.service().videos().list` (1 quota unit for
+  50 ids) gets exact times with no yt-dlp.
 
 ## Channel 404 News (permission from Don 2026-10-19)
 - Don gave the go-ahead 2026-10-19: c404 goes through review → schedule like Kino (uploads still manual).
