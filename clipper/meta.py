@@ -246,7 +246,7 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
             return []
         print(f"{len(assets)} videos without a draft ({len(drafted)} kept)")
 
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    claude = Claude(cfg)
     preflight(claude, mc["model"])
 
     lines = []

@@ -573,7 +573,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
 
     def need_claude() -> Claude:
         nonlocal claude
-        claude = claude or Claude(cfg["scoring"]["workspace_id"])
+        claude = claude or Claude(cfg)
         return claude
 
     done = []

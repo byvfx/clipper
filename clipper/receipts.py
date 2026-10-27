@@ -159,7 +159,7 @@ def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
     prompts = Prompts(cfg)
     prompts.version = rc["prompt_version"]
     prompts.vars.update(subject=subject, max_stories=rc["max_stories"])
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    claude = Claude(cfg)
     archive_index.quiet_http()
     preflight(claude, rc["model"])
     out, _ = claude.json_call(rc["model"], prompts.get("receipts_stories"), user, STORIES_SCHEMA,
@@ -381,7 +381,7 @@ def script(sdir: Path, cfg: dict) -> None:
     prompts = Prompts(cfg)
     prompts.version = rc["script_prompt_version"]
     prompts.vars.update(subject=data["subject"], show_name=data["show"])
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    claude = Claude(cfg)
     preflight(claude, rc["script_model"])
     out, _ = claude.json_call(rc["script_model"], prompts.get("receipts_script"), "\n\n".join(blocks),
                               SCRIPT_SCHEMA, rc["script_effort"])

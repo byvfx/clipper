@@ -316,20 +316,8 @@ def json_text(claude, model: str, system: str, user: str, effort: str) -> tuple[
     """A streamed JSON answer without structured output: a field-by-field schema of the
     issue is too large a grammar for the API, and a free object isn't allowed, so the prompt
     describes the fields and check_issue() looks for them."""
-    with claude.client.messages.stream(
-            model=model, max_tokens=32000, system=system, output_config={"effort": effort},
-            messages=[{"role": "user", "content": user + "\n\nAnswer with the issue as one JSON object and nothing else."}]) as st:
-        resp = st.get_final_message()
-    meta = {"model": resp.model, "request_id": getattr(resp, "_request_id", None),
-            "stop_reason": resp.stop_reason, **claude._account(model, resp.usage)}
-    if resp.stop_reason == "refusal":
-        return None, meta
-    if resp.stop_reason == "max_tokens":
-        raise RuntimeError(f"{model} hit max_tokens ({meta['request_id']})")
-    text = "".join(b.text for b in resp.content if b.type == "text").strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
-    i, j = text.find("{"), text.rfind("}")
-    return json.loads(text[i:j + 1]), meta
+    return claude.json_text(model, system, user + "\n\nAnswer with the issue as one JSON object "
+                            "and nothing else.", effort, max_tokens=32000)
 
 
 REQUIRED = {
@@ -413,7 +401,7 @@ def draft(cfg: dict, here: Path, week: dict, stats: dict, headline: str) -> dict
         system = system.rstrip() + "\n\nHouse style for everything on the page:\n" + "\n".join(f"- {r}" for r in style) + "\n"
     issue = next_issue_number(cfg, here)
     user = draft_user(week, stats, headline, issue, photo_dir(cfg["thumbnail"]))
-    claude = Claude()
+    claude = Claude(cfg)
     preflight(claude, wc["model"])
     print(f"  drafting issue {issue:02d} with {wc['model']} ({len(user) // 4:,} tokens of week)...")
     out, meta = json_text(claude, wc["model"], system, user, wc["effort"])
@@ -479,7 +467,7 @@ def write_articles(cfg: dict, here: Path, week: dict, stats: dict, issue: dict, 
     template = (pdir / f"weekly_article_{wc['article_prompt_version']}.md").read_text(encoding="utf-8")
     example = (pdir / wc["article_example"]).read_text(encoding="utf-8")
     style = cfg["scoring"].get("house_style") or []
-    claude = Claude()
+    claude = Claude(cfg)
     preflight(claude, wc["model"])
     for page in pages:
         a = _article_of(issue, page)

@@ -18,6 +18,8 @@ whenever behaviour changes.
   whenever a stream is known.
 - Shows: `[shows.<key>]` tables; a show's sub-tables override base sections. Each show has
   its own Kitsu production. Everything uploads to one YouTube channel.
+- Model calls go through `clipper/llm.py` (`scoring.Claude` is an alias); the provider is the
+  model string's prefix (`openai:`, `gemini:`, `local:`, bare = Claude). Don't call an SDK directly.
 - Prompts are `prompts/<name>_<version>.md`; the version in use is a config key. Add a new
   version rather than editing one that produced reviewed output.
 
@@ -27,7 +29,8 @@ whenever behaviour changes.
   paths. They go in `clipper.toml` (gitignored) or env vars, with a placeholder in
   `clipper.example.toml`. `clipper doctor` should fail with a fix when a required one is unset.
 - Secrets are env vars (`ANTHROPIC_API_KEY`, `KITSU_TOKEN`, `DISCORD_BOT_TOKEN`,
-  `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`, `ELEVENLABS_API_KEY`) or files
+  `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`, `ELEVENLABS_API_KEY`, and `OPENAI_API_KEY` /
+  `GEMINI_API_KEY` if a stage uses those providers) or files
   under `secrets/`. Never write them into tracked files, logs, or messages.
 - Anything a new check or install step needs belongs in `clipper doctor` and SETUP.md, not
   only in a chat answer.

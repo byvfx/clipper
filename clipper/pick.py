@@ -305,7 +305,7 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
     prompts.vars.update(pick_max_clips=pc["max_clips"], short_min_s=cfg["shorts"]["min_s"],
                         short_max_s=cfg["shorts"]["max_s"])
     prompts.vars.setdefault("audience_viewer", cfg["scoring"]["audience"])  # pre-v4 scoring prompts
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    claude = Claude(cfg)
     preflight(claude, pc["model"])
     if not stretches:
         print(f"looking for {about!r} in the stream summary")

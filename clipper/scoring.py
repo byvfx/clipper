@@ -13,17 +13,16 @@ compared. --dry-run writes the Pass A requests to scoring_requests/ without call
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import ClassVar
 
 import numpy as np
 
 from . import jsonstate
 from .config import for_stream
+from .llm import LLM
 
 CATEGORIES = ["fail", "win", "joke", "insight", "reaction", "hot_take"]
 
@@ -293,66 +292,9 @@ def pass_a_user(w: dict, words: list[dict], sig: dict, lead_in_s: int) -> str:
 
 # ---------- API ----------
 
-class Claude:
-    PRICES: ClassVar[dict[str, tuple[float, float]]] = {  # $ per 1M input/output tokens, for the cost line only
-        "claude-haiku-5-5": (0.10, 0.50),
-        "claude-sonnet-5-5": (2.00, 10.00),
-        "claude-opus-5-5": (4.00, 20.00),
-    }
-
-    def __init__(self, workspace_id: str = ""):
-        import anthropic
-
-        # Keys not scoped to a workspace must name one on every request.
-        workspace_id = workspace_id or os.environ.get("ANTHROPIC_WORKSPACE_ID", "")
-        headers = {"anthropic-workspace-id": workspace_id} if workspace_id else None
-        self.client = anthropic.Anthropic(max_retries=4, default_headers=headers)
-        self.cost = 0.0
-
-    def _account(self, model: str, usage) -> dict:
-        pin, pout = self.PRICES.get(model, (0.0, 0.0))
-        self.cost += (usage.input_tokens * pin + usage.output_tokens * pout) / 1e6
-        return {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens}
-
-    def json_call(self, model: str, system: str, user: str, schema: dict,
-                  effort: str, fallback: bool = False,
-                  stream: bool = False) -> tuple[dict | None, dict]:
-        """Structured-output call. Returns (parsed JSON or None on refusal, meta).
-        stream=True for long inputs/outputs, so the request can't hit an HTTP timeout."""
-        kwargs = {
-            "model": model, "max_tokens": 64000 if stream else 16000, "system": system,
-            "messages": [{"role": "user", "content": user}],
-            "output_config": {"effort": effort, "format": {"type": "json_schema", "schema": schema}},
-        }
-        if fallback:
-            # Server-side refusal fallback (Claude API only); routes by refusal category.
-            kwargs.update(betas=["server-side-fallback-2026-07-01"], fallbacks="default")
-            api = self.client.beta.messages
-        else:
-            api = self.client.messages
-        if stream:
-            with api.stream(**kwargs) as s:
-                resp = s.get_final_message()
-        else:
-            resp = api.create(**kwargs)
-        meta = {"model": resp.model, "request_id": getattr(resp, "_request_id", None),
-                "stop_reason": resp.stop_reason, **self._account(model, resp.usage)}
-        if resp.stop_reason == "refusal":
-            meta["refusal"] = getattr(resp.stop_details, "category", None)
-            return None, meta
-        if resp.stop_reason == "max_tokens":
-            raise RuntimeError(f"{model} hit max_tokens ({meta['request_id']})")
-        text = next(b.text for b in resp.content if b.type == "text")
-        return json.loads(text), meta
-
-    def text_call(self, model: str, system: str, user: str, effort: str) -> tuple[str, dict]:
-        resp = self.client.messages.create(
-            model=model, max_tokens=4000, system=system, output_config={"effort": effort},
-            messages=[{"role": "user", "content": user}])
-        meta = {"stop_reason": resp.stop_reason, **self._account(model, resp.usage)}
-        if resp.stop_reason == "refusal":
-            return "", meta
-        return "".join(b.text for b in resp.content if b.type == "text").strip(), meta
+# Every stage's model calls go through clipper/llm.py, which picks the provider from the
+# model string; `Claude` stays the name the stages import.
+Claude = LLM
 
 
 # ---------- passes ----------
@@ -508,16 +450,8 @@ def run_pass_b(kept: list[dict], summary: list[dict], words: list[dict], cfg: di
 
 
 def preflight(claude: Claude, model: str) -> None:
-    """One tiny call so account problems (auth, workspace, credits) stop the run with
-    one clear line instead of 60 identical failures."""
-    import anthropic
-
-    try:
-        claude.client.messages.create(model=model, max_tokens=16,
-                                      messages=[{"role": "user", "content": "Say OK."}])
-    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError,
-            anthropic.BadRequestError) as e:
-        raise SystemExit(f"Claude API unavailable ({e.status_code}): {e.message}") from None
+    """One tiny call so account problems stop the run with one clear line."""
+    claude.preflight(model)
 
 
 def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
@@ -540,7 +474,7 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
         print(f"wrote {len(windows)} Pass A requests to {d}")
         return {}
 
-    claude = Claude(sc["workspace_id"])
+    claude = Claude(cfg)
     preflight(claude, sc["model_a"])
     t0 = time.time()
     n = int(np.ceil(meta["duration_s"]))

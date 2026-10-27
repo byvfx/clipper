@@ -108,6 +108,14 @@ device = "cuda"
 match = 0.6                # lowest cosine similarity to name a speaker (same voice ~0.9, others < 0.5)
 min_talk_s = 20            # less talk than this: listed, never named
 
+[llm]
+# Any stage's model key can name another provider by prefix (see SETUP "Other model
+# providers"): "openai:<model>" (OPENAI_API_KEY), "gemini:<model>" (GEMINI_API_KEY),
+# "local:<model>" (the OpenAI-compatible server below). Bare names are Claude.
+local_base_url = ""        # e.g. "http://<host>:11434/v1" (Ollama); only for local: models
+# [llm.prices]             # $ per 1M input/output tokens for cost lines; adds to the built-in Claude ones
+# "openai:gpt-5-mini" = [0.25, 2.00]
+
 [scoring]
 # Needs ANTHROPIC_API_KEY (or an `ant auth login` profile) in the environment.
 # A key not scoped to a workspace also needs the workspace id (wrkspc_...), here or

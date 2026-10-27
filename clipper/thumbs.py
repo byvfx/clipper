@@ -1116,7 +1116,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         todo = []
     claude = None
     if todo:
-        claude = Claude(cfg["scoring"]["workspace_id"])
+        claude = Claude(cfg)
         preflight(claude, tc["model"])
         prompts = Prompts(cfg)
         prompts.version = tc["enquirer_prompt_version"] if style == "enquirer" else tc["prompt_version"]

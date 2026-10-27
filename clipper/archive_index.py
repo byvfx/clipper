@@ -281,7 +281,7 @@ def ask(cfg: dict, subject: str, question: str, since: str | None, before: str |
         limit: int) -> None:
     from .scoring import Claude, preflight
 
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    claude = Claude(cfg)
     quiet_http()
     preflight(claude, cfg["archive"]["ask_model"])
     picks = answer(cfg, subject, question, since, before, claude)

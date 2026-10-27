@@ -163,7 +163,7 @@ def plan(cfg: dict, sdir: Path, key: str, st: dict, row: dict, note: str) -> tup
     if st["kind"] == "short":
         schema["properties"]["layout"] = {"anyOf": [{"type": "null"}, {
             "type": "string", "enum": list(layouts_of(cfg["shorts"]))}]}
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    claude = Claude(cfg)
     user = context(cfg, sdir, key, st, row) + f"\n\nReviewer's retake note:\n{note}"
     out, meta = claude.json_call(rc["model"], prompts.get("retake"), user, schema, rc["effort"])
     if out is None:

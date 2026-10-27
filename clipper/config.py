@@ -584,6 +584,20 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_window_s": 240,
         "top_n": 30,
     },
+    "llm": {
+        # Which provider answers is the model string's prefix (clipper/llm.py): bare or
+        # "anthropic:" = Claude, "openai:<model>" (OPENAI_API_KEY), "gemini:<model>"
+        # (GEMINI_API_KEY), "local:<model>" = an OpenAI-compatible server at local_base_url.
+        "local_base_url": "",     # e.g. http://<host>:11434/v1 for Ollama; set in clipper.toml
+        "timeout_s": 600,         # per OpenAI-compatible request
+        # $ per 1M input/output tokens, by model string, for cost lines only (a model not
+        # listed costs $0). A [llm.prices] table in clipper.toml adds to these.
+        "prices": {
+            "claude-haiku-5-5": [0.10, 0.50],
+            "claude-sonnet-5-5": [2.00, 10.00],
+            "claude-opus-5-5": [4.00, 20.00],
+        },
+    },
     "scoring": {
         "workspace_id": "",       # or $ANTHROPIC_WORKSPACE_ID; needed for unscoped keys
         "model_a": "claude-haiku-5-5",

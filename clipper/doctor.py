@@ -264,12 +264,71 @@ def check_gpu(cfg: dict) -> None:
         fail("gpu", f"whisperx import failed: {e}", "uv sync --extra gpu")
 
 
+def llm_providers(cfg: dict) -> dict[str, list[str]]:
+    """Non-Claude providers the config's models use: {provider: ["section.key = model", ...]}."""
+    from . import llm
+
+    out: dict[str, list[str]] = {}
+    for where, model in llm.configured(cfg).items():
+        prov = llm.split(model)[0]
+        if prov != "anthropic":
+            out.setdefault(prov, []).append(f"{where} = {model}")
+    return out
+
+
+def check_llm_keys(cfg: dict) -> None:
+    from . import llm
+
+    for prov, uses in llm_providers(cfg).items():
+        env = llm.PROVIDERS[prov][1]
+        what = f"{prov} models ({'; '.join(uses[:3])}{'...' if len(uses) > 3 else ''})"
+        if prov == "local":
+            if cfg["llm"]["local_base_url"]:
+                ok("keys", f"{what}: [llm] local_base_url = {cfg['llm']['local_base_url']}")
+            else:
+                fail("keys", f"{what}: [llm] local_base_url not set",
+                     "set it in clipper.toml to the server's OpenAI-compatible /v1 URL")
+        elif os.environ.get(env):
+            ok("keys", f"{what}: {env} set")
+        else:
+            fail("keys", f"{what}: {env} not set", "set it as a user environment variable")
+
+
+def check_llm_online(cfg: dict) -> None:
+    """Each non-Claude provider in use lists its models, and has the configured ones."""
+    import requests
+
+    from . import llm
+
+    for prov, uses in llm_providers(cfg).items():
+        base, env = llm.PROVIDERS[prov]
+        base = (cfg["llm"]["local_base_url"] if prov == "local" else base).rstrip("/")
+        key = os.environ.get(env, "")
+        if not base or (prov != "local" and not key):
+            continue  # already a failure under keys
+        try:
+            r = requests.get(f"{base}/models", timeout=15,
+                             headers={"Authorization": f"Bearer {key}"} if key else {})
+        except requests.RequestException as e:
+            fail("online", f"{prov}: {base} unreachable ({type(e).__name__})")
+            continue
+        if not r.ok:
+            fail("online", f"{prov}: HTTP {r.status_code} from {base}/models", f"check {env}")
+            continue
+        have = {m.get("id", "").removeprefix("models/") for m in r.json().get("data", [])}
+        for use in uses:
+            name = llm.split(use.split(" = ", 1)[1])[1]
+            (ok if name in have else warn)("online", f"{prov} model {name}"
+                                           + ("" if name in have else " not listed by the server"))
+
+
 def check_keys(cfg: dict, role: str) -> None:
     if role != "nas":
         if os.environ.get("ANTHROPIC_API_KEY"):
             ok("keys", "ANTHROPIC_API_KEY set")
         else:
             fail("keys", "ANTHROPIC_API_KEY not set", "set it as a user environment variable")
+        check_llm_keys(cfg)
         rc = cfg["review"]
         if rc["host"] and "<" not in rc["host"]:
             ok("keys", f"[review] host = {rc['host']}")
@@ -373,10 +432,12 @@ def check_online(cfg: dict, role: str) -> None:
                                        + (v.json().get("name", "?") if v.ok else f"HTTP {v.status_code}"),
                                        "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")
 
+    if role != "nas":
+        check_llm_online(cfg)
     if role != "nas" and os.environ.get("ANTHROPIC_API_KEY"):
         try:
             from .scoring import Claude
-            Claude(cfg["scoring"]["workspace_id"]).client.models.retrieve(cfg["scoring"]["model_a"])
+            Claude(cfg).client.models.retrieve(cfg["scoring"]["model_a"])
             ok("online", f"Anthropic API answers ({cfg['scoring']['model_a']} available)")
         except Exception as e:  # noqa: BLE001
             fail("online", f"Anthropic API: {type(e).__name__}: {str(e)[:120]}",

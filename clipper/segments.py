@@ -145,7 +145,7 @@ def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     prompts.version = seg_cfg["prompt_version"]
     prompts.vars["min_aside_s"] = seg_cfg["min_aside_s"]
     path = stream_dir / "segments.json"
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    claude = Claude(cfg)
 
     if path.exists() and not force:
         data = json.loads(path.read_text(encoding="utf-8"))

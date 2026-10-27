@@ -292,7 +292,7 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
         end -= pc["trim_end_s"]
     prompts = Prompts(cfg)
     prompts.version = pc["oneoff_prompt_version"] if window else pc["prompt_version"]
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    claude = Claude(cfg)
     preflight(claude, pc["model"])
     user = (f"Original title: {meta['title']}\n\nOriginal description:\n{meta['description'][:2000]}"
             "\n\nTranscript:\n" + "\n".join(transcript_lines(words, start, end + 1, speakers=False)))

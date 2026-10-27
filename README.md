@@ -239,5 +239,7 @@ HANDOFF.md            running notes between work sessions
 ## Requirements
 
 Python 3.12, [uv](https://docs.astral.sh/uv/), ffmpeg with libass (the "full" builds), an
-Anthropic API key, a Kitsu instance, and a Discord bot if you want cards in Discord.
+Anthropic API key, a Kitsu instance, and a Discord bot if you want cards in Discord. Any stage
+can run on another model provider instead (OpenAI, Gemini, or a local OpenAI-compatible server
+such as Ollama) by prefixing its model key: SETUP "Other model providers".
 YouTube downloads (pre-shows) need a JavaScript runtime; `uv sync` installs deno for yt-dlp.
