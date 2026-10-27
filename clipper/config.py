@@ -32,6 +32,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "archive": "archive",     # `clipper archive` subjects: <subject>/catalog.json + one dir per item
         "youtube_cookies": "secrets/youtube_cookies.txt",  # optional, Netscape cookies.txt: `archive` age-restricted items, pre-shows on a bot check
         "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
+        "costs": "logs/costs.jsonl",  # every model call's cost (`clipper costs`, the war room)
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
     },
@@ -583,6 +584,12 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "window_post_s": 30,
         "max_window_s": 240,
         "top_n": 30,
+    },
+    "costs": {
+        # `clipper costs` and the war room's Costs panel (#50). Model calls and Modal runs are
+        # logged as they happen; these are what the logs can't know.
+        "monthly": {},   # fixed costs per month, {"Runway Max" = 95, "domain" = 2}
+        "credits": {},   # a provider's monthly credit against its spend: {"modal" = 30}
     },
     "llm": {
         # Which provider answers is the model string's prefix (clipper/llm.py): bare or

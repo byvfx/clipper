@@ -369,6 +369,16 @@ def overview(cfg: dict) -> dict:
 
 # ---------- actions ----------
 
+def costs_status(cfg: dict) -> dict:
+    """#50: the Costs panel, month to date (clipper/costs.py)."""
+    try:
+        from . import costs
+
+        return costs.report(cfg)
+    except Exception as e:  # noqa: BLE001  # a panel, not a reason to fail the page
+        return {"error": f"{type(e).__name__}: {e}"[:300]}
+
+
 def modal_status(cfg: dict) -> dict:
     """#49: the Modal panel (clipper/modalmon.py). Modal's token stays on this machine."""
     try:
@@ -531,6 +541,8 @@ def make_handler(cfg: dict):
                     self.send_json(retakes(cfg, 50))
                 elif u.path == "/api/modal":
                     self.send_json(modal_status(cfg))
+                elif u.path == "/api/costs":
+                    self.send_json(costs_status(cfg))
                 elif u.path.startswith("/media/"):
                     self.send_media(unquote(u.path[len("/media/"):]))
                 else:

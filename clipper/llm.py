@@ -128,8 +128,9 @@ class LLM:
 
         if isinstance(cfg, dict):
             workspace_id, lc = cfg["scoring"]["workspace_id"], cfg.get("llm") or DEFAULTS["llm"]
+            self.ledger = cfg["paths"].get("costs")  # [paths] costs: one line per call
         else:
-            workspace_id, lc = cfg, DEFAULTS["llm"]
+            workspace_id, lc, self.ledger = cfg, DEFAULTS["llm"], None
         # Keys not scoped to a workspace must name one on every request.
         self.workspace_id = workspace_id or os.environ.get("ANTHROPIC_WORKSPACE_ID", "")
         self.lc = {**DEFAULTS["llm"], **lc}
@@ -151,9 +152,13 @@ class LLM:
         return self._client
 
     def _account(self, model: str, tokens_in: int, tokens_out: int) -> dict:
+        from . import costs
+
         pin, pout = self.prices.get(model) or self.prices.get(split(model)[1]) or (0.0, 0.0)
+        usd = (tokens_in * pin + tokens_out * pout) / 1e6
         with self._lock:
-            self.cost += (tokens_in * pin + tokens_out * pout) / 1e6
+            self.cost += usd
+        costs.llm_call(self.ledger, split(model)[0], model, tokens_in, tokens_out, usd)
         return {"input_tokens": tokens_in, "output_tokens": tokens_out}
 
     # ---------- the calls the stages make ----------

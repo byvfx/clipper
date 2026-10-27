@@ -136,6 +136,13 @@ not a bot") stops a pre-show grab, `clipper preshow` retries it signed in. The a
 does that, so a bulk run doesn't put the account on a blocked IP.
 On a new install, `clipper modal --backfill` adds the runs from before the log, once.
 
+**Costs (#50).** Every model call appends its cost to `[paths] costs` (`logs/costs.jsonl`)
+with the command and stream it ran for; `clipper costs` and the war room's Costs panel add
+that to the Modal run log and your fixed costs: put plans and subscriptions in `[costs]
+monthly` (`{"Runway Max" = 95}`) and a provider's monthly credit in `[costs] credits`
+(`{"modal" = 30}`, shown as credit, not hidden). `clipper costs --backfill` once reads back
+model spend earlier runs wrote into their output files (score, segments, receipts, weekly).
+
 **Speaker labels (diarization, #52).** `[transcribe] diarize = true` adds pyannote's speaker
 turns to the same Modal call (or the local WhisperX run), so `words.jsonl` says who is talking.
 The model is gated on Hugging Face:

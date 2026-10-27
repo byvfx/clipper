@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -153,6 +154,19 @@ def cmd_modal(cfg: dict, args: argparse.Namespace) -> None:
         modalmon.backfill(cfg)
     else:
         modalmon.print_status(cfg)
+
+
+def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
+    from . import costs
+
+    if args.backfill:
+        costs.backfill(cfg, args.dry_run)
+        return
+    rep = costs.report(cfg, args.month or "")
+    if args.json:
+        print(json.dumps(rep, indent=2))
+    else:
+        costs.print_report(rep)
 
 
 def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
@@ -644,6 +658,14 @@ def main() -> None:
                    help="add runs from before the run log (transcript.json cost records), once")
     p.set_defaults(fn=cmd_modal)
 
+    p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
+    p.add_argument("--month", help="YYYY-MM (default: this month, UTC)")
+    p.add_argument("--json", action="store_true", help="the report as JSON")
+    p.add_argument("--backfill", action="store_true",
+                   help="add model spend earlier runs recorded in their output files, once")
+    p.add_argument("--dry-run", action="store_true", help="with --backfill: list, write nothing")
+    p.set_defaults(fn=cmd_costs)
+
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
     p.set_defaults(fn=cmd_signals)
@@ -897,6 +919,12 @@ def main() -> None:
         cfg = config.for_show(cfg, args.show)
     elif getattr(args, "stream", None):
         cfg = config.for_stream(cfg, stream_dir(cfg, args.stream))
+    from . import costs  # what every model call this command makes is recorded under
+
+    action = getattr(args, "action", None)
+    stream = getattr(args, "stream", None)
+    costs.set_context(args.cmd + (f" {action}" if isinstance(action, str) else ""),
+                      Path(stream).name if isinstance(stream, str) else "")
     args.fn(cfg, args)
 
 

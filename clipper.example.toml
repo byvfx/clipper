@@ -108,6 +108,11 @@ device = "cuda"
 match = 0.6                # lowest cosine similarity to name a speaker (same voice ~0.9, others < 0.5)
 min_talk_s = 20            # less talk than this: listed, never named
 
+[costs]
+# `clipper costs` / the war room's Costs panel: what the logs can't know.
+# monthly = { "Runway Max" = 95 }   # fixed costs per month
+# credits = { "modal" = 30 }        # a provider's monthly credit against its spend
+
 [llm]
 # Any stage's model key can name another provider by prefix (see SETUP "Other model
 # providers"): "openai:<model>" (OPENAI_API_KEY), "gemini:<model>" (GEMINI_API_KEY),

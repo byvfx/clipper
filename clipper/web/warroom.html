@@ -283,6 +283,7 @@ nav.views { display: none; }
     <section class="panel"><h2>Retakes <span class="sp" id="retakeSub"></span></h2><div class="feed" id="retakes"></div></section>
     <section class="panel"><h2>Health</h2><div class="health" id="health"></div></section>
     <section class="panel"><h2>Modal <span class="sp" id="cloudSub"></span></h2><div class="cloud" id="cloud"><div class="empty">Asking Modal…</div></div></section>
+    <section class="panel"><h2>Costs <span class="sp" id="costSub"></span></h2><div class="cloud" id="costs"><div class="empty">Adding up…</div></div></section>
   </div>
 
   <section class="panel" id="vQueue">
@@ -702,6 +703,25 @@ function renderUploads() {
     ${u.next.length ? `<div class="nx">${u.next.map(e => `<span class="${e.due ? "due" : ""}">${new Date(e.publish_at).toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit" })}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.title)}">${esc(e.title)}</span>`).join("")}</div>` : ""}`;
 }
 
+// ---------- Costs (#50) ----------
+
+async function refreshCosts() {
+  const el = $("#costs");
+  let c;
+  try { c = await api("/api/costs"); } catch (e) { c = { error: e.message }; }
+  if (c.error) { el.innerHTML = `<div class="bad">${esc(c.error)}</div>`; return; }
+  const usd = v => "$" + (+v || 0).toFixed(2);
+  const list = (o, n) => Object.entries(o || {}).slice(0, n).map(([k, v]) => `${esc(k)} ${usd(v)}`).join(", ") || "-";
+  const cr = Object.entries(c.credits || {});
+  $("#costSub").textContent = c.month;
+  el.innerHTML = `
+    <div class="row"><span class="big">${usd(c.net_usd)}</span><span>this month${cr.length ? ` after ${cr.map(([k, v]) => `${esc(k)} credit ${usd(v)}`).join(", ")}` : ""}</span></div>
+    <div>${list(c.by_kind)}${c.estimated_usd ? ` <span class="f" title="Modal runs are our per-run estimates; earlier model spend was read back from output files">(${usd(c.estimated_usd)} estimated)</span>` : ""}</div>
+    <div class="sub">By stage</div><div>${list(c.by_stage, 6)}</div>
+    <div class="sub">By show</div><div>${list(c.by_show, 6)}</div>
+    <div class="f">${c.calls.toLocaleString()} calls and runs · all time ${usd(c.all_time_usd)} since ${esc(c.since || "-")} · revenue once monetized</div>`;
+}
+
 // ---------- Modal (#49) ----------
 
 let CLOUD = null;
@@ -856,10 +876,11 @@ document.addEventListener("keydown", e => {
   }
 });
 
-refresh(); refreshLive(); refreshCloud();
+refresh(); refreshLive(); refreshCloud(); refreshCosts();
 setInterval(refresh, 15000);
 setInterval(refreshLive, 60000);
 setInterval(refreshCloud, 60000);
+setInterval(refreshCosts, 300000);
 </script>
 </body>
 </html>

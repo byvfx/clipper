@@ -131,6 +131,7 @@ clipper archive transcribe jer --limit 100                        # WhisperX on 
 clipper archive transcribe jer --diarize                          # speaker turns too (~+80% GPU), named against voices/jer.json
 clipper archive status
 clipper modal                                                     # GPUs up, runs, spend, archive ETA
+clipper costs [--month 2026-10]                                   # month's spend: models + Modal + fixed, by stage/show/stream
 clipper archive check jer                                         # which source links still play
 clipper archive links jer                                         # the dead and restricted ones
 clipper archive index jer                                         # keyword index, index.sqlite (free)
@@ -212,7 +213,9 @@ swearing, YouTube's length limits with the show prefix), and cards with a proble
 the last automatic run and its errors, and what goes next; uploaded slots show views and a
 YouTube link. The Modal panel (under Health) shows the month's Modal bill, the spend rate,
 GPUs up, transcriptions running and failed, and each archive's progress (`clipper modal`
-prints the same). On a phone it switches to one view at a
+prints the same). The Costs panel below it adds up the month: every model call (logged as it
+is made, with its stage and stream), Modal runs, and `[costs] monthly` fixed costs, by stage
+and show (`clipper costs` prints the same; revenue joins it once the channel is monetized). On a phone it switches to one view at a
 time (Review, Schedule, Pipeline tabs at the bottom), items open full screen with the
 decisions at the bottom and swipe to the next one, and videos play from a 360p copy
 (`lowres/` beside each preview, about a quarter of the data). It can be added to the home
