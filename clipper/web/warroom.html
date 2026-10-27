@@ -109,7 +109,7 @@ section.panel { background: var(--panel); border: 1px solid var(--line); border-
 .tab.on { background: var(--text); color: #111; border-color: var(--text); font-weight: 600; }
 .tab .n { font-family: var(--mono); opacity: .7; margin-left: 4px; }
 .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
-input.search, select { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 5px 9px; font: inherit; font-size: 12px; }
+input.search, input.date, select { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 5px 9px; font: inherit; font-size: 12px; }
 input.search { margin-left: auto; width: 180px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; padding: 14px; }
 .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; transition: border-color .15s, transform .15s; }
@@ -131,6 +131,25 @@ input.search { margin-left: auto; width: 180px; }
 .card .note { font-size: 11px; color: var(--amber); }
 .card .acts { display: flex; gap: 5px; padding: 0 11px 11px; }
 .card .acts .btn { flex: 1; padding: 5px 0; font-size: 12px; }
+.card .acts .pickl { flex: 0 0 auto; display: flex; align-items: center; padding: 0 3px; cursor: pointer; }
+.card .acts .pickl input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.card.picked { border-color: var(--accent); }
+.card .hit { font-size: 11px; color: var(--dim); font-style: italic; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bulk { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); background: #17202b; font-size: 12px; }
+.bulk[hidden] { display: none; }
+.bulk .btn { padding: 4px 10px; font-size: 12px; }
+.toast .btn { margin-left: 12px; padding: 2px 10px; font-size: 12px; }
+#tool { width: min(820px, 96vw); }
+#tool .m-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+#tool .m-head .x { margin-left: auto; background: none; border: 0; color: var(--dim); font-size: 22px; cursor: pointer; }
+#tool .tbody { padding: 12px 16px; display: grid; gap: 9px; font-size: 13px; }
+#tool .tbody label { display: inline-flex; gap: 5px; align-items: center; margin-right: 12px; }
+#tool .tbody input.search { margin: 0; width: 100%; font-size: 13px; }
+.rep-list { font: 12px/1.5 var(--mono); max-height: 50vh; overflow: auto; display: grid; gap: 6px; }
+.rep-list .it b { color: var(--text); } .rep-list .f { color: var(--faint); }
+.rep-list del { color: #ff98a3; text-decoration: none; } .rep-list ins { color: #7ff0b2; text-decoration: none; }
+.undo-list { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 12px; align-items: center; font-size: 12px; }
+.undo-list .f { color: var(--faint); font-family: var(--mono); } .undo-list .gone { color: var(--faint); text-decoration: line-through; }
 .empty { padding: 40px; text-align: center; color: var(--faint); }
 
 .day { border-bottom: 1px solid var(--line); }
@@ -289,6 +308,7 @@ nav.views { display: none; }
   <section class="panel" id="vQueue">
     <h2>Review queue <span class="sp" id="queueSub"></span></h2>
     <div class="queue-bar" id="queueBar"></div>
+    <div class="bulk" id="bulk" hidden></div>
     <div class="grid" id="grid"></div>
   </section>
 
@@ -306,6 +326,7 @@ nav.views { display: none; }
 
 <dialog id="modal"></dialog>
 <dialog id="keys"></dialog>
+<dialog id="tool"></dialog>
 <div id="dock" hidden></div>
 
 <script>
@@ -314,6 +335,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const KIND = { pick: "Clip", short: "Short", segment: "Segment", compilation: "Comp" };
 const DEC = { pending: "waiting", changes_requested: "changes", approved: "approved", rejected: "rejected" };
 let STATE = null, TAB = "waiting", SHOW = "", KINDF = "", Q = "", BUSY = new Set(), OPEN = null;
+let ST = "", FROM = "", TO = "", THITS = {}, THQ = "", PICK = new Set(), LASTPICK = null;
 let VISIBLE = [], SEL = null, SEL_AT = 0;  // the queue in display order; the keyboard's item
 const PHONE = matchMedia("(max-width: 700px)");
 
@@ -321,8 +343,10 @@ function mmss(s) { if (s == null) return ""; s = Math.round(s); const h = Math.f
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; }
 function ago(iso) { if (!iso) return ""; const s = (Date.now() - new Date(iso)) / 1000;
   if (s < 90) return "just now"; if (s < 5400) return Math.round(s / 60) + " min ago"; if (s < 129600) return Math.round(s / 3600) + " h ago"; return Math.round(s / 86400) + " d ago"; }
-function toast(msg, err) { const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = msg;
-  document.body.appendChild(t); setTimeout(() => t.remove(), err ? 7000 : 3500); }
+function toast(msg, err, undoId) { const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = msg;
+  if (undoId) { const b = document.createElement("button"); b.className = "btn"; b.textContent = "Undo"; b.onclick = () => { t.remove(); undo(undoId); }; t.appendChild(b); }
+  document.querySelectorAll(".toast").forEach(o => o.remove());
+  document.body.appendChild(t); setTimeout(() => t.remove(), undoId ? 10000 : err ? 7000 : 3500); }
 async function api(path, body) {
   const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
   const j = await r.json().catch(() => ({ error: r.statusText }));
@@ -457,13 +481,54 @@ function renderHealth() {
   $("#syncBtn").disabled = h.sync.running;
 }
 
+// #24: one search box over every stream's titles, descriptions, topics, hashtags and, from
+// the server, the items' captions; filters combine, and live in the URL (#q=...&st=...).
+const STATUS = { unslotted: i => i.decision === "approved" && !i.scheduled && !i.uploaded,
+  scheduled: i => !!i.scheduled && !i.uploaded, uploaded: i => i.uploaded, held: i => i.hold,
+  pinned: i => !!i.publish_at, issues: i => (i.issues || []).length > 0 };
+const STATUS_LABEL = { unslotted: "Approved, no slot", scheduled: "Scheduled", uploaded: "Uploaded", held: "Held",
+  pinned: "Pinned", issues: "Has style issues" };
+function textOf(i) {
+  return [i.title, i.hook, i.ref, i.description, i.topic, i.hashtags, i.playlist, i.category, i.thumb_text]
+    .join(" ").toLowerCase();
+}
 function filtered() {
   let items = STATE.items;
   if (SHOW) items = items.filter(i => i.show === SHOW);
   if (KINDF) items = items.filter(i => i.kind === KINDF);
-  if (Q) { const q = Q.toLowerCase(); items = items.filter(i => (i.title + " " + i.hook + " " + i.ref).toLowerCase().includes(q)); }
+  if (ST && STATUS[ST]) items = items.filter(STATUS[ST]);
+  if (FROM) items = items.filter(i => (i.date || "") >= FROM);
+  if (TO) items = items.filter(i => (i.date || "") <= TO);
+  if (Q.trim()) {
+    const ws = Q.toLowerCase().split(/\s+/).filter(Boolean);
+    items = items.filter(i => { const t = textOf(i); return ws.every(w => t.includes(w)) || (THQ === Q && THITS[i.ref]); });
+  }
   return items;
 }
+let THT = null;
+function searchTranscripts() {
+  clearTimeout(THT);
+  if (Q.trim().length < 3) { THITS = {}; THQ = ""; return; }
+  THT = setTimeout(async () => {
+    const q = Q;
+    $("#queueSub").textContent = "searching transcripts…";
+    try { const r = await api("/api/search?q=" + encodeURIComponent(q)); if (q === Q) { THITS = r.hits || {}; THQ = q; renderQueue(); } }
+    catch (e) { toast(e.message, true); }
+  }, 700);
+}
+function saveHash() {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries({ tab: TAB === "waiting" ? "" : TAB, show: SHOW, kind: KINDF, q: Q, st: ST, from: FROM, to: TO })) if (v) p.set(k, v);
+  const h = p.toString();
+  if (h !== location.hash.slice(1)) history.replaceState(null, "", location.pathname + location.search + (h ? "#" + h : ""));
+}
+function loadHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  TAB = TABS[p.get("tab")] ? p.get("tab") : "waiting"; SHOW = p.get("show") || ""; KINDF = p.get("kind") || "";
+  Q = p.get("q") || ""; ST = p.get("st") || ""; FROM = p.get("from") || ""; TO = p.get("to") || "";
+  if (Q) searchTranscripts();
+}
+window.addEventListener("hashchange", () => { loadHash(); if (STATE) renderQueue(); });
 const TABS = { waiting: i => i.decision === "pending", changes: i => i.decision === "changes_requested",
   approved: i => i.decision === "approved" && !i.uploaded, live: i => i.uploaded, rejected: i => i.decision === "rejected", all: () => true };
 const TAB_LABEL = { waiting: "Waiting", changes: "Changes", approved: "Approved", live: "Uploaded", rejected: "Rejected", all: "All" };
@@ -474,12 +539,18 @@ function renderQueue() {
   $("#queueBar").innerHTML = `<span class="tabs">${Object.keys(TABS).map(t => `<button class="tab ${TAB === t ? "on" : ""}" data-tab="${t}">${TAB_LABEL[t]}<span class="n">${base.filter(TABS[t]).length}</span></button>`).join("")}</span>`
     + `<span class="sep"></span><select id="showSel"><option value="">All shows</option>${shows.map(s => `<option value="${s.key}" ${SHOW === s.key ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
        <select id="kindSel"><option value="">All kinds</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}" ${KINDF === k ? "selected" : ""}>${v}s</option>`).join("")}</select>
-       <input class="search" id="q" placeholder="Search titles…" value="${esc(Q)}">`;
+       <select id="stSel"><option value="">Any status</option>${Object.keys(STATUS).map(k => `<option value="${k}" ${ST === k ? "selected" : ""}>${STATUS_LABEL[k]}</option>`).join("")}</select>
+       <input type="date" class="date" id="fromD" value="${esc(FROM)}" title="Streams from this day">
+       <input type="date" class="date" id="toD" value="${esc(TO)}" title="...to this day">
+       <button class="btn" id="pickAll" title="Select every item shown, for a bulk action">☑ Select shown</button>
+       <button class="btn" id="undoBtn" title="The last 20 war room actions, to undo">↶ Undo…</button>
+       <input class="search" id="q" placeholder="Search titles, descriptions, transcripts…" value="${esc(Q)}">`;
   const items = base.filter(TABS[TAB]).sort((a, b) => (b.date || "").localeCompare(a.date || "") || a.ref.localeCompare(b.ref));
   VISIBLE = items.map(i => i.ref);
   if (SEL && !VISIBLE.includes(SEL)) SEL = VISIBLE[Math.min(SEL_AT, VISIBLE.length - 1)] || null;  // acted on: the next one
   SEL_AT = SEL ? VISIBLE.indexOf(SEL) : 0;
-  $("#queueSub").textContent = `${items.length} shown`;
+  $("#queueSub").textContent = `${items.length} shown` + (Q.trim().length >= 3 && THQ !== Q ? " · searching transcripts…" : "");
+  renderBulk(); saveHash();
   $("#vnQueue").textContent = STATE.counts.pending || "";
   $("#grid").innerHTML = items.map(card).join("") || `<div class="empty">Nothing here${TAB === "waiting" ? " — all caught up" : ""}.</div>`;
 }
@@ -489,7 +560,8 @@ function card(i) {
   const media = i.thumbnail_url ? `<img loading="lazy" src="${i.thumbnail_url}" alt="">`
     : i.video_url ? `<video muted preload="${PHONE.matches ? "none" : "metadata"}" src="${i.video_url}#t=3"></video>` : "";
   const sched = i.scheduled ? `⏱ ${new Date(i.scheduled).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : i.publish_at ? `📌 ${esc(i.publish_at)}` : "";
-  return `<div class="card ${BUSY.has(i.ref) ? "busy" : ""} ${SEL === i.ref ? "sel" : ""}" data-ref="${esc(i.ref)}">
+  const hit = THQ === Q && THITS[i.ref] && !textOf(i).includes(Q.toLowerCase().split(/\s+/)[0]) ? THITS[i.ref] : "";
+  return `<div class="card ${BUSY.has(i.ref) ? "busy" : ""} ${SEL === i.ref ? "sel" : ""} ${PICK.has(i.ref) ? "picked" : ""}" data-ref="${esc(i.ref)}">
     <div class="thumb ${vertical ? "vertical" : ""}" data-open="${esc(i.ref)}">${media}
       <span class="kind ${i.kind}">${KIND[i.kind] || i.kind}</span>
       <span class="state ${i.decision}">${DEC[i.decision] || i.decision}${i.hold ? " · held" : ""}</span>
@@ -498,9 +570,11 @@ function card(i) {
       <div class="title" data-open="${esc(i.ref)}">${esc(i.title)}</div>
       <div class="sub"><span>${esc(i.show_name)}</span><span>${esc(i.date)}</span><span>${esc(i.short.split("/")[1])}</span>${i.score ? `<span>★ ${esc(i.score)}</span>` : ""}${sched ? `<span>${sched}</span>` : ""}${i.issues?.length ? `<span class="issues" title="${esc(i.issues.map(x => x.msg).join("\n"))}">⚠ ${i.issues.length}</span>` : ""}</div>
       ${i.hook ? `<div class="hook">${esc(i.hook)}</div>` : ""}
+      ${hit ? `<div class="hit" title="Said in the video">🗨 ${esc(hit)}</div>` : ""}
       ${i.decision === "changes_requested" && i.comment ? `<div class="note">✎ ${esc(i.comment)}</div>` : ""}
     </div>
     <div class="acts">
+      <label class="pickl" title="Select (shift-click: a range)"><input type="checkbox" data-pick="${esc(i.ref)}" ${PICK.has(i.ref) ? "checked" : ""}></label>
       ${i.decision !== "approved" ? `<button class="btn good" data-act="approve" data-ref="${esc(i.ref)}">✓ Approve</button>` : `<button class="btn" data-act="reopen" data-ref="${esc(i.ref)}">↺ Reopen</button>`}
       <button class="btn warn" data-act="changes" data-ref="${esc(i.ref)}">✎ Changes</button>
       <button class="btn bad" data-act="reject" data-ref="${esc(i.ref)}">✕</button>
@@ -533,12 +607,131 @@ async function act(ref, action, extra = {}) {
     const r = await api("/api/action", { ref, action, ...extra });
     const i = STATE.items.findIndex(x => x.ref === ref);
     if (i >= 0) STATE.items[i] = { ...STATE.items[i], ...r.row };
-    toast(`${{ approve: "Approved", reject: "Rejected", changes: "Changes requested for", reopen: "Reopened", hold: extra.on ? "Held" : "Released", pin: extra.text ? "Pinned" : "Unpinned", edit: "Saved", thumbtext: "New thumbnail words for" }[action]} ${ref.split("/")[1].split("_")[0]}${r.note ? " — " + r.note : ""}`);
+    toast(`${{ approve: "Approved", reject: "Rejected", changes: "Changes requested for", reopen: "Reopened", hold: extra.on ? "Held" : "Released", pin: extra.text ? "Pinned" : "Unpinned", edit: "Saved", thumbtext: "New thumbnail words for" }[action]} ${ref.split("/")[1].split("_")[0]}${r.note ? " — " + r.note : ""}`, false, r.undo);
     if (OPEN === ref) fillModalState(STATE.items.find(x => x.ref === ref));
     refresh();
   } catch (e) { toast(e.message, true); }
   finally { BUSY.delete(ref); renderQueue(); }
 }
+function upsert(row) { const k = STATE.items.findIndex(x => x.ref === row.ref); if (k >= 0) STATE.items[k] = { ...STATE.items[k], ...row }; }
+
+// ---------- #23 undo ----------
+
+async function undo(id) {
+  try {
+    const r = await api("/api/undo", { id });
+    (r.rows || []).forEach(upsert);
+    const f = r.failed || [];
+    toast(`Undone (${r.undone})${f.length ? `; ${f.length} failed: ${f[0].ref.split("/")[1]}: ${f[0].error}` : ""}${r.note ? " — " + r.note : ""}`, !!f.length);
+    if ($("#tool").open && $("#tool").dataset.kind === "undo") showUndo();
+    renderQueue(); refresh();
+  } catch (e) { toast(e.message, true); }
+}
+async function showUndo() {
+  const d = $("#tool"); d.dataset.kind = "undo";
+  let list = [];
+  try { list = (await api("/api/undo")).actions; } catch (e) { return toast(e.message, true); }
+  d.innerHTML = `<div class="m-head"><b>Recent war room actions</b><span class="sp" style="color:var(--faint);font-size:12px">the last 20, newest first</span><button class="x" data-close>×</button></div>
+    <div class="tbody"><div class="undo-list">${list.map(a => `<span class="f">${esc(ago(a.at))}</span>
+      <span class="${a.undone ? "gone" : ""}">${esc(a.label)}${a.uploaded ? ` <span style="color:var(--amber)" title="An upload can't be undone: change it in YouTube Studio">· ${a.uploaded} on YouTube</span>` : ""}</span>
+      ${a.undone ? `<span class="f">undone</span>` : `<button class="btn" data-undo="${esc(a.id)}">Undo</button>`}`).join("")
+      || `<span></span><span class="f">Nothing yet.</span><span></span>`}</div></div>`;
+  if (!d.open) d.showModal();
+}
+
+// ---------- #17 select, bulk actions, find and replace ----------
+
+function picked() { return [...PICK].filter(r => STATE.items.some(i => i.ref === r)); }
+function renderBulk() {
+  const n = picked().length, b = $("#bulk");
+  b.hidden = !n;
+  if (!n) return;
+  b.innerHTML = `<b>${n} selected</b>
+    <button class="btn good" data-bulk="approve">✓ Approve</button>
+    <button class="btn" data-bulk="hold">Hold</button><button class="btn" data-bulk="release">Release</button>
+    <button class="btn" data-bulk="pin" title="Publish at for all of them">📌 Pin…</button>
+    <button class="btn warn" data-bulk="changes">✎ Same retake note…</button>
+    <button class="btn" data-bulk="reopen">↺ Reopen</button>
+    <button class="btn" data-bulk="replace">Find and replace…</button>
+    <button class="btn" data-bulk="clear">Clear</button>`;
+}
+function pick(ref, on, range) {
+  if (range && LASTPICK && VISIBLE.includes(LASTPICK) && VISIBLE.includes(ref)) {
+    const [a, b] = [VISIBLE.indexOf(LASTPICK), VISIBLE.indexOf(ref)].sort((x, y) => x - y);
+    VISIBLE.slice(a, b + 1).forEach(r => on ? PICK.add(r) : PICK.delete(r));
+  } else on ? PICK.add(ref) : PICK.delete(ref);
+  LASTPICK = ref;
+  renderQueue();
+}
+async function bulk(action) {
+  const refs = picked(), n = refs.length;
+  if (action === "clear") { PICK.clear(); renderQueue(); return; }
+  if (action === "replace") return showReplace();
+  const extra = {};
+  let api_action = action;
+  if (action === "hold" || action === "release") { api_action = "hold"; extra.on = action === "hold"; }
+  if (action === "pin") {
+    const t = ask(`Publish at for ${n} items: YYYY-MM-DD HH:MM, or a date (each gets that day's first slot, so give times to spread them); empty unpins`, false);
+    if (t === null) return; extra.text = t;
+  }
+  if (action === "changes") { const t = ask(`What should change, for all ${n}? clipper re-cuts each from this note:`, true); if (!t) return; extra.text = t; }
+  if (!["changes", "pin"].includes(action) && !confirm(`${action[0].toUpperCase() + action.slice(1)} ${n} item${n > 1 ? "s" : ""}?`)) return;
+  refs.forEach(r => BUSY.add(r)); renderQueue();
+  try {
+    const r = await api("/api/bulk", { action: api_action, refs, ...extra });
+    (r.rows || []).forEach(upsert);
+    const f = r.failed || [];
+    toast(`${action}: ${r.done} done${f.length ? `, ${f.length} failed (${f[0].ref.split("/")[1]}: ${f[0].error})` : ""}`, !!f.length && !r.done, r.undo);
+    refresh();
+  } catch (e) { toast(e.message, true); }
+  finally { refs.forEach(r => BUSY.delete(r)); renderQueue(); }
+}
+const REP_FIELDS = { title: "Title", description: "Description", hashtags: "Hashtags", tags: "Tags", playlist: "Playlist" };
+let REP_LAST = "";  // the inputs the last dry run was for: Apply needs a preview of exactly these
+function repBody(dry) {
+  return { refs: picked(), find: $("#rFind").value, replace: $("#rRepl").value, dry_run: dry,
+    fields: Object.keys(REP_FIELDS).filter(f => $(`#rf_${f}`).checked),
+    word: $("#rWord").checked, case: $("#rCase").checked, regex: $("#rRegex").checked };
+}
+function showReplace() {
+  const d = $("#tool"), n = picked().length; d.dataset.kind = "replace";
+  d.innerHTML = `<div class="m-head"><b>Find and replace</b><span style="color:var(--faint);font-size:12px">in ${n} selected item${n > 1 ? "s" : ""}, through Kitsu</span><button class="x" data-close>×</button></div>
+    <div class="tbody">
+      <input class="search" id="rFind" placeholder="Find">
+      <input class="search" id="rRepl" placeholder="Replace with (empty deletes it)">
+      <div>${Object.entries(REP_FIELDS).map(([f, l]) => `<label><input type="checkbox" id="rf_${f}" ${["title", "description", "hashtags"].includes(f) ? "checked" : ""}>${l}</label>`).join("")}</div>
+      <div><label><input type="checkbox" id="rWord" checked>Whole words</label><label><input type="checkbox" id="rCase">Match case</label><label><input type="checkbox" id="rRegex">Regular expression</label></div>
+      <div><button class="btn" id="rPrev">Preview (dry run)</button> <button class="btn primary" id="rApply" disabled>Apply</button></div>
+      <div class="rep-list" id="rList"><span class="f">Preview first: every line that would change is listed before anything is written.</span></div>
+    </div>`;
+  const stale = () => { $("#rApply").disabled = JSON.stringify(repBody(true)) !== REP_LAST; };
+  d.querySelectorAll("input").forEach(el => el.addEventListener("input", stale));
+  $("#rPrev").onclick = async () => {
+    const body = repBody(true);
+    try {
+      const r = await api("/api/replace", body);
+      const lines = r.items.reduce((s, it) => s + it.lines.length, 0);
+      $("#rList").innerHTML = `<div class="f">${r.items.length} of ${r.checked} items would change, ${lines} lines:</div>` + r.items.map(it => `<div class="it">
+        <b>${esc(it.short)}</b>${it.uploaded ? ` <span style="color:var(--amber)">· on YouTube already (Kitsu only; the live video keeps its text)</span>` : ""}
+        ${it.lines.map(l => `<div><span class="f">${esc(l.field)}</span> <del>${esc(l.before)}</del><br><span class="f">${" ".repeat(l.field.length)}</span> <ins>${esc(l.after)}</ins></div>`).join("")}</div>`).join("");
+      REP_LAST = JSON.stringify(body);
+      $("#rApply").disabled = !r.items.length;
+      $("#rApply").textContent = `Apply to ${r.items.length} item${r.items.length === 1 ? "" : "s"}`;
+    } catch (e) { $("#rList").innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; }
+  };
+  $("#rApply").onclick = async () => {
+    $("#rApply").disabled = true;
+    try {
+      const r = await api("/api/replace", repBody(false));
+      (r.rows || []).forEach(upsert);
+      const f = r.failed || [];
+      toast(`Replaced in ${r.done} items${f.length ? `; ${f.length} failed (${f[0].ref.split("/")[1]}: ${f[0].error})` : ""}`, !!f.length && !r.done, r.undo);
+      d.close(); renderQueue(); refresh();
+    } catch (e) { toast(e.message, true); $("#rApply").disabled = false; }
+  };
+  d.showModal(); $("#rFind").focus();
+}
+
 function ask(label, required) { const t = prompt(label); if (t === null) return null; if (required && !t.trim()) { toast("That needs some text.", true); return null; } return t.trim(); }
 
 document.addEventListener("click", e => {
@@ -550,6 +743,16 @@ document.addEventListener("click", e => {
   if (v?.dataset.move) { move(+v.dataset.move); return; }
   const pop = e.target.closest("[data-pop]");
   if (pop) { popOut(pop.dataset.pop); return; }
+  const pk = e.target.closest("[data-pick]");
+  if (pk) { pick(pk.dataset.pick, pk.checked, e.shiftKey); return; }
+  if (e.target.closest(".pickl")) return;
+  const bk = e.target.closest("[data-bulk]");
+  if (bk) { bulk(bk.dataset.bulk); return; }
+  const un = e.target.closest("[data-undo]");
+  if (un) { undo(un.dataset.undo); return; }
+  if (e.target.closest("[data-close]")) { e.target.closest("dialog").close(); return; }
+  if (e.target.id === "undoBtn") { showUndo(); return; }
+  if (e.target.id === "pickAll") { VISIBLE.forEach(r => PICK.add(r)); renderQueue(); return; }
   if (e.target.closest("a[href]")) return;  // links inside a clickable row (YouTube) just open
   const t = e.target.closest("[data-tab],[data-act],[data-open]");
   if (!t) return;
@@ -567,8 +770,11 @@ document.addEventListener("click", e => {
 document.addEventListener("change", e => {
   if (e.target.id === "showSel") { SHOW = e.target.value; renderQueue(); }
   if (e.target.id === "kindSel") { KINDF = e.target.value; renderQueue(); }
+  if (e.target.id === "stSel") { ST = e.target.value; renderQueue(); }
+  if (e.target.id === "fromD") { FROM = e.target.value; renderQueue(); }
+  if (e.target.id === "toD") { TO = e.target.value; renderQueue(); }
 });
-document.addEventListener("input", e => { if (e.target.id === "q") { Q = e.target.value; const pos = e.target.selectionStart; renderQueue(); const q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); } });
+document.addEventListener("input", e => { if (e.target.id === "q") { Q = e.target.value; searchTranscripts(); const pos = e.target.selectionStart; renderQueue(); const q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); } });
 $("#syncBtn").onclick = async () => { try { await api("/api/sync", {}); toast("Syncing from Kitsu…"); setTimeout(refresh, 4000); } catch (e) { toast(e.message, true); } };
 $("#replanBtn").onclick = async () => { try { await api("/api/replan", {}); toast("Schedule replanned"); refresh(); } catch (e) { toast(e.message, true); } };
 
@@ -850,6 +1056,7 @@ document.addEventListener("keydown", e => {
   const tg = e.target;
   if (tg.matches?.("input, textarea, select, [contenteditable]")) { if (e.key === "Escape" && OPEN) { e.preventDefault(); tg.blur(); } return; }
   if ($("#keys").open) { if (e.key === "?") $("#keys").close(); return; }
+  if ($("#tool").open) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key, video = OPEN ? $("#modal video") : null;
   const take = () => e.preventDefault();
   if (k === "?") { take(); showKeys(); }
@@ -876,7 +1083,7 @@ document.addEventListener("keydown", e => {
   }
 });
 
-refresh(); refreshLive(); refreshCloud(); refreshCosts();
+loadHash(); refresh(); refreshLive(); refreshCloud(); refreshCosts();
 setInterval(refresh, 15000);
 setInterval(refreshLive, 60000);
 setInterval(refreshCloud, 60000);

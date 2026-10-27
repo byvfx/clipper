@@ -33,7 +33,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from zoneinfo import ZoneInfo
 
-from . import actions, review, schedule, worker
+from . import actions, jsonstate, review, schedule, worker
 from .config import _root, for_stream
 
 PAGE = Path(__file__).with_name("web") / "warroom.html"
@@ -405,33 +405,257 @@ def start_retake(cfg: dict) -> bool:
     return True
 
 
+WHO = "war room"
+REPLANS = ("approve", "reject", "changes", "reopen", "hold", "pin")  # actions that move the schedule
+COLUMN_OF = {"title": "YouTube title", "description": "YouTube description", "hashtags": "Hashtags",
+             "tags": "Tags", "playlist": "Playlist"}  # row field -> Kitsu column
+ROW_OF = {c: f for f, c in COLUMN_OF.items()}
+UNDO_MAX = 20
+
+
+def _apply(cfg: dict, item: actions.Item, action: str, body: dict, who: str) -> dict:
+    text = body.get("text", "")
+    fn = {"approve": lambda: actions.approve(cfg, item, text, who),
+          "reject": lambda: actions.reject(cfg, item, text, who),
+          "changes": lambda: actions.changes(cfg, item, text, who),
+          "reopen": lambda: actions.reopen(cfg, item, who),
+          "hold": lambda: actions.hold(cfg, item, bool(body.get("on", True)), who),
+          "pin": lambda: actions.pin(cfg, item, text, who),
+          "edit": lambda: actions.edit_meta(cfg, item, body.get("values") or {}, who),
+          "thumbtext": lambda: actions.thumbtext(cfg, item, text, who)}.get(action)
+    if not fn:
+        raise SystemExit(f"unknown action {action!r}")
+    return fn()
+
+
+def _before(cfg: dict, item: actions.Item) -> dict:
+    """What an undo puts back: the item's status, hold, pin and texts as the page shows them."""
+    r = actions.describe(cfg, item.stream_dir)[item.key]
+    return {k: r[k] for k in ("status", "decision", "hold", "publish_at", "thumb_text", "uploaded",
+                              *COLUMN_OF)}
+
+
+# ---------- #23 undo ----------
+# The last UNDO_MAX war room actions (single or bulk), newest first, in [paths] warroom_undo.
+# Undo goes through actions.py like everything else, attributed "war room (undo)".
+
+def undo_path(cfg: dict) -> Path:
+    return Path(cfg["paths"]["warroom_undo"])
+
+
+def remember(cfg: dict, action: str, label: str, done: list[dict]) -> str:
+    """done: [{"ref", "before", "values"?}]. Returns the undo id."""
+    uid = f"{int(time.time() * 1000):x}"
+    entry = {"id": uid, "at": datetime.now(UTC).isoformat(timespec="seconds"), "action": action,
+             "label": label, "items": done, "undone": False}
+    undo_path(cfg).parent.mkdir(parents=True, exist_ok=True)
+    with jsonstate.update(undo_path(cfg), {"actions": []}) as d:
+        d["actions"] = [entry, *d["actions"]][:UNDO_MAX]
+    return uid
+
+
+def recent_actions(cfg: dict) -> list[dict]:
+    d = jsonstate.read(undo_path(cfg), {"actions": []})
+    return [{k: a[k] for k in ("id", "at", "action", "label", "undone")}
+            | {"n": len(a["items"]), "uploaded": sum(1 for x in a["items"] if x["before"].get("uploaded"))}
+            for a in d["actions"]]
+
+
+def _inverse(cfg: dict, item: actions.Item, action: str, before: dict, values: dict, who: str) -> dict:
+    if action in ("approve", "reject", "changes", "reopen"):
+        return actions.restore(cfg, item, before["status"], who)
+    if action == "hold":
+        return actions.hold(cfg, item, before["hold"], who)
+    if action == "pin":
+        return actions.pin(cfg, item, before["publish_at"], who)
+    if action in ("edit", "replace"):
+        return actions.edit_meta(cfg, item, {c: before[ROW_OF[c]] for c in values}, who)
+    if action == "thumbtext":
+        return actions.thumbtext(cfg, item, before["thumb_text"], who)
+    raise SystemExit(f"{action} can't be undone")
+
+
+def do_undo(cfg: dict, uid: str) -> dict:
+    d = jsonstate.read(undo_path(cfg), {"actions": []})
+    entry = next((a for a in d["actions"] if a["id"] == uid), None)
+    if not entry:
+        raise SystemExit(f"that action is too old to undo here (only the last {UNDO_MAX} are kept)")
+    if entry["undone"]:
+        raise SystemExit("already undone")
+    who = f"{WHO} (undo)"
+    ok, failed, rows = 0, [], []
+    with LOCK:
+        for x in entry["items"]:
+            try:
+                item = actions.resolve(cfg, x["ref"])
+                rows.append(row_json(item.stream_dir, _inverse(cfg, item, entry["action"], x["before"],
+                                                               x.get("values") or {}, who)))
+                ok += 1
+            except (Exception, SystemExit) as e:  # noqa: BLE001  # report each, undo the rest
+                failed.append({"ref": x["ref"], "error": str(e)[:200]})
+        if ok and cfg["discord"]["replan"] and entry["action"] in REPLANS:
+            schedule.run(cfg, sync_first=False)
+    with jsonstate.update(undo_path(cfg), {"actions": []}) as d:
+        for a in d["actions"]:
+            if a["id"] == uid:
+                a["undone"] = not failed
+    up = sum(1 for x in entry["items"] if x["before"].get("uploaded"))
+    note = f"{up} already on YouTube: change {'it' if up == 1 else 'those'} in Studio too" if up else ""
+    return {"undone": ok, "failed": failed, "rows": rows, "note": note}
+
+
 def do_action(cfg: dict, body: dict) -> dict:
     action, ref = body.get("action", ""), body.get("ref", "")
-    text = body.get("text", "")
-    who = "war room"
     with LOCK:
         item = actions.resolve(cfg, ref)
-        fn = {"approve": lambda: actions.approve(cfg, item, text, who),
-              "reject": lambda: actions.reject(cfg, item, text, who),
-              "changes": lambda: actions.changes(cfg, item, text, who),
-              "reopen": lambda: actions.reopen(cfg, item, who),
-              "hold": lambda: actions.hold(cfg, item, bool(body.get("on", True)), who),
-              "pin": lambda: actions.pin(cfg, item, text, who),
-              "edit": lambda: actions.edit_meta(cfg, item, body.get("values") or {}, who),
-              "thumbtext": lambda: actions.thumbtext(cfg, item, text, who)}.get(action)
-        if not fn:
-            raise SystemExit(f"unknown action {action!r}")
-        row = fn()
+        before = _before(cfg, item)
+        row = _apply(cfg, item, action, body, WHO)
         note = ""
-        if cfg["discord"]["replan"] and action in ("approve", "reject", "changes", "reopen", "hold", "pin"):
+        if cfg["discord"]["replan"] and action in REPLANS:
             schedule.run(cfg, sync_first=False)
             row = actions.describe(cfg, item.stream_dir)[item.key]
             if row["scheduled"]:
                 note = f"scheduled {row['scheduled'][:16].replace('T', ' ')}"
+    uid = remember(cfg, action, f"{action} {item.short}",
+                   [{"ref": item.ref, "before": before, "values": body.get("values") or {}}])
     if action == "changes" and cfg["retake"]["auto"]:
         note = "clipper is working on the retake" if start_retake(cfg) else \
             "a retake run is going; this one is next"
-    return {"row": row_json(item.stream_dir, row), "note": note}
+    return {"row": row_json(item.stream_dir, row), "note": note, "undo": uid}
+
+
+# ---------- #17 bulk actions, find and replace ----------
+
+BULK = ("approve", "reopen", "hold", "pin", "changes", "reject")
+
+
+def do_bulk(cfg: dict, body: dict) -> dict:
+    action, refs = body.get("action", ""), body.get("refs") or []
+    if action not in BULK:
+        raise SystemExit(f"{action!r} isn't a bulk action")
+    if not refs:
+        raise SystemExit("nothing selected")
+    done, failed, rows = [], [], []
+    with LOCK:
+        for ref in refs:
+            try:
+                item = actions.resolve(cfg, ref)
+                before = _before(cfg, item)
+                rows.append(row_json(item.stream_dir, _apply(cfg, item, action, body, WHO)))
+                done.append({"ref": item.ref, "before": before})
+            except (Exception, SystemExit) as e:  # noqa: BLE001  # report each, do the rest
+                failed.append({"ref": ref, "error": str(e)[:200]})
+        if done and cfg["discord"]["replan"] and action in REPLANS:
+            schedule.run(cfg, sync_first=False)
+    uid = remember(cfg, action, f"{action} {len(done)} items", done) if done else ""
+    if done and action == "changes" and cfg["retake"]["auto"]:
+        start_retake(cfg)
+    return {"done": len(done), "failed": failed, "rows": rows, "undo": uid}
+
+
+def replace_plan(rows: list[dict], fields: list[str], find: str, repl: str, regex: bool,
+                 case: bool, word: bool = False) -> list[dict]:
+    """[{ref, short, values: {column: new}, lines: [{field, before, after}]}] for the rows
+    whose fields change."""
+    import re
+
+    if not find:
+        raise SystemExit("find what?")
+    if not fields or any(f not in COLUMN_OF for f in fields):
+        raise SystemExit(f"fields are {', '.join(COLUMN_OF)}")
+    try:
+        pat = find if regex else re.escape(find)
+        pat = re.compile(rf"\b(?:{pat})\b" if word else pat, 0 if case else re.IGNORECASE)
+    except re.error as e:
+        raise SystemExit(f"bad pattern: {e}") from None
+    out = []
+    for r in rows:
+        values, lines = {}, []
+        for f in fields:
+            old = r.get(f) or ""
+            try:
+                new = pat.sub(repl if regex else lambda _m: repl, old)
+            except (re.error, IndexError) as e:
+                raise SystemExit(f"bad replacement: {e}") from None
+            if new == old:
+                continue
+            values[COLUMN_OF[f]] = new
+            olds, news = old.splitlines() or [""], new.splitlines() or [""]
+            lines += [{"field": f, "before": a, "after": b}
+                      for a, b in zip(olds, news, strict=False) if a != b]
+            if len(olds) != len(news):
+                lines.append({"field": f, "before": f"({len(olds)} lines)", "after": f"({len(news)} lines)"})
+        if values:
+            out.append({"ref": r["ref"], "short": r["short"], "values": values, "lines": lines,
+                        "uploaded": r.get("uploaded", False)})
+    return out
+
+
+def do_replace(cfg: dict, body: dict) -> dict:
+    refs = set(body.get("refs") or [])
+    if not refs:
+        raise SystemExit("nothing selected")
+    rows = [r for r in all_rows(cfg) if r["ref"] in refs]
+    plan = replace_plan(rows, body.get("fields") or [], body.get("find", ""), body.get("replace", ""),
+                        bool(body.get("regex")), bool(body.get("case")), bool(body.get("word")))
+    if body.get("dry_run", True):
+        return {"dry_run": True, "items": plan, "checked": len(rows)}
+    done, failed, out_rows = [], [], []
+    with LOCK:
+        for p in plan:
+            try:
+                item = actions.resolve(cfg, p["ref"])
+                before = _before(cfg, item)
+                out_rows.append(row_json(item.stream_dir, actions.edit_meta(cfg, item, p["values"], WHO)))
+                done.append({"ref": item.ref, "before": before, "values": p["values"]})
+            except (Exception, SystemExit) as e:  # noqa: BLE001
+                failed.append({"ref": p["ref"], "error": str(e)[:200]})
+    uid = remember(cfg, "replace", f"replace {body.get('find', '')!r} in {len(done)} items", done) if done else ""
+    return {"dry_run": False, "done": len(done), "failed": failed, "rows": out_rows, "undo": uid}
+
+
+# ---------- #24 search the transcripts ----------
+
+SRT_CACHE: dict[str, tuple[float, str]] = {}
+
+
+def srt_text(path: Path) -> str:
+    """An item's caption text on one line, cached by mtime."""
+    import re
+
+    try:
+        mt = path.stat().st_mtime
+    except OSError:
+        return ""
+    hit = SRT_CACHE.get(str(path))
+    if hit and hit[0] == mt:
+        return hit[1]
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    text = " ".join(ln.strip() for ln in raw.splitlines()
+                    if ln.strip() and not ln.strip().isdigit() and "-->" not in ln)
+    text = re.sub(r"<[^>]+>", "", text)
+    SRT_CACHE[str(path)] = (mt, text)
+    return text
+
+
+def search_transcripts(cfg: dict, q: str, limit: int = 300) -> dict:
+    """Items whose captions say every word of q (case-insensitive), with a snippet each."""
+    words = q.lower().split()
+    if not words or len(q.strip()) < 3:
+        return {"hits": {}}
+    hits = {}
+    for sdir in actions.review_dirs(cfg):
+        state = actions.load_json(sdir / "review_state.json", {}) or {}
+        for key, st in state.items():
+            text = srt_text((sdir / st["file"].replace("\\", "/")).with_suffix(".srt"))
+            low = text.lower()
+            if text and all(w in low for w in words):
+                i = low.find(" ".join(words))  # the phrase where it's said, else the first word
+                i = i if i >= 0 else low.find(words[0])
+                hits[f"{sdir.name}/{key}"] = ("…" if i > 60 else "") + text[max(0, i - 60):i + 100] + "…"
+                if len(hits) >= limit:
+                    return {"hits": hits, "more": True}
+    return {"hits": hits}
 
 
 def sync_all(cfg: dict, stream: str | None = None) -> None:
@@ -543,6 +767,10 @@ def make_handler(cfg: dict):
                     self.send_json(modal_status(cfg))
                 elif u.path == "/api/costs":
                     self.send_json(costs_status(cfg))
+                elif u.path == "/api/undo":
+                    self.send_json({"actions": recent_actions(cfg)})
+                elif u.path == "/api/search":
+                    self.send_json(search_transcripts(cfg, (qs.get("q") or [""])[0]))
                 elif u.path.startswith("/media/"):
                     self.send_media(unquote(u.path[len("/media/"):]))
                 else:
@@ -565,6 +793,12 @@ def make_handler(cfg: dict):
                     self.send_json({"issues": actions.style_issues(sc, body.get("values") or {})})
                 elif u.path == "/api/action":
                     self.send_json(do_action(cfg, body))
+                elif u.path == "/api/undo":
+                    self.send_json(do_undo(cfg, body.get("id", "")))
+                elif u.path == "/api/bulk":
+                    self.send_json(do_bulk(cfg, body))
+                elif u.path == "/api/replace":
+                    self.send_json(do_replace(cfg, body))
                 elif u.path == "/api/sync":
                     sync_all(cfg, body.get("stream"))
                     self.send_json({"started": True})

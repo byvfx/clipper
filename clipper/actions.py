@@ -145,6 +145,14 @@ def reopen(cfg: dict, item: Item, who: str = "") -> dict:
     return refresh(cfg, item)
 
 
+def restore(cfg: dict, item: Item, status_short: str, who: str = "") -> dict:
+    """Put the task back to an earlier status (the war room's undo). The comment is a
+    clipper note, so the decision's reason stays the earlier comment (a retake isn't
+    planned again, a reject keeps its scoring example)."""
+    _status(cfg, item, status_short, f"{review.NOTE_PREFIX} Undo: back to {status_short}{_by(who)}")
+    return refresh(cfg, item)
+
+
 def hold(cfg: dict, item: Item, on: bool = True, who: str = "") -> dict:
     _columns(cfg, item, {"Hold": "true" if on else "false"},
              f"Hold {'on' if on else 'off'}{_by(who)}")

@@ -207,6 +207,14 @@ Click a live show's chip to watch it in a player on the page or on kick.com in a
 window; the chip also says whether the NAS is recording it. The review queue works from the
 keyboard (J/K to move, A approve, R reject, C retake note, H hold, Space/arrows for the
 video, O to pop it out into its own window); press `?` in the war room for the full list.
+The search box looks through every stream's titles, descriptions, topics and hashtags, and
+what is said in each video (its captions); status, date and show filters combine with it, and
+the view is in the page's URL, so it can be bookmarked. Tick items (shift-click for a range,
+or "Select shown") to approve, hold, release, pin, reopen or send the same retake note to all
+of them, or to find and replace in their titles, descriptions, hashtags, tags or playlists:
+the dry run lists every line that would change before anything is written. Every action, single or
+bulk, can be undone from its toast for 10 s or from "Undo…" (the last 20); undo goes through
+Kitsu too, and an item already on YouTube keeps its live text (change it in Studio).
 Titles, descriptions, hashtags and cover words are checked as you type ("hosts", unmasked
 swearing, YouTube's length limits with the show prefix), and cards with a problem carry a
 ⚠ badge. Above the schedule, the upload panel shows uploads in the last 24 h against the cap,
