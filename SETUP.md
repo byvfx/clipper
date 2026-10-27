@@ -350,6 +350,9 @@ else the `[record]` alert webhook or channel) and keeps it in schedule.json.
 5. **Captions**: create a Discord text channel (ours is #tiktok; the bot can't create channels)
    and set `[tiktok] caption_channel_id`. Each send posts a note and then the bare caption, so
    Copy Text on the phone copies just the caption. `clipper tiktok --caption <item>` posts it again.
+   A draft left unposted expires in the app (TikTok's status still says it is in the inbox):
+   `clipper tiktok --items <item>,... --resend` sends it again and keeps the old send under
+   `previous` as expired, which frees its place in the 24 h count.
 6. **Automatic** (optional): `clipper tiktok --auto` sends the next unsent scheduled Shorts, earliest
    YouTube slot first, as many as `max_per_24h` allows (captions saying "host(s)" are skipped).
    Set `[tiktok] auto_send_minutes` (e.g. 60) and restart the bot to have it run that for you.

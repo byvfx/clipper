@@ -4,6 +4,9 @@
                                       desktop PKCE); token saved in paths.tiktok_token and
                                       refreshed automatically (access 24 h, refresh 365 days)
   clipper tiktok --items s02,t20      send these as drafts; each caption goes to Discord
+  clipper tiktok --items ... --resend send again drafts that expired unposted in the app
+                                      (TikTok's status still says SEND_TO_USER_INBOX; the
+                                      old send is kept under "previous" as "expired")
   clipper tiktok --auto               send the next unsent Shorts, in YouTube-schedule order,
                                       as far as max_per_24h allows (the bot runs this every
                                       [tiktok] auto_send_minutes)
@@ -213,10 +216,13 @@ def tiktok_of(e: dict) -> dict:
     return (e.get("platforms") or {}).get("tiktok") or {}
 
 
-def sent_last_24h(sched: dict) -> int:
+def sent_last_24h(sched: dict, exclude: set[str] = frozenset()) -> int:
+    """Drafts sent in the last 24 h that may still be pending (`exclude`: keys about to be
+    sent again, whose old drafts have expired)."""
     since = datetime.now(UTC) - timedelta(hours=24)
     return sum(1 for e in sched["entries"] + sched.get("unscheduled", [])
-               if tiktok_of(e).get("sent_at") and tiktok_of(e).get("status") != "failed"
+               if e["key"] not in exclude
+               and tiktok_of(e).get("sent_at") and tiktok_of(e).get("status") != "failed"
                and datetime.fromisoformat(tiktok_of(e)["sent_at"]) > since)
 
 
@@ -266,19 +272,23 @@ def notify_caption(cfg: dict, e: dict, text: str) -> None:
         print("  caption not posted to Discord: set [tiktok] caption_channel_id (or a [record] alert channel)")
 
 
-def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool = False) -> None:
+def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool = False,
+         resend: bool = False) -> None:
+    """Send `items` to the TikTok inbox. `resend`: items already sent go again (their draft
+    expired unposted in the app); the old record is kept under "previous"."""
     tc = cfg["tiktok"]
     paths = cfg["paths"]
     sched = rumble.load_schedule(cfg)
     todo = [rumble.resolve(sched, r if "/" in r or not stream else f"{stream}/{r}") for r in items]
-    room = tc["max_per_24h"] - sent_last_24h(sched)
+    again = {e["key"] for e in todo if resend and tiktok_of(e).get("status") == "sent"}
+    room = tc["max_per_24h"] - sent_last_24h(sched, exclude=again)
     if not dry_run:
         print(f"TikTok account: {whoami(cfg)}; {max(room, 0)} of {tc['max_per_24h']} drafts left in 24 h")
     from .notify import probe_duration
 
     for e in todo:
         t = tiktok_of(e)
-        if t.get("status") in ("sent", "posted"):
+        if t.get("status") in ("sent", "posted") and e["key"] not in again:
             print(f"  {e['key']}: already {t['status']} on TikTok ({t.get('sent_at', '')})")
             continue
         if e["kind"] not in tc["kinds"]:
@@ -306,9 +316,13 @@ def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
         publish_id = upload_file(paths, video)
         rec = {"status": "sent", "publish_id": publish_id, "caption": text,
                "sent_at": datetime.now(UTC).isoformat(timespec="seconds")}
+        if e["key"] in again:
+            old = {k: v for k, v in t.items() if k != "previous"}
+            rec["previous"] = (t.get("previous") or []) + [{**old, "status": "expired"}]
         rumble.save_platform(cfg, {e["key"]: rec}, "tiktok")
         room -= 1
-        print(f"  {e['key']}: sent to TikTok drafts ({publish_id})\n    caption: {text}")
+        print(f"  {e['key']}: {'sent again' if e['key'] in again else 'sent'} to TikTok drafts "
+              f"({publish_id})\n    caption: {text}")
         try:
             notify_caption(cfg, e, text)
         except Exception as ex:  # noqa: BLE001  # the draft is sent; the caption is in schedule.json

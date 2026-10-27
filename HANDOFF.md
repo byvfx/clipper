@@ -32,6 +32,19 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
 
+## TikTok drafts resent (2026-10-27)
+User: "re-send the tik toks from last night, i forgot to post and i think they expired".
+Last night = the 10/26 18:42 PT batch (01:42 UTC), four kick-133940023 Shorts: v14_t35,
+v06_t08, v09_w23, v11_t03, all still "sent" and TikTok's status endpoint still says
+SEND_TO_USER_INBOX (it never reports expiry). Built `clipper tiktok --items ... --resend`:
+items already "sent" go again, the old record goes under platforms.tiktok.previous with
+status "expired", and `sent_last_24h(exclude=...)` leaves those out of the cap. Sent 11:23 PT
+(backup schedule.before_tiktok_resend_2026-10-27.json; the first run lacked the "previous"
+write, patched in from the backup). Captions went to Discord #tiktok again. Cap is 5/5 again
+until ~11:25 PT 10/28. Also still unposted from the night before (10/25 17:36 PT): v04_t04,
+v05_t05, v07_t14, v08_t18; resend those the same way once there is room, if wanted.
+SETUP.md documents --resend. Not committed.
+
 ## One-off: Just Trish on Ethan Klein (2026-10-27)
 User: the newest Just Trish Podcast episode (https://www.youtube.com/watch?v=sQ8MX1j6sUU) has
 Trish finally addressing the Ethan Klein situation, with her husband Moses (Hila's brother)
@@ -80,8 +93,13 @@ multi-box layout (one big moment, just the two of them).
   LAST", band "Hila's brother: ETHAN ISN'T FAMILY ANYMORE!"; `clipper thumbs yt-sQ8MX1j6sUU
   --ids s00 --compose-only` re-attached it in Kitsu. The Discord card still shows the first
   cover (cards aren't re-posted).
-- README documents the one-off flags and the teasers key; clipper.example.toml has both keys.
-  Not committed.
+- Rejected in Kitsu 10:38 ("currently its just trish... he talk right after this bit"): the
+  user had seen the Discord card, whose excerpt is the first 60 s (Trish's intro). The cut
+  has Moses from 6:41 on (checked frames at 7:00, 11:40, 21:40). **Approved at the user's
+  word** (`clipper review approve yt-sQ8MX1j6sUU/s00`, 2026-10-27 ~10:50); the bot's next
+  hourly pass schedules it asap and uploads it private. Worth considering: Discord excerpts
+  for one-off/pre-show items could start at the first chapter after the intro.
+- Committed and pushed as 0903456 (code, prompt, docs).
 
 ## Receipts video for Don: `clipper receipts` (built 2026-10-25, Sunday night)
 User: "after tonight's Don stream let's run a receipts segment we can send to Don, we do an
