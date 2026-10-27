@@ -67,8 +67,13 @@ by the NAS) is the first real run.
   My picks before the script: r2a off (2021 respiratory infection, not a receipt), r2d on ("I
   skipped one day in the last two years"), r3b left off (2019 "as I exploited my dog's cancer
   for likes" is sarcasm at critics; risky out of context). Script $0.02, cut -> draft 1, 2:21,
-  sent to the user. Waiting on the user's edit; then `clipper receipts upload kick-134300801`
-  (private). r2b's source title contains "Hosts" (Jer's own title, in the description).
+  sent to the user. r2b's source title contains "Hosts" (Jer's own title, in the description).
+  **User: "looks good, upload it private"** -> uploaded 2026-10-26 as **private
+  https://youtu.be/q6gemx2kKMs** (checked via API: private, no publishAt; not in schedule.json).
+  Description carries each source link at the moment + chapters. User then asked to "add links
+  to each video"; asked where (on screen needs a re-cut + new upload, since YouTube can't swap
+  the file), no preference given, so it stays as is. On-screen source links in the lower third
+  is a possible next change. Sending it to Don is the user's call.
 
 ## Weekly issue 02: `clipper weekly` built (2026-10-24, Saturday)
 User: "run the magazine for the week", Ethan Klein as the headline. The stage from the
