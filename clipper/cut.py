@@ -27,6 +27,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from . import jsonstate
 from .config import for_stream
 from .segments import hms, slug
 
@@ -52,7 +53,7 @@ def keyframes(stream_dir: Path, src: Path) -> list[float]:
     kf = sorted(round(float(t) - start, 3) for t, *flags in
                 (line.split(",") for line in out.splitlines() if line)
                 if "K" in "".join(flags) and t != "N/A")
-    cache.write_text(json.dumps(kf))
+    jsonstate.write(cache, kf, indent=None)
     return kf
 
 
@@ -163,8 +164,7 @@ def check_sync(path: Path) -> None:
 
 
 def write_sidecar(path: Path, data: dict) -> None:
-    path.with_suffix(".json").write_text(json.dumps(data, indent=2, ensure_ascii=False),
-                                         encoding="utf-8")
+    jsonstate.write(path.with_suffix(".json"), data)
 
 
 def cut_segments(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None:

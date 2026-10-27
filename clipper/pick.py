@@ -30,6 +30,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import jsonstate
 from .config import for_stream
 from .scoring import (
     Claude,
@@ -363,7 +364,7 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
             "status": "kept", "has_clip": True, "third_party_audio": False,
             "casino_gameplay": False, "needs_context": False, **c})
         picks.append({"id": pid, "title": c["title"], "hook": c["hook"], "reason": c["why"]})
-    cands_path.write_text(json.dumps(cands, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(cands_path, cands)
     n0 = len(picks) - len(ids)
     keys = [f"v{n0 + i:02d}_{pid}" for i, pid in enumerate(ids, 1)]
     print(f"added {', '.join(keys)} to candidates.json")

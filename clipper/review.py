@@ -51,6 +51,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from . import jsonstate
 from .config import for_stream
 from .segments import slug
 
@@ -518,7 +519,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
                             "revision": preview.get("revision"), "preview_mtime": mtime,
                             **links(rc, proj["id"], ep["id"], it["kind"], task["id"])}
         published.append(it["key"])
-        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        state = jsonstate.merge(state_path, state, [it["key"]])  # a retake may write it too
         print(f"published {it['seq']}/{it.get('shot', '')} rev {preview.get('revision')} "
               f"({time.time() - t:.0f}s)", flush=True)
 
@@ -550,7 +551,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
             update(st["entity_id"], missing)
             filled += 1
         st["fields"] = {n: str(v) for n, v in it["fields"].items()}  # what we proposed
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    state = jsonstate.merge(state_path, state, [it["key"] for it in todo if it["key"] in state])
     print(f"custom columns filled on {filled} items")
 
     # Playlists: every clip, and each compilation as its segments in stream order.
@@ -613,12 +614,10 @@ def attach_thumbnails(stream_dir: Path, cfg: dict, gazu=None, keys: list[str] | 
         gazu.task.set_main_preview(pf)
         done[key] = {"preview_id": pf["id"], "movie_preview_id": st["preview_id"],
                      "mtime": jpg.stat().st_mtime}
-    # Re-read before writing: a publish may be updating this file at the same time.
-    state = json.loads(state_path.read_text(encoding="utf-8"))
-    for key, th in done.items():
-        if key in state:
-            state[key]["thumbnail"] = th
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    with jsonstate.update(state_path, {}) as state:  # a publish may be writing it too
+        for key, th in done.items():
+            if key in state:
+                state[key]["thumbnail"] = th
     print(f"thumbnails attached in Kitsu: {len(done)}")
     return len(done)
 
@@ -653,11 +652,10 @@ def ensure_links(stream_dir: Path, cfg: dict, gazu=None) -> dict:
         # Re-read before writing: a publish may be updating this file at the same time.
         found = {k: {f: st[f] for f in ("kitsu_url", "episode_url")}
                  for k, st in state.items() if "kitsu_url" in st}
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-        for k, st in state.items():
-            if "kitsu_url" not in st and k in found:
-                st.update(found[k])
-        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        with jsonstate.update(state_path, {}) as state:
+            for k, st in state.items():
+                if "kitsu_url" not in st and k in found:
+                    st.update(found[k])
     return state
 
 
@@ -717,12 +715,10 @@ def apply_thumbnail_text(stream_dir: Path, cfg: dict, gazu, fmap: dict,
     for tkey, text in thumbs.set_texts(stream_dir, cfg, texts).items():
         print(f"  thumbnail {tkey}: {text}")
     # Re-read before writing: the re-render (attach_thumbnails) just wrote this file.
-    state_path = stream_dir / "review_state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8"))
-    for key, text in applied.items():
-        if key in state:
-            state[key]["thumbnail_text"] = text
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    with jsonstate.update(stream_dir / "review_state.json", {}) as state:
+        for key, text in applied.items():
+            if key in state:
+                state[key]["thumbnail_text"] = text
 
 
 def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
@@ -737,8 +733,6 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
     fmap = column_fields(gazu, gazu.project.get_project_by_name(project_name(cfg)))
     statuses = {s["id"]: s["short_name"] for s in gazu.task.all_task_statuses()}
     out = {}
-    if keys is not None and review_path.exists():
-        out = json.loads(review_path.read_text(encoding="utf-8"))
     thumb_edits = {}
     for key, st in state.items():
         if keys is not None and key not in keys:
@@ -763,10 +757,12 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
                     "updated_at": task.get("updated_at")}
     if thumb_edits:
         apply_thumbnail_text(stream_dir, cfg, gazu, fmap, thumb_edits)
-    out = {k: out[k] for k in state if k in out}  # state order; drops items no longer published
-    from .worker import write_json
-
-    write_json(review_path, out)  # whole file or nothing: upload, analytics and the war room read it
+    # Merged under the lock: the bot and the war room both sync single items at once.
+    with jsonstate.locked(review_path):
+        if keys is not None:
+            out = {**jsonstate.read(review_path, {}), **out}
+        out = {k: out[k] for k in state if k in out}  # state order; drops items no longer published
+        jsonstate.write(review_path, out)
     if quiet:
         return out
     counts: dict[str, int] = {}

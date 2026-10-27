@@ -33,7 +33,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import youtube
+from . import jsonstate, youtube
 
 LICENSE_NOTES = {
     "Rumble Only": "non-exclusive, monetized on Rumble only; the YouTube copy is unaffected",
@@ -57,17 +57,16 @@ def save_platform(cfg: dict, updates: dict[str, dict | None], platform: str = "r
     before writing so a concurrent `clipper schedule` or `clipper upload` isn't overwritten.
     None clears."""
     path: Path = cfg["paths"]["schedule"]
-    sched = json.loads(path.read_text(encoding="utf-8"))
-    for e in sched["entries"] + sched.get("unscheduled", []):
-        if e["key"] in updates:
-            plats = e.setdefault("platforms", {})
-            if updates[e["key"]] is None:
-                plats.pop(platform, None)
-            else:
-                plats[platform] = updates[e["key"]]
-            if not plats:
-                e.pop("platforms")
-    path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+    with jsonstate.update(path) as sched:
+        for e in sched["entries"] + sched.get("unscheduled", []):
+            if e["key"] in updates:
+                plats = e.setdefault("platforms", {})
+                if updates[e["key"]] is None:
+                    plats.pop(platform, None)
+                else:
+                    plats[platform] = updates[e["key"]]
+                if not plats:
+                    e.pop("platforms")
 
 
 def rumble_of(e: dict) -> dict:

@@ -41,6 +41,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import jsonstate
 from .bleep import Bleeper
 from .config import for_stream
 from .review import draft_fields, full_title, hashtag_line
@@ -78,7 +79,7 @@ def credentials(paths: dict, sign_in: bool = False):
         # Account channel is picked; plain "consent" silently reuses the browser's account.
         creds = flow.run_local_server(port=0, prompt="select_account consent",
                                       authorization_prompt_message="Opening your browser to sign in to YouTube: {url}")
-    token_path.write_text(creds.to_json(), encoding="utf-8")
+    jsonstate.write_text(token_path, creds.to_json())  # rewritten on every refresh
     return creds
 
 
@@ -249,12 +250,17 @@ def with_links(description: str, old: str, new: str) -> str:
     return f"{text}\n\n{new}".strip()
 
 
+def mark(sched_path: Path, key: str, **fields) -> None:
+    """Set fields on one entry of schedule.json, re-read under its lock (the bot may have
+    replanned since this run read it)."""
+    with jsonstate.update(sched_path) as sched:
+        for e in sched["entries"]:
+            if e["key"] == key:
+                e.update(fields)
+
+
 def note_links(sched_path: Path, key: str, links: str) -> None:
-    sched = json.loads(sched_path.read_text(encoding="utf-8"))  # the bot may have replanned
-    for e in sched["entries"]:
-        if e["key"] == key:
-            e["source_links"] = links
-    sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+    mark(sched_path, key, source_links=links)
 
 
 def backfill_links(cfg: dict, sched: dict, sched_path: Path, dry_run: bool,
@@ -354,7 +360,7 @@ def add_to_playlist(yt, name: str, vid: str, cache: dict, cache_path: Path, priv
 
     for attempt in range(2):
         pid = ensure_playlist(yt, name, cache, privacy)
-        cache_path.write_text(json.dumps(cache, indent=2))
+        jsonstate.write(cache_path, cache)
         try:
             execute_with_retry(yt.playlistItems().insert(part="snippet", body={"snippet": {
                 "playlistId": pid, "resourceId": {"kind": "youtube#video", "videoId": vid}}}))
@@ -421,11 +427,10 @@ def backfill_playlists(cfg: dict, sched: dict, sched_path: Path, dry_run: bool,
 def note_playlist(sched_path: Path, key: str, name: str) -> None:
     """Record that an uploaded entry is in a playlist, re-reading schedule.json first (the
     bot may have replanned since)."""
-    sched = json.loads(sched_path.read_text(encoding="utf-8"))
-    for e in sched["entries"]:
-        if e["key"] == key and name not in e.get("playlists", []):
-            e.setdefault("playlists", []).append(name)
-    sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+    with jsonstate.update(sched_path) as sched:
+        for e in sched["entries"]:
+            if e["key"] == key and name not in e.get("playlists", []):
+                e.setdefault("playlists", []).append(name)
 
 
 class ThumbnailsNotAllowed(Exception):
@@ -465,12 +470,12 @@ def backfill_thumbnails(cfg: dict, sched: dict, sched_path: Path, dry_run: bool)
         except ThumbnailsNotAllowed as ex:
             raise SystemExit(str(ex)) from None
         e["thumbnail_set"] = datetime.now(UTC).isoformat(timespec="seconds")
-        sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+        mark(sched_path, e["key"], thumbnail_set=e["thumbnail_set"])
         print(f"  {e['url']} thumbnail set")
 
 
 def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_path: Path,
-           sched: dict, sched_path: Path) -> None:
+           sched_path: Path) -> None:
     """Everything after the video itself: thumbnail, captions, playlist, Kitsu link. None
     of it counts against the channel's daily upload limit."""
     yc = cfg["youtube"]
@@ -479,7 +484,7 @@ def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_pat
         try:
             set_thumbnail(yt, vid, m["thumb"])
             e["thumbnail_set"] = datetime.now(UTC).isoformat(timespec="seconds")
-            sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+            mark(sched_path, e["key"], thumbnail_set=e["thumbnail_set"])
             extras.append("thumbnail")
         except ThumbnailsNotAllowed as ex:
             print(f"  warning: {ex}")
@@ -495,7 +500,7 @@ def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_pat
         for name in m["playlists"] if yc["add_to_playlist"] else []:
             add_to_playlist(yt, name, vid, playlists, cache_path, yc["playlist_privacy"])
             e.setdefault("playlists", []).append(name)
-            sched_path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+            note_playlist(sched_path, e["key"], name)
             extras.append(f"playlist {name}")
         kitsu_url(cfg, m, f"https://youtu.be/{vid}")
         extras.append("Kitsu link")
@@ -636,16 +641,15 @@ def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: i
                 "uploaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
                 "source_links": links}
         e.update(done)
-        # Re-read first: `clipper rumble` may have written other platforms' marks meanwhile.
-        fresh = json.loads(sched_path.read_text(encoding="utf-8"))
-        mine = next((x for x in fresh["entries"] if x["key"] == e["key"]), None)
-        if mine:
-            mine.update(done)
-        else:  # replanned away meanwhile; the upload must still be on record
-            fresh["entries"].append(e)
-        sched_path.write_text(json.dumps(fresh, indent=2, ensure_ascii=False), encoding="utf-8")
+        # Re-read under the lock: a replan or `clipper rumble` may have written meanwhile.
+        with jsonstate.update(sched_path) as fresh:
+            mine = next((x for x in fresh["entries"] if x["key"] == e["key"]), None)
+            if mine:
+                mine.update(done)
+            else:  # replanned away meanwhile; the upload must still be on record
+                fresh["entries"].append(e)
         print(f"  {url} ({time.time() - t:.0f}s)" + (f", links {links!r}" if links else ""), flush=True)
-        finish(yt, cfg, e, m, vid, playlists, cache_path, sched, sched_path)
+        finish(yt, cfg, e, m, vid, playlists, cache_path, sched_path)
     return yt
 
 
@@ -743,11 +747,10 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
               "source": "studio", "status": "uploaded", "video_id": vid,
               "url": f"https://youtu.be/{vid}", "uploaded_at": now.isoformat(timespec="seconds"),
               "source_links": links})
-    fresh = json.loads(sched_path.read_text(encoding="utf-8"))  # clipper rumble may have written
-    fresh["entries"] = [x for x in fresh["entries"] if x["key"] != key] + [e]
-    fresh["unscheduled"] = [x for x in fresh.get("unscheduled", []) if x["key"] != key]
-    sched_path.write_text(json.dumps(fresh, indent=2, ensure_ascii=False), encoding="utf-8")
+    with jsonstate.update(sched_path) as fresh:  # a replan or clipper rumble may have written
+        fresh["entries"] = [x for x in fresh["entries"] if x["key"] != key] + [e]
+        fresh["unscheduled"] = [x for x in fresh.get("unscheduled", []) if x["key"] != key]
     print("  details set; recorded as uploaded")
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
     playlists = json.loads(cache_path.read_text()) if cache_path.exists() else {}
-    finish(yt, cfg, e, m, vid, playlists, cache_path, fresh, sched_path)
+    finish(yt, cfg, e, m, vid, playlists, cache_path, sched_path)

@@ -22,7 +22,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import actions, notify, review
+from . import actions, jsonstate, notify, review
 from .config import for_stream
 
 log = logging.getLogger("clipper.cardsync")
@@ -57,10 +57,8 @@ def stream_dirs(cfg: dict) -> list[Path]:
 
 
 def remember(sdir: Path, message_id: str, sig: str | float) -> None:
-    path = sdir / STATE
-    seen = actions.load_json(path, {}) or {}
-    seen[str(message_id)] = sig
-    path.write_text(json.dumps(seen, indent=2), encoding="utf-8")
+    with jsonstate.update(sdir / STATE, {}) as seen:
+        seen[str(message_id)] = sig
 
 
 def remember_row(row: dict, message_id: int | str, thumb: bool = False) -> None:
@@ -85,6 +83,7 @@ def refresh_stream(cfg: dict, sdir: Path, api: notify.Rest | None = None,
     rows = actions.describe(cfg, sdir)
     path = sdir / STATE
     seen = actions.load_json(path, {}) or {}
+    before = dict(seen)
     edited = 0
     for key, m in messages.items():
         row = rows.get(key)
@@ -117,6 +116,6 @@ def refresh_stream(cfg: dict, sdir: Path, api: notify.Rest | None = None,
         seen[mid] = sig
         edited += 1
         log.info("refreshed %s card: %s", row["short"], actions.decision_text(row))
-    if not dry_run:
-        path.write_text(json.dumps(seen, indent=2), encoding="utf-8")
+    if not dry_run:  # only what this pass changed: remember() may have written meanwhile
+        jsonstate.merge(path, seen, [k for k in seen if before.get(k) != seen[k]])
     return edited

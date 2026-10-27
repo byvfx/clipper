@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
+from . import jsonstate
 from .config import for_stream
 from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
 from .segments import hms
@@ -209,7 +210,7 @@ def captions_only(stream_dir: Path, cfg: dict) -> None:
             for k in ("title", "description", "lead", "body"):
                 d[k] = mask(d[k])
             d["chapters"] = [{**c, "title": mask(c["title"])} for c in d["chapters"]]
-            side.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
+            jsonstate.write(side, d)
     print("captions rewritten" + (", text masked" if bleeper.mode != "off" else ""))
 
 
@@ -313,7 +314,7 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
         out["problems"] = problems
         dst = draft_path(stream_dir, x)
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+        jsonstate.write(dst, out)
         x["video"].with_suffix(".srt").write_text(make_srt(words, x["parts"], mc, bleeper.mask),
                                                   encoding="utf-8")
         results.append(out)

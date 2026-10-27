@@ -26,6 +26,8 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
+from . import jsonstate
+
 
 def voices_path(cfg: dict) -> Path:
     return Path(cfg["paths"]["voices"]) / f"{cfg['show']['key'] or 'default'}.json"
@@ -128,7 +130,7 @@ def set_names(sdir: Path, names: dict[str, str]) -> None:
         entry.pop("by", None)
         if name:
             entry.update(name=name, by="hand")
-    path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    jsonstate.write(path, data, indent=1)
 
 
 def enroll(sdir: Path, cfg: dict, labels: list[str]) -> None:
@@ -149,7 +151,7 @@ def enroll(sdir: Path, cfg: dict, labels: list[str]) -> None:
         print(f"enrolled {name} from {sdir.name} {label} ({len(refs)} sample(s))")
     path = voices_path(cfg)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(bank), encoding="utf-8")
+    jsonstate.write(path, bank, indent=None)
 
 
 def hms(t: float) -> str:

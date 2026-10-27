@@ -17,6 +17,7 @@ import re
 from itertools import pairwise
 from pathlib import Path
 
+from . import jsonstate
 from .config import for_stream
 from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
 
@@ -155,7 +156,7 @@ def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     apply_filters(segs, seg_cfg)
     data["compilations"] = compilations(data, cfg, claude, prompts)
     data["cost_usd"] = round(data.get("cost_usd", 0) + claude.cost, 4)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(path, data)
 
     print(f"{len(segs)} segments, {sum(s['cut'] for s in segs)} to cut; "
           f"this run ${claude.cost:.3f}")

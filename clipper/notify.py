@@ -28,6 +28,7 @@ from pathlib import Path
 
 import requests
 
+from . import jsonstate
 from .config import for_stream
 
 API = "https://discord.com/api/v10"
@@ -186,6 +187,17 @@ def replace_thumb(api: Rest, channel_id: str, message_id: str, r: dict) -> None:
         files=[r["thumbnail"]])
 
 
+def save_state(dpath: Path, dstate: dict, key: str | None = None) -> None:
+    """discord.json, re-read under its lock (a retake may post a card at the same time):
+    a new thread replaces it, otherwise only card `key`'s message is written."""
+    with jsonstate.update(dpath, {}) as fresh:
+        if fresh.get("thread_id") != dstate.get("thread_id"):
+            fresh.clear()
+            fresh.update(dstate)
+        elif key:
+            fresh.setdefault("messages", {})[key] = dstate["messages"][key]
+
+
 def ensure_thread(api: Rest, cfg: dict, sdir: Path, dstate: dict, rows: list[dict]) -> str:
     cfg = for_stream(cfg, sdir)
     dc = cfg["discord"]
@@ -238,7 +250,7 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
     dpath = sdir / "discord.json"
     dstate = json.loads(dpath.read_text(encoding="utf-8")) if dpath.exists() else {}
     thread_id = ensure_thread(api, cfg, sdir, dstate, rows)
-    dpath.write_text(json.dumps(dstate, indent=2), encoding="utf-8")
+    save_state(dpath, dstate)
     posted = 0
     for r in todo:
         prev = dstate["messages"].get(r["key"])
@@ -258,7 +270,7 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
                   files=files)
         dstate["messages"][r["key"]] = {"id": msg["id"], "revision": r["revision"],
                                         "thumb": r["thumb_mtime"]}
-        dpath.write_text(json.dumps(dstate, indent=2), encoding="utf-8")
+        save_state(dpath, dstate, r["key"])
         posted += 1
         print(f"discord {r['short']}: {file.stat().st_size / 1e6:.1f} MB"
               f"{' excerpt' if excerpt else ''} ({time.time() - t:.0f}s)", flush=True)

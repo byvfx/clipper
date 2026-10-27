@@ -38,6 +38,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import jsonstate
 from .config import for_show, for_stream
 
 log = logging.getLogger("clipper.preshow")
@@ -194,7 +195,7 @@ def fetch(cfg: dict, url: str, key: str, window: dict | None = None) -> Path:
             "grabbed_at": datetime.now(UTC).isoformat(timespec="seconds")}
     if window:
         meta["window"] = window
-    (d / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(d / "meta.json", meta)
     log.info("%s: grabbed %r (%.0f min)", d.name, meta["title"], meta["duration_s"] / 60)
     return d
 
@@ -322,7 +323,7 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
     data = {"stream_id": stream_dir.name, "model": pc["model"], "prompt_version": prompts.version,
             "api": api, "gaps": [], "segments": [seg], "compilations": [],
             "cost_usd": round(claude.cost, 4)}
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(path, data)
     what = (f"one-off: {start / 60:.1f}-{end / 60:.1f} min" if window
             else f"pre-show: one segment, {end / 60:.1f} min"
                  + (f" ({full - end:.1f} s off the end)" if end < full else ""))

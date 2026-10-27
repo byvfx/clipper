@@ -22,6 +22,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from . import jsonstate
 from .config import _root, for_stream
 
 ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
@@ -120,7 +121,7 @@ def run(cfg: dict, sign_in: bool = False) -> dict:
                 cols = [h["name"] for h in r["columnHeaders"]]
                 rec["d7"] = dict(zip(cols, r["rows"][0]))
     p = path_of(cfg)
-    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(p, data)
     d7 = sum(1 for r in data.values() if r.get("d7"))
     print(f"{len(data)} videos in {p.name} ({d7} with 7-day numbers"
           + ("" if has_analytics else "; run `clipper analytics --sign-in` for those") + ")")

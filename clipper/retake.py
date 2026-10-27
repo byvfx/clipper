@@ -27,6 +27,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import jsonstate
 from .config import _root, for_stream, stream_dir
 
 LOCK_STALE_S = 3600
@@ -204,23 +205,19 @@ def snap_trim(cfg: dict, sdir: Path, st: dict, trim: dict) -> tuple[float, float
 def trim_pick(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> None:
     from .cut import cut_picks
 
-    path = sdir / "candidates.json"
-    data = load(path, {})
-    rec = next(r for r in data["pass_a"] if r["id"] == st["id"])
-    rec.setdefault("orig_in_s", rec["in_s"])
-    rec.setdefault("orig_out_s", rec["out_s"])
-    rec["in_s"], rec["out_s"] = a, b
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    with jsonstate.update(sdir / "candidates.json", {}) as data:
+        rec = next(r for r in data["pass_a"] if r["id"] == st["id"])
+        rec.setdefault("orig_in_s", rec["in_s"])
+        rec.setdefault("orig_out_s", rec["out_s"])
+        rec["in_s"], rec["out_s"] = a, b
     cut_picks(sdir, cfg, ids=[st["id"]])
 
 
 def trim_short(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> None:
     from . import shorts
 
-    path = sdir / "shorts.json"
-    data = load(path, {})
-    data.setdefault(short_key(st), {})["window_override"] = [a, b]
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    with jsonstate.update(sdir / "shorts.json", {}) as data:  # the worker may be rendering
+        data.setdefault(short_key(st), {})["window_override"] = [a, b]
     shorts.run(sdir, cfg, ids=[short_key(st).split("_")[0]])
 
 
@@ -245,7 +242,7 @@ def rewrite_draft(cfg: dict, path: Path, chapters: list[dict]) -> None:
     d["chapters"] = chapters
     d["description"] = mask(description(d["lead"], d["body"], chapters, d["credit"],
                                         d["hashtags"]))
-    path.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(path, d)
 
 
 def trim_segment(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> list[str]:
@@ -253,14 +250,12 @@ def trim_segment(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> list[st
     Returns the compilation item keys that changed."""
     from .cut import cut_compilations, cut_segments
 
-    path = sdir / "segments.json"
-    data = load(path, {})
-    seg = next(s for s in data["segments"] if s["id"] == st["id"])
-    delta = a - seg["start_s"]
-    seg.setdefault("orig_start_s", seg["start_s"])
-    seg.setdefault("orig_end_s", seg["end_s"])
-    seg["start_s"], seg["end_s"], seg["duration_s"] = a, b, round(b - a, 1)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    with jsonstate.update(sdir / "segments.json", {}) as data:
+        seg = next(s for s in data["segments"] if s["id"] == st["id"])
+        delta = a - seg["start_s"]
+        seg.setdefault("orig_start_s", seg["start_s"])
+        seg.setdefault("orig_end_s", seg["end_s"])
+        seg["start_s"], seg["end_s"], seg["duration_s"] = a, b, round(b - a, 1)
     cut_segments(sdir, cfg, ids=[seg["id"]])
     draft = sdir / "metadata" / "segments" / f"{Path(seg['file']).stem}.json"
     if draft.exists():
@@ -343,10 +338,8 @@ def apply(cfg: dict, sdir: Path, key: str, st: dict, p: dict, who: str) -> tuple
 
 
 def record(sdir: Path, key: str, entry: dict) -> None:
-    path = sdir / "retakes.json"
-    data = load(path, {})
-    data.setdefault(key, []).append(entry)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    with jsonstate.update(sdir / "retakes.json", {}) as data:
+        data.setdefault(key, []).append(entry)
 
 
 def discord_message(cfg: dict, sdir: Path, text: str) -> None:
@@ -358,7 +351,7 @@ def discord_message(cfg: dict, sdir: Path, text: str) -> None:
     dpath = sdir / "discord.json"
     dstate = load(dpath, {})
     thread = notify.ensure_thread(api, cfg, sdir, dstate, list(actions.describe(cfg, sdir).values()))
-    dpath.write_text(json.dumps(dstate, indent=2), encoding="utf-8")
+    notify.save_state(dpath, dstate)
     api("POST", f"/channels/{thread}/messages", {"content": text[:1900]})
 
 

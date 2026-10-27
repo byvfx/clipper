@@ -38,6 +38,8 @@ from pathlib import Path
 
 import numpy as np
 
+from . import jsonstate
+
 SR = 8000  # analysis sample rate for take detection
 
 
@@ -120,7 +122,7 @@ def prepare(recording: Path, read: Path, pc: dict, take: int = 1, out: Path | No
               + ("  <- over the 30 MB single upload" if mb > 30 else ""))
     manifest = {"recording": str(recording.resolve()), "read": str(read.resolve()), "take": take,
                 "take_start": round(t0, 3), "end": round(end, 3), "pieces": pieces}
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    jsonstate.write(out / "manifest.json", manifest)
     print(f"{out}: {len(pieces)} pieces; render each with the character model and save it as renderN.mp4,"
           f" then: clipper perform stitch {out}")
     return out

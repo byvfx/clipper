@@ -103,16 +103,9 @@ def read_json(path: Path) -> dict:
 
 
 def write_json(path: Path, data: dict) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    for attempt in range(10):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:  # a reader (war room, bot) has it open on the NAS share
-            if attempt == 9:
-                raise
-            time.sleep(0.2 * (attempt + 1))
+    from . import jsonstate
+
+    jsonstate.write(path, data)
 
 
 def stage_args(stage: str, stream: str, wc: dict) -> list[str]:

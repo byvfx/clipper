@@ -47,7 +47,7 @@ from pathlib import Path
 
 import requests
 
-from . import rumble, youtube
+from . import jsonstate, rumble, youtube
 from .config import for_stream
 from .review import draft_fields, hashtag_line
 
@@ -75,7 +75,7 @@ def save_token(paths: dict, tok: dict) -> dict:
     now = time.time()
     tok = {**tok, "expires_at": now + int(tok["expires_in"]) - 300,
            "refresh_expires_at": now + int(tok.get("refresh_expires_in") or 0)}
-    paths["tiktok_token"].write_text(json.dumps(tok, indent=2), encoding="utf-8")
+    jsonstate.write(paths["tiktok_token"], tok)
     return tok
 
 

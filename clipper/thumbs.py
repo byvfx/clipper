@@ -45,6 +45,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
+from . import jsonstate
 from .config import for_stream
 from .meta import duration, load_assets
 from .scoring import Claude, Prompts, load_signals, preflight
@@ -1034,8 +1035,8 @@ def set_texts(stream_dir: Path, cfg: dict, texts: dict[str, str]) -> dict[str, s
         if e.get("highlight") and norm(e["highlight"]) not in {norm(w) for w in text.split()}:
             e["highlight"] = ""
         changed[key] = text
-    if changed:
-        state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    if changed:  # only these keys: the worker may be writing other picks right now
+        state = jsonstate.merge(state_path, state, list(changed))
         run(stream_dir, cfg, ids=[state[k]["id"] for k in changed], compose_only=True)
     return changed
 
@@ -1071,7 +1072,7 @@ def set_photos(stream_dir: Path, cfg: dict, ids: list[str], photo: str | None = 
                     state[k].pop(field, None)
                 changed.append(k)
     if changed:
-        state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+        jsonstate.merge(state_path, state, sorted(set(changed)))
         run(stream_dir, cfg, compose_only=True, kitsu=kitsu)
     return sorted(set(changed))
 
@@ -1147,8 +1148,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
 
         with ThreadPoolExecutor(tc["concurrency"]) as pool:
             for key, entry in pool.map(one, todo):
-                state[key] = entry
-                state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+                state[key] = entry  # each paid pick is kept as soon as it's made
+                state = jsonstate.merge(state_path, state, [key])
 
     tc_enq, date, own_band = enquirer_setup(stream_dir, cfg, tc)
     results = []

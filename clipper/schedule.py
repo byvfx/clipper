@@ -28,6 +28,8 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import jsonstate
+
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 KINDS = {"pick": "clip", "segment": "segment", "compilation": "compilation", "short": "short"}
 ENTITY = {"clip": "Shot", "segment": "Sequence", "compilation": "Sequence", "short": "Shot"}
@@ -160,6 +162,28 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
             review.sync(state.parent, cfg)
 
     items, skipped = candidates(cfg, streams_dir, sc, tz)
+    # Locked from reading the old plan to writing the new one, so an upload recorded
+    # meanwhile can't be planned back to "scheduled" (and uploaded twice).
+    with jsonstate.locked(out_path):
+        old, platforms = previous(out_path)
+        placed, skipped = plan(items, skipped, old, platforms, sc, tz, now, start, reshuffle)
+        entries = sorted(placed.values(), key=lambda e: e["publish_at"])
+        result = {"timezone": sc["timezone"], "generated_at": now.isoformat(timespec="seconds"),
+                  "entries": entries, "unscheduled": skipped}
+        if not dry_run:
+            jsonstate.write(out_path, result)
+    if not dry_run and write_kitsu:
+        push_to_kitsu(cfg, items, placed, tz)
+
+    print(f"{len(entries)} scheduled, {len(skipped)} not scheduled -> {out_path}"
+          + (" (dry run)" if dry_run else ""))
+    for e in entries:
+        print(f"  {entry_line(e, tz)}")
+    return result
+
+
+def previous(out_path: Path) -> tuple[dict, dict]:
+    """The last plan's entries by key, and other platforms' records by key."""
     old, platforms = {}, {}
     if out_path.exists():
         prev_sched = json.loads(out_path.read_text(encoding="utf-8"))
@@ -167,7 +191,12 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
         # Other platforms' records (clipper rumble), kept while an item is unscheduled too.
         platforms = {e["key"]: e["platforms"] for e in prev_sched["entries"]
                      + prev_sched.get("unscheduled", []) if e.get("platforms")}
+    return old, platforms
 
+
+def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc: dict,
+         tz: ZoneInfo, now: datetime, start: date, reshuffle: bool) -> tuple[dict, list]:
+    """Place items into slots: (entries by key, the ones left out)."""
     taken: list[datetime] = []
     placed: dict[str, dict] = {}
 
@@ -265,20 +294,7 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
         up = [p for p, r in plats.items() if r.get("status") == "uploaded"]
         if up:
             print(f"  note: {key} is on {', '.join(up)} but no longer scheduled ({hit['reason']})")
-
-    entries = sorted(placed.values(), key=lambda e: e["publish_at"])
-    result = {"timezone": sc["timezone"], "generated_at": now.isoformat(timespec="seconds"),
-              "entries": entries, "unscheduled": skipped}
-    if not dry_run:
-        out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-        if write_kitsu:
-            push_to_kitsu(cfg, items, placed, tz)
-
-    print(f"{len(entries)} scheduled, {len(skipped)} not scheduled -> {out_path}"
-          + (" (dry run)" if dry_run else ""))
-    for e in entries:
-        print(f"  {entry_line(e, tz)}")
-    return result
+    return placed, skipped
 
 
 def upcoming(cfg: dict, days: int = 7) -> list[dict]:

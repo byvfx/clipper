@@ -35,6 +35,7 @@ import time
 from itertools import pairwise
 from pathlib import Path
 
+from . import jsonstate
 from .bleep import Bleeper
 from .config import for_stream
 from .cut import encode_args, ffmpeg_cut, keyframe_before, source_file
@@ -527,7 +528,7 @@ def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dic
     draft["chapters"] = []
     out = stream_dir / "metadata" / "shorts" / f"{short_video.stem}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(draft, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(out, draft)
 
 
 # ---------- stage ----------
@@ -671,15 +672,14 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
                 **multi, "layout_by": how, "bleeps": n_bleeps, "captions": n_caps, **loud,
                 "category": c.get("category"), "score_a": c.get("score"),
                 "clip": clip_video.name if clip_video != dst else ""}
-        dst.with_suffix(".json").write_text(json.dumps(side, indent=2, ensure_ascii=False),
-                                            encoding="utf-8")
+        jsonstate.write(dst.with_suffix(".json"), side)
         write_draft(stream_dir, clip_video, dst, p, sc)
         state[key] = {"file": f"shorts/{dst.name}", "layout": label, **multi, "layout_by": how,
                       "in_s": a, "out_s": b,
                       **({"window_override": prev["window_override"]}
                          if prev.get("window_override") else {}),
                       "sig": sig}
-        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        jsonstate.write(state_path, state)
         done.append(side)
         print(f"{key}  {dur:5.1f}s  {label:<8} ({how})  {n_caps} captions, {n_bleeps} bleeps, "
               f"{loud['input_lufs']:.1f} -> {sc['lufs']} LUFS  -> {dst.name} ({time.time() - t:.0f}s)",
@@ -688,7 +688,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         print(f"layout picks cost ${claude.cost:.4f}")
     if check:
         return []
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")  # marks the stage done
+    jsonstate.write(state_path, state)  # marks the stage done
     print(f"{len(done)} shorts rendered, {len(picks) - len(done)} unchanged or skipped")
     if done:  # their vertical covers, from the clips' thumbnail choices (no model calls)
         from . import thumbs

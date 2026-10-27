@@ -22,6 +22,7 @@ from typing import ClassVar
 
 import numpy as np
 
+from . import jsonstate
 from .config import for_stream
 
 CATEGORIES = ["fail", "win", "joke", "insight", "reaction", "hot_take"]
@@ -373,7 +374,7 @@ def stream_summary(stream_dir: Path, words: list[dict], n: int, cfg: dict,
 
     with ThreadPoolExecutor(sc["concurrency"]) as pool:
         blocks = list(pool.map(one, range(0, n, SUMMARY_BLOCK_S)))
-    path.write_text(json.dumps(blocks, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(path, blocks)
     return blocks
 
 
@@ -401,7 +402,7 @@ def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
 
     with ThreadPoolExecutor(sc["concurrency"]) as pool:
         moments = [m for block in pool.map(one, range(0, n, SUMMARY_BLOCK_S)) for m in block]
-    path.write_text(json.dumps(moments, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(path, moments)
     return moments
 
 
@@ -565,8 +566,7 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
     out = {"stream_id": stream_dir.name, "title": meta.get("title"),
            "prompt_version": prompts.version, "cost_usd": round(claude.cost, 4),
            "pass_a": results, "pass_b": pass_b}
-    (stream_dir / "candidates.json").write_text(json.dumps(out, indent=2, ensure_ascii=False),
-                                                encoding="utf-8")
+    jsonstate.write(stream_dir / "candidates.json", out)
 
     by_id = {r["id"]: r for r in results}
     print(f"Pass B: {len(pass_b.get('picks', []))} picks; cost ${claude.cost:.3f}")
