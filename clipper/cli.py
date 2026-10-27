@@ -65,7 +65,13 @@ def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
         key = cfg["show"]["key"] or (keys[0] if len(keys) == 1 else "")
         if not key:
             raise SystemExit(f"preshow fetch: say which show with --show ({', '.join(cfg['shows'])})")
-        d = preshow.fetch(cfg, args.url, key)
+        window = None
+        if args.start or args.end or args.about:
+            from .pick import parse_time
+
+            window = {"start_s": parse_time(args.start) if args.start else 0.0,
+                      "end_s": parse_time(args.end) if args.end else None, "about": args.about}
+        d = preshow.fetch(cfg, args.url, key, window)
         print(f"{d.name}: grabbed; the worker runs it, or: clipper run {d.name}")
 
 
@@ -526,8 +532,12 @@ def main() -> None:
     r = rsub.add_parser("check", help="grab new uploads matching [preshow] title_pattern (the bot does this)")
     r.add_argument("--run", action="store_true", help="then run the pipeline on grabbed pre-shows not done yet")
     rsub.add_parser("list", help="recent pre-shows in the feeds, and which are grabbed")
-    r = rsub.add_parser("fetch", help="grab one video by url, any age")
+    r = rsub.add_parser("fetch", help="grab one video by url, any age; --from/--to/--about: a one-off, "
+                                      "one long segment out of that stretch")
     r.add_argument("url")
+    r.add_argument("--from", dest="start", metavar="TIME", help="one-off: the stretch starts about here (1:30:00)")
+    r.add_argument("--to", dest="end", metavar="TIME", help="one-off: ...and ends about here (default: the end)")
+    r.add_argument("--about", default="", help="one-off: what the stretch is (the model finds the exact bounds)")
 
     p = sub.add_parser("transcribe", help="WhisperX -> words.jsonl")
     p.add_argument("stream", nargs="?", help="stream id under paths.streams, or a stream dir")

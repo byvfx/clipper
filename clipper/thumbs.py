@@ -726,11 +726,12 @@ def compose_enquirer(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, d
         d.text((584, 63), band["band_headline"], font=bf, fill=WHT, stroke_width=2, stroke_fill=BLK,
                anchor="lm")
 
-    # Side teasers.
+    # Side teasers; or none ([thumbnail] teasers = false: one big moment, the photo
+    # fills the left of the cover).
     styles = [(YEL, RED, None, None, None), (PINK, BLK, "CAN YOU BELIEVE IT?", YEL, BLK),
               (CREAM, RED, "", RED, WHT)]
     y, heights = 128, (178, 196, 196)
-    for i, h in enumerate(heights):
+    for i, h in enumerate(heights if tc["teasers"] else ()):
         bg, ink, label, lbg, lin = styles[i]
         if i < len(ctx["side"]):
             s = ctx["side"][i]
@@ -744,7 +745,7 @@ def compose_enquirer(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, d
         y += h + 6
 
     # Main face, bleeding to the bottom; reaction inset and channel badge on it.
-    mx, my, mw, mh = 314, 126, 470, H - 126
+    mx, my, mw, mh = (314, 126, 470, H - 126) if tc["teasers"] else (8, 126, 776, H - 126)
     photo = tc.get("_photos", {}).get(photo_name(tc, e.get("photo", "")))
     img.paste(face_crop(photo, WHOLE, (mw, mh)) if photo
               else face_crop(frame_path(e["frame"]), e["face"], (mw, mh)), (mx, my))

@@ -250,6 +250,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "model": "claude-sonnet-5-5",  # writes the one segment's title/description
         "effort": "medium",
         "prompt_version": "v1",   # prompts/preshow_<v>.md
+        "oneoff_prompt_version": "v1",  # prompts/oneoff_<v>.md: `fetch --from/--to/--about`, one stretch
         "trim_end_s": 3.0,        # drop this much off the end (2026-10-23, user); 0 = whole video
         "publish": "asap",        # asap: out as soon as it is approved and uploaded | slots
         "band": "Pre-show {date}!",  # cover's green band ({date} = M/D aired); "" = the model's line
@@ -403,6 +404,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "masthead_price": "$1.39",
         "badge_kicker": "AS SEEN ON",
         "badge_channel": "",      # empty = scoring.channel_name; the small badge on the photo
+        "teasers": True,          # the three side boxes; false = the photo fills the left (one big moment)
         "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf",
                             "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
                             "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"],

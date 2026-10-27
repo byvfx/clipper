@@ -156,12 +156,16 @@ def estimate_usd(hours: float, gpu: str, diarize: bool = False) -> float:
 
 def netscape_cookies(path: Path) -> Path:
     """yt-dlp reads only Netscape cookies.txt; a browser extension's JSON export (a list of
-    {domain, path, secure, expirationDate, name, value}) is converted beside it."""
-    text = path.read_text(encoding="utf-8").lstrip()
-    if not text.startswith("["):
+    {domain, path, secure, expirationDate, name, value}, or an object holding that list
+    under "cookies") is converted beside it."""
+    text = path.read_text(encoding="utf-8-sig").lstrip()
+    if not text.startswith(("[", "{")):
         return path
+    data = json.loads(text)
+    if isinstance(data, dict):
+        data = data.get("cookies") or []
     lines = ["# Netscape HTTP Cookie File"]
-    for c in json.loads(text):
+    for c in data:
         dom = c["domain"]
         lines.append("\t".join([dom, "TRUE" if dom.startswith(".") else "FALSE", c.get("path") or "/",
                                 "TRUE" if c.get("secure") else "FALSE",

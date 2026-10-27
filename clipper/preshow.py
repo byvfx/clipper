@@ -9,7 +9,11 @@ skips it.
                                youtube_channel), grab new uploads matching title_pattern,
                                and with --run put them through the pipeline. `clipper bot`
                                runs this every [preshow] poll_minutes.
-  clipper preshow fetch <url>  grab one video by hand (any age)
+  clipper preshow fetch <url>  grab one video by hand (any age); --show <key> picks the show
+  clipper preshow fetch <url> --from 1:30:00 [--to ...] --about "..."
+                               a one-off: ONE long segment out of a stretch of any YouTube
+                               video (a podcast episode, say). The model finds the exact
+                               start and end inside that window from the transcript.
   clipper preshow list         what the feeds show and which ones are grabbed
 
 A grabbed video becomes streams/yt-<video id>/ (source.mp4 + meta.json, kind "preshow",
@@ -55,6 +59,15 @@ SCHEMA = {
     "required": ["title", "topic", "figures", "summary", "description"],
     "additionalProperties": False,
 }
+
+# A one-off window (`fetch --from/--to/--about`): the model also returns where the
+# segment really starts and ends inside the window.
+SCHEMA_WINDOW = {
+    **SCHEMA,
+    "properties": {**SCHEMA["properties"], "start_s": {"type": "number"}, "end_s": {"type": "number"}},
+    "required": SCHEMA["required"] + ["start_s", "end_s"],
+}
+WINDOW_PAD_S = 1.0   # keep this much room around the model's bounds
 
 
 def is_preshow(stream_dir: Path) -> bool:
@@ -152,9 +165,10 @@ def ytdlp_signed_in_if_blocked(cfg: dict, *args: str) -> subprocess.CompletedPro
     return r
 
 
-def fetch(cfg: dict, url: str, key: str) -> Path:
+def fetch(cfg: dict, url: str, key: str, window: dict | None = None) -> Path:
     """Download one video into streams/yt-<id>/; meta.json last, so a failed or partial
-    download is retried (and resumed) by the next check."""
+    download is retried (and resumed) by the next check. `window` ({start_s, end_s or
+    None, about}) marks a one-off: the segment is one stretch of the video, not all of it."""
     sc = for_show(cfg, key)
     pc = sc["preshow"]
     info = ytdlp_signed_in_if_blocked(cfg, "-J", "--no-playlist", url)
@@ -178,6 +192,8 @@ def fetch(cfg: dict, url: str, key: str) -> Path:
             "youtube_channel": v.get("channel_id", ""), "youtube_channel_name": v.get("channel", ""),
             "started_at": published.isoformat(), "duration_s": float(v.get("duration") or 0),
             "grabbed_at": datetime.now(UTC).isoformat(timespec="seconds")}
+    if window:
+        meta["window"] = window
     (d / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     log.info("%s: grabbed %r (%.0f min)", d.name, meta["title"], meta["duration_s"] / 60)
     return d
@@ -251,7 +267,9 @@ def video_duration(path: Path) -> float | None:
 
 def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     """segments.json with one segment covering the whole video: no topic split, and no
-    compilations. Title and description come from one small model call over the transcript."""
+    compilations. Title and description come from one small model call over the transcript.
+    With a window in meta.json (a one-off grabbed with --from/--to), the segment is the
+    stretch the model marks inside that window instead."""
     from .cut import source_file
     from .scoring import Claude, Prompts, load_words, preflight, transcript_lines
     from .segments import slug
@@ -266,26 +284,47 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
     meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
     words = load_words(stream_dir)
     full = video_duration(source_file(stream_dir)) or meta["duration_s"]
-    end = full - pc["trim_end_s"] if full > 2 * pc["trim_end_s"] else full
+    window = meta.get("window") or {}
+    start = float(window.get("start_s") or 0.0)
+    end = min(full, float(window["end_s"])) if window.get("end_s") else full
+    if end == full and full > 2 * pc["trim_end_s"]:
+        end -= pc["trim_end_s"]
     prompts = Prompts(cfg)
-    prompts.version = pc["prompt_version"]
+    prompts.version = pc["oneoff_prompt_version"] if window else pc["prompt_version"]
     claude = Claude(cfg["scoring"]["workspace_id"])
     preflight(claude, pc["model"])
     user = (f"Original title: {meta['title']}\n\nOriginal description:\n{meta['description'][:2000]}"
-            "\n\nTranscript:\n" + "\n".join(transcript_lines(words, 0, end + 1, speakers=False)))
-    out, api = claude.json_call(pc["model"], prompts.get("preshow"), user, SCHEMA, pc["effort"],
-                                fallback=True)
+            "\n\nTranscript:\n" + "\n".join(transcript_lines(words, start, end + 1, speakers=False)))
+    if window:
+        prompts.vars.update(about=window.get("about") or "the stretch described below",
+                            window_start=f"{start:.0f}", window_end=f"{end:.0f}")
+        user = (f"Window: {start:.0f} s to {end:.0f} s of the video. What to find: "
+                f"{window.get('about') or '(not said; the one story this stretch tells)'}\n\n" + user)
+    out, api = claude.json_call(pc["model"], prompts.get("oneoff" if window else "preshow"), user,
+                                SCHEMA_WINDOW if window else SCHEMA, pc["effort"], fallback=True)
     if out is None:
         out = {"title": meta["title"], "topic": "Pre-show", "figures": [],
                "summary": "", "description": ""}
-    seg = {"start_s": 0.0, "end_s": round(end, 3), **out, "kind": "intro", "source_share": "most",
-           "standalone": True, "id": "s00", "duration_s": round(end, 1),
+    if window:
+        # The model's bounds, kept inside the window with a little room; a bad answer
+        # (end before start) falls back to the whole window.
+        a = max(start, float(out.pop("start_s", start)) - WINDOW_PAD_S)
+        b = min(end, float(out.pop("end_s", end)) + WINDOW_PAD_S)
+        if b - a < 60:
+            log.warning("%s: model bounds %.0f-%.0f s too short, using the window", stream_dir.name, a, b)
+            a, b = start, end
+        start, end = a, b
+    seg = {"start_s": round(start, 3), "end_s": round(end, 3), **out, "kind": "intro",
+           "source_share": "most", "standalone": True, "id": "s00",
+           "duration_s": round(end - start, 1),
            "file": f"s00_{slug(out['topic'] or 'pre-show')}.mp4", "cut": True, "skip_reasons": [],
            "preshow": True}
     data = {"stream_id": stream_dir.name, "model": pc["model"], "prompt_version": prompts.version,
             "api": api, "gaps": [], "segments": [seg], "compilations": [],
             "cost_usd": round(claude.cost, 4)}
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    trimmed = f" ({full - end:.1f} s off the end)" if end < full else ""
-    print(f"pre-show: one segment, {end / 60:.1f} min{trimmed}: {seg['title']}; ${claude.cost:.3f}")
+    what = (f"one-off: {start / 60:.1f}-{end / 60:.1f} min" if window
+            else f"pre-show: one segment, {end / 60:.1f} min"
+                 + (f" ({full - end:.1f} s off the end)" if end < full else ""))
+    print(f"{what}: {seg['title']}; ${claude.cost:.3f}")
     return [seg]

@@ -32,6 +32,57 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
 
+## One-off: Just Trish on Ethan Klein (2026-10-27)
+User: the newest Just Trish Podcast episode (https://www.youtube.com/watch?v=sQ8MX1j6sUU) has
+Trish finally addressing the Ethan Klein situation, with her husband Moses (Hila's brother)
+giving his take, from about 1:30:00 in. "Trish and Moses speak out!" is the story. Wanted:
+one long segment of just that, up on Lolcow Cinema, with a cover that is NOT the usual
+multi-box layout (one big moment, just the two of them).
+- Built for it, on the pre-show path (same yt-<id> stream, [preshow] stages):
+  `clipper preshow fetch <url> --show <key> --from 1:30:00 [--to ...] --about "..."` writes
+  a `window` into meta.json; `preshow.write_segments` then sends the window's transcript to
+  `prompts/oneoff_v1.md` ([preshow] oneoff_prompt_version), which returns start_s/end_s
+  (kept inside the window, 1 s pad, whole window if the answer is under 60 s) plus the
+  usual title/description. trim_end_s applies only when the window runs to the end.
+- `[thumbnail] teasers = false`: compose_enquirer draws no side boxes and the photo fills
+  the left (x 8-784); band, headline, inset and badge as before. Test-rendered on
+  yt-hZs5LrBJuG4 to the scratchpad only (its real cover untouched).
+- `[shows.trish]` in clipper.toml (backup clipper.before_trish_2026-10-27.toml): placeholder
+  channel "justtrish" (not on Kick), show_name "Just Trish" (= its Kitsu production, created
+  on first publish), stream_context (Trish, Moses, the H3 story), preshow band/playlist "",
+  trim_end_s 0, credit naming the podcast, thumbnail teasers = false + a YouTube tagline.
+- **Blocked on cookies:** YouTube bot-checks this IP and secrets/youtube_cookies.txt (exported
+  10/24) has been rotated ("account cookies are no longer valid"), so the grab needs a fresh
+  export (SETUP: Cookie-Editor JSON or Netscape into secrets/youtube_cookies.txt, private
+  window, then close it). Nothing grabbed yet. Then:
+  `clipper preshow fetch "https://www.youtube.com/watch?v=sQ8MX1j6sUU" --show trish --from 1:25:00
+  --about "Trish and Moses speak out on Ethan Klein cheating on Hila (Moses's sister)"`,
+  and the worker (or `clipper run yt-sQ8MX1j6sUU`) does transcribe (Modal), segments, cut,
+  meta, thumbs, review. Expect ~$0.10 Modal for the episode + ~$0.05 Sonnet/Opus. Review in
+  Kitsu "Just Trish" / Discord; once approved the bot uploads it (asap, private).
+- Cookies re-exported 10/27 10:08 (user) as secrets/www.youtube.com_27-10-2026.json, an
+  object {url, cookies: [...]} rather than Cookie-Editor's bare list; copied over
+  youtube_cookies.txt (old one kept as youtube_cookies.before_2026-10-27.txt) and
+  `archive.netscape_cookies` now takes that shape too (and a BOM). Grab then worked on the
+  signed-in retry: **yt-sQ8MX1j6sUU**, "Trisha & Moses Address Ethan & Hila Klein For the
+  First Time... | Just Trish Ep. 323", 122 min, window 5100 s to the end. `clipper run` log:
+  logs/run_trish_2026-10-27.log.
+- **Run done 10:24** (`clipper run`, 10 min end to end): transcribe on Modal 320 s; the
+  model put the segment at 5573-7281 s (1:32:53 on, after the Hulu ad read, to the end of the
+  topic), 28.5 min, $0.04; cut (409 MB), meta ("Ethan Klein's Cheating: Trish & Moses Break 5
+  Years of Silence", 8 chapters, podcast credit), cover: no boxes, Trish main, Moses inset,
+  "TRISH SPEAKS OUT! — AT LAST", band "Family insider: MOSES FINALLY TALKS ETHAN!".
+  In Kitsu (new production "Just Trish" / 2026-10-27) and Discord (thread
+  1564691193999392910), pending the user's approval; then the bot uploads it private (asap).
+- Cover redone by hand (user, after listening: "moses needs the cover, his part was the
+  news"): thumbnails.json edited (backup thumbnails.before_moses_2026-10-27.json): main =
+  Moses, frame 3 (856 s), inset Trish (frame 1), headline "TRISH & MOSES SPEAK OUT! — AT
+  LAST", band "Hila's brother: ETHAN ISN'T FAMILY ANYMORE!"; `clipper thumbs yt-sQ8MX1j6sUU
+  --ids s00 --compose-only` re-attached it in Kitsu. The Discord card still shows the first
+  cover (cards aren't re-posted).
+- README documents the one-off flags and the teasers key; clipper.example.toml has both keys.
+  Not committed.
+
 ## Receipts video for Don: `clipper receipts` (built 2026-10-25, Sunday night)
 User: "after tonight's Don stream let's run a receipts segment we can send to Don, we do an
 edit etc, make it private at first." Don's stream kick-134300801 (started 17:01 PT, recorded

@@ -234,7 +234,7 @@ def read_sections(path: Path, prefix: str, fmt: dict) -> dict[str, str]:
 
 # Prompts that write text viewers see; [scoring] house_style rules are appended to them.
 VIEWER_FACING = {"score_a", "score_b", "meta", "chapters", "segments", "compilation",
-                 "thumbnail", "thumbnail_enquirer", "preshow", "pick", "retake",
+                 "thumbnail", "thumbnail_enquirer", "preshow", "oneoff", "pick", "retake",
                  "receipts_stories"}
 
 
