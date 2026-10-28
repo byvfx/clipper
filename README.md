@@ -216,6 +216,13 @@ of them, or to find and replace in their titles, descriptions, hashtags, tags or
 the dry run lists every line that would change before anything is written. Every action, single or
 bulk, can be undone from its toast for 10 s or from "Undo…" (the last 20); undo goes through
 Kitsu too, and an item already on YouTube keeps its live text (change it in Studio).
+"Edit cover" in an item's window opens the cover editor: pick the main frame (shift-click for
+the inset) from the candidate frames, drag and resize the face boxes, choose a photo or teaser
+photo from `[thumbnail] photos`, change the words; Preview renders without saving, Save
+re-renders with no model calls (every cover of the stream when the teaser changes) and
+re-attaches it in Kitsu. The schedule shows the open slots of the next two weeks and the
+approved items with no slot: drag an item or a scheduled slot onto an open slot (or a day) to
+pin it, or onto "unpin"; the page warns before a drop breaks the spacing rules.
 Titles, descriptions, hashtags and cover words are checked as you type ("hosts", unmasked
 swearing, YouTube's length limits with the show prefix), and cards with a problem carry a
 ⚠ badge. Above the schedule, the upload panel shows uploads in the last 24 h against the cap,

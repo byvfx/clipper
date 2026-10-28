@@ -32,6 +32,36 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
 
+## Issue day 2 (2026-10-28): analytics, audit follow-ups, cover editor, schedule DnD
+- **TikTok auto-send off** (user: hand-posting; TikTok flagged bot activity): see the TikTok section.
+- **YouTube Analytics API** was disabled in the Google Cloud project (analytics failed daily since
+  at least 10-27); the user enabled it 10-28. **#42:** `clipper analytics` also fetches channel
+  totals by day + traffic sources (analytics_channel.json, gitignored); `--report [--month]
+  [--refresh]` -> reports/analytics/<month>.md + .csv; war room Analytics panel (Stats tab on the
+  phone). October so far: 12.7k views, 68.5 h, +28 subs, Shorts feed 80% of views. Monthly
+  check-in = desktop scheduled task `clipper-monthly-checkin` (1st, 09:00, saved in Auto mode):
+  writes reports/analytics/<month>-checkin.md with 3-5 suggestions, changes nothing. First run
+  2026-11-01; once the user has gone through it, #42 can close.
+- **#76 (ef9cc42):** war room refuses cross-site/non-JSON POSTs and cross-site API/media GETs,
+  hmac token compare, Secure cookie behind tailscale serve, generic 500s, refs must be names.
+- **#75 (5a2d205):** score saves Pass A to pass_a_<v>.json before Pass B (rerun reuses it,
+  re-asks only errored windows); empty spans/swapped times are window errors; failed summary/
+  scan blocks aren't cached; meta keeps successful calls in metadata/.checkpoint_<v>.json;
+  retakes are recorded right after apply (finish_pending publishes what Kitsu missed);
+  transcribe writes atomically and `clipper transcribe` needs --force over words.jsonl (the
+  worker passes it); thumbs keeps other picks when one fails.
+- **#77 (66cb868), the main items:** per-entry upload errors (last_error on the entry, kept
+  across replans; quota/limit stops the run), per-show [youtube] overrides at upload, past
+  "Publish at" pins take the next slot, draft-only compilation links, recorder stall/offline
+  without a first segment (**needs `bash deploy/record/deploy.sh` when no show is live**),
+  sync.so polling bounded, Kick 429s capped at 15 min, list/dict env overrides, run --from
+  errors, retake lock refresh, doctor checks timezone/discord ids/record channels. Still open on
+  #77: M12 quota tracking, L6, L10, L11, L13, L16-L18, repo hygiene.
+- **#18 #20 (6a04bc1):** cover editor in the item window (frames, face boxes, photos, words,
+  preview, save = compose-only + Kitsu) and drag-and-drop schedule (open slots of 14 days, the
+  unslotted list, unpin target, rule warnings). The schedule was full for 14 days on 10-28
+  (207/207 slots), so there were no real open slots to drop on.
+
 ## Issue day (2026-10-27): shared state, LLM layer, costs, war room
 User: "take care of some gh issues"; picked the audit fix, #72, #50 and the war room batch.
 - **Audit filed** as #74 (shared state), #75 (checkpoint paid work), #76 (war room auth/CSRF),
