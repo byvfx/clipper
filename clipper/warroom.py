@@ -17,9 +17,11 @@ unless [warroom] host is changed, which then needs [warroom] token.
 
 from __future__ import annotations
 
+import hmac
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -514,8 +516,17 @@ def do_undo(cfg: dict, uid: str) -> dict:
     return {"undone": ok, "failed": failed, "rows": rows, "note": note}
 
 
+REF = re.compile(r"(?:[\w.-]+/)?[\w.-]+")  # <stream>/<key> or a key: names, never paths (#76)
+
+
+def checked_ref(ref) -> str:
+    if not isinstance(ref, str) or not REF.fullmatch(ref) or ".." in ref:
+        raise SystemExit(f"not an item name: {str(ref)[:60]!r}")
+    return ref
+
+
 def do_action(cfg: dict, body: dict) -> dict:
-    action, ref = body.get("action", ""), body.get("ref", "")
+    action, ref = body.get("action", ""), checked_ref(body.get("ref", ""))
     with LOCK:
         item = actions.resolve(cfg, ref)
         before = _before(cfg, item)
@@ -540,7 +551,7 @@ BULK = ("approve", "reopen", "hold", "pin", "changes", "reject")
 
 
 def do_bulk(cfg: dict, body: dict) -> dict:
-    action, refs = body.get("action", ""), body.get("refs") or []
+    action, refs = body.get("action", ""), [checked_ref(r) for r in body.get("refs") or []]
     if action not in BULK:
         raise SystemExit(f"{action!r} isn't a bulk action")
     if not refs:
@@ -602,7 +613,7 @@ def replace_plan(rows: list[dict], fields: list[str], find: str, repl: str, rege
 
 
 def do_replace(cfg: dict, body: dict) -> dict:
-    refs = set(body.get("refs") or [])
+    refs = {checked_ref(r) for r in body.get("refs") or []}
     if not refs:
         raise SystemExit("nothing selected")
     rows = [r for r in all_rows(cfg) if r["ref"] in refs]
@@ -719,7 +730,24 @@ def make_handler(cfg: dict):
             if not got:
                 cookie = self.headers.get("Cookie", "")
                 got = next((c.split("=", 1)[1] for c in cookie.split("; ") if c.startswith("wr=")), "")
-            return got == wc["token"]
+            return hmac.compare_digest(got.encode(), wc["token"].encode())
+
+        def cross_site(self) -> bool:
+            """#76: a request another site's page made (a form, an <img>, a fetch). The war room
+            trusts localhost, so those never reach the API or the media; links into the page
+            itself (from Discord, a DM) still work."""
+            site = self.headers.get("Sec-Fetch-Site", "")
+            if site:  # every current browser sends it
+                return site not in ("same-origin", "none")
+            origin = self.headers.get("Origin", "")  # older ones; behind tailscale serve, the forwarded host
+            hosts = {self.headers.get("Host", ""), self.headers.get("X-Forwarded-Host", "")}
+            return bool(origin) and urlparse(origin).netloc not in hosts
+
+        def fail(self, e: BaseException, status: int = 500) -> None:
+            """Errors go to the log in full; the page gets the type only (no NAS paths or
+            Kitsu replies over the network)."""
+            print(f"warroom: {self.command} {urlparse(self.path).path}: {type(e).__name__}: {e}", flush=True)
+            self.send_json({"error": f"{type(e).__name__} (details in the bot log)"}, status)
 
         def send_json(self, data, status=200):
             body = json.dumps(data, default=str).encode("utf-8")
@@ -744,6 +772,8 @@ def make_handler(cfg: dict):
                 return
             if not self.authorized(qs):
                 return self.send_json({"error": "add ?key=<[warroom] token>"}, 401)
+            if (u.path.startswith(("/api/", "/media/"))) and self.cross_site():
+                return self.send_json({"error": "cross-site request refused"}, 403)
             try:
                 if u.path in ("/", "/index.html"):
                     body = PAGE.read_bytes()
@@ -752,8 +782,10 @@ def make_handler(cfg: dict):
                     self.send_header("Content-Length", str(len(body)))
                     if wc["token"] and qs.get("key"):
                         # A year, so the home-screen app (#25) stays signed in after it closes.
+                        https = self.headers.get("X-Forwarded-Proto") == "https"  # tailscale serve
                         self.send_header("Set-Cookie", f"wr={wc['token']}; Path=/; Max-Age=31536000; "
-                                                       "HttpOnly; SameSite=Lax")  # Lax: links from Discord etc. keep it
+                                                       "HttpOnly; SameSite=Lax"  # Lax: links from Discord etc. keep it
+                                         + ("; Secure" if https else ""))
                     self.end_headers()
                     self.wfile.write(body)
                 elif u.path == "/api/overview":
@@ -787,20 +819,29 @@ def make_handler(cfg: dict):
                     self.send_media(unquote(u.path[len("/media/"):]))
                 else:
                     self.send_json({"error": "not found"}, 404)
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
             except (Exception, SystemExit) as e:  # noqa: BLE001
-                self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+                self.fail(e)
 
         def do_POST(self):
             u = urlparse(self.path)
             if not self.authorized(parse_qs(u.query)):
                 return self.send_json({"error": "unauthorized"}, 401)
+            # #76: only the page's own fetch() calls: JSON (a cross-site form can't send it
+            # without a CORS preflight, which this server never answers) from this origin.
+            if self.cross_site() or not self.headers.get("Content-Type", "").startswith("application/json"):
+                return self.send_json({"error": "cross-site or non-JSON request refused"}, 403)
             n = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(n) or b"{}")
+            try:
+                body = json.loads(self.rfile.read(n) or b"{}")
+            except ValueError:
+                return self.send_json({"error": "bad JSON"}, 400)
+            if not isinstance(body, dict):
+                return self.send_json({"error": "bad JSON"}, 400)
             try:
                 if u.path == "/api/check":  # #19: style warnings while typing
-                    item = actions.resolve(cfg, body.get("ref", ""))
+                    item = actions.resolve(cfg, checked_ref(body.get("ref", "")))
                     sc = for_stream(cfg, item.stream_dir)
                     self.send_json({"issues": actions.style_issues(sc, body.get("values") or {})})
                 elif u.path == "/api/action":
@@ -812,7 +853,8 @@ def make_handler(cfg: dict):
                 elif u.path == "/api/replace":
                     self.send_json(do_replace(cfg, body))
                 elif u.path == "/api/sync":
-                    sync_all(cfg, body.get("stream"))
+                    stream = body.get("stream")
+                    sync_all(cfg, checked_ref(stream) if stream else None)
                     self.send_json({"started": True})
                 elif u.path == "/api/replan":
                     with LOCK:
@@ -822,10 +864,10 @@ def make_handler(cfg: dict):
                     self.send_json({"started": start_retake(cfg)})
                 else:
                     self.send_json({"error": "not found"}, 404)
-            except SystemExit as e:
+            except SystemExit as e:  # clipper's own messages: safe to show
                 self.send_json({"error": str(e)}, 400)
             except Exception as e:  # noqa: BLE001
-                self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+                self.fail(e)
 
         def send_media(self, rel: str):
             path = (streams_root / rel).resolve()

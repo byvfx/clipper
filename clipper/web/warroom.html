@@ -494,7 +494,7 @@ function renderStreams() {
       <div class="top"><span class="tag">${esc(x.show_name || x.channel)}</span><b style="font-size:12px">${esc(x.started_at.slice(0, 10))}</b>
         <span style="margin-left:auto;font-size:11px;color:${x.run_status === "failed" ? "var(--red)" : x.run_status === "running" ? "var(--accent)" : "var(--faint)"}">${esc(status)}</span></div>
       <div class="t">${esc(x.title)}</div>
-      <div class="stages">${STATE.stages.map(g => `<div class="stage ${x.stages[g]}" title="${g}: ${x.stages[g] || "not yet"}"></div>`).join("")}</div>
+      <div class="stages">${STATE.stages.map(g => `<div class="stage ${esc(x.stages[g] || "")}" title="${g}: ${x.stages[g] || "not yet"}"></div>`).join("")}</div>
       <div class="meta"><span>${esc(x.id)}</span><span>${x.duration_s ? (x.duration_s / 3600).toFixed(1) + " h" : ""}</span></div></div>`;
   }).join("") || `<div class="empty">No streams yet</div>`;
 }
@@ -605,8 +605,8 @@ function card(i) {
   const hit = THQ === Q && THITS[i.ref] && !textOf(i).includes(Q.toLowerCase().split(/\s+/)[0]) ? THITS[i.ref] : "";
   return `<div class="card ${BUSY.has(i.ref) ? "busy" : ""} ${SEL === i.ref ? "sel" : ""} ${PICK.has(i.ref) ? "picked" : ""}" data-ref="${esc(i.ref)}">
     <div class="thumb ${vertical ? "vertical" : ""}" data-open="${esc(i.ref)}">${media}
-      <span class="kind ${i.kind}">${KIND[i.kind] || i.kind}</span>
-      <span class="state ${i.decision}">${DEC[i.decision] || i.decision}${i.hold ? " · held" : ""}</span>
+      <span class="kind ${esc(i.kind)}">${esc(KIND[i.kind] || i.kind)}</span>
+      <span class="state ${esc(i.decision)}">${esc(DEC[i.decision] || i.decision)}${i.hold ? " · held" : ""}</span>
       <span class="dur">${mmss(i.duration_s)}</span>${i.video_url ? `<button class="pop" data-pop="${esc(i.ref)}" title="Open the video in its own window">⧉</button>` : ""}</div>
     <div class="body">
       <div class="title" data-open="${esc(i.ref)}">${esc(i.title)}</div>
@@ -635,7 +635,7 @@ function renderSchedule() {
     return `<div class="day ${d === today ? "today" : d < today ? "past" : ""}"><h3>${d === today ? "Today · " : ""}${label}<span class="n">${days[d].length || ""}</span></h3>
       ${days[d].map(e => `<div class="slot" data-open="${esc(e.key)}">
         <span class="tm">${new Date(e.publish_at).toLocaleTimeString([], { timeZone: tz, hour: "2-digit", minute: "2-digit" })}</span>
-        <span class="bar ${e.kind}"></span>
+        <span class="bar ${esc(e.kind)}"></span>
         <span><div class="tt">${esc(e.title)}</div><div class="ss">${esc(e.show_name || "")} · ${e.kind}${e.status === "uploaded" ? ` · <span class="up">uploaded</span>${e.views != null ? ` · ${Number(e.views).toLocaleString()} views` : ""}${e.url ? ` · <a href="${esc(e.url)}" target="_blank" rel="noopener">YouTube</a>` : ""}` : e.source === "pinned" ? " · pinned" : ""}</div></span></div>`).join("")
       || `<div class="slot" style="cursor:default"><span></span><span></span><span class="ss">—</span></div>`}</div>`;
   }).join("");
@@ -829,8 +829,8 @@ function openModal(ref) {
   const m = $("#modal");
   const hist = STATE.retakes.filter(h => `${h.stream}/${h.key}` === ref);
   m.innerHTML = `
-    <div class="m-head"><span class="kind ${i.kind}">${KIND[i.kind]}</span><b>${esc(i.short)}</b><span class="tag">${esc(i.show_name)}</span>
-      <span id="mState" class="state ${i.decision}" style="position:static"></span>
+    <div class="m-head"><span class="kind ${esc(i.kind)}">${esc(KIND[i.kind] || i.kind)}</span><b>${esc(i.short)}</b><span class="tag">${esc(i.show_name)}</span>
+      <span id="mState" class="state ${esc(i.decision)}" style="position:static"></span>
       <button class="x" onclick="closeModal()">×</button></div>
     <div class="m-body">
       <div class="player">
