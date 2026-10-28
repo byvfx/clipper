@@ -25,6 +25,7 @@ import subprocess
 import tarfile
 import time
 from concurrent.futures import ThreadPoolExecutor
+from itertools import pairwise
 from pathlib import Path
 
 from . import jsonstate
@@ -210,9 +211,19 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         # The real cut starts (keyframes) live in each segment's sidecar.
         segs = [json.loads((seg_dir / s["file"]).with_suffix(".json").read_text(encoding="utf-8"))
                 for s in segs]
+        # A part's keyframe lead-in replays the end of the part before it when the two are
+        # back to back in the stream, so each part ends where the next one's file begins.
+        # A copy can stop anywhere (only starts need keyframes); nothing is dropped.
+        begin = [s.get("cut_start_s", s["start_s"]) for s in segs]
+        ends = [min(s["end_s"], b) if b > a else s["end_s"]
+                for s, (a, b) in zip(segs, pairwise(begin))] + [segs[-1]["end_s"]]
+        lines = []
+        for s, b, end in zip(segs, begin, ends):
+            lines.append(f"file '{(seg_dir / s['file']).resolve().as_posix()}'\n")
+            if end < s["end_s"]:
+                lines.append(f"outpoint {end - b:.3f}\n")
         listing = out_dir / f"{slug(topic)}.txt"
-        listing.write_text("".join(f"file '{(seg_dir / s['file']).resolve().as_posix()}'\n"
-                                   for s in segs), encoding="utf-8")
+        listing.write_text("".join(lines), encoding="utf-8")
         dst = out_dir / f"{slug(topic)}.mp4"
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat",
                         "-safe", "0", "-i", str(listing), "-c", "copy",
@@ -220,9 +231,9 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         listing.unlink()
         # Chapters: each part's offset in the compilation, from the actual cut lengths.
         chapters, t = [], 0.0
-        for s in segs:
+        for s, b, end in zip(segs, begin, ends):
             chapters.append({"start_s": round(t, 1), "id": s["id"], "title": s["title"]})
-            t += s["end_s"] - s.get("cut_start_s", s["start_s"])
+            t += end - b
         chapter_text = "\n".join(f"{hms(c['start_s'])} {c['title']}" for c in chapters)
         write_sidecar(dst, {**comp, "duration_s": round(t, 1), "chapters": chapters,
                             "chapter_text": chapter_text,
