@@ -76,6 +76,40 @@ kbd { font: 600 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 
 
 main { display: grid; grid-template-columns: 300px minmax(0, 1fr) 340px; gap: 14px; padding: 14px 18px; }
 @media (max-width: 1250px) { main { grid-template-columns: 1fr; } }
+#vStats { grid-column: 1 / -1; }
+.stats { padding: 12px 14px; display: grid; gap: 16px; font-size: 12px; color: var(--dim); }
+.stats .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stats .tile { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+.stats .tile b { font: 700 22px var(--mono); color: var(--text); }
+.stats .tile .d { font: 11px var(--mono); color: var(--faint); }
+.stats .tile .d.up { color: var(--green); } .stats .tile .d.down { color: var(--red); }
+.stats h3 { font: 700 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 0 0 6px; }
+.stats .two { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 18px; }
+.stats .four { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+@media (max-width: 900px) { .stats .two { grid-template-columns: 1fr; } }
+.stats svg { display: block; width: 100%; height: auto; overflow: visible; }
+.stats svg .gl { stroke: var(--line); stroke-width: 1; }
+.stats svg text { fill: var(--faint); font: 10px var(--mono); }
+.stats svg .bar { fill: var(--blue); }
+.stats svg .hit { fill: transparent; cursor: default; }
+.stats svg .hit:hover + .bar, .stats svg g:hover .bar { fill: #7bbcff; }
+.stats .hb { display: grid; grid-template-columns: minmax(90px, auto) 1fr auto; gap: 5px 10px; align-items: center; }
+.stats .hb .lab { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats .hb .track { height: 8px; }
+.stats .hb .fill { height: 8px; border-radius: 0 4px 4px 0; background: var(--blue); min-width: 2px; }
+.stats .hb .v { font: 11px var(--mono); color: var(--dim); text-align: right; white-space: nowrap; }
+.stats .hb .few { color: var(--faint); }
+.stats table { width: 100%; border-collapse: collapse; font: 11px var(--mono); }
+.stats td, .stats th { padding: 3px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.stats td:first-child, .stats th:first-child { text-align: left; color: var(--text); }
+.stats th { color: var(--faint); font-weight: 500; }
+.stats tr.few td { color: var(--faint); }
+.stats .vids { display: grid; gap: 4px; }
+.stats .vids a { color: var(--text); text-decoration: none; } .stats .vids a:hover { text-decoration: underline; }
+.stats .vids .n { font: 700 12px var(--mono); color: var(--text); display: inline-block; min-width: 44px; }
+.stats .note { color: var(--faint); font-size: 11px; }
+.stats .tip { position: fixed; pointer-events: none; z-index: 60; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font: 11px/1.5 var(--mono); color: var(--text); box-shadow: 0 6px 20px #000a; }
+.stats .tip[hidden] { display: none; }
 section.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .panel h2 { margin: 0; padding: 10px 14px; font: 700 12px var(--mono); letter-spacing: .12em; text-transform: uppercase;
   color: var(--dim); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
@@ -235,8 +269,9 @@ nav.views { display: none; }
   .counters { order: 4; width: 100%; margin: 0; flex-wrap: nowrap; overflow-x: auto; }
   .counter { min-width: 66px; flex: none; }
   main { display: block; padding: 10px 0 calc(74px + env(safe-area-inset-bottom)); }
-  #vPipe, #vQueue, #vSched { display: none; }
+  #vPipe, #vQueue, #vSched, #vStats { display: none; }
   body[data-view="queue"] #vQueue, body[data-view="schedule"] #vSched, body[data-view="pipeline"] #vPipe { display: flex; }
+  body[data-view="stats"] #vStats { display: block; }
   #vQueue, #vSched { flex-direction: column; }
   section.panel { border-radius: 0; border-left: 0; border-right: 0; }
   .queue-bar { gap: 8px; }
@@ -312,6 +347,12 @@ nav.views { display: none; }
     <div class="grid" id="grid"></div>
   </section>
 
+  <section class="panel" id="vStats">
+    <h2>Analytics <span class="sp" id="statsSub"></span>
+      <select id="statsMonth" style="margin-left:auto" title="Month"></select></h2>
+    <div class="stats" id="stats"><div class="empty">Reading analytics.json…</div></div>
+  </section>
+
   <section class="panel" id="vSched">
     <h2>Schedule <span class="sp" id="schedSub"></span></h2>
     <div class="uploads" id="uploads"></div>
@@ -322,6 +363,7 @@ nav.views { display: none; }
   <button data-view="queue"><b>☰</b>Review <span class="n" id="vnQueue"></span></button>
   <button data-view="schedule"><b>◷</b>Schedule</button>
   <button data-view="pipeline"><b>⚙</b>Pipeline</button>
+  <button data-view="stats"><b>▥</b>Stats</button>
 </nav>
 
 <dialog id="modal"></dialog>
@@ -909,6 +951,89 @@ function renderUploads() {
     ${u.next.length ? `<div class="nx">${u.next.map(e => `<span class="${e.due ? "due" : ""}">${new Date(e.publish_at).toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit" })}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.title)}">${esc(e.title)}</span>`).join("")}</div>` : ""}`;
 }
 
+// ---------- Analytics (#42): the same numbers as `clipper analytics --report` ----------
+
+let STATS_MONTH = "";
+const kindName = k => KIND[k] || (k === "clip" ? "Clip" : k);  // schedule/analytics say "clip", review "pick"
+async function refreshStats() {
+  const el = $("#stats");
+  let a;
+  try { a = await api("/api/analytics" + (STATS_MONTH ? "?month=" + STATS_MONTH : "")); } catch (e) { a = { error: e.message }; }
+  if (a.error) { el.innerHTML = `<div class="bad" style="color:var(--red)">${esc(a.error)}</div>`; return; }
+  renderStats(a);
+}
+function monthsBack(n) {
+  const out = [], d = new Date(); d.setDate(1);
+  for (let k = 0; k < n; k++) { out.push(d.toISOString().slice(0, 7)); d.setMonth(d.getMonth() - 1); }
+  return out;
+}
+function renderStats(a) {
+  const n = v => (+v || 0).toLocaleString(), t = a.totals, p = a.prev_totals;
+  const sel = $("#statsMonth");
+  if (!sel.options.length) sel.innerHTML = monthsBack(4).map(m => `<option>${m}</option>`).join("");
+  sel.value = a.month;
+  $("#statsSub").textContent = a.fetched_at ? "YouTube data as of " + ago(a.fetched_at) : "";
+  const delta = (x, y) => y > 0 ? `<span class="d ${x >= y ? "up" : "down"}">${x >= y ? "▲" : "▼"} ${Math.abs(Math.round((x - y) / y * 100))}% vs ${esc(a.prev_month)}</span>` : `<span class="d">${esc(a.prev_month)}: no data</span>`;
+  const tile = (label, value, d) => `<div class="tile"><span>${label}</span><b>${value}</b>${d}</div>`;
+  const kinds = Object.entries(a.uploads_by_kind).map(([k, v]) => `${v} ${kindName(k)}${v > 1 ? "s" : ""}`).join(" · ");
+  const tiles = tile("Views", n(t.views), delta(t.views, p.views))
+    + tile("Watch time", (+t.watch_hours).toLocaleString() + " h", delta(t.watch_hours, p.watch_hours))
+    + tile("Subscribers", (t.subs >= 0 ? "+" : "") + n(t.subs), delta(t.subs, p.subs))
+    + tile("Published", n(a.uploads), `<span class="d">${esc(kinds) || "none"}${a.still_scheduled ? ` · ${a.still_scheduled} more to come` : ""}</span>`);
+  const totalT = a.traffic.reduce((s, x) => s + x.views, 0) || 1, maxT = Math.max(1, ...a.traffic.map(x => x.views));
+  const traffic = a.traffic.slice(0, 8).map(x => `<span class="lab">${esc(x.label)}</span>
+      <span class="track"><div class="fill" style="width:${x.views / maxT * 100}%"></div></span>
+      <span class="v">${n(x.views)} · ${Math.round(x.views / totalT * 100)}%</span>`).join("");
+  const group = (title, rows) => {
+    if (!rows.length) return "";
+    const max = Math.max(1, ...rows.map(r => r.median_views));
+    return `<div><h3>${title}</h3><div class="hb">${rows.map(r => `<span class="lab ${r.n < 3 ? "few" : ""}" title="${r.n} video${r.n > 1 ? "s" : ""}${r.n < 3 ? ": too few to read much into" : ""}">${esc(["pick", "clip", "short", "segment", "compilation"].includes(r.key) ? kindName(r.key) + "s" : r.key)} <span class="few">(${r.n})</span></span>
+      <span class="track"><div class="fill" style="width:${r.median_views / max * 100}%;${r.n < 3 ? "opacity:.45" : ""}"></div></span>
+      <span class="v" title="median 7-day views · average % watched · 7-day views in all">${r.median_views} · ${Math.round(r.pct)}% · ${n(r.views)}</span>`).join("")}</div></div>`;
+  };
+  const vids = rows => rows.map(r => `<div><span class="n">${n(r.d7_views)}</span> <span class="few">${Math.round(r.d7_pct || 0)}% · ${esc(kindName(r.kind))} · ${esc(r.show)}</span> <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a></div>`).join("");
+  $("#stats").innerHTML = `<div class="tiles">${tiles}</div>
+    <div class="two">
+      <div><h3>Views per day</h3>${dailyChart(a.daily)}</div>
+      <div><h3>Where views came from</h3>${traffic ? `<div class="hb">${traffic}</div>` : `<div class="note">No traffic data for this month yet.</div>`}</div>
+    </div>
+    ${a.with_d7 ? `<div><h3>First 7 days of this month's uploads</h3><div class="note">Each bar is the median 7-day views; then average % watched and the group's 7-day views in all. Faded rows have fewer than 3 videos.</div></div>
+    <div class="four">${group("By show", a.by_show)}${group("By kind", a.by_kind)}${group("By weekday published", a.by_weekday)}${group("By hour published", a.by_hour)}</div>
+    <div class="two"><div><h3>Best (7-day views)</h3><div class="vids">${vids(a.best)}</div></div>
+      <div><h3>Weakest</h3><div class="vids">${vids(a.worst) || `<div class="note">Needs more than 8 videos with 7-day numbers.</div>`}</div></div></div>`
+      : `<div class="note">None of this month's uploads is 8 days old yet, so there are no 7-day numbers to compare.</div>`}
+    <div class="note">Report as a file: <code>clipper analytics --report${a.month ? " --month " + esc(a.month) : ""}</code> → reports/analytics/${esc(a.month)}.md + .csv</div>
+    <div class="tip" id="statTip" hidden></div>`;
+}
+function dailyChart(days) {
+  if (!days.length) return `<div class="note">No daily numbers for this month yet.</div>`;
+  const W = 640, H = 170, L = 34, B = 18, T = 6, max = Math.max(1, ...days.map(d => d.views));
+  const step = Math.pow(10, Math.floor(Math.log10(max))), top = Math.ceil(max / step) * step;
+  const y = v => T + (H - T - B) * (1 - v / top), slot = (W - L) / days.length, bw = Math.max(2, slot - 2);
+  const ticks = [0, top / 2, top].map(v => `<line class="gl" x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 5}" y="${y(v) + 3}" text-anchor="end">${v >= 1000 ? (v / 1000) + "k" : v}</text>`).join("");
+  const bars = days.map((d, k) => {
+    const x = L + k * slot + 1, h = Math.max(1, y(0) - y(d.views)), r = Math.min(4, bw / 2, h);
+    const path = `M${x},${y(0)} v${-(h - r)} q0,${-r} ${r},${-r} h${bw - 2 * r} q${r},0 ${r},${r} v${h - r} z`;
+    return `<g data-tip="${esc(d.day)}|${d.views}|${d.minutes}|${d.subs}"><rect class="hit" x="${L + k * slot}" y="${T}" width="${slot}" height="${H - T - B}"/><path class="bar" d="${path}"/></g>`;
+  }).join("");
+  const labels = days.filter((d, k) => k % Math.ceil(days.length / 6) === 0).map(d => {
+    const k = days.indexOf(d);
+    return `<text x="${L + k * slot + slot / 2}" y="${H - 4}" text-anchor="middle">${d.day.slice(5)}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Views per day">${ticks}${bars}${labels}</svg>`;
+}
+document.addEventListener("mousemove", e => {
+  const tip = $("#statTip");
+  if (!tip) return;
+  const g = e.target.closest?.("[data-tip]");
+  if (!g) { tip.hidden = true; return; }
+  const [day, v, m, s] = g.dataset.tip.split("|");
+  tip.innerHTML = `${new Date(day + "T12:00:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}<br><b>${(+v).toLocaleString()}</b> views<br>${Math.round(m / 60 * 10) / 10} h watched<br>${s >= 0 ? "+" : ""}${s} subscribers`;
+  tip.hidden = false;
+  tip.style.left = Math.min(innerWidth - 150, e.clientX + 12) + "px"; tip.style.top = (e.clientY + 12) + "px";
+});
+document.addEventListener("change", e => { if (e.target.id === "statsMonth") { STATS_MONTH = e.target.value; refreshStats(); } });
+
 // ---------- Costs (#50) ----------
 
 async function refreshCosts() {
@@ -1083,11 +1208,12 @@ document.addEventListener("keydown", e => {
   }
 });
 
-loadHash(); refresh(); refreshLive(); refreshCloud(); refreshCosts();
+loadHash(); refresh(); refreshLive(); refreshCloud(); refreshCosts(); refreshStats();
 setInterval(refresh, 15000);
 setInterval(refreshLive, 60000);
 setInterval(refreshCloud, 60000);
 setInterval(refreshCosts, 300000);
+setInterval(refreshStats, 900000);
 </script>
 </body>
 </html>

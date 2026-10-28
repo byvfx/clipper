@@ -5,6 +5,10 @@ Usage:
     clipper analytics --sign-in   once: grant read-only YouTube Analytics (adds 7-day views,
                                   average view percentage, watch time, subscribers gained)
     clipper analytics --list      print what's in analytics.json, best first
+    clipper analytics --report [--month 2026-10] [--refresh]
+                                  the month: channel totals, where views came from, 7-day
+                                  numbers of its uploads by show/kind/category/day/hour, best
+                                  and weakest -> reports/analytics/<month>.md + .csv (#42)
 
 Views, likes and comments come from the YouTube Data API with the upload sign-in. Once a
 video is 7 days old, its first-7-days numbers come from the YouTube Analytics API (needs
@@ -120,6 +124,11 @@ def run(cfg: dict, sign_in: bool = False) -> dict:
             if r.get("rows"):
                 cols = [h["name"] for h in r["columnHeaders"]]
                 rec["d7"] = dict(zip(cols, r["rows"][0]))
+    if ya:  # channel-wide totals and traffic sources, for the report and the war room
+        try:
+            fetch_channel(cfg, ya, now)
+        except Exception as e:  # noqa: BLE001  # the per-video numbers still count
+            print(f"  channel totals: {type(e).__name__}: {str(e)[:200]}")
     p = path_of(cfg)
     jsonstate.write(p, data)
     d7 = sum(1 for r in data.values() if r.get("d7"))
@@ -162,3 +171,186 @@ def feedback_block(cfg: dict, show_key: str) -> str:
             "7 days (best first, then the weakest). A hint about what this audience watches, "
             "not a rule: still judge each candidate on its own.\n"
             + "\n".join(line(r) for r in pick) + "\n</past_performance>\n\n")
+
+
+# ---------- channel totals and the monthly report (#42) ----------
+# Channel-wide numbers come from the Analytics API by day (views, watch time, subscribers)
+# and by traffic source per month; they sit in analytics_channel.json beside analytics.json.
+
+CHANNEL_DAYS = 120
+TRAFFIC = {"SHORTS": "Shorts feed", "YT_SEARCH": "YouTube search", "SUBSCRIBER": "Subscriptions",
+           "RELATED_VIDEO": "Suggested videos", "BROWSE": "Browse (home)", "EXT_URL": "External",
+           "NO_LINK_OTHER": "Direct / unknown", "PLAYLIST": "Playlists", "YT_CHANNEL": "Channel page",
+           "NOTIFICATION": "Notifications", "YT_OTHER_PAGE": "Other YouTube pages",
+           "END_SCREEN": "End screens", "HASHTAGS": "Hashtag pages", "SOUND_PAGE": "Sound pages"}
+WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def channel_path(cfg: dict) -> Path:
+    return path_of(cfg).with_name("analytics_channel.json")
+
+
+def fetch_channel(cfg: dict, ya, now: datetime) -> dict:
+    """Daily channel totals for the last CHANNEL_DAYS days, and traffic sources for this
+    month and the two before it."""
+    end = now.date() - timedelta(days=1)
+    start = end - timedelta(days=CHANNEL_DAYS)
+    r = ya.reports().query(ids="channel==MINE", startDate=start.isoformat(), endDate=end.isoformat(),
+                           dimensions="day", sort="day",
+                           metrics="views,estimatedMinutesWatched,subscribersGained,subscribersLost,likes").execute()
+    cols = [h["name"] for h in r.get("columnHeaders", [])]
+    daily = [dict(zip(cols, row, strict=False)) for row in r.get("rows") or []]
+    traffic = {}
+    first = end.replace(day=1)
+    for _ in range(3):
+        last = min(end, (first + timedelta(days=32)).replace(day=1) - timedelta(days=1))
+        t = ya.reports().query(ids="channel==MINE", startDate=first.isoformat(), endDate=last.isoformat(),
+                               dimensions="insightTrafficSourceType", sort="-views",
+                               metrics="views,estimatedMinutesWatched").execute()
+        traffic[first.strftime("%Y-%m")] = [{"source": row[0], "views": row[1], "minutes": row[2]}
+                                            for row in t.get("rows") or []]
+        first = (first - timedelta(days=1)).replace(day=1)
+    out = {"fetched_at": now.isoformat(timespec="seconds"), "daily": daily, "traffic": traffic}
+    jsonstate.write(channel_path(cfg), out)
+    return out
+
+
+def _median(xs: list[float]) -> float:
+    xs = sorted(xs)
+    n = len(xs)
+    return 0.0 if not n else xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def _group(rows: list[dict], key) -> list[dict]:
+    """Per group of videos with 7-day numbers: count, median and total 7-day views, mean %
+    watched; biggest median first."""
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+        groups.setdefault(key(r) or "(none)", []).append(r)
+    out = [{"key": k, "n": len(g), "median_views": round(_median([r["d7"]["views"] for r in g]), 1),
+            "views": sum(r["d7"]["views"] for r in g),
+            "pct": round(sum(r["d7"].get("averageViewPercentage", 0) for r in g) / len(g), 1)}
+           for k, g in groups.items()]
+    return sorted(out, key=lambda x: (-x["median_views"], -x["n"]))
+
+
+def report(cfg: dict, month: str = "") -> dict:
+    """One month: channel totals (and the month before), uploads by kind, 7-day performance
+    of that month's uploads by show, kind, category, weekday and hour, best and weakest,
+    traffic sources and the daily numbers."""
+    from zoneinfo import ZoneInfo
+
+    cfg = _root(cfg)
+    tz = ZoneInfo(cfg["schedule"]["timezone"])
+    month = month or datetime.now(tz).strftime("%Y-%m")
+    prev = (datetime.strptime(month + "-01", "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m")
+    ch = jsonstate.read(channel_path(cfg), {}) or {}
+    daily = ch.get("daily") or []
+
+    def totals(m: str) -> dict:
+        ds = [d for d in daily if d["day"].startswith(m)]
+        return {"days": len(ds), "views": sum(d["views"] for d in ds),
+                "watch_hours": round(sum(d["estimatedMinutesWatched"] for d in ds) / 60, 1),
+                "subs": sum(d["subscribersGained"] - d["subscribersLost"] for d in ds),
+                "likes": sum(d["likes"] for d in ds)}
+
+    vids = [r for r in load(cfg).values() if not r.get("missing")]
+    for r in vids:
+        r["local"] = datetime.fromisoformat(r["publish_at"]).astimezone(tz)
+    now = datetime.now(tz)
+    in_month = [r for r in vids if r["local"].strftime("%Y-%m") == month]
+    mine = [r for r in in_month if r["local"] <= now]  # out already, not just uploaded with a later publishAt
+    d7 = [r for r in mine if r.get("d7")]
+    by_kind: dict[str, int] = {}
+    for r in mine:
+        by_kind[r["kind"]] = by_kind.get(r["kind"], 0) + 1
+
+    def row(r: dict) -> dict:
+        d = r.get("d7") or {}
+        return {"title": r["title"], "url": r["url"], "kind": r["kind"],
+                "show": r.get("show_name") or r.get("show", ""),
+                "published": r["local"].strftime("%Y-%m-%d %H:%M"), "views": r["views"],
+                "d7_views": d.get("views"), "d7_pct": d.get("averageViewPercentage"),
+                "d7_minutes": d.get("estimatedMinutesWatched"), "d7_subs": d.get("subscribersGained"),
+                "category": r.get("category", ""), "score": r.get("score", ""), "topic": r.get("topic", "")}
+
+    ranked = sorted(d7, key=lambda r: -r["d7"]["views"])
+    return {
+        "month": month, "prev_month": prev, "fetched_at": ch.get("fetched_at", ""),
+        "totals": totals(month), "prev_totals": totals(prev),
+        "uploads": len(mine), "uploads_by_kind": by_kind, "with_d7": len(d7),
+        "still_scheduled": len(in_month) - len(mine),
+        "by_show": _group(d7, lambda r: r.get("show_name") or r.get("show")),
+        "by_kind": _group(d7, lambda r: r["kind"]),
+        "by_category": _group(d7, lambda r: r.get("category")),
+        "by_weekday": sorted(_group(d7, lambda r: WEEKDAYS[r["local"].weekday()]),
+                             key=lambda g: WEEKDAYS.index(g["key"])),
+        "by_hour": sorted(_group(d7, lambda r: f"{r['local'].hour:02d}:00"), key=lambda g: g["key"]),
+        "best": [row(r) for r in ranked[:8]],
+        "worst": [row(r) for r in ranked[-5:][::-1]] if len(ranked) > 8 else [],
+        "traffic": [{**t, "label": TRAFFIC.get(t["source"], t["source"].replace("_", " ").title())}
+                    for t in (ch.get("traffic") or {}).get(month, [])],
+        "daily": [{"day": d["day"], "views": d["views"], "minutes": d["estimatedMinutesWatched"],
+                   "subs": d["subscribersGained"] - d["subscribersLost"]}
+                  for d in daily if d["day"].startswith(month)],
+        "videos": [row(r) for r in sorted(mine, key=lambda r: r["local"])],
+    }
+
+
+def report_markdown(rep: dict) -> str:
+    t, p = rep["totals"], rep["prev_totals"]
+
+    def delta(a: float, b: float) -> str:
+        return f" ({'+' if a >= b else ''}{(a - b) / b * 100:.0f}% vs {rep['prev_month']})" if b > 0 else ""
+
+    def table(title: str, groups: list[dict]) -> list[str]:
+        if not groups:
+            return []
+        return [f"### {title}", "", "| | videos | median 7-day views | 7-day views | avg % watched |",
+                "|---|---:|---:|---:|---:|",
+                *(f"| {g['key']} | {g['n']} | {g['median_views']:g} | {g['views']:,} | {g['pct']:.0f}% |"
+                  for g in groups), ""]
+
+    def vids(rows: list[dict]) -> list[str]:
+        return [f"- **{r['d7_views']:,}** views, {r['d7_pct'] or 0:.0f}% watched · {r['kind']} · {r['show']} · "
+                f"[{r['title']}]({r['url']})" for r in rows]
+
+    kinds = ", ".join(f"{n} {k}" for k, n in sorted(rep["uploads_by_kind"].items()))
+    lines = [f"# Lolcow Cinema analytics: {rep['month']}", "",
+             (f"Channel numbers through the last day YouTube has (fetched {rep['fetched_at'][:16].replace('T', ' ')} UTC; "
+             "the Analytics API runs about two days behind)."), "",
+             f"- **Views:** {t['views']:,}{delta(t['views'], p['views'])}",
+             f"- **Watch time:** {t['watch_hours']:,} h{delta(t['watch_hours'], p['watch_hours'])}",
+             f"- **Subscribers:** {t['subs']:+,}{delta(t['subs'], p['subs'])}",
+             f"- **Published:** {rep['uploads']} ({kinds}), {rep['with_d7']} old enough for 7-day numbers"
+             + (f"; {rep['still_scheduled']} more uploaded and set to go out later this month"
+                if rep["still_scheduled"] else ""), ""]
+    if rep["traffic"]:
+        total = sum(x["views"] for x in rep["traffic"]) or 1
+        lines += ["## Where views came from", "",
+                  *(f"- {x['label']}: {x['views']:,} ({x['views'] / total * 100:.0f}%)" for x in rep["traffic"][:8]), ""]
+    if rep["with_d7"]:
+        lines += ["## First 7 days of this month's uploads", "",
+                  *table("By show", rep["by_show"]), *table("By kind", rep["by_kind"]),
+                  *table("By category", rep["by_category"]), *table("By weekday published", rep["by_weekday"]),
+                  *table("By hour published", rep["by_hour"]),
+                  "### Best", "", *vids(rep["best"]), ""]
+        if rep["worst"]:
+            lines += ["### Weakest", "", *vids(rep["worst"]), ""]
+    lines += ["Medians of fewer than 3 videos are anecdotes, not trends. Every upload is in the .csv beside this file.", ""]
+    return "\n".join(lines)
+
+
+def write_report(cfg: dict, rep: dict) -> Path:
+    """reports/analytics/<month>.md and .csv (every upload of the month, one row each)."""
+    import csv
+
+    out = Path(_root(cfg)["_dir"]) / "reports" / "analytics"
+    out.mkdir(parents=True, exist_ok=True)
+    md = out / f"{rep['month']}.md"
+    jsonstate.write_text(md, report_markdown(rep))
+    with open(out / f"{rep['month']}.csv", "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rep["videos"][0]) if rep["videos"] else ["title"])
+        w.writeheader()
+        w.writerows(rep["videos"])
+    return md

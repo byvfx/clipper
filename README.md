@@ -132,6 +132,7 @@ clipper archive transcribe jer --diarize                          # speaker turn
 clipper archive status
 clipper modal                                                     # GPUs up, runs, spend, archive ETA
 clipper costs [--month 2026-10]                                   # month's spend: models + Modal + fixed, by stage/show/stream
+clipper analytics --report [--month 2026-10] [--refresh]          # YouTube month: views, sources, 7-day numbers by show/kind/day/hour
 clipper archive check jer                                         # which source links still play
 clipper archive links jer                                         # the dead and restricted ones
 clipper archive index jer                                         # keyword index, index.sqlite (free)
@@ -223,7 +224,12 @@ YouTube link. The Modal panel (under Health) shows the month's Modal bill, the s
 GPUs up, transcriptions running and failed, and each archive's progress (`clipper modal`
 prints the same). The Costs panel below it adds up the month: every model call (logged as it
 is made, with its stage and stream), Modal runs, and `[costs] monthly` fixed costs, by stage
-and show (`clipper costs` prints the same; revenue joins it once the channel is monetized). On a phone it switches to one view at a
+and show (`clipper costs` prints the same; revenue joins it once the channel is monetized).
+The Analytics panel (full width, under the queue; the Stats tab on a phone) shows a month of
+YouTube: views, watch time and subscribers against the month before, views per day, where
+views came from (Shorts feed, search, ...), and the first-7-day numbers of that month's
+uploads by show, kind, weekday and hour, with the best and weakest. `clipper analytics
+--report` writes the same as reports/analytics/<month>.md plus a .csv of every upload. On a phone it switches to one view at a
 time (Review, Schedule, Pipeline tabs at the bottom), items open full screen with the
 decisions at the bottom and swipe to the next one, and videos play from a 360p copy
 (`lowres/` beside each preview, about a quarter of the data). It can be added to the home

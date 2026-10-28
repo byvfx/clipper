@@ -477,7 +477,14 @@ def cmd_shows(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_analytics(cfg: dict, args: argparse.Namespace) -> None:
     from . import analytics
 
-    analytics.show(cfg) if args.list_only else analytics.run(cfg, sign_in=args.sign_in)
+    if args.report:
+        if args.refresh:
+            analytics.run(cfg)
+        rep = analytics.report(cfg, args.month or "")
+        print(analytics.report_markdown(rep))
+        print(f"-> {analytics.write_report(cfg, rep)}")
+    else:
+        analytics.show(cfg) if args.list_only else analytics.run(cfg, sign_in=args.sign_in)
 
 
 def cmd_warroom(cfg: dict, args: argparse.Namespace) -> None:
@@ -890,6 +897,10 @@ def main() -> None:
     p.add_argument("--sign-in", action="store_true", help="once: grant read-only YouTube Analytics")
     p.add_argument("--list", dest="list_only", action="store_true", help="print analytics.json, best first")
     p.add_argument("--show", dest="list_only", action="store_true", help=argparse.SUPPRESS)  # old spelling
+    p.add_argument("--report", action="store_true",
+                   help="the month's report -> reports/analytics/<month>.md + .csv")
+    p.add_argument("--month", help="with --report: YYYY-MM (default: this month)")
+    p.add_argument("--refresh", action="store_true", help="with --report: refresh analytics.json first")
     p.set_defaults(fn=cmd_analytics)
 
     p = sub.add_parser("warroom", help="local dashboard: live shows, pipeline, review queue, schedule")

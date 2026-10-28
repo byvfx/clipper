@@ -369,6 +369,16 @@ def overview(cfg: dict) -> dict:
 
 # ---------- actions ----------
 
+def analytics_status(cfg: dict, month: str = "") -> dict:
+    """#42: the Analytics panel, the same numbers as `clipper analytics --report`."""
+    try:
+        from . import analytics
+
+        return analytics.report(cfg, month)
+    except Exception as e:  # noqa: BLE001  # a panel, not a reason to fail the page
+        return {"error": f"{type(e).__name__}: {e}"[:300]}
+
+
 def costs_status(cfg: dict) -> dict:
     """#50: the Costs panel, month to date (clipper/costs.py)."""
     try:
@@ -767,6 +777,8 @@ def make_handler(cfg: dict):
                     self.send_json(modal_status(cfg))
                 elif u.path == "/api/costs":
                     self.send_json(costs_status(cfg))
+                elif u.path == "/api/analytics":
+                    self.send_json(analytics_status(cfg, (qs.get("month") or [""])[0]))
                 elif u.path == "/api/undo":
                     self.send_json({"actions": recent_actions(cfg)})
                 elif u.path == "/api/search":
