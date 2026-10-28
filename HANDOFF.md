@@ -439,6 +439,10 @@ item kinds get edits (suggested clips + Shorts first), edited version replaces o
 cut, whether sound effects/stings are wanted (left out until they say), and which issue after #67.
 
 ## TikTok drafts (#28, built 2026-10-21)
+**Off since 2026-10-28 (user): "stop all tiktok posting... ill hand post it, getting alot of
+errors thinking we are bots".** clipper.toml `[tiktok] auto_send_minutes = 0` (was 60), bot
+restarted 08:42 on it. The user posts by hand; don't send drafts unless asked. Notes below are
+history.
 - User made the TikTok account and a developer app (Login Kit desktop + Content Posting API, scopes
   user.info.basic + video.upload, redirect `http://localhost:3455/callback/`). Privacy/terms copy for
   byvfx.com (Squarespace, "Not linked" pages /lolcow-privacy, /lolcow-terms): docs/tiktok-app-pages.md.
