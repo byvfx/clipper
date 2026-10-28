@@ -4,8 +4,8 @@ Stream clipper for Kino Casino (Kick channel `kinocasinogaming`) → YouTube cha
 Repo: `C:\clipper`, remote https://github.com/byvfx/clipper (private, pushed 2026-10-18). Python package
 `clipper/`, config `clipper.toml` (gitignored; `clipper.example.toml` is tracked), prompts `prompts/`.
 Plan doc: https://claude.ai/code/artifact/a9bb9e38-ced0-4455-8d8e-18a78122f45f
-Walkthrough (usage only, for presenting; Claude Docs, updated 2026-10-21): https://claude.ai/code/artifact/0d0e04da-54f6-4f15-bad0-2df72a286383
-Walkthrough (usage only, for presenting; Claude Docs, updated 2026-10-21): https://claude.ai/code/artifact/0d0e04da-54f6-4f15-bad0-2df72a286383
+Walkthrough (usage only, for presenting; Claude Docs, updated 2026-10-27 with one-offs, archive, receipts, weekly, costs, TikTok/Mother Moo; demo approvals only on the test stream): https://claude.ai/code/artifact/0d0e04da-54f6-4f15-bad0-2df72a286383
+Interactive demo walkthrough (HTML artifact, 2026-10-27: 11 stops with talk track, checklists, copyable commands, archive command builder, costs bars, timer; numbers as of that day): https://claude.ai/artifact/ASL1grYiajRAELyoqTGitN
 Keys are Windows **User** env vars (ANTHROPIC_API_KEY, KITSU_TOKEN); agent shells must load them, e.g.
 `export KITSU_TOKEN="$(powershell.exe -NoProfile -Command "[Environment]::GetEnvironmentVariable('KITSU_TOKEN','User')" | tr -d '\r')"`.
 README.md (what it is) and CLAUDE.md (conventions for agents) were added 2026-10-19.
@@ -31,6 +31,37 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
   2026-10-19; Kick bio says "Andy Warski and PPP"). Who-looks-like-what is in [shows.kino.scoring] stream_context.
 - Bleep: `[bleep] mode = "bleep"`, `profanity = true` (all forms of "fuck"), slurs always. Captions/titles masked.
 - YouTube API uploads are NOT locked private on this project (user made one public in Studio). Audit status unconfirmed.
+
+## Issue day (2026-10-27): shared state, LLM layer, costs, war room
+User: "take care of some gh issues"; picked the audit fix, #72, #50 and the war room batch.
+- **Audit filed** as #74 (shared state), #75 (checkpoint paid work), #76 (war room auth/CSRF),
+  #77 (the rest); `reports/code-audit-2026-10-23.md` is now tracked.
+- **#74 done (e20b131):** `clipper/jsonstate.py` = atomic write + `<file>.lock` (O_EXCL, works
+  across processes/the NAS share; stale after 120 s) with `update()`/`merge()`. schedule.run
+  holds the schedule.json lock from reading the old plan to writing (split into previous()/
+  plan(); plan identical to the old code on live data, 334 entries); upload/attach/finish/
+  backfills mark entries under the lock (`youtube.mark`), rumble/tiktok marks too; review.sync,
+  review_state, thumbnails.json, discord.json, card sync merge only their keys; every other
+  stage JSON is atomic. Stress test: 4 processes x 3 threads, no lost updates.
+  **The running bot still has the old code in-process** (its replans and the :8765 war room):
+  restart it (see Gotchas) so its writes take the lock too. Child processes already use it.
+- **#72 done (1a03033):** `clipper/llm.py`; `scoring.Claude` is an alias. Model strings:
+  bare = Claude (unchanged), `openai:`, `gemini:`, `local:` ([llm] local_base_url, Ollama etc.)
+  via one OpenAI-compatible adapter (reasoning_effort, json_schema -> JSON mode fallback,
+  schema check + one retry, images, refusals). Prices moved to [llm] prices. Doctor checks keys
+  and that the server lists the model. Tested on a fake server + real Haiku calls. No stage
+  switched; the issue's side-by-side on kick-131151926 and `clipper edit` (#67) remain.
+- **#50 ledger done (f0fcccf):** every model call -> `logs/costs.jsonl` with the CLI command and
+  stream; `clipper costs [--month] [--json]`, war room Costs panel (with Modal runs and [costs]
+  monthly / credits). Backfilled 34 earlier records (estimated). October so far ~$200, ~$184 of
+  it the Jer archive on Modal. Meta/thumbs/shorts costs before today were only printed (lost).
+  Revenue waits for monetization. Nothing set in [costs] monthly yet (Runway Max $95? ask).
+- **#23 #24 #17 done (0edda43):** war room undo (toast 10 s + "Undo…" list, last 20 in
+  logs/warroom_undo.json; actions.restore), search over texts + captions (.srt) with filters
+  in the URL hash, checkboxes + bulk bar, find and replace with a required dry run. A "hosts"
+  dry run finds 14 items (descriptions, mostly uploaded: Kitsu only, the live videos keep their
+  text); not applied. Test: hold + undo on kick-131151926/s02 (Kitsu has the two notes).
+- Pushed 2026-10-28; #74 #23 #24 #17 closed, #72 and #50 left open for what remains; bot restarted on the new code.
 
 ## TikTok drafts resent (2026-10-27)
 User: "re-send the tik toks from last night, i forgot to post and i think they expired".
@@ -99,6 +130,14 @@ multi-box layout (one big moment, just the two of them).
   word** (`clipper review approve yt-sQ8MX1j6sUU/s00`, 2026-10-27 ~10:50); the bot's next
   hourly pass schedules it asap and uploads it private. Worth considering: Discord excerpts
   for one-off/pre-show items could start at the first chapter after the intro.
+- **Uploaded 2026-10-27 ~11:35 PT at the user's word** ("just upload the trish vid ill post it
+  now while its hot"): `clipper schedule` (backup schedule.before_trish_upload_2026-10-27.json)
+  then `clipper upload --max 1` (log logs/upload_trish_2026-10-27.log): **public at once,
+  https://youtu.be/Mh6JcTACFlI** (API check: privacyStatus public, no publishAt, 28:33), cover,
+  captions, playlists "Ethan Klein" and "Just Trish", Kitsu link. As designed: asap entries
+  publish public at once and [youtube] manual_publish has been false since 2026-10-20 (the
+  "private-only" note under Pre-shows is stale). The user wanted it out right away, so fine;
+  for a private-first one-off, set manual_publish = true for that run.
 - Committed and pushed as 0903456 (code, prompt, docs).
 
 ## Receipts video for Don: `clipper receipts` (built 2026-10-25, Sunday night)
