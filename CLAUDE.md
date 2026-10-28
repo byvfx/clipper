@@ -1,9 +1,11 @@
 # clipper: notes for Claude Code
 
-Read HANDOFF.md first: it is the running log between sessions (what was built, what the
-user decided, what is waiting on them). README.md says what the project is, SETUP.md how
-to install it. Keep HANDOFF.md current at the end of a session; keep README and SETUP true
-whenever behaviour changes.
+Read HANDOFF.md first: the current state between sessions (what runs where, what the user
+decided, what is waiting on them, open work, recipes, gotchas), kept under ~300 lines. The
+session diary is `docs/log/<YYYY-MM>.md`: grep it for history, don't read it whole. README.md
+says what the project is, SETUP.md how to install it. At the end of a session update
+HANDOFF.md in place (no diaries there) and add a dated entry at the end of the month's log;
+keep README and SETUP true whenever behaviour changes.
 
 ## Shape
 

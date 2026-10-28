@@ -257,7 +257,7 @@ deploy/               NAS recorder (Docker), Kitsu (Docker), Windows worker and 
 streams/<id>/         one folder per stream: source, transcript, cuts, metadata, review state
 clipper.example.toml  every setting, documented
 SETUP.md              installing on a new machine
-HANDOFF.md            running notes between work sessions
+HANDOFF.md            current state between work sessions (short); docs/log/ has the dated diary
 ```
 
 ## Requirements
