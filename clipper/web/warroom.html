@@ -198,6 +198,40 @@ input.search { margin-left: auto; width: 180px; }
 .slot .bar.clip { background: var(--clip); } .slot .bar.short { background: var(--short); } .slot .bar.segment { background: var(--segment); } .slot .bar.compilation { background: var(--compilation); }
 .slot .tt { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .slot .ss { font-size: 11px; color: var(--faint); }
+/* #20 drag and drop */
+.slot[draggable="true"] { cursor: grab; }
+.slot.free { cursor: default; opacity: .55; }
+.slot.free .tt { color: var(--faint); font-style: italic; }
+.slot.free .bar { opacity: .5; }
+.slot.over, .unpin.over, .day h3.over { background: #23314a; outline: 1px dashed var(--blue); opacity: 1; }
+.sched-tools { display: flex; gap: 8px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: 11px; color: var(--faint); }
+.sched-tools label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+.unpin { border: 1px dashed var(--line); border-radius: 7px; padding: 4px 10px; }
+.unslotted { padding: 6px 14px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 3px; max-height: 220px; overflow: auto; }
+.unslotted .chip { display: grid; grid-template-columns: 6px 1fr; gap: 8px; align-items: center; font-size: 12px; padding: 3px 6px; border-radius: 6px; cursor: grab; }
+.unslotted .chip:hover { background: var(--panel2); }
+.unslotted .chip span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* #18 cover editor */
+#tool.cover { width: min(1180px, 97vw); }
+.cv { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 16px; padding: 12px 16px; }
+@media (max-width: 800px) { .cv { grid-template-columns: 1fr; } }
+.cv .shot { width: 100%; border-radius: 8px; display: block; background: #000; }
+.cv .frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin-top: 8px; }
+.cv .frames button { padding: 0; border: 2px solid transparent; border-radius: 6px; background: none; position: relative; cursor: pointer; }
+.cv .frames button img { width: 100%; display: block; border-radius: 4px; }
+.cv .frames button.main { border-color: var(--accent); } .cv .frames button.inset { border-color: var(--blue); }
+.cv .frames button span { position: absolute; top: 2px; left: 4px; font: 700 10px var(--mono); text-shadow: 0 0 3px #000; }
+.cv .boxwrap { position: relative; margin-top: 10px; user-select: none; touch-action: none; }
+.cv .boxwrap img { width: 100%; display: block; border-radius: 6px; }
+.cv .box { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px #0007; cursor: move; }
+.cv .box.inset { border-color: var(--blue); }
+.cv .box i { position: absolute; right: -7px; bottom: -7px; width: 12px; height: 12px; background: var(--accent); border-radius: 2px; cursor: nwse-resize; }
+.cv .form { display: grid; gap: 7px; font-size: 12px; color: var(--dim); align-content: start; }
+.cv .form input, .cv .form select { width: 100%; margin: 0; font-size: 13px; }
+.cv .form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.cv .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.cv .seg button { border: 0; background: none; padding: 3px 10px; color: var(--dim); font-size: 12px; cursor: pointer; }
+.cv .seg button.on { background: var(--panel2); color: var(--text); }
 .slot .up { color: var(--green); }
 .sched { max-height: calc(100vh - 140px); overflow: auto; }
 
@@ -356,6 +390,8 @@ nav.views { display: none; }
   <section class="panel" id="vSched">
     <h2>Schedule <span class="sp" id="schedSub"></span></h2>
     <div class="uploads" id="uploads"></div>
+    <div class="sched-tools" id="schedTools"></div>
+    <div class="unslotted" id="unslotted" hidden></div>
     <div class="sched" id="schedule"></div>
   </section>
 </main>
@@ -630,10 +666,25 @@ function renderSchedule() {
   for (const e of STATE.schedule) (days[dayKey(e.publish_at)] ??= []).push(e);
   for (let k = 0; k < 14; k++) { const d = new Date(Date.now() + k * 864e5); days[dayKey(d)] ??= []; }
   $("#schedSub").textContent = `${STATE.counts.scheduled_7d} in 7 days`;
+  const free = {};
+  if (SHOWFREE) for (const f of STATE.free_slots || []) (free[dayKey(f.at)] ??= []).push(f);
+  const uns = STATE.items.filter(STATUS.unslotted);
+  $("#schedTools").innerHTML = `<label title="Show the open slots to drop items on"><input type="checkbox" id="showFree" ${SHOWFREE ? "checked" : ""}> Open slots</label>
+    <span class="unpin" data-unpin>⇣ drop here to unpin</span>
+    <span>max ${STATE.rules?.max_per_day ?? "?"}/day · ${STATE.rules?.min_gap_minutes ?? "?"} min apart · drag a slot to move it</span>`;
+  $("#unslotted").innerHTML = uns.length ? `<div class="ss" style="color:var(--faint);font-size:11px">Approved, no slot yet (${uns.length}): drag onto an open slot</div>`
+    + uns.slice(0, 60).map(i => `<div class="chip" draggable="true" data-dref="${esc(i.ref)}" data-dkind="${esc(i.kind === "pick" ? "clip" : i.kind)}" title="${esc(i.title)}"><span class="bar ${esc(i.kind === "pick" ? "clip" : i.kind)}" style="width:4px;height:16px;border-radius:2px;display:block"></span><span>${esc(i.title)}</span></div>`).join("") : "";
+  $("#unslotted").hidden = !uns.length;
+  for (const d of Object.keys(free)) days[d] ??= [];
   $("#schedule").innerHTML = Object.keys(days).sort().map(d => {
     const label = new Date(d + "T12:00:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
-    return `<div class="day ${d === today ? "today" : d < today ? "past" : ""}"><h3>${d === today ? "Today · " : ""}${label}<span class="n">${days[d].length || ""}</span></h3>
-      ${days[d].map(e => `<div class="slot" data-open="${esc(e.key)}">
+    const rows = [...days[d].map(e => ({ e, at: e.publish_at })), ...(free[d] || []).map(f => ({ f, at: f.at }))]
+      .sort((a, b) => a.at.localeCompare(b.at));
+    return `<div class="day ${d === today ? "today" : d < today ? "past" : ""}"><h3 data-dday="${d}">${d === today ? "Today · " : ""}${label}<span class="n">${days[d].length || ""}</span></h3>
+      ${rows.map(({ e, f }) => f ? `<div class="slot free" data-dslot="${esc(f.at)}" data-dkind="${esc(f.kind)}">
+        <span class="tm">${new Date(f.at).toLocaleTimeString([], { timeZone: tz, hour: "2-digit", minute: "2-digit" })}</span>
+        <span class="bar ${esc(f.kind)}"></span><span><div class="tt">open ${esc(f.kind)} slot</div></span></div>`
+      : `<div class="slot" data-open="${esc(e.key)}" ${e.status !== "uploaded" ? `draggable="true" data-dref="${esc(e.key)}" data-dkind="${esc(e.kind)}" data-dat="${esc(e.publish_at)}"` : ""}>
         <span class="tm">${new Date(e.publish_at).toLocaleTimeString([], { timeZone: tz, hour: "2-digit", minute: "2-digit" })}</span>
         <span class="bar ${esc(e.kind)}"></span>
         <span><div class="tt">${esc(e.title)}</div><div class="ss">${esc(e.show_name || "")} · ${e.kind}${e.status === "uploaded" ? ` · <span class="up">uploaded</span>${e.views != null ? ` · ${Number(e.views).toLocaleString()} views` : ""}${e.url ? ` · <a href="${esc(e.url)}" target="_blank" rel="noopener">YouTube</a>` : ""}` : e.source === "pinned" ? " · pinned" : ""}</div></span></div>`).join("")
@@ -839,6 +890,7 @@ function openModal(ref) {
           : `<video controls preload="metadata" src="${i.video_url}"></video>`}
         ${i.video_url && !PHONE.matches ? `<div class="row" style="margin-top:6px"><button class="btn" data-pop="${esc(i.ref)}" title="Open the video in its own window (O)">⧉ Pop out</button></div>` : ""}
         ${i.thumbnail_url ? `<img src="${i.thumbnail_url}" alt="thumbnail">` : ""}
+        ${i.thumbnail_url && i.kind !== "short" ? `<div class="row" style="margin-top:6px"><button class="btn" data-cover="${esc(i.ref)}" title="Frame, face box, photos and words; re-renders without model calls">🖼 Edit cover</button></div>` : ""}
         <div class="kv">
           <b>Length</b><span>${mmss(i.duration_s)}</span>
           <b>Stream</b><span>${esc(i.stream)} · ${esc(i.date)}</span>
@@ -950,6 +1002,164 @@ function renderUploads() {
     ${r.lines?.length ? `<div class="log">${r.lines.map(logLine).join("")}</div>` : ""}
     ${u.next.length ? `<div class="nx">${u.next.map(e => `<span class="${e.due ? "due" : ""}">${new Date(e.publish_at).toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit" })}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.title)}">${esc(e.title)}</span>`).join("")}</div>` : ""}`;
 }
+
+// ---------- #20 drag and drop on the schedule ----------
+
+let SHOWFREE = (() => { try { return localStorage.getItem("warroom.free") !== "0"; } catch { return true; } })();
+let DRAG = null;
+function localPin(iso) {  // "2026-10-29T14:00:00-07:00" -> "2026-10-29 14:00" in the schedule's zone
+  const d = new Date(iso), tz = STATE.timezone;
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(d).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+}
+function ruleWarnings(at, kind, ref) {
+  const r = STATE.rules || {}, t = new Date(at), w = [];
+  const others = STATE.schedule.filter(e => e.key !== ref);
+  const day = localPin(at).slice(0, 10);
+  const sameDay = others.filter(e => localPin(e.publish_at).slice(0, 10) === day).length;
+  if (r.max_per_day && sameDay >= r.max_per_day) w.push(`${day} already has ${sameDay} (max ${r.max_per_day} a day)`);
+  const near = others.find(e => Math.abs(new Date(e.publish_at) - t) < (r.min_gap_minutes || 0) * 60000);
+  if (near) w.push(`within ${r.min_gap_minutes} min of "${near.title.slice(0, 50)}"`);
+  return w;
+}
+async function dropPin(ref, at, slotKind, kind) {
+  const text = localPin(at), warn = ruleWarnings(at, kind, ref);
+  if (slotKind && kind && slotKind !== kind) warn.push(`it's a ${slotKind} slot and this is a ${kind}`);
+  if (warn.length && !confirm(`Pin for ${text}?\n\n` + warn.map(x => "• " + x).join("\n"))) return;
+  await act(ref, "pin", { text });
+}
+document.addEventListener("dragstart", e => {
+  const s = e.target.closest?.("[data-dref]");
+  if (!s) return;
+  DRAG = { ref: s.dataset.dref, kind: s.dataset.dkind };
+  e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", DRAG.ref);
+});
+document.addEventListener("dragend", () => { DRAG = null; document.querySelectorAll(".over").forEach(x => x.classList.remove("over")); });
+document.addEventListener("dragover", e => {
+  if (!DRAG) return;
+  const t = e.target.closest?.("[data-dslot],[data-unpin],[data-dday]");
+  document.querySelectorAll(".over").forEach(x => x !== t && x.classList.remove("over"));
+  if (t) { e.preventDefault(); t.classList.add("over"); }
+});
+document.addEventListener("drop", async e => {
+  if (!DRAG) return;
+  const t = e.target.closest?.("[data-dslot],[data-unpin],[data-dday]");
+  if (!t) return;
+  e.preventDefault();
+  const { ref, kind } = DRAG; DRAG = null;
+  t.classList.remove("over");
+  if (t.dataset.unpin !== undefined) return act(ref, "pin", { text: "" });
+  if (t.dataset.dslot) return dropPin(ref, t.dataset.dslot, t.dataset.dkind, kind);
+  const hm = prompt(`Time on ${t.dataset.dday} (HH:MM, ${STATE.timezone})`, "12:00");
+  if (!hm) return;
+  if (!/^\d{1,2}:\d{2}$/.test(hm.trim())) return toast("Use HH:MM", true);
+  const [h, m] = hm.trim().split(":").map(Number);
+  const guess = new Date(`${t.dataset.dday}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+  const text = `${t.dataset.dday} ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const warn = ruleWarnings(guess.toISOString(), kind, ref);
+  if (warn.length && !confirm(`Pin for ${text}?\n\n` + warn.map(x => "• " + x).join("\n"))) return;
+  act(ref, "pin", { text });
+});
+document.addEventListener("change", e => {
+  if (e.target.id === "showFree") { SHOWFREE = e.target.checked; try { localStorage.setItem("warroom.free", SHOWFREE ? "1" : "0"); } catch { /* private window */ } renderSchedule(); }
+});
+
+// ---------- #18 cover editor ----------
+
+let CV = null;  // {ref, info, changes, box: "face" | "inset_face"}
+async function showCover(ref) {
+  const d = $("#tool");
+  d.dataset.kind = "cover"; d.classList.add("cover");
+  d.innerHTML = `<div class="m-head"><b>Cover</b><span style="color:var(--faint);font-size:12px">${esc(ref)}</span><button class="x" data-close>×</button></div><div class="tbody">Loading the frames…</div>`;
+  if (!d.open) d.showModal();
+  let info;
+  try { info = await api("/api/cover?ref=" + encodeURIComponent(ref)); } catch (e) { d.querySelector(".tbody").innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; return; }
+  CV = { ref, info, changes: {}, box: "face" };
+  renderCover();
+}
+function cvVal(k) { return k in CV.changes ? CV.changes[k] : CV.info.fields[k]; }
+function renderCover() {
+  const { info } = CV, enq = info.style === "enquirer", main = cvVal("frame"), inset = cvVal("inset_frame");
+  const frameUrl = n => info.frames[n - 1]?.url;
+  const boxFrame = CV.box === "face" ? main : inset;
+  const b = cvVal(CV.box) || { x: 0.35, y: 0.2, width: 0.3, height: 0.4 };
+  const hl = cvVal("headline") || [];
+  const photoSel = (id, v) => `<select id="${id}"><option value="">(none: use the frame)</option>${info.photos.map(p => `<option ${p === v ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>`;
+  $("#tool").innerHTML = `<div class="m-head"><b>Cover</b><span style="color:var(--faint);font-size:12px">${esc(CV.ref)} · ${esc(info.style)}</span><button class="x" data-close>×</button></div>
+    <div class="cv"><div>
+      <img class="shot" id="cvShot" src="${esc(CV.preview || info.cover_url)}" alt="cover">
+      <div class="f" style="font-size:11px;color:var(--faint);margin-top:6px">${CV.preview ? "Preview (not saved)" : "Current cover"} · click a frame to use it${enq ? "; shift-click for the inset" : ""}</div>
+      <div class="frames">${info.frames.map(f => `<button data-cvframe="${f.n}" class="${f.n === main ? "main" : f.n === inset ? "inset" : ""}" title="${f.t.toFixed(1)} s"><img loading="lazy" src="${esc(f.url)}" alt=""><span>${f.n}${f.n === main ? " main" : f.n === inset ? " inset" : ""}</span></button>`).join("")}</div>
+      ${enq ? `<div style="margin-top:10px;display:flex;gap:8px;align-items:center;font-size:12px;color:var(--dim)">Face box on <span class="seg"><button data-cvbox="face" class="${CV.box === "face" ? "on" : ""}">main</button><button data-cvbox="inset_face" class="${CV.box === "inset_face" ? "on" : ""}">inset</button></span> drag to move, corner to resize</div>
+      ${boxFrame ? `<div class="boxwrap" id="cvWrap"><img src="${esc(frameUrl(boxFrame))}" alt="" draggable="false"><div class="box ${CV.box === "inset_face" ? "inset" : ""}" id="cvBox" style="left:${b.x * 100}%;top:${b.y * 100}%;width:${b.width * 100}%;height:${b.height * 100}%"><i data-resize></i></div></div>` : ""}` : ""}
+    </div>
+    <div class="form">
+      ${enq ? `<label>Headline (up to 3 lines)</label>${[0, 1, 2].map(k => `<input class="search" data-cvhl="${k}" value="${esc(hl[k] || "")}">`).join("")}
+        <div class="row2"><div><label>Attribution</label><input class="search" data-cvf="attribution" value="${esc(cvVal("attribution") || "")}"></div>
+          <div><label>Band kicker</label><input class="search" data-cvf="band_kicker" value="${esc(cvVal("band_kicker") || "")}"></div></div>
+        <label>Band headline</label><input class="search" data-cvf="band_headline" value="${esc(cvVal("band_headline") || "")}">
+        <label>Subhead</label><input class="search" data-cvf="subhead" value="${esc(cvVal("subhead") || "")}">
+        <label>Teaser (shows on this stream's other covers)</label><input class="search" data-cvf="teaser" value="${esc(cvVal("teaser") || "")}">
+        <div class="row2"><div><label>Main face photo</label>${photoSel("cvPhoto", cvVal("photo"))}</div><div><label>Teaser photo</label>${photoSel("cvTeaserPhoto", cvVal("teaser_photo"))}</div></div>`
+        : `<label>Words (at most ${info.max_words})</label><input class="search" data-cvf="text" value="${esc(cvVal("text") || "")}">`}
+      <div style="display:flex;gap:6px;margin-top:6px"><button class="btn" id="cvPrev">Preview</button><button class="btn primary" id="cvSave" ${Object.keys(CV.changes).length ? "" : "disabled"}>Save and re-render</button></div>
+      <div class="f" style="font-size:11px;color:var(--faint)">Saving re-renders without model calls and re-attaches the cover in Kitsu${cvVal("teaser") !== CV.info.fields.teaser || "teaser_photo" in CV.changes ? "; a teaser change re-renders every cover of the stream" : ""}. An uploaded video's YouTube thumbnail isn't changed.</div>
+    </div></div>`;
+  wireCover();
+}
+function wireCover() {
+  const set = (k, v) => { CV.changes[k] = v; $("#cvSave").disabled = false; };
+  document.querySelectorAll("[data-cvhl]").forEach(el => el.addEventListener("input", () => set("headline", [...document.querySelectorAll("[data-cvhl]")].map(x => x.value).filter(x => x.trim()))));
+  document.querySelectorAll("[data-cvf]").forEach(el => el.addEventListener("input", () => set(el.dataset.cvf, el.value)));
+  $("#cvPhoto")?.addEventListener("change", e => set("photo", e.target.value));
+  $("#cvTeaserPhoto")?.addEventListener("change", e => set("teaser_photo", e.target.value));
+  $("#cvPrev").onclick = () => coverSend(true);
+  $("#cvSave").onclick = () => coverSend(false);
+  const wrap = $("#cvWrap"), box = $("#cvBox");
+  if (!wrap || !box) return;
+  box.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    const R = wrap.getBoundingClientRect(), b0 = { ...(cvVal(CV.box) || { x: 0.35, y: 0.2, width: 0.3, height: 0.4 }) };
+    const resize = e.target.dataset.resize !== undefined, x0 = e.clientX, y0 = e.clientY;
+    const move = ev => {
+      const dx = (ev.clientX - x0) / R.width, dy = (ev.clientY - y0) / R.height, b = { ...b0 };
+      if (resize) { b.width = Math.min(1 - b.x, Math.max(0.04, b0.width + dx)); b.height = Math.min(1 - b.y, Math.max(0.04, b0.height + dy)); }
+      else { b.x = Math.min(1 - b.width, Math.max(0, b0.x + dx)); b.y = Math.min(1 - b.height, Math.max(0, b0.y + dy)); }
+      Object.assign(box.style, { left: b.x * 100 + "%", top: b.y * 100 + "%", width: b.width * 100 + "%", height: b.height * 100 + "%" });
+      CV.changes[CV.box] = b;
+    };
+    const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); $("#cvSave").disabled = false; };
+    addEventListener("pointermove", move); addEventListener("pointerup", up);
+  });
+}
+async function coverSend(preview) {
+  const btn = preview ? $("#cvPrev") : $("#cvSave");
+  btn.disabled = true; btn.textContent = preview ? "Rendering…" : "Saving…";
+  try {
+    const r = await api("/api/cover", { ref: CV.ref, changes: CV.changes, preview });
+    if (preview) { CV.preview = r.url; renderCover(); return; }
+    if (r.row) upsert(r.row);
+    toast("Cover saved and re-rendered");
+    CV.info.cover_url = r.url; CV.preview = null;
+    Object.assign(CV.info.fields, CV.changes); CV.changes = {};
+    renderCover(); refresh();
+  } catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = preview ? "Preview" : "Save and re-render"; }
+}
+document.addEventListener("click", e => {
+  const c = e.target.closest?.("[data-cover]");
+  if (c) { showCover(c.dataset.cover); return; }
+  const f = e.target.closest?.("[data-cvframe]");
+  if (f && CV) {
+    const n = +f.dataset.cvframe;
+    if (e.shiftKey && CV.info.style === "enquirer") { CV.changes.inset_frame = n; CV.box = "inset_face"; }
+    else { CV.changes.frame = n; CV.box = "face"; }
+    renderCover(); return;
+  }
+  const bx = e.target.closest?.("[data-cvbox]");
+  if (bx && CV) { CV.box = bx.dataset.cvbox; renderCover(); }
+});
+$("#tool").addEventListener("close", () => { $("#tool").classList.remove("cover"); CV = null; });
 
 // ---------- Analytics (#42): the same numbers as `clipper analytics --report` ----------
 

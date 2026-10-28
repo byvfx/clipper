@@ -357,7 +357,13 @@ def overview(cfg: dict) -> dict:
                         "views": views.get(e.get("video_id") or "")})
     entries.sort(key=lambda e: e["publish_at"])
     sc = cfg["schedule"]
+    # #20: the next 14 days' open slots (drop targets) and the spacing rules the page checks.
+    taken = {e["publish_at"][:16] for e in entries}
+    free = [{"at": when.isoformat(), "kind": kind}
+            for when, kind in schedule.slots({**sc, "horizon_days": 14}, tz, now.date())
+            if when > now + timedelta(minutes=30) and when.isoformat()[:16] not in taken]
     return {"generated_at": now.isoformat(), "timezone": sc["timezone"],
+            "free_slots": free, "rules": {"max_per_day": sc["max_per_day"], "min_gap_minutes": sc["min_gap_minutes"]},
             "shows": [{"key": k, "name": for_stream_show_name(cfg, k), "channels": s["channels"]}
                       for k, s in _root(cfg)["shows"].items()],
             "counts": {**counts, "scheduled_7d": sum(
@@ -543,6 +549,45 @@ def do_action(cfg: dict, body: dict) -> dict:
         note = "clipper is working on the retake" if start_retake(cfg) else \
             "a retake run is going; this one is next"
     return {"row": row_json(item.stream_dir, row), "note": note, "undo": uid}
+
+
+# ---------- #18 cover editor ----------
+
+def cover_key(item: actions.Item) -> str:
+    from . import thumbs
+
+    return thumbs.video_key(item.stream_dir / item.state["file"].replace("\\", "/"))
+
+
+def cover_get(cfg: dict, ref: str) -> dict:
+    from . import thumbs
+
+    item = actions.resolve(cfg, checked_ref(ref))
+    sdir = item.stream_dir
+    info = thumbs.cover_info(sdir, cfg, cover_key(item))
+    for f in info["frames"]:
+        f["url"] = media_url(sdir, sdir / f.pop("path"))
+    jpg = (sdir / item.state["file"].replace("\\", "/")).with_suffix(".jpg")
+    info["cover_url"] = media_url(sdir, jpg) + f"?v={int(jpg.stat().st_mtime)}" if jpg.exists() else ""
+    return info
+
+
+def cover_post(cfg: dict, body: dict) -> dict:
+    from . import thumbs
+
+    item = actions.resolve(cfg, checked_ref(body.get("ref", "")))
+    sdir, preview = item.stream_dir, bool(body.get("preview"))
+    changes = body.get("changes") or {}
+    if not isinstance(changes, dict) or not changes:
+        raise SystemExit("nothing changed")
+    if preview:
+        jpg = thumbs.edit_cover(sdir, cfg, cover_key(item), changes, preview=True)
+        return {"url": media_url(sdir, jpg) + f"?v={int(time.time() * 1000)}"}
+    with LOCK:
+        jpg = thumbs.edit_cover(sdir, cfg, cover_key(item), changes)
+        (jpg.with_name("_preview.jpg")).unlink(missing_ok=True)
+        row = actions.describe(cfg, sdir)[item.key]
+    return {"row": row_json(sdir, row), "url": media_url(sdir, jpg) + f"?v={int(time.time() * 1000)}"}
 
 
 # ---------- #17 bulk actions, find and replace ----------
@@ -813,6 +858,8 @@ def make_handler(cfg: dict):
                     self.send_json(analytics_status(cfg, (qs.get("month") or [""])[0]))
                 elif u.path == "/api/undo":
                     self.send_json({"actions": recent_actions(cfg)})
+                elif u.path == "/api/cover":
+                    self.send_json(cover_get(cfg, (qs.get("ref") or [""])[0]))
                 elif u.path == "/api/search":
                     self.send_json(search_transcripts(cfg, (qs.get("q") or [""])[0]))
                 elif u.path.startswith("/media/"):
@@ -848,6 +895,8 @@ def make_handler(cfg: dict):
                     self.send_json(do_action(cfg, body))
                 elif u.path == "/api/undo":
                     self.send_json(do_undo(cfg, body.get("id", "")))
+                elif u.path == "/api/cover":
+                    self.send_json(cover_post(cfg, body))
                 elif u.path == "/api/bulk":
                     self.send_json(do_bulk(cfg, body))
                 elif u.path == "/api/replace":
