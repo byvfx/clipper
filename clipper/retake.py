@@ -357,7 +357,7 @@ def discord_message(cfg: dict, sdir: Path, text: str) -> None:
 
 def process(cfg: dict, sdir: Path, key: str, note: str, comment_id: str,
             dry_run: bool = False) -> dict:
-    from . import actions, notify, review
+    from . import actions, review
 
     cfg = for_stream(cfg, sdir)
     state = load(sdir / "review_state.json", {})
@@ -394,16 +394,36 @@ def process(cfg: dict, sdir: Path, key: str, note: str, comment_id: str,
         record(sdir, key, entry)
         print(f"  not applied: {msg}")
         return entry
+    # #75: recorded as handled now, before Kitsu and Discord: if they're down, the note isn't
+    # planned and re-cut again on every pass; finish_pending() retries what follows.
+    entry.update(result="applied", applied=done, publish="pending", videos=sorted(videos),
+                 unsupported=unsupported, summary=p.get("summary") or "", seconds=round(time.time() - t))
+    record(sdir, key, entry)
+    print(f"  applied: {'; '.join(done)} ({time.time() - t:.0f}s)")
+    publish_retake(cfg, sdir, key, entry)
+    return entry
+
+
+def publish_retake(cfg: dict, sdir: Path, key: str, entry: dict) -> None:
+    """The Kitsu revision, notes and Discord card for an applied retake; marks the entry done."""
+    from . import actions, notify, review
+
+    cfg = for_stream(cfg, sdir)
+    st = load(sdir / "review_state.json", {})[key]
+    short = f"{sdir.name}/{key.split('_')[0]}"
+    done, note, unsupported = entry["applied"], entry["comment"], entry.get("unsupported", "")
+    summary = entry.get("summary") or "; ".join(done)
+    gazu = review.connect(cfg["review"])
     before = st.get("revision")
     review.publish(sdir, cfg, notify=False)
     st = load(sdir / "review_state.json", {})[key]
-    text = (f"{review.NOTE_PREFIX} Retake applied: {p.get('summary') or '; '.join(done)}\n"
+    text = (f"{review.NOTE_PREFIX} Retake applied: {summary}\n"
             + "\n".join(f"- {d}" for d in done)
             + (f"\nNot done: {unsupported}" if unsupported else "") + f"\nNote: {note}")
     # A new revision is already waiting for approval; otherwise put it back there.
     actions._comment(gazu, actions.Item(sdir, key, st),
                      None if st.get("revision") != before else "wfa", text)
-    for k in videos:
+    for k in entry.get("videos", []):
         if k != key and k in load(sdir / "review_state.json", {}):
             actions._comment(gazu, actions.Item(sdir, k, load(sdir / "review_state.json", {})[k]),
                              None, f"{review.NOTE_PREFIX} Re-cut because {short} was trimmed "
@@ -411,13 +431,25 @@ def process(cfg: dict, sdir: Path, key: str, note: str, comment_id: str,
     review.sync(sdir, cfg, keys=[key], quiet=True)
     if cfg["discord"]["enabled"] and cfg["discord"]["review_channel_id"]:
         notify.post(sdir, cfg, keys=[key], force=True,
-                    note=f"🔁 **Retake** `{short}`: {p.get('summary') or '; '.join(done)}"
+                    note=f"🔁 **Retake** `{short}`: {summary}"
                          + (f"\nNot done: {unsupported}" if unsupported else ""))
-    entry.update(result="applied", applied=done, revision=st.get("revision"),
-                 seconds=round(time.time() - t))
-    record(sdir, key, entry)
-    print(f"  applied: {'; '.join(done)} -> rev {st.get('revision')} ({time.time() - t:.0f}s)")
-    return entry
+    with jsonstate.update(sdir / "retakes.json", {}) as data:
+        for h in data.get(key, []):
+            if h["comment_id"] == entry["comment_id"]:
+                h.update(publish="done", revision=st.get("revision"))
+    print(f"  {short}: in Kitsu as rev {st.get('revision')}")
+
+
+def finish_pending(cfg: dict) -> None:
+    """Retakes applied while Kitsu or Discord was down: publish them now (no new plan)."""
+    for d in review_dirs(cfg):
+        for key, hs in load(d / "retakes.json", {}).items():
+            for h in hs:
+                if h.get("publish") == "pending":
+                    try:
+                        publish_retake(cfg, d, key, h)
+                    except Exception as e:  # noqa: BLE001  # try again next run
+                        print(f"{d.name}/{key}: retake still not in Kitsu: {type(e).__name__}: {e}")
 
 
 # ---------- command ----------
@@ -469,6 +501,8 @@ def run(cfg: dict, stream: str | None = None, item: str | None = None,
                 except SystemExit as e:
                     print(f"{d.name}: not synced ({e})")
         todo = pending(root, stream)
+        if not dry_run:
+            finish_pending(root)
     if not todo:
         print("no retakes waiting")
         return []

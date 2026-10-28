@@ -266,13 +266,36 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
         lines.append("Playlists this episode's other videos already use (reuse the name for "
                      "the same subject): " + "; ".join(used))
     long_segs = [x for x in assets if x["kind"] == "segment" and duration(x) >= mc["chapters_min_s"]]
+    # #75: every call that succeeded is kept here until the drafts are written, so one failed
+    # chapters call doesn't throw away the big metadata call (or the other chapters).
+    ckpt = stream_dir / "metadata" / f".checkpoint_{mc['prompt_version']}.json"
+    ids = sorted(x["id"] for x in assets)
+    saved = jsonstate.read(ckpt) or {}
+    if saved.get("ids") != ids:
+        saved = {"ids": ids, "gen": None, "chapters": {}}
+    errors = []
     with ThreadPoolExecutor(mc["concurrency"]) as pool:
-        f_meta = pool.submit(claude.json_call, mc["model"], prompts.get("meta"),
-                             "\n\n".join(lines), META_SCHEMA, mc["effort"], True, True)
+        f_meta = None if saved["gen"] else pool.submit(
+            claude.json_call, mc["model"], prompts.get("meta"), "\n\n".join(lines), META_SCHEMA,
+            mc["effort"], True, True)
         f_ch = {x["id"]: pool.submit(segment_chapters, x, words, mc, claude, prompts)
-                for x in long_segs}
-        gen, _ = f_meta.result()
-        chapters = {k: f.result() for k, f in f_ch.items()}
+                for x in long_segs if x["id"] not in saved["chapters"]}
+        for k, f in f_ch.items():
+            try:
+                saved["chapters"][k] = f.result()
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"chapters {k}: {type(e).__name__}: {e}")
+        if f_meta:
+            try:
+                saved["gen"] = f_meta.result()[0]
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"metadata: {type(e).__name__}: {e}")
+    ckpt.parent.mkdir(parents=True, exist_ok=True)
+    jsonstate.write(ckpt, saved)
+    if errors:
+        raise SystemExit("meta: " + "; ".join(errors)[:600] + f"\n(what worked is kept in {ckpt.name}; "
+                         "rerun clipper meta to finish)")
+    gen, chapters = saved["gen"], dict(saved["chapters"])
     if gen is None:
         raise SystemExit("meta: model refused")
     by_id = {g["id"]: g for g in gen["assets"]}
@@ -318,6 +341,7 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
         x["video"].with_suffix(".srt").write_text(make_srt(words, x["parts"], mc, bleeper.mask),
                                                   encoding="utf-8")
         results.append(out)
+    ckpt.unlink(missing_ok=True)
 
     print(f"{len(results)} assets, {len(long_segs)} with transcript chapters; cost ${claude.cost:.3f}")
     for r in results:

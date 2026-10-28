@@ -113,6 +113,8 @@ def stage_args(stage: str, stream: str, wc: dict) -> list[str]:
         return ["review", "publish", stream] + ([] if wc["notify"] else ["--no-notify"])
     if stage == "clips":
         return ["cut", stream, "picks"]
+    if stage == "transcribe":  # the worker only runs it when it means to (not done, or forced)
+        return ["transcribe", stream, "--force"]
     if wc["fast_lane"]:
         if stage == "cut":
             return ["cut", stream, "segments", "compilations"]

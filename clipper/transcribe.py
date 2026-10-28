@@ -249,13 +249,14 @@ def run(stream_dir: Path, tc: dict, runs: Path | None = None) -> None:
 
 def write(stream_dir: Path, tc: dict, segments: list[dict], dur: float, t0: float,
           extra: dict | None = None) -> None:
-    (stream_dir / "transcript.json").write_text(
-        json.dumps({"model": tc["mlx_model"] if tc["backend"] == "mlx" else tc["model"],
-                    "backend": tc["backend"], "language": tc["language"], **(extra or {}),
-                    "segments": segments},
-                   ensure_ascii=False),
-        encoding="utf-8",
-    )
+    from . import jsonstate
+
+    # #75: both files appear whole or not at all; words.jsonl is the stage's done marker, so a
+    # half-written one would pass for a finished transcript.
+    jsonstate.write(stream_dir / "transcript.json",
+                    {"model": tc["mlx_model"] if tc["backend"] == "mlx" else tc["model"],
+                     "backend": tc["backend"], "language": tc["language"], **(extra or {}),
+                     "segments": segments}, indent=None)
 
     words = []
     for si, seg in enumerate(segments):
@@ -268,9 +269,8 @@ def write(stream_dir: Path, tc: dict, segments: list[dict], dur: float, t0: floa
                 "seg": si,
             })
     missing = fill_missing_times(words)
-    with open(stream_dir / "words.jsonl", "w", encoding="utf-8") as f:
-        for w in words:
-            f.write(json.dumps(w, ensure_ascii=False) + "\n")
+    jsonstate.write_text(stream_dir / "words.jsonl",
+                         "".join(json.dumps(w, ensure_ascii=False) + "\n" for w in words))
 
     total = time.time() - t0
     print(f"{len(segments)} segments, {len(words)} words ({missing} interpolated); "

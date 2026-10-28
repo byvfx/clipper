@@ -311,12 +311,20 @@ def stream_summary(stream_dir: Path, words: list[dict], n: int, cfg: dict,
         lines = transcript_lines(words, a, a + SUMMARY_BLOCK_S)
         if not lines:
             return {"start_s": a, "summary": "(no speech)"}
-        text, _ = claude.text_call(sc["model_a"], system, "\n".join(lines), sc["effort_a"])
-        return {"start_s": a, "summary": text}
+        try:
+            text, _ = claude.text_call(sc["model_a"], system, "\n".join(lines), sc["effort_a"])
+        except Exception as e:  # noqa: BLE001  # one bad block shouldn't sink the run
+            print(f"summary block {a}: {type(e).__name__}: {e}")
+            return {"start_s": a, "summary": "(unavailable)", "failed": True}
+        return {"start_s": a, "summary": text} if text else {"start_s": a, "summary": "(refused)", "failed": True}
 
     with ThreadPoolExecutor(sc["concurrency"]) as pool:
         blocks = list(pool.map(one, range(0, n, SUMMARY_BLOCK_S)))
-    jsonstate.write(path, blocks)
+    failed = sum(1 for b in blocks if b.pop("failed", False))
+    if failed:  # #75: not cached, so the next run asks for those blocks again
+        print(f"summary: {failed} block(s) failed; not cached")
+    else:
+        jsonstate.write(path, blocks)
     return blocks
 
 
@@ -338,13 +346,20 @@ def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
                                       sc["effort_a"])
         except Exception as e:  # noqa: BLE001  # one bad block shouldn't sink the scan
             print(f"scan block {a}: {type(e).__name__}: {e}")
-            return []
-        moments = (out or {}).get("moments", [])[:sc["scan_max_per_block"]]
+            return None
+        if out is None:
+            return None
+        moments = out.get("moments", [])[:sc["scan_max_per_block"]]
         return [m for m in moments if a - 60 <= m["start_s"] < m["end_s"] <= a + SUMMARY_BLOCK_S + 60]
 
     with ThreadPoolExecutor(sc["concurrency"]) as pool:
-        moments = [m for block in pool.map(one, range(0, n, SUMMARY_BLOCK_S)) for m in block]
-    jsonstate.write(path, moments)
+        blocks = list(pool.map(one, range(0, n, SUMMARY_BLOCK_S)))
+    moments = [m for block in blocks if block for m in block]
+    failed = sum(1 for b in blocks if b is None)
+    if failed:  # #75: not cached, so the next run scans those blocks again
+        print(f"scan: {failed} block(s) failed or refused; not cached")
+    else:
+        jsonstate.write(path, moments)
     return moments
 
 
@@ -410,8 +425,15 @@ def run_pass_a(windows: list[dict], words: list[dict], sig: dict, cfg: dict,
         if rec["status"] == "kept":
             lo = max(0, w["start_s"] - sc["lead_in_s"])
             span = [x for x in words if lo <= x["start"] < w["end_s"] + 30]
+            if not span:  # #75: music or a break with chat heat; nothing to snap to
+                return {**rec, "status": "error", "error": "no transcript words in the window"}
             for a, b in (("in_s", "out_s"), ("short_in_s", "short_out_s")):
                 rec[a], rec[b] = snap(span, out[a], "start"), snap(span, out[b], "end")
+            if rec["out_s"] <= rec["in_s"]:
+                return {**rec, "status": "error",
+                        "error": f"clip ends before it starts ({out['in_s']}-{out['out_s']})"}
+            if rec["short_out_s"] <= rec["short_in_s"]:  # the Short falls back to the clip
+                rec["short_in_s"], rec["short_out_s"] = rec["in_s"], rec["out_s"]
             rec["duration_s"] = round(rec["out_s"] - rec["in_s"], 2)
             rec["short_duration_s"] = round(rec["short_out_s"] - rec["short_in_s"], 2)
         return rec
@@ -478,6 +500,20 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
     preflight(claude, sc["model_a"])
     t0 = time.time()
     n = int(np.ceil(meta["duration_s"]))
+    # #75: Pass A is saved here before Pass B, so a Pass B failure (or a crash) doesn't mean
+    # paying for every window again; the next run re-asks only windows that errored.
+    ckpt = stream_dir / f"pass_a_{prompts.version}.json"
+    saved = jsonstate.read(ckpt)
+    if saved:
+        summary = stream_summary(stream_dir, words, n, cfg, claude, prompts)
+        redo = [r for r in saved["pass_a"] if r["status"] == "error"]
+        by_id = {w.get("id") or f"w{w['rank']:02d}": w for w in windows + saved.get("scan_windows", [])}
+        fresh = {r["id"]: r for r in run_pass_a([by_id[r["id"]] for r in redo if r["id"] in by_id],
+                                                words, sig, cfg, claude, prompts)}
+        results = [fresh.get(r["id"], r) for r in saved["pass_a"]]
+        print(f"Pass A from {ckpt.name} (saved before a failed run); {len(redo)} errored window(s) asked again")
+        return _finish(stream_dir, cfg, meta, prompts, claude, summary, words, results, ckpt, t0)
+    extra: list[dict] = []
     with ThreadPoolExecutor(3) as pool:
         f_sum = pool.submit(stream_summary, stream_dir, words, n, cfg, claude, prompts)
         f_scan = pool.submit(transcript_scan, stream_dir, words, n, cfg, claude, prompts) \
@@ -490,6 +526,14 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
                                  cfg["signals"]["chat_lag_s"])
             print(f"transcript scan: {len(moments)} moments, {len(extra)} new windows")
             results += run_pass_a(extra, words, sig, cfg, claude, prompts)
+    jsonstate.write(ckpt, {"prompt_version": prompts.version, "pass_a": results, "scan_windows": extra,
+                           "cost_usd": round(claude.cost, 4)})
+    return _finish(stream_dir, cfg, meta, prompts, claude, summary, words, results, ckpt, t0)
+
+
+def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: Claude,
+            summary: list[dict], words: list[dict], results: list[dict], ckpt: Path, t0: float) -> dict:
+    """Pass B over the kept Pass A results, then candidates.json (the stage's done marker)."""
     kept = [r for r in results if r["status"] == "kept"]
     counts = {s: sum(r["status"] == s for r in results)
               for s in ("kept", "no_clip", "rejected", "refused", "error")}
@@ -501,6 +545,7 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
            "prompt_version": prompts.version, "cost_usd": round(claude.cost, 4),
            "pass_a": results, "pass_b": pass_b}
     jsonstate.write(stream_dir / "candidates.json", out)
+    ckpt.unlink(missing_ok=True)
 
     by_id = {r["id"]: r for r in results}
     print(f"Pass B: {len(pass_b.get('picks', []))} picks; cost ${claude.cost:.3f}")

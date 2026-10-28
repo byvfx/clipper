@@ -1146,10 +1146,24 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
                 "model": tc["model"], "prompt_version": prompts.version,
                 **({"feedback": note} if note else {})}
 
+        def safe(x: dict) -> tuple[str, dict | None]:
+            try:
+                return one(x)
+            except Exception as e:  # noqa: BLE001  # #75: one bad grab can't cost the others' picks
+                print(f"{x['id']:<22} failed: {type(e).__name__}: {e}", flush=True)
+                return asset_key(x), None
+
+        failed = []
         with ThreadPoolExecutor(tc["concurrency"]) as pool:
-            for key, entry in pool.map(one, todo):
+            for key, entry in pool.map(safe, todo):
+                if entry is None:
+                    failed.append(key)
+                    continue
                 state[key] = entry  # each paid pick is kept as soon as it's made
                 state = jsonstate.merge(state_path, state, [key])
+        if failed:
+            raise SystemExit(f"thumbnails failed for {', '.join(failed)}; the other picks are saved, "
+                             "rerun clipper thumbs for these")
 
     tc_enq, date, own_band = enquirer_setup(stream_dir, cfg, tc)
     results = []

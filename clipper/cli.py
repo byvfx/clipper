@@ -178,6 +178,8 @@ def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
         raise SystemExit("clipper transcribe <stream>, or --deploy")
     sdir = stream_dir(cfg, args.stream)
     scfg = config.for_stream(cfg, sdir)
+    if (sdir / "words.jsonl").exists() and not args.force:  # #75: a GPU or Modal job already paid for
+        raise SystemExit(f"{sdir.name} is transcribed already (words.jsonl); --force to do it again")
     transcribe.run(sdir, scfg["transcribe"], cfg["paths"]["modal_runs"])
     if (sdir / "diarization.json").exists():
         from . import speakers
@@ -563,6 +565,7 @@ def main() -> None:
     p.add_argument("stream", nargs="?", help="stream id under paths.streams, or a stream dir")
     p.add_argument("--deploy", action="store_true",
                    help="deploy the Modal app for [transcribe] backend = \"modal\"")
+    p.add_argument("--force", action="store_true", help="transcribe again over an existing words.jsonl")
     p.set_defaults(fn=cmd_transcribe)
 
     p = sub.add_parser("speakers", help="name the diarized speakers (enrolled voices), fill words.jsonl speaker")
