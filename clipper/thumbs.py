@@ -965,6 +965,8 @@ def enquirer_setup(stream_dir: Path, cfg: dict, tc: dict) -> tuple[dict, str, st
     smeta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
     started = smeta.get("started_at", "")
     own_band = ""
+    if smeta.get("kind") == "preshow" and cfg["preshow"].get("teasers") is not None:
+        tc = {**tc, "teasers": cfg["preshow"]["teasers"]}  # e.g. one story on every pre-show cover
     try:
         from datetime import datetime
         from zoneinfo import ZoneInfo

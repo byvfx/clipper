@@ -256,6 +256,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "trim_end_s": 3.0,        # drop this much off the end (2026-10-23, user); 0 = whole video
         "publish": "asap",        # asap: out as soon as it is approved and uploaded | slots
         "band": "Pre-show {date}!",  # cover's green band ({date} = M/D aired); "" = the model's line
+        "teasers": None,          # cover's side boxes; false = one story fills it; None = as [thumbnail]
         "playlist": "{show} Pre-shows",  # YouTube playlist for every pre-show; "" = the model's pick
         "credit": "The {show} pre-show from {date}, first posted on their YouTube channel: {url}",
     },

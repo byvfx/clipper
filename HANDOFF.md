@@ -41,7 +41,8 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 - Kitsu is the record for review/edits (no separate DB). Discord approvals must keep working.
 - Thumbnails: `[thumbnail] style = "enquirer"` (1990s tabloid: KINO CASINO masthead, no "THE NEW" roundel,
   no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v3` (face = headline
-  subject; may use `[thumbnail] photos` portraits for people not on screen).
+  subject; may use `[thumbnail] photos` portraits for people not on screen). Pre-show covers are one
+  story, no side boxes (`[preshow] teasers = false`, user 2026-10-28: "single issue for preshows").
 - Never use the word "hosts" in viewer-facing text (was "rarely" until 2026-10-20) → `[scoring] house_style` rules, appended to all viewer-facing prompts.
   Put future style notes there. Co-hosts are **Andy (Warski)** and **PPP**. Never call PPP by any other name (user,
   2026-10-19; Kick bio says "Andy Warski and PPP"). Who-looks-like-what is in [shows.kino.scoring] stream_context.
@@ -108,7 +109,9 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   hosts-only re-renders, the kick-132733064 clock-fix republish, kick-131151926's recut items.
   Approved-and-scheduled Shorts that a scene re-render would change (v06_w11, v03_w06, v03_t23) are
   left alone until the user says.
-- Review today's Kino pre-show (yt-hB61VKYaOQ0, 10/28) in Kitsu/Discord; it publishes asap once approved.
+- Review today's Kino pre-show (yt-hB61VKYaOQ0, 10/28) in Kitsu/Discord, rev 3 (whole video, original
+  text, single-story cover "ANDY STUNNED BY H3!"); it publishes asap once approved. Rev 2 was the
+  retake reading "single issue" as one topic (cut to 63 s); undone by hand with retake.apply.
   (Stuck 12:53-15:00 on stale cookies; fresh export copied over secrets/youtube_cookies.txt, old one in
   youtube_cookies.before_2026-10-28.txt. A new export saved under another name isn't read: copy it over.)
 - Content ID: all five pre-show/one-off uploads checked in Studio 2026-10-28, no claims, no region
@@ -197,7 +200,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   to restart the bot, also stop the old bot-supervisor.ps1 powershell and its clipper.exe children.
 - schedule: a compilation approved as its own Kitsu item needs segment_keys (fixed 2026-10-18).
 - The bot runs `schedule.run` in-process (replan after a decision): scheduler changes need a bot restart.
-- Retake planner can't edit cover layout; a note about the cover's boxes comes back "unsupported".
+- Retake planner can't edit cover layout; a note about the cover's boxes comes back "unsupported",
+  or worse, gets read as an edit it can make ("single issue" became a 63 s trim, 10-28). A layout
+  rule belongs in config; undo a bad retake with `retake.apply` + `publish_retake` and a hand plan.
 - A recording with dropped HLS segments used to shift the transcript clock (kick-132733064, 46.9 s);
   `extract_audio` now fills gaps with silence. Check new recorders' gaps against the source length.
 - Discord review cards carry only the first 60 s of a segment; the full preview is in Kitsu. A reject

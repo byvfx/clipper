@@ -87,6 +87,7 @@ trim_end_s = 3.0           # seconds dropped off the end of each pre-show; 0 = t
 oneoff_prompt_version = "v1"   # prompts/oneoff_<v>.md: `preshow fetch --from/--to/--about`, one stretch of any video
 publish = "asap"           # asap: approved -> next `clipper upload` publishes it at once | slots
 band = "Pre-show {date}!"  # the cover's green band, {date} = M/D; "" = the model's own line
+# teasers = false          # pre-show covers: one story, no side boxes (unset = as [thumbnail] teasers)
 playlist = "{show} Pre-shows"   # one playlist for all of them; "" = the model's pick
 credit = "The {show} pre-show from {date}, first posted on their YouTube channel: {url}"
 

@@ -69,6 +69,7 @@ stage asks the model for the exact start and end inside that window (prompts/one
 long segment comes out, not the whole video. A show that is not on Kick gets a placeholder
 channel in its `[shows.<key>]` table. `[thumbnail] teasers = false` (per show) drops the
 cover's three side boxes so the photo fills the left: one big moment, no other stories to plug.
+`[preshow] teasers = false` does the same for every pre-show and one-off cover only.
 
 **Weekly issue.** `clipper weekly` turns the week's streams (Sun-Sat) into *Lolcow Cinema
 Weekly*, a ten-page tabloid for a TikTok carousel or two YouTube Posts: a cover, contents,
