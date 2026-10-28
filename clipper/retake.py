@@ -509,6 +509,7 @@ def run(cfg: dict, stream: str | None = None, item: str | None = None,
     out = []
     with Lock(root):
         for sdir, key, r in todo[:root["retake"]["max_per_run"]]:
+            os.utime(Lock(root).path)  # #77 L1: still running; a long run's lock isn't stale
             try:
                 out.append(process(root, sdir, key, r["comment"], note_id(r), dry_run))
             except Exception as e:  # noqa: BLE001 - one bad item shouldn't stop the rest

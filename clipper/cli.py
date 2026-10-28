@@ -434,6 +434,10 @@ def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
     worker.setup_logging()
     stages = None
     if args.only or args.from_:
+        if args.from_ and args.from_ not in worker.STAGES:  # #77 L14
+            raise SystemExit(f"run: unknown stage {args.from_!r}; stages: {', '.join(worker.STAGES)}")
+        if args.only and args.from_:
+            raise SystemExit("run: --only or --from, not both")
         stages = args.only.split(",") if args.only else worker.STAGES[worker.STAGES.index(args.from_):]
         bad = set(stages) - set(worker.STAGES)
         if bad:

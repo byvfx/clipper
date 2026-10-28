@@ -638,13 +638,23 @@ DEFAULTS: dict[str, dict[str, Any]] = {
 }
 
 
-def _coerce(raw: str, like: Any) -> Any:
-    if isinstance(like, bool):
-        return raw.lower() in ("1", "true", "yes", "on")
-    if isinstance(like, int):
-        return int(raw)
-    if isinstance(like, float):
-        return float(raw)
+def _coerce(raw: str, like: Any, name: str = "") -> Any:
+    """An env var's text as the default's type. Lists take "a,b" or "a b" (or JSON); tables
+    take JSON (#77 L9)."""
+    try:
+        if isinstance(like, bool):
+            return raw.lower() in ("1", "true", "yes", "on")
+        if isinstance(like, int):
+            return int(raw)
+        if isinstance(like, float):
+            return float(raw)
+        if isinstance(like, list):
+            raw = raw.strip()
+            return json.loads(raw) if raw.startswith("[") else raw.replace(",", " ").split()
+        if isinstance(like, dict):
+            return json.loads(raw)
+    except ValueError as e:
+        raise SystemExit(f"{name or 'environment variable'}={raw!r}: not a {type(like).__name__} ({e})") from None
     return raw
 
 
@@ -668,9 +678,10 @@ def _apply_env(cfg: dict, only: set[str] | None = None) -> None:
         if only is not None and section not in only:
             continue
         for key, value in values.items():
-            env = os.environ.get(f"CLIPPER_{section}_{key}".upper())
+            name = f"CLIPPER_{section}_{key}".upper()
+            env = os.environ.get(name)
             if env is not None:
-                values[key] = _coerce(env, value)
+                values[key] = _coerce(env, value, name)
 
 
 def _resolve_paths(paths: dict, base: Path, keys=None) -> None:

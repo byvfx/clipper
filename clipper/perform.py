@@ -202,13 +202,23 @@ def lipsync_sync(video: Path, audio_wav: Path, pc: dict) -> bytes:
         raise SystemExit(f"Sync: HTTP {r.status_code}: {r.text[:300]}")
     gid = r.json()["id"]
     t0 = time.time()
-    while True:
+    errors = 0
+    while True:  # #77 M13: a network blip doesn't lose the paid job; it's never polled forever
         time.sleep(10)
-        s = requests.get(f"https://api.sync.so/v2/generate/{gid}", headers=h, timeout=60).json()
+        if time.time() - t0 > 3600:
+            raise SystemExit(f"Sync job {gid} still not done after an hour; check sync.so")
+        try:
+            s = requests.get(f"https://api.sync.so/v2/generate/{gid}", headers=h, timeout=60).json()
+        except (requests.RequestException, ValueError) as e:
+            errors += 1
+            if errors >= 10:
+                raise SystemExit(f"Sync job {gid}: polling failed 10 times ({e}); check sync.so") from None
+            continue
+        errors = 0
         if s.get("status") == "COMPLETED":
             print(f"Sync {pc['sync_model']}: {time.time() - t0:.0f} s")
             return requests.get(s["outputUrl"], timeout=600).content
-        if s.get("status") in ("FAILED", "REJECTED"):
+        if s.get("status") in ("FAILED", "REJECTED", "CANCELED", "CANCELLED"):
             raise SystemExit(f"Sync {s.get('status')}: {s.get('errorCode')} {s.get('error')}")
 
 

@@ -574,10 +574,32 @@ def check_tailnet(cfg: dict, offline: bool) -> None:
              "is the bot (or clipper warroom) running here?")
 
 
+def check_role_settings(cfg: dict, role: str) -> None:
+    """Settings whose absence makes a role exit at start (#77 L12)."""
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    try:
+        ZoneInfo(cfg["schedule"]["timezone"])
+        ok("config", f"[schedule] timezone {cfg['schedule']['timezone']}")
+    except (ZoneInfoNotFoundError, ValueError):
+        fail("config", f"[schedule] timezone {cfg['schedule']['timezone']!r} isn't a time zone",
+             'an IANA name, e.g. "America/Los_Angeles"')
+    dc = cfg["discord"]
+    if role in ("all", "bot") and dc.get("enabled", True):
+        for k in ("guild_id", "allowed_user_ids"):
+            (ok if dc.get(k) else fail)("config", f"[discord] {k}" + (" set" if dc.get(k) else " not set"),
+                                        "" if dc.get(k) else "the bot refuses to start without it; see SETUP")
+    if role in ("all", "nas"):
+        chans = cfg["record"].get("channels")
+        (ok if chans else warn)("config", "[record] channels " + ("set" if chans else "empty: the recorder has nothing to watch"),
+                                "" if chans else "add the Kick channel slugs to record")
+
+
 def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     RESULTS.clear()
     check_python()
     check_config(cfg)
+    check_role_settings(cfg, role)
     if role != "nas":
         check_prompts(cfg)
     check_ffmpeg(cfg, role)

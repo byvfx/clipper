@@ -55,9 +55,13 @@ class RateLimiter:
             self.next_at = max(self.next_at, time.monotonic() + pause)
 
 
+THROTTLED_MAX_S = 900  # one request throttled this long is a blocked IP
+
+
 def _get(url: str, ua: str, limiter: RateLimiter | None = None) -> Any:
     req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept": "application/json"})
     errors = 0
+    t0 = time.monotonic()
     while True:
         if limiter:
             limiter.wait()
@@ -75,7 +79,9 @@ def _get(url: str, ua: str, limiter: RateLimiter | None = None) -> Any:
                     limiter.throttled(pause)
                 else:
                     time.sleep(pause)
-                continue  # throttling is expected; retry without limit
+                if time.monotonic() - t0 > THROTTLED_MAX_S:  # #77 L8: a ban, not throttling
+                    raise RuntimeError(f"Kick kept answering 429 for {THROTTLED_MAX_S // 60} min: {url}") from None
+                continue  # throttling is expected; retry
             if e.code not in (500, 502, 503, 504):
                 raise
         except (urllib.error.URLError, TimeoutError):

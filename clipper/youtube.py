@@ -193,8 +193,12 @@ def source_parents(cfg: dict, e: dict, entries: list[dict], cache: dict) -> list
                     out.append(("clip_source", p, int(c["in_s"] - a)))
                     break
         return out
-    out += [("segment_source", mine[("compilation", cid)], 0) for cid, ids in comps.items()
-            if e["id"] in ids and ("compilation", cid) in mine]
+    # A compilation that's a Kitsu item has id comp-<stem>; one scheduled from its draft
+    # alone has its topic as id, so match those on the key too (#77 M3).
+    by_key = {x["key"].split("/", 1)[1]: x for x in entries
+              if x["stream"] == e["stream"] and x["kind"] == "compilation"}
+    out += [("segment_source", p, 0) for cid, ids in comps.items()
+            if e["id"] in ids and (p := mine.get(("compilation", cid)) or by_key.get(cid))]
     if yc["part_links"]:  # the nearest scheduled segment either side (intros etc. have none)
         listed = [s["id"] for s in segs if ("segment", s["id"]) in mine]
         i = listed.index(e["id"]) if e["id"] in listed else -1
@@ -608,49 +612,81 @@ def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: i
     yt = service(paths)
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
     playlists = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+    failed = 0
     for e in due:
-        m = metadata(e, cfg)
-        parents = source_parents(cfg, e, sched["entries"], sources)
-        links = source_links(cfg, e, parents, privacy(yt, [p.get("video_id") for _, p, _ in parents])
-                             if parents else {})
-        m["description"] = clean(with_links(m["description"], "", links), 5000)
-        publish_utc = datetime.fromisoformat(e["publish_at"]).astimezone(UTC)
-        at_once = publish_utc <= datetime.now(UTC) + timedelta(minutes=yc["min_lead_minutes"])
-        slot = f"{publish_utc.astimezone(tz):%a %m-%d %H:%M}"
-        if yc["manual_publish"]:  # stays private; you make it public in YouTube Studio
-            status, when = {"privacyStatus": "private"}, f"private, publish in Studio {'now' if at_once else slot}"
-        elif at_once:
-            status, when = {"privacyStatus": "public"}, "public now"
-        else:
-            status, when = {"privacyStatus": "private",
-                            "publishAt": publish_utc.strftime("%Y-%m-%dT%H:%M:%SZ")}, slot
-        body = {
-            "snippet": {"title": m["title"], "description": m["description"], "tags": m["tags"],
-                        "categoryId": yc["category_id"], "defaultLanguage": yc["language"],
-                        "defaultAudioLanguage": yc["language"]},
-            "status": {**status, "selfDeclaredMadeForKids": yc["made_for_kids"]},
-        }
-        print(f"uploading {e['key']} -> {when}: {m['title']}",
-              flush=True)
-        t = time.time()
-        vid = upload_video(yt, Path(e["file"]), body, yc["notify_subscribers"])
-        url = f"https://youtu.be/{vid}"
-        # Record the upload before the optional extras, so a failure there can't
-        # make the next run upload the same video twice.
-        done = {"status": "uploaded", "video_id": vid, "url": url,
-                "uploaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
-                "source_links": links}
-        e.update(done)
-        # Re-read under the lock: a replan or `clipper rumble` may have written meanwhile.
-        with jsonstate.update(sched_path) as fresh:
-            mine = next((x for x in fresh["entries"] if x["key"] == e["key"]), None)
-            if mine:
-                mine.update(done)
-            else:  # replanned away meanwhile; the upload must still be on record
-                fresh["entries"].append(e)
-        print(f"  {url} ({time.time() - t:.0f}s)" + (f", links {links!r}" if links else ""), flush=True)
-        finish(yt, cfg, e, m, vid, playlists, cache_path, sched_path)
+        # #77 M5: one bad entry (a missing file, a refused upload) no longer blocks every
+        # later one each hour; it's noted on the entry and the run moves on. A quota or daily
+        # limit refusal stops the run, since everything after would fail the same way.
+        try:
+            upload_one(cfg, yt, e, sched, sched_path, sources, playlists, cache_path, tz)
+        except Exception as ex:  # noqa: BLE001
+            reason = getattr(ex, "reason", "") or ""
+            text = f"{type(ex).__name__}: {ex}"[:300]
+            print(f"  FAILED {e['key']}: {text}", flush=True)
+            mark(sched_path, e["key"], last_error=text,
+                 last_error_at=datetime.now(UTC).isoformat(timespec="seconds"))
+            failed += 1
+            if any(s in f"{reason} {ex}" for s in ("quotaExceeded", "uploadLimitExceeded", "dailyLimitExceeded")):
+                print("  YouTube's quota or upload limit: stopping this run", flush=True)
+                break
+    if failed:
+        print(f"{failed} upload(s) failed; the error is on their schedule.json entries")
     return yt
+
+
+def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: dict,
+               playlists: dict, cache_path: Path, tz) -> None:
+    # #77 M6: a show's [shows.<key>.youtube] (manual_publish, notify_subscribers, captions,
+    # made_for_kids, playlist_privacy...) applies to its uploads.
+    cfg = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])
+    yc = cfg["youtube"]
+    if not Path(e["file"]).exists():
+        raise FileNotFoundError(f"no video file {e['file']}")
+    m = metadata(e, cfg)
+    parents = source_parents(cfg, e, sched["entries"], sources)
+    links = source_links(cfg, e, parents, privacy(yt, [p.get("video_id") for _, p, _ in parents])
+                         if parents else {})
+    m["description"] = clean(with_links(m["description"], "", links), 5000)
+    publish_utc = datetime.fromisoformat(e["publish_at"]).astimezone(UTC)
+    at_once = publish_utc <= datetime.now(UTC) + timedelta(minutes=yc["min_lead_minutes"])
+    slot = f"{publish_utc.astimezone(tz):%a %m-%d %H:%M}"
+    if yc["manual_publish"]:  # stays private; you make it public in YouTube Studio
+        status, when = {"privacyStatus": "private"}, f"private, publish in Studio {'now' if at_once else slot}"
+    elif at_once:
+        status, when = {"privacyStatus": "public"}, "public now"
+    else:
+        status, when = {"privacyStatus": "private",
+                        "publishAt": publish_utc.strftime("%Y-%m-%dT%H:%M:%SZ")}, slot
+    body = {
+        "snippet": {"title": m["title"], "description": m["description"], "tags": m["tags"],
+                    "categoryId": yc["category_id"], "defaultLanguage": yc["language"],
+                    "defaultAudioLanguage": yc["language"]},
+        "status": {**status, "selfDeclaredMadeForKids": yc["made_for_kids"]},
+    }
+    print(f"uploading {e['key']} -> {when}: {m['title']}",
+          flush=True)
+    t = time.time()
+    vid = upload_video(yt, Path(e["file"]), body, yc["notify_subscribers"])
+    url = f"https://youtu.be/{vid}"
+    # Record the upload before the optional extras, so a failure there can't
+    # make the next run upload the same video twice.
+    done = {"status": "uploaded", "video_id": vid, "url": url,
+            "uploaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "source_links": links}
+    e.update(done)
+    # Re-read under the lock: a replan or `clipper rumble` may have written meanwhile.
+    with jsonstate.update(sched_path) as fresh:
+        mine = next((x for x in fresh["entries"] if x["key"] == e["key"]), None)
+        if mine:
+            mine.update(done)
+        else:  # replanned away meanwhile; the upload must still be on record
+            fresh["entries"].append(e)
+        for x in fresh["entries"]:  # a retry that worked clears the last failure
+            if x["key"] == e["key"]:
+                x.pop("last_error", None)
+                x.pop("last_error_at", None)
+    print(f"  {url} ({time.time() - t:.0f}s)" + (f", links {links!r}" if links else ""), flush=True)
+    finish(yt, cfg, e, m, vid, playlists, cache_path, sched_path)
 
 
 # ---------- videos uploaded by hand ----------

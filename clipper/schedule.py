@@ -207,6 +207,9 @@ def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc:
                              "id": it["id"], "title": it["title"], "file": it["file"],
                              "publish_at": when.isoformat(), "source": source,
                              "status": old.get(it["key"], {}).get("status", "scheduled"),
+                             # the last upload failure (youtube.upload_one) until one works
+                             **{k: old[it["key"]][k] for k in ("last_error", "last_error_at")
+                                if k in old.get(it["key"], {})},
                              **({"platforms": platforms[it["key"]]} if it["key"] in platforms else {})}
 
     # 0. Already on YouTube: fixed there, so kept exactly as recorded (with its video id),
@@ -229,6 +232,9 @@ def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc:
         if it["override_text"] and not when:
             skipped.append({"key": it["key"], "reason": f"bad Publish at {it['override_text']!r}"})
             it["bad"] = True
+        elif when and when <= now:  # #77 M7: a pin that has passed would sit there forever
+            print(f"  note: {it['key']} was pinned for {when:%a %m-%d %H:%M}, which has passed: "
+                  "it takes the next free slot (clear or change Publish at in Kitsu)")
         elif when:
             if not fits(when, taken, sc):
                 print(f"  note: {it['key']} pinned at {when:%a %m-%d %H:%M} breaks the spacing rules")

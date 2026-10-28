@@ -311,6 +311,7 @@ class Recording:
 
     def _video(self) -> None:
         media, fails, alerted, saved = None, 0, False, time.monotonic()
+        began = _now()  # #77 M10: a stream that never sends a segment still counts as stalled
         out = None
         # A segment that fails to download stays in the live playlist for a while: hold the
         # line there (later segments wait, so the part stays in order) and retry it on the
@@ -330,7 +331,7 @@ class Recording:
                     fails += 1
                     if fails >= 3:
                         media = None   # re-resolve: token expired or stream restarted
-                    stalled = _now() - (self.st.last_seen or _now())
+                    stalled = _now() - (self.st.last_seen or began)
                     if stalled > self.rc["stall_alert_s"] and not alerted:
                         self.alert(f"{self.st.stream_id}: no video for {stalled:.0f} s ({e})")
                         alerted = True
@@ -846,7 +847,7 @@ class Watcher:
                 if ls["id"] not in rec.st.sessions:
                     rec.st.sessions.append(ls["id"])  # restarted under our feet
                 rec.st.title = ls.get("session_title") or rec.st.title
-            elif not live and active and now - (rec.last_seen or now) > 20:
+            elif not live and active and now - (rec.last_seen or self.started_at.get(slug, now)) > 20:
                 log.info("%s: offline; waiting %d s for a restart", slug, c["end_grace_s"])
                 rec.pause()
                 self.paused_at[slug] = now
