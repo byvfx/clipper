@@ -53,7 +53,7 @@ Project memory (`~/.claude/projects/C--clipper/memory/`) has the details; read M
 - **#77 (66cb868), the main items:** per-entry upload errors (last_error on the entry, kept
   across replans; quota/limit stops the run), per-show [youtube] overrides at upload, past
   "Publish at" pins take the next slot, draft-only compilation links, recorder stall/offline
-  without a first segment (**needs `bash deploy/record/deploy.sh` when no show is live**),
+  without a first segment (deployed to the NAS 2026-10-28 11:05, nothing live; container healthy),
   sync.so polling bounded, Kick 429s capped at 15 min, list/dict env overrides, run --from
   errors, retake lock refresh, doctor checks timezone/discord ids/record channels. Still open on
   #77: M12 quota tracking, L6, L10, L11, L13, L16-L18, repo hygiene.
