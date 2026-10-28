@@ -217,4 +217,25 @@ def digest(cfg: dict, now: datetime | None = None) -> str:
     failed = [s["id"] for s in ov["streams"] if s["run_status"] == "failed"]
     if failed:
         lines.append(f"Streams stuck on a failed stage: {', '.join(failed)}")
+    lines += related_lines(cfg, now)
     return "\n".join(lines)
+
+
+def related_lines(cfg: dict, now: datetime, show: int = 5) -> list[str]:
+    """Shorts whose segment is out but whose related video isn't set yet (Studio only)."""
+    from . import youtube
+
+    try:
+        sched = json.loads(cfg["paths"]["schedule"].read_text(encoding="utf-8"))
+        todo = youtube.related_todo(cfg, sched, now)
+    except (OSError, ValueError, KeyError) as e:  # the digest still goes out without this part
+        log.warning("digest related videos: %s: %s", type(e).__name__, e)
+        return []
+    if not todo:
+        return []
+    lines = [f"Shorts to link to their segment (Studio, Related video): {len(todo)}"]
+    lines += [f"  <https://studio.youtube.com/video/{e['video_id']}/edit> → search {p['video_id']}"
+              for e, p in todo[:show]]
+    if len(todo) > show:
+        lines.append(f"  +{len(todo) - show} more: clipper upload --related")
+    return lines + ["  Then: clipper upload --related <keys or links>"]

@@ -28,6 +28,11 @@ file in Studio (private, no details), then `clipper upload --attach <item> <link
 the title, description and tags, adds thumbnail, captions, playlist and Kitsu link, and
 records it as uploaded so it never goes up twice.
 
+A Short's "related video" (the link under it to the longer video) can only be set in Studio:
+`clipper upload --related` lists uploaded Shorts whose segment is out, with the Studio link
+and the segment's id to search for; `--related ITEM ...` records them as done (the daily
+digest lists the same).
+
 Publishing through the API (public, or private with publishAt) worked on this Cloud project
 before any API audit (2026-10-20). [youtube] max_per_24h keeps every run together under the
 channel's daily upload cap; with auto_upload_minutes the bot replans and uploads on a timer.
@@ -207,6 +212,60 @@ def source_parents(cfg: dict, e: dict, entries: list[dict], cache: dict) -> list
         if 0 <= i < len(listed) - 1:
             out.append(("next_part", mine[("segment", listed[i + 1])], 0))
     return out
+
+
+def short_segment(cfg: dict, e: dict, entries: list[dict], cache: dict) -> dict | None:
+    """The scheduled segment a Short's moment falls in (its sidecar's in_s), if any."""
+    sdir = cfg["paths"]["streams"] / e["stream"]
+    side = sdir / "shorts" / f"{Path(e['file']).stem}.json"
+    if not side.exists():
+        return None
+    in_s = json.loads(side.read_text(encoding="utf-8"))["in_s"]
+    segs, _ = stream_sources(sdir, cache)
+    s = next((s for s in segs if s.get("cut_start_s", s["start_s"]) <= in_s < s["end_s"]), None)
+    return s and next((x for x in entries if x["stream"] == e["stream"]
+                       and x["kind"] == "segment" and x["id"] == s["id"]), None)
+
+
+def related_todo(cfg: dict, sched: dict, now: datetime | None = None) -> list[tuple[dict, dict]]:
+    """(Short, segment) for each uploaded Short with no related video recorded whose segment
+    is up and past its release time. Reads files only, no quota."""
+    now, cache, out = now or datetime.now(UTC), {}, []
+    for e in sched["entries"]:
+        if e["kind"] != "short" or e.get("status") != "uploaded" or e.get("related_video"):
+            continue
+        p = short_segment(cfg, e, sched["entries"], cache)
+        if p and p.get("status") == "uploaded" and p.get("video_id") and (
+                not p.get("publish_at") or datetime.fromisoformat(p["publish_at"]) <= now):
+            out.append((e, p))
+    return out
+
+
+def related(cfg: dict, refs: list[str]) -> None:
+    """No refs: print the Shorts waiting for a related video. With refs (schedule keys or
+    the Shorts' links): record their segment as set, after you set it in Studio."""
+    sched_path: Path = cfg["paths"]["schedule"]
+    sched = json.loads(sched_path.read_text(encoding="utf-8"))
+    todo = related_todo(cfg, sched)
+    if not refs:
+        print(f"{len(todo)} Shorts need their related video set in Studio")
+        for e, p in todo:
+            print(f"  {e['key']}  https://studio.youtube.com/video/{e['video_id']}/edit\n"
+                  f"    related video: search {p['video_id']}  ({p['title'][:70]})")
+        return
+    cache, today = {}, datetime.now(UTC).date().isoformat()
+    for ref in refs:
+        e = next((x for x in sched["entries"] if x["key"] == ref), None)
+        if not e:
+            vid = video_id(ref)
+            e = next((x for x in sched["entries"] if x.get("video_id") == vid), None)
+        if not e or e["kind"] != "short":
+            raise SystemExit(f"{ref}: no uploaded Short with that key or link")
+        p = short_segment(cfg, e, sched["entries"], cache)
+        if not p or not p.get("video_id"):
+            raise SystemExit(f"{e['key']}: its segment isn't on YouTube, nothing to record")
+        mark(sched_path, e["key"], related_video=p["video_id"], related_set_at=today)
+        print(f"{e['key']} -> {p['video_id']} ({p['title'][:70]})")
 
 
 def privacy(yt, ids) -> dict[str, dict]:

@@ -35,6 +35,10 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
   Descriptions link to the longer video each one comes from (a clip to its segment at the clip's
   offset, a segment to its compilation) once that video is public; every upload run adds the link
   to videos already up when their longer video goes public (`[youtube] source_links`).
+  A Short's "related video" (the link under it to its segment) can only be set in Studio:
+  `clipper upload --related` lists the uploaded Shorts whose segment is out, with the Studio link
+  and the segment id to search for, and `clipper upload --related <keys or links>` records the
+  ones you set. The daily digest lists them too.
 - **pick**: Shorts from a stretch you name, when you watched the show and know where the good bits are:
   `clipper pick <stream> --from 4:05:00 --to 4:25:00 --about "the Quartering bit"` (or `--at 4:50:00`, or
   only `--about`, which searches the stream's summary first; `--find <word>` lists transcript lines for free).

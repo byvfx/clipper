@@ -366,6 +366,9 @@ def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
     if args.attach:
         youtube.attach(cfg, args.attach[0], args.attach[1], dry_run=args.dry_run)
         return
+    if args.related is not None:
+        youtube.related(cfg, args.related)
+        return
     youtube.run(cfg, sign_in=args.sign_in, dry_run=args.dry_run, limit=args.max,
                 thumbnails_only=args.thumbnails, playlists_only=args.playlists,
                 links_only=args.links)
@@ -860,6 +863,9 @@ def main() -> None:
     p.add_argument("--attach", nargs=2, metavar=("ITEM", "LINK"),
                    help="a video you uploaded in Studio is ITEM (e.g. kick-132380636/s12): set its "
                         "details, thumbnail, captions, playlist, Kitsu link; record it as uploaded")
+    p.add_argument("--related", nargs="*", metavar="ITEM",
+                   help="list uploaded Shorts whose segment is out, to set its related video in Studio "
+                        "(the API can't); with ITEMs (keys or Short links), record them as set")
     p.set_defaults(fn=cmd_upload)
 
     p = sub.add_parser("rumble", help="ready-to-upload Rumble folders for scheduled items; mark them done")

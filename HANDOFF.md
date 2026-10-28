@@ -108,9 +108,19 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   hosts-only re-renders, the kick-132733064 clock-fix republish, kick-131151926's recut items.
   Approved-and-scheduled Shorts that a scene re-render would change (v06_w11, v03_w06, v03_t23) are
   left alone until the user says.
-- Content ID: watch Kino pre-show uploads for blocks (the first one was removed 10-19 and re-uploaded).
-- Set each Short's "related video" in Studio once its segment is public (the API can't). Verify whether
-  `thumbnails.set` works on Shorts before turning on `[youtube] short_thumbnails`.
+- **Today's Kino pre-show (hB61VKYaOQ0, 10/28) isn't grabbed:** YouTube's bot check rejects the
+  signed-in retry too since 12:53 (cookies exported 10-27). Re-export secrets/youtube_cookies.txt;
+  the bot's 5-minute poll then grabs it.
+- Content ID: all five pre-show/one-off uploads checked in Studio 2026-10-28, no claims, no region
+  blocks. Keep checking new ones (Studio → video → Copyright; the Data API only sees region blocks).
+- Shorts "related video" (Studio only, the API can't): set on all 19 uploaded Shorts whose segment was
+  public, 2026-10-28 (marked `related_video` in schedule.json). `clipper upload --related` lists what's
+  due and the 09:00 digest carries the same list; after setting them, `clipper upload --related <keys or
+  links>` records them. Still to do as their segments go up:
+  kick-133423456 v01_w10 (10-29) and v04_t28 (10-30), kick-132380636 v01_t29 (11-02), kick-132733064
+  v01_t27 (11-04). kick-133423456 v02_t12 and kick-133940023 v14_t35 fall outside every segment: pick one
+  by hand or leave them. Verify whether `thumbnails.set` works on Shorts before turning on
+  `[youtube] short_thumbnails`.
 - Old approved Short titles/descriptions that still say "hosts" (Kitsu text; uploads go as written).
   A war-room find-and-replace dry run found 14; not applied.
 - Decisions on #66 (transcript-framed edits): which item kinds, replace or sit beside the plain cut,
@@ -213,4 +223,4 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 2026-10-25 Receipts for Don · Roadmap: transcript-framed edits · Speaker labels
 2026-10-26 Cut on the NAS
 2026-10-27 Issue day (jsonstate, llm.py, costs, war room) · TikTok resend · One-off: Just Trish
-2026-10-28 Issue day 2 (analytics, audit follow-ups, cover editor, schedule DnD)
+2026-10-28 Issue day 2 (analytics, audit follow-ups, cover editor, schedule DnD) · Related videos and Content ID check
