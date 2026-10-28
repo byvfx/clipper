@@ -108,9 +108,9 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   hosts-only re-renders, the kick-132733064 clock-fix republish, kick-131151926's recut items.
   Approved-and-scheduled Shorts that a scene re-render would change (v06_w11, v03_w06, v03_t23) are
   left alone until the user says.
-- **Today's Kino pre-show (hB61VKYaOQ0, 10/28) isn't grabbed:** YouTube's bot check rejects the
-  signed-in retry too since 12:53 (cookies exported 10-27). Re-export secrets/youtube_cookies.txt;
-  the bot's 5-minute poll then grabs it.
+- Review today's Kino pre-show (yt-hB61VKYaOQ0, 10/28) in Kitsu/Discord; it publishes asap once approved.
+  (Stuck 12:53-15:00 on stale cookies; fresh export copied over secrets/youtube_cookies.txt, old one in
+  youtube_cookies.before_2026-10-28.txt. A new export saved under another name isn't read: copy it over.)
 - Content ID: all five pre-show/one-off uploads checked in Studio 2026-10-28, no claims, no region
   blocks. Keep checking new ones (Studio → video → Copyright; the Data API only sees region blocks).
 - Shorts "related video" (Studio only, the API can't): set on all 19 uploaded Shorts whose segment was
