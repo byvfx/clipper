@@ -15,6 +15,7 @@ dependencies = [
     "requests>=2.32",
     "websockets>=13",   # live chat (clipper record)
     "pillow>=11",
+    "tzdata>=2024.1; sys_platform == 'win32'",  # Windows has no time zone database ([schedule] timezone)
 ]
 
 [project.optional-dependencies]

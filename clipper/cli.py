@@ -526,6 +526,13 @@ def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     raise SystemExit(doctor.main(cfg, offline=args.offline, role=args.role))
 
 
+def cmd_setup(cfg: dict, args: argparse.Namespace) -> None:
+    from . import setup
+
+    raise SystemExit(setup.main(args.config, step=args.step, answers=args.answers, check_only=args.check,
+                                print_sync=args.sync_args, offline=args.offline))
+
+
 def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
     from . import bot
 
@@ -933,6 +940,16 @@ def main() -> None:
     p.add_argument("--role", choices=["all", "gpu", "bot", "nas"], default="all",
                    help="only what this machine runs (gpu worker, bot, nas recorder)")
     p.set_defaults(fn=cmd_doctor)
+
+    from .setup import STEPS
+    p = sub.add_parser("setup", help="guided first run on a new machine: roles, folders, encoder, keys")
+    p.add_argument("--step", choices=STEPS, help="do this step again")
+    p.add_argument("--check", action="store_true", help="each step's checks, no questions")
+    p.add_argument("--answers", metavar="FILE",
+                   help="answers file (TOML): no questions, defaults for what it leaves out; never keys")
+    p.add_argument("--offline", action="store_true", help="the final check skips the network")
+    p.add_argument("--sync-args", action="store_true", help=argparse.SUPPRESS)  # for deploy/bootstrap
+    p.set_defaults(fn=cmd_setup)
 
     p = sub.add_parser("shows", help="list the [shows] profiles and which streams belong to each")
     p.set_defaults(fn=cmd_shows)

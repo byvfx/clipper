@@ -130,6 +130,9 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   sound effects, order after #67. #27 TikTok content rules. Sloth Beat handle check (@slothbeat).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - Recorder warnings arrive twice (webhook channel + DM) until the webhook in deploy/record/env.local is dropped.
+- `clipper setup` (#78) phase 1 is committed; to test it on a truly clean Windows, turn on
+  Windows Sandbox (admin, then reboot): `Enable-WindowsOptionalFeature -Online -FeatureName
+  Containers-DisposableClientVM`. Then the desktop (#46) and MacBook (#7) runs.
 - Issue 03 of the weekly on Saturday; the monthly check-in report on 11-01.
 
 ## Open work
@@ -141,7 +144,8 @@ transcript-framed edits #66 (#67-#71), YouTube Posts magazine #30 (#32-#38), cas
 lore-order playlists #43, archive fun #63, Udder Truth #58/#59/#60, Modal ideas #53-#56.
 Older notes not on an issue: republish the 2026-10-19 re-cut streams to Kitsu (user said not yet);
 Blade compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`);
-a daily "post kit" folder; prove SETUP.md on a clean machine (desktop or MacBook `[mac]` extra);
+a daily "post kit" folder; `clipper setup` walkthrough #78 (phase 1 done 2026-10-28: bootstrap,
+roles, `clipper.local.toml`, keys; next join mode on the MacBook #7, new stack on the desktop #46);
 thumbs: reject a picked frame with no face, `--frame-at <s>`; Discord excerpts for one-offs could
 start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 
@@ -179,6 +183,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   that never made it into HANDOFF.
 
 ## Gotchas learned
+- New Windows installs (found by `clipper setup`, 2026-10-28): keep the folder short (anthropic's files
+  sit ~160 characters deep in .venv; past 260 imports fail with long paths off), and `tzdata` must be a
+  direct dependency (Windows has no zone database; the laptop only had it through pandas).
 - Kick: yt-dlp VOD extractor 404s; resolve via channel videos API (kick.py). Chat history API ~2 req/s,
   429 with Retry-After: 0 → adaptive limiter.
 - Stream-copy cuts must start on a keyframe (every ~4 s) or audio drifts; `.ts` seeking for re-encodes

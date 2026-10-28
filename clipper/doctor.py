@@ -45,6 +45,33 @@ def run(cmd: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
                           errors="replace", timeout=timeout, check=False)
 
 
+def collect(check, *args, **kwargs) -> list[tuple[str, str, str, str]]:
+    """Run one check and return its result lines, leaving RESULTS as it was (`clipper setup`)."""
+    start = len(RESULTS)
+    check(*args, **kwargs)
+    out = RESULTS[start:]
+    del RESULTS[start:]
+    return out
+
+
+def report(results: list[tuple[str, str, str, str]]) -> dict[str, int]:
+    """Print result lines with their hints; the count of each status."""
+    width = max((len(a) for _, a, _, _ in results), default=0)
+    for status, area, what, hint in results:
+        print(f"{status:<4}  {area:<{width}}  {what}")
+        if hint and status != "OK":
+            print(f"{'':<4}  {'':<{width}}  -> {hint}")
+    return {s: sum(r[0] == s for r in results) for s in ("OK", "WARN", "FAIL")}
+
+
+def encoder_works(codec: str) -> tuple[bool, str]:
+    """Test-encode a fraction of a second of black with this ffmpeg encoder."""
+    vf = ["-vf", "format=nv12"] if codec == "h264_qsv" else []
+    r = run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+             "color=c=black:s=320x240:d=0.2", *vf, "-c:v", codec, "-f", "null", "-"])
+    return r.returncode == 0, r.stderr.strip()
+
+
 # ---------- checks ----------
 
 def check_python() -> None:
@@ -54,6 +81,17 @@ def check_python() -> None:
     else:
         fail("python", f"{platform.python_version()}: clipper needs 3.12",
              "uv python install 3.12, then uv sync")
+    if sys.platform == "win32" and len(sys.prefix) > 86:  # the folder + \.venv over ~80 characters
+        import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as k:
+                long_paths = winreg.QueryValueEx(k, "LongPathsEnabled")[0] == 1
+        except OSError:
+            long_paths = False
+        if not long_paths:
+            warn("python", f"the venv's path is {len(sys.prefix)} characters and Windows long paths are off",
+                 "some packages (anthropic) fail to load past 260 characters: move clipper to a short "
+                 "folder such as C:\\clipper, or turn long paths on")
 
 
 def check_config(cfg: dict) -> None:
@@ -61,7 +99,10 @@ def check_config(cfg: dict) -> None:
     if root.get("_file"):
         ok("config", f"{root['_file']}")
     else:
-        fail("config", "no clipper.toml found", "copy clipper.example.toml to clipper.toml, or pass --config")
+        fail("config", "no clipper.toml found", "clipper setup (or copy clipper.example.toml to clipper.toml)")
+    if root.get("_local_file"):
+        ok("config", f"this machine: {root['_local_file'].name} sets " + ", ".join(
+            f"{s}.{k}" for s, v in root["_local"].items() for k in v))
     shows = root["shows"]
     if shows:
         ok("config", f"{len(shows)} shows: " + ", ".join(
@@ -148,16 +189,14 @@ def check_ffmpeg(cfg: dict, role: str) -> None:
     codecs = {cfg["cut"]["clip_codec"], cfg["shorts"]["codec"] or cfg["cut"]["clip_codec"],
               cfg["review"]["preview_codec"] or cfg["cut"]["clip_codec"]}
     for codec in sorted(c for c in codecs if c and c != "copy"):
-        vf = ["-vf", "format=nv12"] if codec == "h264_qsv" else []
-        r = run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-                 "color=c=black:s=320x240:d=0.2", *vf, "-c:v", codec, "-f", "null", "-"])
-        if r.returncode == 0:
+        works, err = encoder_works(codec)
+        if works:
             ok("ffmpeg", f"encoder {codec} works")
         else:
-            hint = {"h264_qsv": "needs an Intel GPU; set [cut] clip_codec = \"libx264\" (or h264_nvenc)",
+            hint = {"h264_qsv": "needs an Intel GPU; clipper setup --step machine picks one that works here",
                     "h264_nvenc": "needs an NVIDIA driver new enough for this ffmpeg (610+ for 8.1)",
-                    }.get(codec, "pick another [cut] clip_codec")
-            fail("ffmpeg", f"encoder {codec} failed: {r.stderr.strip()[:120]}", hint)
+                    }.get(codec, "pick another [cut] clip_codec (clipper setup --step machine)")
+            fail("ffmpeg", f"encoder {codec} failed: {err[:120]}", hint)
 
 
 def font_dirs() -> list[Path]:
@@ -614,11 +653,6 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_tailnet(cfg, offline)
     if not offline:
         check_online(cfg, role)
-    width = max(len(a) for _, a, _, _ in RESULTS)
-    for status, area, what, hint in RESULTS:
-        print(f"{status:<4}  {area:<{width}}  {what}")
-        if hint and status != "OK":
-            print(f"{'':<4}  {'':<{width}}  -> {hint}")
-    n = {s: sum(r[0] == s for r in RESULTS) for s in ("OK", "WARN", "FAIL")}
+    n = report(RESULTS)
     print(f"\n{n['OK']} ok, {n['WARN']} warnings, {n['FAIL']} failures")
     return 1 if n["FAIL"] else 0

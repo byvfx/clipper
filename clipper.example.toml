@@ -1,5 +1,7 @@
-# Copy to clipper.toml and edit. Every key can also be set with an env var
-# named CLIPPER_<SECTION>_<KEY>, e.g. CLIPPER_TRANSCRIBE_DEVICE=cpu.
+# Copy to clipper.toml and edit (or run `clipper setup`, which does it and asks the rest).
+# One machine's own values go in clipper.local.toml beside it (same sections; setup writes
+# it), and every key can also be set with an env var named CLIPPER_<SECTION>_<KEY>, e.g.
+# CLIPPER_TRANSCRIBE_DEVICE=cpu. Both win over this file and its [shows.*] tables.
 
 [paths]
 # Relative paths resolve against this file's directory.

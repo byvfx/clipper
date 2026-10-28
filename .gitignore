@@ -23,7 +23,8 @@ secrets/
 deploy/kitsu/env.local
 deploy/record/env.local
 
-# run state (upload schedule, analytics)
+# run state (upload schedule, analytics, `clipper setup` progress)
+setup_state.json
 schedule*.json
 analytics.json
 analytics_channel.json

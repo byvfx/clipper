@@ -14,7 +14,9 @@ keep README and SETUP true whenever behaviour changes.
   never a loose script.
 - A stream is `streams/<id>/`; stages read and write files there and are idempotent, so
   `clipper run` can skip what is done. Review state is `review.json`, retakes `retakes.json`.
-- Config: defaults in `clipper/config.py` < `clipper.toml` < `CLIPPER_<SECTION>_<KEY>` env.
+- Config: defaults in `clipper/config.py` < `clipper.toml` < `clipper.local.toml` (this machine's
+  own values, written by `clipper setup`) < `CLIPPER_<SECTION>_<KEY>` env; the last two also win
+  over show and stream overrides.
   `config.for_stream(cfg, sdir)` resolves the show from the stream's `meta.json` channel,
   then the stream's own `streams/<id>/config.toml` if any; use it rather than the base config
   whenever a stream is known.
@@ -35,7 +37,8 @@ keep README and SETUP true whenever behaviour changes.
   `GEMINI_API_KEY` if a stage uses those providers) or files
   under `secrets/`. Never write them into tracked files, logs, or messages.
 - Anything a new check or install step needs belongs in `clipper doctor` and SETUP.md, not
-  only in a chat answer.
+  only in a chat answer (and in `clipper setup`, `clipper/setup.py`, when a new user would
+  have to do it).
 - Kitsu is the record for review decisions. Bot buttons and the war room act through
   `clipper/actions.py`; do not write decisions anywhere else.
 - Uploads are automatic since 2026-10-20: the bot replans and runs `clipper upload` every

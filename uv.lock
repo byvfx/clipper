@@ -316,6 +316,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "requests" },
     { name = "scipy" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
     { name = "websockets" },
     { name = "yt-dlp", extra = ["default", "deno"] },
 ]
@@ -354,6 +355,7 @@ requires-dist = [
     { name = "torch", marker = "extra == 'gpu'", specifier = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchaudio", marker = "extra == 'gpu'", specifier = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchvision", marker = "extra == 'gpu'", specifier = "==0.23.0", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2024.1" },
     { name = "websockets", specifier = ">=13" },
     { name = "whisperx", marker = "extra == 'gpu'", specifier = ">=3.8.6" },
     { name = "yt-dlp", extras = ["default", "deno"], specifier = ">=2026.10.10" },

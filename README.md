@@ -95,23 +95,34 @@ All roles share one streams folder (a NAS share). One machine can do more than o
 
 ## Quick start
 
-```bash
-uv sync --extra gpu --extra discord      # GPU worker + bot; --extra mac on Apple Silicon
-cp clipper.example.toml clipper.toml     # then edit: streams path, Kitsu URL, Discord ids, shows
-export ANTHROPIC_API_KEY=... KITSU_TOKEN=...
-uv run clipper doctor --role gpu         # checks ffmpeg, codecs, fonts, GPU, keys, Kitsu, Discord, Kick
-uv run clipper fetch <kick vod url>
-uv run clipper run <stream id>
+From the clipper folder on a new machine (keep the folder path short on Windows, e.g. `C:\clipper`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\bootstrap.ps1   # macOS/Linux: bash deploy/bootstrap.sh
 ```
 
-[SETUP.md](SETUP.md) has the full per-platform steps, including the NAS recorder and running the
-worker and bot unattended.
+It installs uv, Python 3.12 and ffmpeg if they're missing, then runs `clipper setup`, a
+walkthrough that asks whether this machine joins an existing install or starts a new one,
+what it runs, where it transcribes, its streams folder and encoder, and the keys (checked as
+you enter them), then runs `clipper doctor`. Run it again to carry on; `clipper setup --step
+keys` redoes one step and `clipper setup --check` shows where each step stands. Then:
+
+```bash
+clipper fetch <kick vod url>
+clipper run <stream id>
+```
+
+[SETUP.md](SETUP.md) has the full per-platform steps, including what setup doesn't do yet
+(Discord ids, YouTube sign-in, adding a show), the NAS recorder and running the worker and bot
+unattended.
 
 ## Configuration
 
-Settings come from three layers: built-in defaults, then `clipper.toml`, then environment
-variables named `CLIPPER_<SECTION>_<KEY>` (for example `CLIPPER_CUT_CLIP_CODEC=libx264`).
-That lets one shared `clipper.toml` serve every machine, with per-machine differences in env vars.
+Settings come in layers: built-in defaults, then `clipper.toml`, then this machine's own
+`clipper.local.toml` (written by `clipper setup`: streams path, encoder, transcribe backend),
+then environment variables named `CLIPPER_<SECTION>_<KEY>` (for example
+`CLIPPER_CUT_CLIP_CODEC=libx264`). That lets one shared `clipper.toml` serve every machine.
+`clipper.local.toml` and env vars win over show and stream overrides too.
 
 Each Kick channel is a show: a `[shows.<key>]` table with its channels, show name, scoring
 context and Shorts layouts. A show's sub-tables override the base sections for that show.
@@ -258,7 +269,7 @@ filling up, and a daily digest at 09:00. Quiet hours (00:00-08:00) hold them unt
 ```
 clipper/              the package, one module per stage, cli.py wires them
 prompts/              versioned prompt files; the version in use is set in clipper.toml
-deploy/               NAS recorder (Docker), Kitsu (Docker), Windows worker and bot tasks
+deploy/               bootstrap (new machine), NAS recorder (Docker), Kitsu (Docker), Windows worker and bot tasks
 streams/<id>/         one folder per stream: source, transcript, cuts, metadata, review state
 clipper.example.toml  every setting, documented
 SETUP.md              installing on a new machine

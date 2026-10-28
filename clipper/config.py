@@ -1,7 +1,11 @@
-"""Config loading: built-in defaults < clipper.toml < CLIPPER_<SECTION>_<KEY> env vars.
+"""Config loading: built-in defaults < clipper.toml < clipper.local.toml < CLIPPER_<SECTION>_<KEY> env vars.
 
 The file is found via --config, then $CLIPPER_CONFIG, then ./clipper.toml.
 Relative paths in [paths] resolve against the config file's directory.
+
+clipper.local.toml (beside clipper.toml, or $CLIPPER_LOCAL_CONFIG) holds this machine's own
+values (streams path, codec, transcribe backend; `clipper setup` writes it), so clipper.toml
+can stay identical on every machine. Like env vars, it wins over show and stream overrides.
 """
 
 from __future__ import annotations
@@ -674,10 +678,12 @@ def _sections(cfg: dict):
     return ((s, v) for s, v in cfg.items() if s not in NOT_SECTIONS and not s.startswith("_"))
 
 
-def _apply_env(cfg: dict, only: set[str] | None = None) -> None:
+def _apply_env(cfg: dict, only: set[str] | None = None, local: dict | None = None) -> None:
+    """This machine's values over cfg: clipper.local.toml (`local`, as loaded), then env vars."""
     for section, values in _sections(cfg):
         if only is not None and section not in only:
             continue
+        values.update(copy.deepcopy((local or {}).get(section, {})))
         for key, value in values.items():
             name = f"CLIPPER_{section}_{key}".upper()
             env = os.environ.get(name)
@@ -691,7 +697,34 @@ def _resolve_paths(paths: dict, base: Path, keys=None) -> None:
         paths[key] = p if p.is_absolute() else base / p
 
 
-def load(path: str | Path | None = None) -> dict[str, dict[str, Any]]:
+LOCAL_CONFIG = "clipper.local.toml"
+
+
+def local_path(cfg_path: str | Path | None = None) -> Path:
+    """This machine's clipper.local.toml: $CLIPPER_LOCAL_CONFIG, else beside the config file."""
+    if os.environ.get("CLIPPER_LOCAL_CONFIG"):
+        return Path(os.environ["CLIPPER_LOCAL_CONFIG"])
+    path = Path(cfg_path or os.environ.get("CLIPPER_CONFIG") or "clipper.toml")
+    return path.resolve().parent / LOCAL_CONFIG
+
+
+def _load_local(path: Path, cfg: dict, base: Path) -> dict:
+    """clipper.local.toml as {section: {key: value}}, [paths] resolved; unknown keys refused."""
+    if not path.exists():
+        return {}
+    local = tomllib.loads(path.read_text(encoding="utf-8"))
+    for section, values in local.items():
+        if section in NOT_SECTIONS or not isinstance(values, dict):
+            raise SystemExit(f"{path}: only this machine's [section] settings go here, not [{section}]")
+        unknown = [k for k in values if k not in cfg.get(section, {})]
+        if unknown:
+            raise SystemExit(f"{path}: unknown setting [{section}] {', '.join(unknown)}")
+    if "paths" in local:
+        _resolve_paths(local["paths"], base)
+    return local
+
+
+def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, dict[str, Any]]:
     cfg = copy.deepcopy(DEFAULTS)
     path = Path(path or os.environ.get("CLIPPER_CONFIG") or "clipper.toml")
     base = Path.cwd()
@@ -703,7 +736,9 @@ def load(path: str | Path | None = None) -> dict[str, dict[str, Any]]:
         shows = data.pop("shows", {})
         for section, values in data.items():
             cfg.setdefault(section, {}).update(values)
-    _apply_env(cfg)
+    lpath = local_path(path)
+    local = _load_local(lpath, cfg, base) if use_local else {}
+    _apply_env(cfg, local=local)
     _resolve_paths(cfg["paths"], base)
 
     cfg["shows"] = {}
@@ -715,6 +750,9 @@ def load(path: str | Path | None = None) -> dict[str, dict[str, Any]]:
     cfg["show"] = {"key": "", "channel": cfg["kick"]["channel"]}
     cfg["_dir"] = base
     cfg["_file"] = path.resolve() if path.exists() else None
+    cfg["_path"] = path.resolve()  # where it is, or would be (`clipper setup` writes it)
+    cfg["_local"] = local
+    cfg["_local_file"] = lpath if local else None
     cfg["_resolved"] = {}
     return cfg
 
@@ -767,7 +805,7 @@ def for_show(cfg: dict, key: str, channel: str = "") -> dict:
     overrides = root["shows"][key]["overrides"] if key else {}
     for section, values in overrides.items():
         out.setdefault(section, {}).update(copy.deepcopy(values))
-    _apply_env(out, set(overrides))
+    _apply_env(out, set(overrides), root["_local"])
     if "paths" in overrides:
         _resolve_paths(out["paths"], root["_dir"], list(overrides["paths"]))
     if key and not channel:
@@ -802,7 +840,7 @@ def for_stream(cfg: dict, sdir: Path) -> dict:
         if unknown:
             raise SystemExit(f"{path}: unknown setting [{section}] {', '.join(unknown)}")
         res[section].update(copy.deepcopy(values))
-    _apply_env(res, set(overrides))
+    _apply_env(res, set(overrides), root["_local"])
     res["_root"] = root
     root["_resolved"][cache_key] = res
     return res

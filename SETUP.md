@@ -11,6 +11,60 @@ clipper runs in three roles. A machine can do more than one.
 After any setup, run `clipper doctor` (add `--role gpu`, `--role bot` or `--role nas`). It
 checks everything below and prints a fix for each problem.
 
+## 0. The walkthrough: `clipper setup` (#78)
+
+Get the code onto the machine (clone it, or copy the folder without `streams/`, `.venv/`,
+`logs/`) into a short path, then from that folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\bootstrap.ps1     # Windows
+bash deploy/bootstrap.sh                                         # macOS / Linux
+```
+
+The bootstrap installs uv (which brings Python 3.12) and ffmpeg if they're missing (winget,
+else uv's installer and BtbN's ffmpeg build; Homebrew or apt on macOS/Linux), syncs the
+packages, then runs `clipper setup`:
+
+1. **Join or start fresh.** Join copies the main machine's `clipper.toml` (and, if you like, the
+   `secrets/` beside it) from a path or the share; new writes one from clipper.example.toml.
+2. **Roles.** Worker, bot, recorder (the recorder is the NAS's Docker container; setup only
+   points at `deploy/record/deploy.sh`). It looks at the GPU and offers WhisperX (NVIDIA), mlx
+   (Apple Silicon) or Modal, keeping the shared choice when this machine can run it. If the
+   roles need packages that aren't installed, it exits with code 3 and the bootstrap runs
+   `uv sync --extra ...` and starts setup again.
+3. **Folders and encoder.** The streams folder (checked writable), the time zone (new installs
+   only), and the encoder: the shared `[cut] clip_codec` if it encodes here, else the first of
+   NVENC, QSV, VideoToolbox, libx264 that does.
+4. **Keys.** Anthropic, the Kitsu address and bot token, Modal (when it transcribes there), the
+   Discord bot token (bot role, or `[discord] enabled`). Typed hidden, checked against the
+   service, saved as Windows user env vars / in your shell profile / in `secrets/`.
+5. **Check.** `clipper doctor` for the chosen roles, then what to run next.
+
+Values that only this machine needs go in **`clipper.local.toml`** beside clipper.toml
+(gitignored), written only where they differ from the shared file, so clipper.toml can stay
+identical everywhere. It wins over clipper.toml and its shows; `CLIPPER_*` env vars still win
+over it. Progress is in `setup_state.json`; `clipper setup --step <name>` redoes a step,
+`clipper setup --check` shows each step's checks without asking anything, and
+`clipper setup --answers answers.toml` runs it without questions (keys never go in that file:
+they come from the environment):
+
+```toml
+mode = "new"                 # or "join", with from = "path/to/clipper.toml", copy_secrets = true
+roles = ["worker", "bot"]
+transcribe = "modal"         # whisperx | mlx | modal
+streams = "streams"
+timezone = "America/Los_Angeles"
+kitsu = "http://<nas>:8090"
+```
+
+**Windows path length.** With Windows long paths off (the default), keep the clipper folder
+under ~80 characters (`C:\clipper` is fine): the anthropic package has files ~160 characters
+deep inside `.venv`, and past 260 in total Python can't import them. The bootstrap refuses a
+longer folder and doctor warns.
+
+Not in the walkthrough yet (SETUP below, and #78 phases 2-4): creating the Discord app and its
+ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
+
 ## 1. Windows GPU worker or bot
 
 1. **Tools**
@@ -38,8 +92,9 @@ checks everything below and prints a fix for each problem.
    - `[cut] clip_codec`: `h264_qsv` needs an Intel GPU; on an NVIDIA-only desktop use
      `h264_nvenc` (driver 610+ for ffmpeg 8.1) or `libx264`. `clipper doctor` test-encodes it.
    - `[transcribe] compute_type = "int8_float16"` and `batch_size = 4` on cards under 8 GB.
-   Anything can also be set per machine with an env var `CLIPPER_<SECTION>_<KEY>`, e.g.
-   `CLIPPER_CUT_CLIP_CODEC=libx264`, so one shared clipper.toml can stay identical.
+   Anything can also be set per machine in `clipper.local.toml` (what `clipper setup` writes)
+   or with an env var `CLIPPER_<SECTION>_<KEY>`, e.g. `CLIPPER_CUT_CLIP_CODEC=libx264`, so one
+   shared clipper.toml can stay identical.
 
 4. **Prompts and secrets**: copy `prompts/` (it comes with the repo) and `secrets/`
    (`discord_token.txt`, `youtube_client_secret.json`, `youtube_token.json`; only the
