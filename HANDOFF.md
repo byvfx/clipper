@@ -170,6 +170,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   429 with Retry-After: 0 → adaptive limiter.
 - Stream-copy cuts must start on a keyframe (every ~4 s) or audio drifts; `.ts` seeking for re-encodes
   needs keyframe seek + output trim (cut.py handles both).
+- Reading a shared JSON file on the NAS while another process os.replace()s it raises PermissionError
+  on Windows (analytics died on review.json 2026-10-28 14:57). Read state files with `jsonstate.read`,
+  which retries for ~9 s like `write` does, not `json.loads(path.read_text())`.
 - ffmpeg backs input seeks off by 3/23 s when video has B-frames. `.ts` then lands on the keyframe
   at/after the target, `.mkv` (NAS recorder) on the one at/before it, so `copy_cut` seeks k+0.005 for
   .ts and k+0.15 otherwise (fixed 2026-10-19). Before that, every .mkv segment carried one extra GOP

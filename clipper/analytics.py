@@ -37,8 +37,7 @@ def path_of(cfg: dict) -> Path:
 
 
 def load(cfg: dict) -> dict:
-    p = path_of(cfg)
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    return jsonstate.read(path_of(cfg), {})
 
 
 def credentials(cfg: dict, sign_in: bool = False):
@@ -64,10 +63,7 @@ def credentials(cfg: dict, sign_in: bool = False):
 def entry_details(cfg: dict, e: dict) -> dict:
     sdir = cfg["paths"]["streams"] / e["stream"]
     key = e["key"].split("/", 1)[1]
-    fields = {}
-    rp = sdir / "review.json"
-    if rp.exists():
-        fields = (json.loads(rp.read_text(encoding="utf-8")).get(key) or {}).get("fields") or {}
+    fields = (jsonstate.read(sdir / "review.json", {}).get(key) or {}).get("fields") or {}
     sc = for_stream(cfg, sdir) if sdir.exists() else cfg
     return {"show": sc["show"]["key"], "show_name": sc["meta"]["show_name"],
             "category": fields.get("Category") or "", "score": fields.get("Score") or "",
@@ -82,8 +78,7 @@ def run(cfg: dict, sign_in: bool = False) -> dict:
         credentials(cfg, sign_in=True)
         print("signed in with YouTube Analytics access")
     creds, has_analytics = credentials(cfg)
-    sched = json.loads(Path(cfg["paths"]["schedule"]).read_text(encoding="utf-8")) \
-        if Path(cfg["paths"]["schedule"]).exists() else {}
+    sched = jsonstate.read(Path(cfg["paths"]["schedule"]), {})
     up = [e for e in sched.get("entries", []) if e.get("status") == "uploaded" and e.get("video_id")]
     data = load(cfg)
     if not up:
