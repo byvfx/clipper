@@ -95,6 +95,11 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   Costs and Modal panels. Monthly analytics check-in task runs 2026-11-01 09:00 (#42).
 - **Analytics:** YouTube Analytics API enabled 10-28; October so far 12.7k views, 68.5 h watch, +28 subs,
   Shorts feed 80% of views.
+- **Compilation joins fixed 2026-10-28** (user spotted Andy "repeating himself" at 2:18:42 of the H3
+  compilation): each segment file starts on the keyframe before its start, so back-to-back segments
+  replayed 1-5 s of the previous one at every join (13 of 15 in the H3 video, also Quartering/DSP/Angry
+  Joe). `cut_compilations` now ends each part with a concat `outpoint` where the next file begins.
+  Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
