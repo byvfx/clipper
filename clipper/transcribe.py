@@ -31,6 +31,8 @@ import sys
 import time
 from pathlib import Path
 
+from .errors import ClipperError
+
 
 def extract_audio(stream_dir: Path) -> Path:
     wav = stream_dir / "audio.wav"
@@ -38,7 +40,7 @@ def extract_audio(stream_dir: Path) -> Path:
         return wav
     sources = sorted(p for p in stream_dir.glob("source.*") if p.suffix != ".part")
     if not sources:
-        sys.exit(f"no source.* in {stream_dir}")
+        raise ClipperError(f"no source.* in {stream_dir}")
     tmp = wav.with_suffix(".tmp.wav")
     # A recording with dropped segments has timestamp jumps; WAV has no timestamps, so
     # without aresample the samples close up over each gap and every transcript time
@@ -179,7 +181,7 @@ def diarize(stream_dir: Path, tc: dict, runs: Path | None = None) -> None:
         out, cost = transcribe_modal(wav, tc, runs, method="diarize")
         return write_diarization(stream_dir, out["diarization"], cost)
     if tc["backend"] != "whisperx":
-        raise SystemExit("diarization needs [transcribe] backend = whisperx or modal")
+        raise ClipperError("diarization needs [transcribe] backend = whisperx or modal")
     import whisperx
 
     t0 = time.time()
@@ -211,7 +213,7 @@ def run(stream_dir: Path, tc: dict, runs: Path | None = None) -> None:
             write_diarization(stream_dir, out["diarization"], cost)
         return write(stream_dir, tc, out["segments"], out["dur"], t0, {"modal": cost})
     if tc["backend"] != "whisperx":
-        raise SystemExit(f"[transcribe] backend must be whisperx, mlx or modal, not {tc['backend']!r}")
+        raise ClipperError(f"[transcribe] backend must be whisperx, mlx or modal, not {tc['backend']!r}")
     import torch
     import whisperx
 

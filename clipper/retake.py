@@ -30,6 +30,7 @@ from pathlib import Path
 
 from . import jsonstate
 from .config import _root, for_stream, stream_dir
+from .errors import ClipperError
 
 LOCK_STALE_S = 3600
 
@@ -472,7 +473,7 @@ class Lock:
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
             if time.time() - self.path.stat().st_mtime < LOCK_STALE_S:
-                raise SystemExit("another clipper retake is running") from None
+                raise ClipperError("another clipper retake is running") from None
             self.path.unlink(missing_ok=True)
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.write(fd, self.token.encode())
@@ -503,7 +504,7 @@ def run(cfg: dict, stream: str | None = None, item: str | None = None,
                 review.sync(it.stream_dir, root, keys=[it.key], quiet=True)
             r = load(it.stream_dir / "review.json", {}).get(it.key, {})
             if not r.get("comment"):
-                raise SystemExit(f"{it.ref} has no retake note; pass --comment to try one")
+                raise ClipperError(f"{it.ref} has no retake note; pass --comment to try one")
             comment, cid = r["comment"], note_id(r)
         else:
             cid = f"manual:{int(time.time())}"
@@ -513,7 +514,7 @@ def run(cfg: dict, stream: str | None = None, item: str | None = None,
             for d in ([stream_dir(root, stream)] if stream else review_dirs(root)):
                 try:
                     review.sync(d, root, quiet=True)
-                except SystemExit as e:
+                except ClipperError as e:
                     print(f"{d.name}: not synced ({e})")
         todo = pending(root, stream)
     finish = not item and not dry_run and unpublished(root)

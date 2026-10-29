@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
 from .segments import hms
 
@@ -235,7 +236,7 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
     bleeper = Bleeper({**cfg["bleep"], "patterns": cfg["bleep"]["patterns"]
                        if cfg["bleep"]["mode"] != "off" else []})
     if not assets:
-        raise SystemExit("no cut assets; run `clipper cut` first")
+        raise ClipperError("no cut assets; run `clipper cut` first")
     drafted: dict[str, dict] = {}
     if missing:
         drafted = {x["id"]: json.loads(draft_path(stream_dir, x).read_text(encoding="utf-8"))
@@ -293,11 +294,11 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
     ckpt.parent.mkdir(parents=True, exist_ok=True)
     jsonstate.write(ckpt, saved)
     if errors:
-        raise SystemExit("meta: " + "; ".join(errors)[:600] + f"\n(what worked is kept in {ckpt.name}; "
+        raise ClipperError("meta: " + "; ".join(errors)[:600] + f"\n(what worked is kept in {ckpt.name}; "
                          "rerun clipper meta to finish)")
     gen, chapters = saved["gen"], dict(saved["chapters"])
     if gen is None:
-        raise SystemExit("meta: model refused")
+        raise ClipperError("meta: model refused")
     by_id = {g["id"]: g for g in gen["assets"]}
 
     # Compilations: each segment's title at its start, then that segment's own chapters.

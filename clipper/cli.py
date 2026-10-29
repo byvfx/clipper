@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import config, jsonstate
 from .config import stream_dir
+from .errors import ClipperError
 
 
 def cmd_fetch(cfg: dict, args: argparse.Namespace) -> None:
@@ -44,7 +45,7 @@ def cmd_record(cfg: dict, args: argparse.Namespace) -> None:
     elif args.channel:
         chans = [c for c in chans if c["slug"] in args.channel]
     if not chans:
-        raise SystemExit("record: no channels; set [record] channels in clipper.toml")
+        raise ClipperError("record: no channels; set [record] channels in clipper.toml")
     once = args.action == "now"
     record.Watcher(cfg, chans, max_s=getattr(args, "max_s", None), once=once).run(until_done=once)
 
@@ -64,7 +65,7 @@ def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
         keys = [k for k, _ in preshow.watched(cfg)]
         key = cfg["show"]["key"] or (keys[0] if len(keys) == 1 else "")
         if not key:
-            raise SystemExit(f"preshow fetch: say which show with --show ({', '.join(cfg['shows'])})")
+            raise ClipperError(f"preshow fetch: say which show with --show ({', '.join(cfg['shows'])})")
         window = None
         if args.start or args.end or args.about:
             from .pick import parse_time
@@ -103,7 +104,7 @@ def cmd_perform(cfg: dict, args: argparse.Namespace) -> None:
         if args.deploy:
             return perform.deploy_lipsync()
         if not args.target:
-            raise SystemExit("clipper perform lipsync <dir or video> [--engine ...], or --deploy")
+            raise ClipperError("clipper perform lipsync <dir or video> [--engine ...], or --deploy")
         chosen = args.engine or pc["lipsync_engine"]
         for engine in (["latentsync", "sync"] if chosen == "both" else [chosen]):
             perform.lipsync(Path(args.target), pc, engine, Path(args.audio) if args.audio else None)
@@ -175,11 +176,11 @@ def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
     if args.deploy:
         return transcribe.deploy()
     if not args.stream:
-        raise SystemExit("clipper transcribe <stream>, or --deploy")
+        raise ClipperError("clipper transcribe <stream>, or --deploy")
     sdir = stream_dir(cfg, args.stream)
     scfg = config.for_stream(cfg, sdir)
     if (sdir / "words.jsonl").exists() and not args.force:  # #75: a GPU or Modal job already paid for
-        raise SystemExit(f"{sdir.name} is transcribed already (words.jsonl); --force to do it again")
+        raise ClipperError(f"{sdir.name} is transcribed already (words.jsonl); --force to do it again")
     transcribe.run(sdir, scfg["transcribe"], cfg["paths"]["modal_runs"])
     if (sdir / "diarization.json").exists():
         from . import speakers
@@ -194,11 +195,11 @@ def cmd_speakers(cfg: dict, args: argparse.Namespace) -> None:
     if args.diarize:
         transcribe.diarize(sdir, scfg["transcribe"], cfg["paths"]["modal_runs"])
     elif not (sdir / "diarization.json").exists():
-        raise SystemExit(f"no diarization.json in {sdir}: clipper speakers {args.stream} --diarize")
+        raise ClipperError(f"no diarization.json in {sdir}: clipper speakers {args.stream} --diarize")
     if args.name:
         names = dict(n.split("=", 1) for n in args.name if "=" in n)
         if len(names) != len(args.name):
-            raise SystemExit("--name takes SPEAKER_xx=Name")
+            raise ClipperError("--name takes SPEAKER_xx=Name")
         speakers.apply(sdir, scfg)  # speakers.json must exist before naming
         speakers.set_names(sdir, names)
     found = speakers.apply(sdir, scfg)
@@ -234,7 +235,7 @@ def cmd_cut(cfg: dict, args: argparse.Namespace) -> None:
     what = args.what or ["segments", "compilations", "picks"]
     bad = set(what) - {"segments", "compilations", "picks"}
     if bad:
-        raise SystemExit(f"cut: unknown {sorted(bad)}; use segments, compilations, picks")
+        raise ClipperError(f"cut: unknown {sorted(bad)}; use segments, compilations, picks")
     if config.for_stream(cfg, d)["cut"]["backend"] == "nas" and {"segments", "compilations"} & set(what):
         # the copies run beside the source; picks re-encode a few minutes each, so stay here
         cut.on_nas(d, cfg, [w for w in what if w != "picks"] + (["--ids", args.ids] if args.ids else []))
@@ -259,7 +260,7 @@ def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
 
     if args.photo is not None or args.teaser_photo is not None:
         if not args.ids:
-            raise SystemExit("--photo/--teaser-photo need --ids")
+            raise ClipperError("--photo/--teaser-photo need --ids")
         changed = thumbs.set_photos(stream_dir(cfg, args.stream), cfg, args.ids.split(","),
                                     photo=args.photo, teaser_photo=args.teaser_photo,
                                     kitsu=not args.no_kitsu)
@@ -291,7 +292,7 @@ def cmd_shorts(cfg: dict, args: argparse.Namespace) -> None:
 
     if args.save_example:
         if args.at is None:
-            raise SystemExit("--save-example needs --at <seconds into the stream>")
+            raise ClipperError("--save-example needs --at <seconds into the stream>")
         shorts.save_example(stream_dir(cfg, args.stream), cfg, args.save_example, args.at)
         return
     shorts.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
@@ -438,18 +439,18 @@ def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
     stages = None
     if args.only or args.from_:
         if args.from_ and args.from_ not in worker.STAGES:  # #77 L14
-            raise SystemExit(f"run: unknown stage {args.from_!r}; stages: {', '.join(worker.STAGES)}")
+            raise ClipperError(f"run: unknown stage {args.from_!r}; stages: {', '.join(worker.STAGES)}")
         if args.only and args.from_:
-            raise SystemExit("run: --only or --from, not both")
+            raise ClipperError("run: --only or --from, not both")
         stages = args.only.split(",") if args.only else worker.STAGES[worker.STAGES.index(args.from_):]
         bad = set(stages) - set(worker.STAGES)
         if bad:
-            raise SystemExit(f"run: unknown stage {sorted(bad)}; stages: {', '.join(worker.STAGES)}")
+            raise ClipperError(f"run: unknown stage {sorted(bad)}; stages: {', '.join(worker.STAGES)}")
     try:
         ok = worker.run_stream(cfg, stream_dir(cfg, args.stream), config_path(args), stages,
                                force=args.force or bool(args.from_))
     except worker.Busy as e:
-        raise SystemExit(str(e))
+        raise ClipperError(str(e))
     if not ok:
         raise SystemExit(1)
 
@@ -523,13 +524,13 @@ def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     from . import doctor
 
-    raise SystemExit(doctor.main(cfg, offline=args.offline, role=args.role))
+    raise ClipperError(doctor.main(cfg, offline=args.offline, role=args.role))
 
 
 def cmd_setup(cfg: dict, args: argparse.Namespace) -> None:
     from . import setup
 
-    raise SystemExit(setup.main(args.config, step=args.step, answers=args.answers, check_only=args.check,
+    raise ClipperError(setup.main(args.config, step=args.step, answers=args.answers, check_only=args.check,
                                 print_sync=args.sync_args, offline=args.offline))
 
 
@@ -955,6 +956,13 @@ def main() -> None:
     p.set_defaults(fn=cmd_shows)
 
     args = ap.parse_args()
+    try:
+        run_command(args)
+    except ClipperError as e:
+        raise SystemExit(str(e)) from None
+
+
+def run_command(args: argparse.Namespace) -> None:
     cfg = config.load(args.config)
     if args.show:
         cfg = config.for_show(cfg, args.show)

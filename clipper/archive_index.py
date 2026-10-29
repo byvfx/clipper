@@ -35,6 +35,7 @@ from collections import Counter
 from pathlib import Path
 
 from .archive import load_catalog, subject_dir
+from .errors import ClipperError
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
@@ -73,7 +74,7 @@ def build(cfg: dict, subject: str, rebuild: bool) -> None:
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
     if not cat:
-        raise SystemExit(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
+        raise ClipperError(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
     if rebuild:
         (d / "index.sqlite").unlink(missing_ok=True)
     db = connect(d)
@@ -124,7 +125,7 @@ def link(url: str, source: str, start: float) -> str:
 def open_index(cfg: dict, subject: str) -> sqlite3.Connection:
     d = subject_dir(cfg, subject)
     if not (d / "index.sqlite").exists():
-        raise SystemExit(f"no index for {subject!r} yet: clipper archive index {subject}")
+        raise ClipperError(f"no index for {subject!r} yet: clipper archive index {subject}")
     return connect(d)
 
 
@@ -205,7 +206,7 @@ def search(cfg: dict, subject: str, query: str, limit: int, since: str | None, b
             f"snippet(windows, 0, '[', ']', ' ... ', 40) {base} ORDER BY {order} LIMIT ?",
             [*params, limit]).fetchall()
     except sqlite3.OperationalError as e:  # bad FTS5 syntax, e.g. an unclosed quote
-        raise SystemExit(f"query {query!r}: {e}") from e
+        raise ClipperError(f"query {query!r}: {e}") from e
     print(f"{query!r}: {total} windows in {vids} videos; showing {len(rows)} by {by}\n")
     for date, channel, title, url, source, start, snip in rows:
         print(f"{date or '????-??-??'}  {channel}  {title[:70]!r}")

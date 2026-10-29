@@ -27,6 +27,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import jsonstate
+from .errors import ClipperError
 
 
 def voices_path(cfg: dict) -> Path:
@@ -120,11 +121,11 @@ def set_names(sdir: Path, names: dict[str, str]) -> None:
     """Hand names ({"SPEAKER_01": "Andy"}; "" clears one) kept in speakers.json for apply()."""
     path = sdir / "speakers.json"
     if not path.exists():
-        raise SystemExit(f"no speakers.json in {sdir}: run `clipper speakers {sdir.name}` first")
+        raise ClipperError(f"no speakers.json in {sdir}: run `clipper speakers {sdir.name}` first")
     data = json.loads(path.read_text(encoding="utf-8"))
     for label, name in names.items():
         if label not in data["speakers"]:
-            raise SystemExit(f"no {label} in this stream; speakers: {', '.join(data['speakers'])}")
+            raise ClipperError(f"no {label} in this stream; speakers: {', '.join(data['speakers'])}")
         entry = data["speakers"][label]
         entry.pop("name", None)
         entry.pop("by", None)
@@ -139,12 +140,12 @@ def enroll(sdir: Path, cfg: dict, labels: list[str]) -> None:
     names = json.loads((sdir / "speakers.json").read_text(encoding="utf-8"))["speakers"]
     bank = load_voices(cfg)
     if bank["voices"] and bank["model"] != d["model"]:
-        raise SystemExit(f"{voices_path(cfg)} holds {bank['model']} voices; this stream is {d['model']}")
+        raise ClipperError(f"{voices_path(cfg)} holds {bank['model']} voices; this stream is {d['model']}")
     bank["model"] = d["model"]
     for label in labels:
         name = names[label].get("name")
         if not name or label not in d["embeddings"]:
-            raise SystemExit(f"{label}: needs a name and a voice embedding to enroll")
+            raise ClipperError(f"{label}: needs a name and a voice embedding to enroll")
         refs = bank["voices"].setdefault(name, [])
         refs.append(d["embeddings"][label])
         del refs[:-cfg["speakers"]["max_refs"]]

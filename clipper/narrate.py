@@ -31,6 +31,8 @@ from pathlib import Path
 
 import requests
 
+from .errors import ClipperError
+
 API = "https://api.elevenlabs.io"
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".m4v", ".webm"}
 
@@ -53,7 +55,7 @@ def key(nc: dict) -> str:
     k = find_key(nc)
     if not k:
         path = nc["key_file"]
-        raise SystemExit(f"no ElevenLabs API key: set ${nc['key_env']} or put it in {path} "
+        raise ClipperError(f"no ElevenLabs API key: set ${nc['key_env']} or put it in {path} "
                          "(SETUP.md, Narration)")
     return k
 
@@ -74,17 +76,17 @@ def convert(audio: Path, nc: dict, voice_id: str) -> bytes:
                                 "remove_background_noise": str(nc["remove_background_noise"]).lower()},
                           files={"audio": (audio.name, f, "audio/wav")}, timeout=600)
     if not r.ok:
-        raise SystemExit(f"ElevenLabs voice changer: HTTP {r.status_code}: {r.text[:300]}")
+        raise ClipperError(f"ElevenLabs voice changer: HTTP {r.status_code}: {r.text[:300]}")
     return r.content
 
 
 def voice(take: Path, nc: dict, voice_id: str = "", out: Path | None = None) -> Path:
     voice_id = voice_id or nc["voice_id"]
     if not voice_id:
-        raise SystemExit("no voice: set [narrate] voice_id, or pass --voice-id (clipper narrate voices)")
+        raise ClipperError("no voice: set [narrate] voice_id, or pass --voice-id (clipper narrate voices)")
     dur = duration(take)
     if dur > nc["max_s"]:
-        raise SystemExit(f"{take.name} is {dur:.0f} s; split takes longer than [narrate] max_s "
+        raise ClipperError(f"{take.name} is {dur:.0f} s; split takes longer than [narrate] max_s "
                          f"({nc['max_s']} s) at pauses first")
     is_video = take.suffix.lower() in VIDEO_EXT
     ext = nc["output_format"].split("_")[0]
@@ -113,16 +115,16 @@ def speak(text: str, nc: dict, out: Path, voice_id: str = "", overrides: dict | 
     creative, 0.5 natural, 1 robust/steadiest), style (exaggeration), speed (0.7-1.2)."""
     voice_id = voice_id or nc["voice_id"]
     if not voice_id:
-        raise SystemExit("no voice: set [narrate] voice_id, or pass --voice-id")
+        raise ClipperError("no voice: set [narrate] voice_id, or pass --voice-id")
     if len(text) > nc["tts_max_chars"]:
-        raise SystemExit(f"script is {len(text)} characters; split it (max {nc['tts_max_chars']} per read)")
+        raise ClipperError(f"script is {len(text)} characters; split it (max {nc['tts_max_chars']} per read)")
     body = {"text": text, "model_id": nc["tts_model"]}
     if settings_ := {**nc["tts_settings"], **(overrides or {})}:
         body["voice_settings"] = settings_
     r = requests.post(f"{API}/v1/text-to-speech/{voice_id}", params={"output_format": nc["output_format"]},
                       headers={"xi-api-key": key(nc)}, json=body, timeout=600)
     if not r.ok:
-        raise SystemExit(f"ElevenLabs text to speech: HTTP {r.status_code}: {r.text[:300]}")
+        raise ClipperError(f"ElevenLabs text to speech: HTTP {r.status_code}: {r.text[:300]}")
     out.write_bytes(r.content)
     print(f"{out}  ({duration(out):.1f} s, voice {voice_id}, {len(text)} characters, "
           f"settings {body.get('voice_settings', 'voice default')})")
@@ -154,7 +156,7 @@ def add_voice(nc: dict, ref: str, name: str) -> str:
     r = requests.post(f"{API}/v1/voices/add/{owner}/{vid}", headers={"xi-api-key": key(nc)},
                       json={"new_name": name}, timeout=30)
     if not r.ok:
-        raise SystemExit(f"ElevenLabs add voice: HTTP {r.status_code}: {r.text[:300]}")
+        raise ClipperError(f"ElevenLabs add voice: HTTP {r.status_code}: {r.text[:300]}")
     new_id = r.json()["voice_id"]
     print(f"added {name!r}: voice_id {new_id} (set [narrate] voice_id = \"{new_id}\")")
     return new_id

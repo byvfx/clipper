@@ -30,6 +30,7 @@ import requests
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 
 API = "https://discord.com/api/v10"
 COLORS = {"pending": 0x5865F2, "changes_requested": 0xFEE75C, "approved": 0x57F287,
@@ -51,9 +52,9 @@ def token(cfg: dict) -> str:
     if not tok and path.exists():
         tok = path.read_text(encoding="utf-8-sig").strip()
     if not tok:
-        raise SystemExit(f"no Discord bot token: set ${dc['token_env']} or put it in {path}")
+        raise ClipperError(f"no Discord bot token: set ${dc['token_env']} or put it in {path}")
     if tok.count(".") != 2:
-        raise SystemExit("that isn't a bot token (Developer Portal > your app > Bot > Reset "
+        raise ClipperError("that isn't a bot token (Developer Portal > your app > Bot > Reset "
                          "Token; the OAuth2 client secret won't work)")
     return tok
 
@@ -89,9 +90,9 @@ class Rest:
                 time.sleep(float(r.json().get("retry_after", 1)) + 0.2)
                 continue
             if r.status_code >= 400:
-                raise SystemExit(f"Discord {method} {path}: {r.status_code} {r.text[:300]}")
+                raise ClipperError(f"Discord {method} {path}: {r.status_code} {r.text[:300]}")
             return r.json() if r.content else {}
-        raise SystemExit(f"Discord {method} {path}: still rate limited")
+        raise ClipperError(f"Discord {method} {path}: still rate limited")
 
 
 # ---------- cards ----------
@@ -172,7 +173,7 @@ def discord_preview(r: dict, dc: dict) -> tuple[Path, bool]:
             tmp.replace(dst)
             return dst, excerpt
         video *= 0.8
-    raise SystemExit(f"{r['key']}: preview still over {dc['max_upload_mb']} MB")
+    raise ClipperError(f"{r['key']}: preview still over {dc['max_upload_mb']} MB")
 
 
 # ---------- posting ----------
@@ -206,7 +207,7 @@ def ensure_thread(api: Rest, cfg: dict, sdir: Path, dstate: dict, rows: list[dic
         try:
             api("GET", f"/channels/{dstate['thread_id']}")
             return dstate["thread_id"]
-        except SystemExit:
+        except ClipperError:
             pass  # deleted: make a new one
     meta = json.loads((sdir / "meta.json").read_text(encoding="utf-8"))
     show = cfg["meta"]["show_name"] or cfg["review"]["project"] or "Stream"
@@ -238,7 +239,7 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
 
     dc = cfg["discord"]
     if not dc["review_channel_id"]:
-        raise SystemExit("set [discord] review_channel_id in clipper.toml")
+        raise ClipperError("set [discord] review_channel_id in clipper.toml")
     review.sync(sdir, cfg, quiet=True)
     rows = list(actions.describe(cfg, sdir).values())
     if not rows:

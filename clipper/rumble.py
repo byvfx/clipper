@@ -34,6 +34,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import jsonstate, youtube
+from .errors import ClipperError
 
 LICENSE_NOTES = {
     "Rumble Only": "non-exclusive, monetized on Rumble only; the YouTube copy is unaffected",
@@ -48,7 +49,7 @@ LICENSE_NOTES = {
 def load_schedule(cfg: dict) -> dict:
     path: Path = cfg["paths"]["schedule"]
     if not path.exists():
-        raise SystemExit("no schedule.json; run: clipper schedule")
+        raise ClipperError("no schedule.json; run: clipper schedule")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -88,9 +89,9 @@ def resolve(sched: dict, ref: str) -> dict:
             or [e for e in pool if short_key(e).split("_")[0] == ref]
             or [e for e in pool if short_key(e).startswith(ref)])
     if not hits:
-        raise SystemExit(f"no schedule.json entry {ref!r}; only scheduled items can be sent")
+        raise ClipperError(f"no schedule.json entry {ref!r}; only scheduled items can be sent")
     if len(hits) > 1:
-        raise SystemExit(f"{ref!r} matches {', '.join(e['key'] for e in hits[:8])}; give more of it")
+        raise ClipperError(f"{ref!r} matches {', '.join(e['key'] for e in hits[:8])}; give more of it")
     return hits[0]
 
 
@@ -228,7 +229,7 @@ def push_kitsu(cfg: dict, updates: list[tuple[dict, dict]]) -> None:
                       else gazu.shot.update_shot_data)
             if data:
                 update(st["entity_id"], data)
-    except (SystemExit, Exception) as ex:  # noqa: BLE001  # schedule.json is the record; Kitsu is a view
+    except Exception as ex:  # noqa: BLE001  # schedule.json is the record; Kitsu is a view
         print(f"  warning: Kitsu not updated: {ex}")
 
 
@@ -273,7 +274,7 @@ def run(cfg: dict, stream: str | None = None, items: list[str] | None = None,
         todo = [e for e in sched["entries"] if (not stream or e["stream"] == stream)
                 and e["kind"] in rc["kinds"]]
     if not todo:
-        raise SystemExit(f"nothing scheduled{' for ' + stream if stream else ''}; "
+        raise ClipperError(f"nothing scheduled{' for ' + stream if stream else ''}; "
                          "approve items in Kitsu and run: clipper schedule")
     updates, kitsu, made = {}, [], []
     for e in todo:

@@ -39,6 +39,7 @@ from . import jsonstate
 from .bleep import Bleeper
 from .config import for_stream
 from .cut import encode_args, ffmpeg_cut, keyframe_before, source_file
+from .errors import ClipperError
 from .scoring import Claude, load_words
 from .segments import slug
 
@@ -160,7 +161,7 @@ def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tu
         even = lambda v: int(v) // 2 * 2
         crops.append((even(x), even(y), even(w), even(h), ph))
     if sum(c[4] for c in crops) != out_h:
-        raise SystemExit(f"layout panels add up to {sum(c[4] for c in crops)} px, not {out_h}")
+        raise ClipperError(f"layout panels add up to {sum(c[4] for c in crops)} px, not {out_h}")
     return crops
 
 
@@ -326,7 +327,7 @@ def save_example(stream_dir: Path, cfg: dict, name: str, at: float) -> Path:
     """The source frame at `at` s as the reference screenshot of layout `name`."""
     cfg = for_stream(cfg, stream_dir)
     if name not in layouts_of(cfg["shorts"]):
-        raise SystemExit(f"no layout {name!r}; this show has {', '.join(layouts_of(cfg['shorts']))}")
+        raise ClipperError(f"no layout {name!r}; this show has {', '.join(layouts_of(cfg['shorts']))}")
     out = example_dir(cfg) / f"{name}.jpg"
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{at:.3f}",
@@ -443,7 +444,7 @@ def measure_loudness(video: Path, sc: dict) -> dict:
                        check=False)
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr)
     if not m:
-        raise SystemExit(f"loudnorm measurement failed for {video.name}")
+        raise ClipperError(f"loudnorm measurement failed for {video.name}")
     return json.loads(m.group(0))
 
 
@@ -542,9 +543,9 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     codec = sc["codec"] or cfg["cut"]["clip_codec"]
     layouts = layouts_of(sc)
     if sc["default_layout"] not in layouts:
-        raise SystemExit(f"shorts.default_layout {sc['default_layout']!r} isn't one of {list(layouts)}")
+        raise ClipperError(f"shorts.default_layout {sc['default_layout']!r} isn't one of {list(layouts)}")
     if layout and layout not in layouts:
-        raise SystemExit(f"no layout {layout!r}; this show has {', '.join(layouts)}")
+        raise ClipperError(f"no layout {layout!r}; this show has {', '.join(layouts)}")
     cands = json.loads((stream_dir / "candidates.json").read_text(encoding="utf-8"))
     segs = []
     if (stream_dir / "segments.json").exists():

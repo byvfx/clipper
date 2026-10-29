@@ -49,6 +49,7 @@ from zoneinfo import ZoneInfo
 from . import jsonstate
 from .bleep import Bleeper
 from .config import for_stream
+from .errors import ClipperError
 from .review import draft_fields, full_title, hashtag_line
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
@@ -75,10 +76,10 @@ def credentials(paths: dict, sign_in: bool = False):
         try:
             creds.refresh(Request())
         except Exception as e:  # noqa: BLE001  # revoked, or a 7-day Testing-mode token that expired
-            raise SystemExit(f"YouTube token refresh failed ({e}); run: clipper upload --sign-in")
+            raise ClipperError(f"YouTube token refresh failed ({e}); run: clipper upload --sign-in")
     if not creds or not creds.valid:
         if not sign_in:
-            raise SystemExit("not signed in to YouTube; run: clipper upload --sign-in")
+            raise ClipperError("not signed in to YouTube; run: clipper upload --sign-in")
         flow = InstalledAppFlow.from_client_secrets_file(str(paths["youtube_client_secret"]), SCOPES)
         # select_account: always show the account chooser, which is also where a Brand
         # Account channel is picked; plain "consent" silently reuses the browser's account.
@@ -160,7 +161,7 @@ def refresh_review(cfg: dict, entries: list[dict]) -> None:
             continue
         try:
             review.sync(sdir, cfg, keys=keys, quiet=True)
-        except (Exception, SystemExit) as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             print(f"  Kitsu not read for {stream} ({e}); using review.json as last synced")
 
 
@@ -260,10 +261,10 @@ def related(cfg: dict, refs: list[str]) -> None:
             vid = video_id(ref)
             e = next((x for x in sched["entries"] if x.get("video_id") == vid), None)
         if not e or e["kind"] != "short":
-            raise SystemExit(f"{ref}: no uploaded Short with that key or link")
+            raise ClipperError(f"{ref}: no uploaded Short with that key or link")
         p = short_segment(cfg, e, sched["entries"], cache)
         if not p or not p.get("video_id"):
-            raise SystemExit(f"{e['key']}: its segment isn't on YouTube, nothing to record")
+            raise ClipperError(f"{e['key']}: its segment isn't on YouTube, nothing to record")
         mark(sched_path, e["key"], related_video=p["video_id"], related_set_at=today)
         print(f"{e['key']} -> {p['video_id']} ({p['title'][:70]})")
 
@@ -531,7 +532,7 @@ def backfill_thumbnails(cfg: dict, sched: dict, sched_path: Path, dry_run: bool)
         try:
             set_thumbnail(yt, e["video_id"], m["thumb"])
         except ThumbnailsNotAllowed as ex:
-            raise SystemExit(str(ex)) from None
+            raise ClipperError(str(ex)) from None
         e["thumbnail_set"] = datetime.now(UTC).isoformat(timespec="seconds")
         mark(sched_path, e["key"], thumbnail_set=e["thumbnail_set"])
         print(f"  {e['url']} thumbnail set")
@@ -600,7 +601,7 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
         return
     sched_path: Path = paths["schedule"]
     if not sched_path.exists():
-        raise SystemExit("no schedule.json; run: clipper schedule")
+        raise ClipperError("no schedule.json; run: clipper schedule")
     sched = json.loads(sched_path.read_text(encoding="utf-8"))
     if thumbnails_only:
         backfill_thumbnails(cfg, sched, sched_path, dry_run)
@@ -614,10 +615,10 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     yt, failed = upload_due(cfg, sched, sched_path, dry_run, limit)
     try:  # links on videos already up whose longer video went public since
         backfill_links(cfg, jsonstate.read(sched_path), sched_path, dry_run, None, yt)
-    except (Exception, SystemExit) as ex:  # noqa: BLE001  # the uploads are done either way
+    except Exception as ex:  # noqa: BLE001  # the uploads are done either way
         print(f"  warning: source links: {type(ex).__name__}: {ex}")
     if failed:  # a non-zero exit is what makes the bot DM it
-        raise SystemExit(f"{len(failed)} upload(s) failed: {'; '.join(failed)}"[:900])
+        raise ClipperError(f"{len(failed)} upload(s) failed: {'; '.join(failed)}"[:900])
 
 
 def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: int | None):
@@ -681,7 +682,7 @@ def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: i
         # limit refusal stops the run, since everything after would fail the same way.
         try:
             upload_one(cfg, yt, e, sched, sched_path, sources, playlists, cache_path, tz)
-        except (Exception, SystemExit) as ex:  # noqa: BLE001  # SystemExit: a missing file etc.
+        except Exception as ex:  # noqa: BLE001  # ClipperError: a missing file etc.
             reason = getattr(ex, "reason", "") or ""
             text = f"{type(ex).__name__}: {ex}"[:300]
             print(f"  FAILED {e['key']}: {text}", flush=True)
@@ -762,7 +763,7 @@ def video_id(url: str) -> str:
         return m.group(1)
     if re.fullmatch(r"[\w-]{11}", url.strip()):
         return url.strip()
-    raise SystemExit(f"no YouTube video id in {url!r}")
+    raise ClipperError(f"no YouTube video id in {url!r}")
 
 
 def queue(cfg: dict) -> list[dict]:
@@ -805,12 +806,12 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
     sched = json.loads(sched_path.read_text(encoding="utf-8"))
     prev = next((e for e in sched["entries"] if e["key"] == key), None)
     if prev and prev.get("status") == "uploaded":
-        raise SystemExit(f"{key} is already on YouTube: {prev.get('url')}")
+        raise ClipperError(f"{key} is already on YouTube: {prev.get('url')}")
     if other := next((e for e in sched["entries"] if e.get("video_id") == vid), None):
-        raise SystemExit(f"{vid} is already recorded as {other['key']}")
+        raise ClipperError(f"{vid} is already recorded as {other['key']}")
     e = prev or next((x for x in queue(cfg) if x["key"] == key), None)
     if not e:
-        raise SystemExit(f"{key} isn't approved (or is on hold): approve it in Kitsu first")
+        raise ClipperError(f"{key} isn't approved (or is on hold): approve it in Kitsu first")
     e = {k: v for k, v in e.items() if k in ("key", "stream", "kind", "id", "title", "file",
                                              "publish_at", "source", "platforms")}
     refresh_review(cfg, [e])
@@ -818,7 +819,7 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
     yt = service(paths)
     found = yt.videos().list(part="snippet,status", id=vid).execute().get("items", [])
     if not found:
-        raise SystemExit(f"YouTube has no video {vid} on this channel (still uploading?)")
+        raise ClipperError(f"YouTube has no video {vid} on this channel (still uploading?)")
     v = found[0]
     stem = Path(e["file"]).stem
     print(f"{key} <- https://youtu.be/{vid} ({v['status']['privacyStatus']}, "

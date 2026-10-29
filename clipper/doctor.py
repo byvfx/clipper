@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 
 from .config import _root, for_show
+from .errors import ClipperError
 
 RESULTS: list[tuple[str, str, str, str]] = []  # (status, area, what, hint)
 
@@ -381,7 +382,7 @@ def check_keys(cfg: dict, role: str) -> None:
         try:
             token(cfg)
             ok("keys", "Discord bot token found")
-        except SystemExit as e:
+        except ClipperError as e:
             fail("keys", f"Discord: {e}", f"put the bot token in {cfg['paths']['discord_token']}")
         try:
             import discord  # noqa: F401
@@ -494,7 +495,7 @@ def check_online(cfg: dict, role: str) -> None:
                 else:
                     warn("online", f"Kitsu production {name!r} doesn't exist yet",
                          "created by the first `clipper review publish` of that show")
-        except (Exception, SystemExit) as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             fail("online", f"Kitsu: {e}", "is the NAS up, and this machine on its network?")
     if cfg["discord"]["enabled"] or role == "bot":
         try:
@@ -504,7 +505,7 @@ def check_online(cfg: dict, role: str) -> None:
             (ok if r.ok else fail)("online", f"Discord bot {r.json().get('username', '?')}" if r.ok
                                    else f"Discord refused the token ({r.status_code})",
                                    "" if r.ok else "reset the bot token in the Developer Portal")
-        except (Exception, SystemExit) as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             fail("online", f"Discord: {e}")
     if role in ("all", "gpu") and cfg["transcribe"]["backend"] == "modal":
         try:

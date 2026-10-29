@@ -47,6 +47,7 @@ from typing import Any
 import requests
 
 from . import kick
+from .errors import ClipperError
 
 log = logging.getLogger("clipper.record")
 
@@ -115,7 +116,7 @@ class Alerts:
 
                 notify.Rest(self.cfg)("POST", f"/channels/{self.channel}/messages",
                                       {"content": body[:1900]})
-        except (requests.RequestException, SystemExit) as e:
+        except (requests.RequestException, ClipperError) as e:
             log.error("alert not delivered: %s", e)
 
 

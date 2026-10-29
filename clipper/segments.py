@@ -19,6 +19,7 @@ from pathlib import Path
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
 
 KINDS = ["intro", "commentary", "reaction", "call", "gambling", "ad_read", "break",
@@ -93,7 +94,7 @@ def split(stream_dir: Path, cfg: dict, claude: Claude, prompts: Prompts) -> dict
     out, meta = claude.json_call(seg_cfg["model"], prompts.get("segments"), transcript, SCHEMA,
                                  seg_cfg["effort"], fallback=True, stream=True)
     if out is None:
-        raise SystemExit(f"segments: model refused ({meta.get('refusal')})")
+        raise ClipperError(f"segments: model refused ({meta.get('refusal')})")
     segs = sorted(out["segments"], key=lambda s: s["start_s"])
     for i, s in enumerate(segs, 1):
         s["id"] = f"s{i:02d}"

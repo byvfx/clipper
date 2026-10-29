@@ -122,7 +122,7 @@ def checks(cfg: dict, st: dict, now: datetime) -> None:
         st["digest"] = now.date().isoformat()
         try:
             text = digest(cfg, now)
-        except (Exception, SystemExit) as e:  # noqa: BLE001  # say so once, rather than every pass
+        except Exception as e:  # noqa: BLE001  # say so once, rather than every pass
             log.warning("digest: %s: %s", type(e).__name__, e)
             text = f"Daily digest failed: {type(e).__name__}: {e}"[:1900]
         send(cfg, "digest", text, key=f"digest:{now.date()}")

@@ -37,6 +37,7 @@ from zoneinfo import ZoneInfo
 
 from . import actions, jsonstate, review, schedule, worker
 from .config import _root, for_stream
+from .errors import ClipperError
 
 PAGE = Path(__file__).with_name("web") / "warroom.html"
 STATIC = {"/manifest.webmanifest": "application/manifest+json", "/icon.svg": "image/svg+xml",
@@ -203,8 +204,8 @@ def all_rows(cfg: dict, streams: list | None = None) -> list[dict]:
             continue
         try:
             rows += _cached(sdir, "rows", sig + (sched,), lambda d=sdir: stream_rows(cfg, d))
-        # SystemExit too: for_stream raises it on a bad streams/<id>/config.toml
-        except (Exception, SystemExit) as e:  # noqa: BLE001 - one broken stream shouldn't blank the page
+        # ClipperError too: for_stream raises it on a bad streams/<id>/config.toml
+        except Exception as e:  # noqa: BLE001 - one broken stream shouldn't blank the page
             print(f"warroom: {sdir.name}: {type(e).__name__}: {e}", flush=True)
     return rows
 
@@ -218,7 +219,7 @@ def stream_infos(cfg: dict, streams: list) -> list[dict]:
             continue
         try:
             infos.append(_cached(d, "info", sig, lambda d=d: stream_info(cfg, d)))
-        except (Exception, SystemExit) as e:  # noqa: BLE001 - as in all_rows
+        except Exception as e:  # noqa: BLE001 - as in all_rows
             print(f"warroom: {d.name}: {type(e).__name__}: {e}", flush=True)
     return sorted(infos, key=lambda i: i["started_at"], reverse=True)
 
@@ -226,7 +227,7 @@ def stream_infos(cfg: dict, streams: list) -> list[dict]:
 def _show_name(cfg: dict, sdir: Path) -> str:
     try:
         return for_stream(cfg, sdir)["meta"]["show_name"]
-    except (Exception, SystemExit):  # noqa: BLE001 - a bad config.toml: fall back to the base show
+    except Exception:  # noqa: BLE001 - a bad config.toml: fall back to the base show
         return cfg["meta"]["show_name"]
 
 
@@ -445,7 +446,7 @@ def _apply(cfg: dict, item: actions.Item, action: str, body: dict, who: str) -> 
           "edit": lambda: actions.edit_meta(cfg, item, body.get("values") or {}, who),
           "thumbtext": lambda: actions.thumbtext(cfg, item, text, who)}.get(action)
     if not fn:
-        raise SystemExit(f"unknown action {action!r}")
+        raise ClipperError(f"unknown action {action!r}")
     return fn()
 
 
@@ -493,16 +494,16 @@ def _inverse(cfg: dict, item: actions.Item, action: str, before: dict, values: d
         return actions.edit_meta(cfg, item, {c: before[ROW_OF[c]] for c in values}, who)
     if action == "thumbtext":
         return actions.thumbtext(cfg, item, before["thumb_text"], who)
-    raise SystemExit(f"{action} can't be undone")
+    raise ClipperError(f"{action} can't be undone")
 
 
 def do_undo(cfg: dict, uid: str) -> dict:
     d = jsonstate.read(undo_path(cfg), {"actions": []})
     entry = next((a for a in d["actions"] if a["id"] == uid), None)
     if not entry:
-        raise SystemExit(f"that action is too old to undo here (only the last {UNDO_MAX} are kept)")
+        raise ClipperError(f"that action is too old to undo here (only the last {UNDO_MAX} are kept)")
     if entry["undone"]:
-        raise SystemExit("already undone")
+        raise ClipperError("already undone")
     who = f"{WHO} (undo)"
     ok, failed, rows = 0, [], []
     with LOCK:
@@ -512,7 +513,7 @@ def do_undo(cfg: dict, uid: str) -> dict:
                 rows.append(row_json(item.stream_dir, _inverse(cfg, item, entry["action"], x["before"],
                                                                x.get("values") or {}, who)))
                 ok += 1
-            except (Exception, SystemExit) as e:  # noqa: BLE001  # report each, undo the rest
+            except Exception as e:  # noqa: BLE001  # report each, undo the rest
                 failed.append({"ref": x["ref"], "error": str(e)[:200]})
         if ok and cfg["discord"]["replan"] and entry["action"] in REPLANS:
             schedule.run(cfg, sync_first=False)
@@ -530,7 +531,7 @@ REF = re.compile(r"(?:[\w.-]+/)?[\w.-]+")  # <stream>/<key> or a key: names, nev
 
 def checked_ref(ref) -> str:
     if not isinstance(ref, str) or not REF.fullmatch(ref) or ".." in ref:
-        raise SystemExit(f"not an item name: {str(ref)[:60]!r}")
+        raise ClipperError(f"not an item name: {str(ref)[:60]!r}")
     return ref
 
 
@@ -582,7 +583,7 @@ def cover_post(cfg: dict, body: dict) -> dict:
     sdir, preview = item.stream_dir, bool(body.get("preview"))
     changes = body.get("changes") or {}
     if not isinstance(changes, dict) or not changes:
-        raise SystemExit("nothing changed")
+        raise ClipperError("nothing changed")
     if preview:
         jpg = thumbs.edit_cover(sdir, cfg, cover_key(item), changes, preview=True)
         return {"url": media_url(sdir, jpg) + f"?v={int(time.time() * 1000)}"}
@@ -601,9 +602,9 @@ BULK = ("approve", "reopen", "hold", "pin", "changes", "reject")
 def do_bulk(cfg: dict, body: dict) -> dict:
     action, refs = body.get("action", ""), [checked_ref(r) for r in body.get("refs") or []]
     if action not in BULK:
-        raise SystemExit(f"{action!r} isn't a bulk action")
+        raise ClipperError(f"{action!r} isn't a bulk action")
     if not refs:
-        raise SystemExit("nothing selected")
+        raise ClipperError("nothing selected")
     done, failed, rows = [], [], []
     with LOCK:
         for ref in refs:
@@ -612,7 +613,7 @@ def do_bulk(cfg: dict, body: dict) -> dict:
                 before = _before(cfg, item)
                 rows.append(row_json(item.stream_dir, _apply(cfg, item, action, body, WHO)))
                 done.append({"ref": item.ref, "before": before})
-            except (Exception, SystemExit) as e:  # noqa: BLE001  # report each, do the rest
+            except Exception as e:  # noqa: BLE001  # report each, do the rest
                 failed.append({"ref": ref, "error": str(e)[:200]})
         if done and cfg["discord"]["replan"] and action in REPLANS:
             schedule.run(cfg, sync_first=False)
@@ -629,14 +630,14 @@ def replace_plan(rows: list[dict], fields: list[str], find: str, repl: str, rege
     import re
 
     if not find:
-        raise SystemExit("find what?")
+        raise ClipperError("find what?")
     if not fields or any(f not in COLUMN_OF for f in fields):
-        raise SystemExit(f"fields are {', '.join(COLUMN_OF)}")
+        raise ClipperError(f"fields are {', '.join(COLUMN_OF)}")
     try:
         pat = find if regex else re.escape(find)
         pat = re.compile(rf"\b(?:{pat})\b" if word else pat, 0 if case else re.IGNORECASE)
     except re.error as e:
-        raise SystemExit(f"bad pattern: {e}") from None
+        raise ClipperError(f"bad pattern: {e}") from None
     out = []
     for r in rows:
         values, lines = {}, []
@@ -645,7 +646,7 @@ def replace_plan(rows: list[dict], fields: list[str], find: str, repl: str, rege
             try:
                 new = pat.sub(repl if regex else lambda _m: repl, old)
             except (re.error, IndexError) as e:
-                raise SystemExit(f"bad replacement: {e}") from None
+                raise ClipperError(f"bad replacement: {e}") from None
             if new == old:
                 continue
             values[COLUMN_OF[f]] = new
@@ -663,7 +664,7 @@ def replace_plan(rows: list[dict], fields: list[str], find: str, repl: str, rege
 def do_replace(cfg: dict, body: dict) -> dict:
     refs = {checked_ref(r) for r in body.get("refs") or []}
     if not refs:
-        raise SystemExit("nothing selected")
+        raise ClipperError("nothing selected")
     rows = [r for r in all_rows(cfg) if r["ref"] in refs]
     plan = replace_plan(rows, body.get("fields") or [], body.get("find", ""), body.get("replace", ""),
                         bool(body.get("regex")), bool(body.get("case")), bool(body.get("word")))
@@ -677,7 +678,7 @@ def do_replace(cfg: dict, body: dict) -> dict:
                 before = _before(cfg, item)
                 out_rows.append(row_json(item.stream_dir, actions.edit_meta(cfg, item, p["values"], WHO)))
                 done.append({"ref": item.ref, "before": before, "values": p["values"]})
-            except (Exception, SystemExit) as e:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
                 failed.append({"ref": p["ref"], "error": str(e)[:200]})
     uid = remember(cfg, "replace", f"replace {body.get('find', '')!r} in {len(done)} items", done) if done else ""
     return {"dry_run": False, "done": len(done), "failed": failed, "rows": out_rows, "undo": uid}
@@ -737,7 +738,7 @@ def sync_all(cfg: dict, stream: str | None = None) -> None:
             dirs = ([cfg["paths"]["streams"] / stream] if stream else actions.review_dirs(cfg))
             for d in dirs:
                 review.sync(d, cfg, quiet=True)
-        except (Exception, SystemExit) as e:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             SYNC["error"] = str(e)[:200]
         SYNC.update(running=False, last=datetime.now(UTC).isoformat(timespec="seconds"))
 
@@ -752,7 +753,7 @@ def watch_page(qs: dict) -> bytes:
 
     src = (qs.get("src") or [""])[0]
     if not src.startswith("/media/"):
-        raise SystemExit("no such video")
+        raise ClipperError("no such video")
     title = html.escape((qs.get("title") or ["clipper"])[0])
     t = float((qs.get("t") or ["0"])[0] or 0)
     return (f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -871,7 +872,7 @@ def make_handler(cfg: dict):
                     self.send_json({"error": "not found"}, 404)
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
-            except SystemExit as e:  # clipper's own messages (a bad ref): safe to show
+            except ClipperError as e:  # clipper's own messages (a bad ref): safe to show
                 self.send_json({"error": str(e)}, 400)
             except Exception as e:  # noqa: BLE001
                 self.fail(e)
@@ -918,7 +919,7 @@ def make_handler(cfg: dict):
                     self.send_json({"started": start_retake(cfg)})
                 else:
                     self.send_json({"error": "not found"}, 404)
-            except SystemExit as e:  # clipper's own messages: safe to show
+            except ClipperError as e:  # clipper's own messages: safe to show
                 self.send_json({"error": str(e)}, 400)
             except Exception as e:  # noqa: BLE001
                 self.fail(e)
@@ -1046,7 +1047,7 @@ def lowres_status(cfg: dict, url: str) -> dict:
     root = cfg["paths"]["streams"].resolve()
     src = (root / unquote(urlparse(url).path.removeprefix("/media/"))).resolve()
     if root not in src.parents or src.suffix.lower() != ".mp4" or not src.is_file():
-        raise SystemExit("no such video")
+        raise ClipperError("no such video")
     if lowres_ready(src):
         lo = lowres_path(src)
         return {"ready": True, "url": "/media/" + quote(lo.relative_to(root).as_posix()),
@@ -1066,7 +1067,7 @@ def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
     cfg = {**cfg, "warroom": {**cfg["warroom"], "token": token(cfg)}}
     wc = cfg["warroom"]
     if wc["host"] not in ("127.0.0.1", "localhost", "::1") and not wc["token"]:
-        raise SystemExit("[warroom] host is reachable from other machines: set [warroom] token too")
+        raise ClipperError("[warroom] host is reachable from other machines: set [warroom] token too")
 
     def warm():  # fill the per-stream cache so the first page load isn't the slow one
         try:
@@ -1126,10 +1127,10 @@ def tailnet(cfg: dict, action: str) -> None:
     wc, tok_file = cfg["warroom"], Path(cfg["paths"]["warroom_token"])
     st = tailnet_status(cfg)
     if not st["installed"]:
-        raise SystemExit("Tailscale isn't installed here: install it from https://tailscale.com/download, "
+        raise ClipperError("Tailscale isn't installed here: install it from https://tailscale.com/download, "
                          "sign in, and put the phone on the same tailnet (SETUP.md, Phone access)")
     if st["state"] != "Running":
-        raise SystemExit(f"Tailscale is {st['state'] or 'not running'}: sign in from its tray icon "
+        raise ClipperError(f"Tailscale is {st['state'] or 'not running'}: sign in from its tray icon "
                          "(or `tailscale up`), then run this again")
     if action == "off":
         r = _ts("serve", "--https=443", "off")
@@ -1137,7 +1138,7 @@ def tailnet(cfg: dict, action: str) -> None:
         return
     if action == "on" and not st["served"]:
         if wc["host"] not in ("127.0.0.1", "localhost", "0.0.0.0", "::"):
-            raise SystemExit(f"[warroom] host is {wc['host']}; tailscale serve proxies to 127.0.0.1")
+            raise ClipperError(f"[warroom] host is {wc['host']}; tailscale serve proxies to 127.0.0.1")
         if not token(cfg):  # the tailnet is the boundary; the token is the second check
             import secrets
             tok_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1149,7 +1150,7 @@ def tailnet(cfg: dict, action: str) -> None:
         r = subprocess.run([tailscale_exe(), "serve", "--bg", "--https=443",
                             f"http://127.0.0.1:{wc['port']}"], check=False)
         if r.returncode:
-            raise SystemExit("tailscale serve failed (above). If it asks to enable HTTPS, do that in "
+            raise ClipperError("tailscale serve failed (above). If it asks to enable HTTPS, do that in "
                              "the Tailscale admin console (DNS: MagicDNS and HTTPS certificates), then rerun")
         st = tailnet_status(cfg)
     if not st["served"]:
@@ -1170,7 +1171,7 @@ def run(cfg: dict, port: int | None = None, open_browser: bool = False) -> None:
     try:
         srv = server(cfg, port)
     except OSError as e:
-        raise SystemExit(f"war room: port {port or _root(cfg)['warroom']['port']} is busy ({e}); "
+        raise ClipperError(f"war room: port {port or _root(cfg)['warroom']['port']} is busy ({e}); "
                          "the Discord bot may already be serving it ([warroom] with_bot)") from None
     url_ = url(cfg, port)
     print(f"war room on {url_}  (Ctrl+C to stop)", flush=True)

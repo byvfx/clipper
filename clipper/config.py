@@ -17,6 +17,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from .errors import ClipperError
+
 DEFAULTS: dict[str, dict[str, Any]] = {
     "paths": {
         "streams": "streams",
@@ -659,7 +661,7 @@ def _coerce(raw: str, like: Any, name: str = "") -> Any:
         if isinstance(like, dict):
             return json.loads(raw)
     except ValueError as e:
-        raise SystemExit(f"{name or 'environment variable'}={raw!r}: not a {type(like).__name__} ({e})") from None
+        raise ClipperError(f"{name or 'environment variable'}={raw!r}: not a {type(like).__name__} ({e})") from None
     return raw
 
 
@@ -715,10 +717,10 @@ def _load_local(path: Path, cfg: dict, base: Path) -> dict:
     local = tomllib.loads(path.read_text(encoding="utf-8"))
     for section, values in local.items():
         if section in NOT_SECTIONS or not isinstance(values, dict):
-            raise SystemExit(f"{path}: only this machine's [section] settings go here, not [{section}]")
+            raise ClipperError(f"{path}: only this machine's [section] settings go here, not [{section}]")
         unknown = [k for k in values if k not in cfg.get(section, {})]
         if unknown:
-            raise SystemExit(f"{path}: unknown setting [{section}] {', '.join(unknown)}")
+            raise ClipperError(f"{path}: unknown setting [{section}] {', '.join(unknown)}")
     if "paths" in local:
         _resolve_paths(local["paths"], base)
     return local
@@ -801,7 +803,7 @@ def for_show(cfg: dict, key: str, channel: str = "") -> dict:
         if not channel or channel == root["show"]["channel"]:
             return root
     elif key not in root["shows"]:
-        raise SystemExit(f"no [shows.{key}] in the config; shows: {', '.join(root['shows'])}")
+        raise ClipperError(f"no [shows.{key}] in the config; shows: {', '.join(root['shows'])}")
     cache_key = (key, channel)
     if cache_key in root["_resolved"]:
         return root["_resolved"][cache_key]
@@ -842,7 +844,7 @@ def for_stream(cfg: dict, sdir: Path) -> dict:
     for section, values in overrides.items():
         unknown = [k for k in values if k not in res.get(section, {})] if isinstance(values, dict) else [""]
         if unknown:
-            raise SystemExit(f"{path}: unknown setting [{section}] {', '.join(unknown)}")
+            raise ClipperError(f"{path}: unknown setting [{section}] {', '.join(unknown)}")
         res[section].update(copy.deepcopy(values))
     _apply_env(res, set(overrides), root["_local"])
     res["_root"] = root

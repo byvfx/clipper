@@ -52,6 +52,7 @@ from .archive import netscape_cookies, subject_dir
 from .bleep import Bleeper
 from .config import for_stream
 from .cut import encode_args
+from .errors import ClipperError
 
 STORIES_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["stories"],
@@ -72,7 +73,7 @@ def out_dir(sdir: Path) -> Path:
 def load(sdir: Path) -> dict:
     p = out_dir(sdir) / "receipts.json"
     if not p.exists():
-        raise SystemExit(f"no receipts for {sdir.name} yet: clipper receipts find {sdir.name}")
+        raise ClipperError(f"no receipts for {sdir.name} yet: clipper receipts find {sdir.name}")
     return json.loads(p.read_text(encoding="utf-8"))
 
 
@@ -144,7 +145,7 @@ def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
     segs = json.loads((sdir / "segments.json").read_text(encoding="utf-8"))["segments"]
     picked = [s for s in segs if (s["id"] in only if only else about_subject(s, rc))]
     if not picked:
-        raise SystemExit(f"{sdir.name}: no segments about {subject} (topics {rc['topics']}, "
+        raise ClipperError(f"{sdir.name}: no segments about {subject} (topics {rc['topics']}, "
                          f"figures {rc['figures']}); name some with --segments")
     words = load_words(sdir)
     blocks = []
@@ -245,7 +246,7 @@ def first_font(paths: list[str]) -> Path:
     for f in paths:
         if Path(f).exists():
             return Path(f)
-    raise SystemExit(f"no font found among {paths}; set [receipts] fonts / text_fonts")
+    raise ClipperError(f"no font found among {paths}; set [receipts] fonts / text_fonts")
 
 
 def esc(p: Path) -> str:
@@ -287,7 +288,7 @@ def download(cfg: dict, r: dict, dst: Path) -> None:
     if dst.exists():
         return
     if r["source"] != "youtube":
-        raise SystemExit(f"{r['id']}: only YouTube receipts can be cut so far ({r['url']})")
+        raise ClipperError(f"{r['id']}: only YouTube receipts can be cut so far ({r['url']})")
     tmp = dst.with_name(dst.stem + ".dl.mp4")
     args = ["--download-sections", f"*{r['start']:.2f}-{r['end']:.2f}", "--force-keyframes-at-cuts",
             "-f", cfg["receipts"]["format"], "--merge-output-format", "mp4", "--no-playlist",
@@ -377,7 +378,7 @@ def script(sdir: Path, cfg: dict) -> None:
                          f'title="{r["title"]}">\n{said}\n</receipt>')
         blocks.append("\n".join(parts) + "\n</story>")
     if not blocks:
-        raise SystemExit("no story has a receipt with use = true")
+        raise ClipperError("no story has a receipt with use = true")
     prompts = Prompts(cfg)
     prompts.version = rc["script_prompt_version"]
     prompts.vars.update(subject=data["subject"], show_name=data["show"])
@@ -386,7 +387,7 @@ def script(sdir: Path, cfg: dict) -> None:
     out, _ = claude.json_call(rc["script_model"], prompts.get("receipts_script"), "\n\n".join(blocks),
                               SCRIPT_SCHEMA, rc["script_effort"])
     if not out:
-        raise SystemExit("the model returned no script (refusal); write it in receipts.json by hand")
+        raise ClipperError("the model returned no script (refusal); write it in receipts.json by hand")
     lines = {s["id"]: s for s in out["stories"]}
     data["script"] = {"open": out["open"], "close": out["close"],
                       "model": rc["script_model"], "written_at": datetime.now(UTC).isoformat(timespec="seconds")}
@@ -500,7 +501,7 @@ def cut(sdir: Path, cfg: dict) -> Path:
         t += duration(p)
 
     if not used(data):
-        raise SystemExit("no story has a receipt with use = true")
+        raise ClipperError("no story has a receipt with use = true")
     if vo := voiced(cfg, sdir, sc.get("open", "")):
         chapters.append((t, "Open"))
         still(work, "open", [(big, 150, "0xFFD400", 360, "RECEIPTS"),
@@ -553,11 +554,11 @@ def upload(sdir: Path, cfg: dict, again: bool = False) -> None:
     data = load(sdir)
     final = out_dir(sdir) / "receipts.mp4"
     if not final.exists() or not data.get("cut_at"):
-        raise SystemExit(f"cut it first: clipper receipts cut {sdir.name}")
+        raise ClipperError(f"cut it first: clipper receipts cut {sdir.name}")
     if data.get("youtube") and not again:
-        raise SystemExit(f"already uploaded: {data['youtube']['url']} (--again for a second copy)")
+        raise ClipperError(f"already uploaded: {data['youtube']['url']} (--again for a second copy)")
     if final.stat().st_mtime < datetime.fromisoformat(data["cut_at"]).timestamp() - 5:
-        raise SystemExit("receipts.mp4 is older than the last cut; cut again")
+        raise ClipperError("receipts.mp4 is older than the last cut; cut again")
     yc = cfg["youtube"]
     mask = Bleeper({**cfg["bleep"], "mode": "bleep"}).mask
     desc_file = (out_dir(sdir) / "description.txt").read_text(encoding="utf-8")

@@ -39,6 +39,7 @@ from pathlib import Path
 import numpy as np
 
 from . import jsonstate
+from .errors import ClipperError
 
 SR = 8000  # analysis sample rate for take detection
 
@@ -101,11 +102,11 @@ def prepare(recording: Path, read: Path, pc: dict, take: int = 1, out: Path | No
     rd = pcm(read)
     takes = find_takes(pcm(recording), rd)
     if not takes:
-        raise SystemExit(f"the read isn't audible in {recording.name}: play it out loud while filming")
+        raise ClipperError(f"the read isn't audible in {recording.name}: play it out loud while filming")
     for k, (t, s) in enumerate(takes, 1):
         print(f"take {k}: starts at {t:.2f} s (match {s:.2f})")
     if not 1 <= take <= len(takes):
-        raise SystemExit(f"--take {take}: the recording has {len(takes)} take(s)")
+        raise ClipperError(f"--take {take}: the recording has {len(takes)} take(s)")
     t0 = takes[take - 1][0]
     end = min(len(rd) / SR + pc["tail_s"], duration(recording) - t0)
     cuts = cut_points(pauses(read, pc), end, pc)
@@ -141,7 +142,7 @@ def stitch(d: Path, pc: dict) -> Path:
     m = status(d)
     missing = [p["render"] for p in m["pieces"] if not (d / p["render"]).exists()]
     if missing:
-        raise SystemExit(f"not rendered yet: {', '.join(missing)}")
+        raise ClipperError(f"not rendered yet: {', '.join(missing)}")
     inputs, chains = [], []
     for i, p in enumerate(m["pieces"]):
         slot = p["end"] - p["start"]
@@ -175,7 +176,7 @@ def sync_key(pc: dict) -> str:
     if not k and path.exists():
         k = path.read_text(encoding="utf-8-sig").strip()
     if not k:
-        raise SystemExit(f"no Sync API key: set ${pc['sync_key_env']} or put it in {path}")
+        raise ClipperError(f"no Sync API key: set ${pc['sync_key_env']} or put it in {path}")
     return k
 
 
@@ -199,27 +200,27 @@ def lipsync_sync(video: Path, audio_wav: Path, pc: dict) -> bytes:
                           data={"model": pc["sync_model"], "options": json.dumps({"sync_mode": "cut_off"})},
                           files={"video": (video.name, v, "video/mp4"), "audio": (audio_wav.name, a, "audio/wav")})
     if not r.ok:
-        raise SystemExit(f"Sync: HTTP {r.status_code}: {r.text[:300]}")
+        raise ClipperError(f"Sync: HTTP {r.status_code}: {r.text[:300]}")
     gid = r.json()["id"]
     t0 = time.time()
     errors = 0
     while True:  # #77 M13: a network blip doesn't lose the paid job; it's never polled forever
         time.sleep(10)
         if time.time() - t0 > 3600:
-            raise SystemExit(f"Sync job {gid} still not done after an hour; check sync.so")
+            raise ClipperError(f"Sync job {gid} still not done after an hour; check sync.so")
         try:
             s = requests.get(f"https://api.sync.so/v2/generate/{gid}", headers=h, timeout=60).json()
         except (requests.RequestException, ValueError) as e:
             errors += 1
             if errors >= 10:
-                raise SystemExit(f"Sync job {gid}: polling failed 10 times ({e}); check sync.so") from None
+                raise ClipperError(f"Sync job {gid}: polling failed 10 times ({e}); check sync.so") from None
             continue
         errors = 0
         if s.get("status") == "COMPLETED":
             print(f"Sync {pc['sync_model']}: {time.time() - t0:.0f} s")
             return requests.get(s["outputUrl"], timeout=600).content
         if s.get("status") in ("FAILED", "REJECTED", "CANCELED", "CANCELLED"):
-            raise SystemExit(f"Sync {s.get('status')}: {s.get('errorCode')} {s.get('error')}")
+            raise ClipperError(f"Sync {s.get('status')}: {s.get('errorCode')} {s.get('error')}")
 
 
 def lipsync(target: Path, pc: dict, engine: str, audio: Path | None = None) -> Path:

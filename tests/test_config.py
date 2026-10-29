@@ -5,6 +5,7 @@ import pytest
 from conftest import ROOT
 
 from clipper import config
+from clipper.errors import ClipperError
 
 TOML = """
 [meta]
@@ -54,7 +55,7 @@ def test_layers(cfg_path, monkeypatch):
 
 def test_env_value_must_parse(cfg_path, monkeypatch):
     monkeypatch.setenv("CLIPPER_META_SRT_MAX_S", "six")
-    with pytest.raises(SystemExit, match="CLIPPER_META_SRT_MAX_S"):
+    with pytest.raises(ClipperError, match="CLIPPER_META_SRT_MAX_S"):
         config.load(cfg_path)
 
 
@@ -65,19 +66,19 @@ def test_env_list(cfg_path, monkeypatch):
 
 def test_unknown_keys_are_refused(cfg_path, tmp_path):
     (tmp_path / config.LOCAL_CONFIG).write_text("[meta]\nsrt_max = 1\n", encoding="utf-8")
-    with pytest.raises(SystemExit, match="unknown setting"):
+    with pytest.raises(ClipperError, match="unknown setting"):
         config.load(cfg_path)
 
     cfg = config.load(cfg_path, use_local=False)
     sdir = tmp_path / "kick-2"
     sdir.mkdir()
     (sdir / config.STREAM_CONFIG).write_text("[meta]\nsrt_max = 1\n", encoding="utf-8")
-    with pytest.raises(SystemExit, match="unknown setting"):
+    with pytest.raises(ClipperError, match="unknown setting"):
         config.for_stream(cfg, sdir)
 
 
 def test_unknown_show_is_refused(cfg_path):
-    with pytest.raises(SystemExit, match="no \\[shows.nope\\]"):
+    with pytest.raises(ClipperError, match="no \\[shows.nope\\]"):
         config.for_show(config.load(cfg_path), "nope")
 
 

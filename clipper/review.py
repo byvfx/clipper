@@ -53,6 +53,7 @@ from pathlib import Path
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .segments import slug
 
 TASK_TYPES = {"Segment": ("#48bfe3", "Sequence"), "Horizontal": ("#5e60ce", "Shot"),
@@ -153,15 +154,15 @@ def connect(rc: dict):
     import gazu
 
     if not rc["host"] or "<" in rc["host"]:
-        raise SystemExit("set [review] host to your Kitsu API URL (Kitsu URL + /api) in clipper.toml")
+        raise ClipperError("set [review] host to your Kitsu API URL (Kitsu URL + /api) in clipper.toml")
     token = os.environ.get(rc["token_env"], "")
     if not token:
-        raise SystemExit(f"set ${rc['token_env']} to a Kitsu bot token (Kitsu > Bots)")
+        raise ClipperError(f"set ${rc['token_env']} to a Kitsu bot token (Kitsu > Bots)")
     gazu.cache.disable()  # cached "not found" lookups would hide what we just created
     gazu.set_host(rc["host"])
     gazu.set_token(token)
     if not gazu.client.host_is_up():
-        raise SystemExit(f"Kitsu not reachable at {rc['host']}")
+        raise ClipperError(f"Kitsu not reachable at {rc['host']}")
     return gazu
 
 
@@ -698,7 +699,7 @@ def apply_thumbnail_text(stream_dir: Path, cfg: dict, gazu, fmap: dict,
             continue
         try:
             text = thumbs.check_text(cfg, raw)
-        except SystemExit as e:
+        except ClipperError as e:
             text = tstate[tkey]["text"]
             note = f"{NOTE_PREFIX} Thumbnail text not used: {e}. Kept {text!r}"
             gazu.task.add_comment(task, gazu.task.get_task_status(task["task_status_id"]), note)

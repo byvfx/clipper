@@ -30,6 +30,7 @@ from pathlib import Path
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .segments import hms, slug
 
 
@@ -37,7 +38,7 @@ def source_file(stream_dir: Path) -> Path:
     for p in sorted(stream_dir.glob("source.*")):
         if p.suffix not in (".part", ".ytdl") and "Frag" not in p.name:
             return p
-    raise SystemExit(f"no source video in {stream_dir}")
+    raise ClipperError(f"no source video in {stream_dir}")
 
 
 def keyframes(stream_dir: Path, src: Path) -> list[float]:
@@ -152,7 +153,7 @@ def copy_cut(stream_dir: Path, src: Path, dst: Path, start: float, end: float,
     check_sync(dst)
     got = stream_durations(dst).get("video", 0)
     if abs(got - (end - k)) > 0.5:
-        raise SystemExit(f"{dst.name}: {got:.1f}s of video for {end - k:.1f}s from keyframe "
+        raise ClipperError(f"{dst.name}: {got:.1f}s of video for {end - k:.1f}s from keyframe "
                          f"{k}; the seek missed it")
     return k, n
 
@@ -161,7 +162,7 @@ def check_sync(path: Path) -> None:
     # ~0.1 s of video offset is normal (B-frame delay, covered by the MP4 edit list).
     off = stream_offsets(path)
     if abs(off.get("video", 0) - off.get("audio", 0)) > 0.25:
-        raise SystemExit(f"{path.name}: audio/video start {off}; the cut is out of sync")
+        raise ClipperError(f"{path.name}: audio/video start {off}; the cut is out of sync")
 
 
 def write_sidecar(path: Path, data: dict) -> None:
@@ -290,13 +291,13 @@ def on_nas(stream_dir: Path, cfg: dict, argv: list[str]) -> None:
     cc = for_stream(cfg, stream_dir)["cut"]
     missing = [k for k in ("nas_host", "nas_data") if not cc[k]]
     if missing:
-        raise SystemExit(f"[cut] backend = \"nas\" needs [cut] {', '.join(missing)} in clipper.toml")
+        raise ClipperError(f"[cut] backend = \"nas\" needs [cut] {', '.join(missing)} in clipper.toml")
     if stream_dir.resolve().parent != Path(cfg["paths"]["streams"]).resolve():
-        raise SystemExit(f"{stream_dir} is not under paths.streams; the NAS only sees those "
+        raise ClipperError(f"{stream_dir} is not under paths.streams; the NAS only sees those "
                          f"(CLIPPER_CUT_BACKEND=local to cut it here)")
     toml = (cfg.get("_root") or cfg).get("_file")  # a resolved config keeps the loaded one in _root
     if not toml:
-        raise SystemExit("[cut] backend = \"nas\" needs a clipper.toml to send along")
+        raise ClipperError("[cut] backend = \"nas\" needs a clipper.toml to send along")
     buf = io.BytesIO()
     pkg = Path(__file__).parent
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -319,6 +320,6 @@ def on_nas(stream_dir: Path, cfg: dict, argv: list[str]) -> None:
     r = subprocess.run(["ssh", "-o", "BatchMode=yes", cc["nas_host"], remote], input=buf.getvalue(),
                        check=False)
     if r.returncode:
-        raise SystemExit(f"cut on {cc['nas_host']} failed (exit {r.returncode}); a run still going "
+        raise ClipperError(f"cut on {cc['nas_host']} failed (exit {r.returncode}); a run still going "
                          f"there: ssh {cc['nas_host']} docker rm -f clipper-cut-{sid}")
     print(f"cut on {cc['nas_host']} in {time.time() - t:.0f}s", flush=True)
