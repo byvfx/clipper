@@ -429,7 +429,8 @@ class Bot(discord.Client):
         if row["scheduled"]:
             note = f"; scheduled {row['scheduled'][:16].replace('T', ' ')}"
         elif row["decision"] == "approved" and cfg["discord"]["replan"]:
-            note = "; no free slot yet" if not row["hold"] else "; held, not scheduled"
+            note = ("; held, not scheduled" if row["hold"] else f"; not going out: {row['dropped']}"
+                    if row["dropped"] else "; no free slot yet")
         return row, note
 
     async def apply(self, interaction: discord.Interaction, action: str, ref: str, text) -> None:

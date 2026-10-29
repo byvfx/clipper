@@ -494,8 +494,13 @@ short_times = ["10:00"]          # Shorts count toward max_per_day and min_gap_m
 max_per_day = 6                # YouTube upload quota guard, all kinds together
 min_gap_minutes = 90
 kick_first_hours = 24          # nothing goes out until this long after the stream ended
+# Most releases per stream by kind; the best go (Shorts by score, segments and compilations
+# by chat heat), the rest stay approved but unscheduled. {} = everything approved goes.
+stream_budget = {}             # e.g. { segment = 10, short = 8, compilation = 1 }
+budget_hours = 8.0             # a stream this long gets the whole budget; others scale with length
+stale_days = 0                 # an item not out this many days after its first allowed slot never goes; 0 = off
 clip_order = "score"           # score (best first) or stream (oldest stream first)
-mix_shows = true               # shows take turns for slots of each kind; false = one queue, oldest stream first
+mix_shows = true              # shows take turns for slots of each kind; false = one queue, oldest stream first
 # priority = true: set only in a stream's own streams/<id>/config.toml; its items go ahead of
 # every other stream's, freeing their automatic slots that are not uploaded yet.
 priority = false

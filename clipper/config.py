@@ -568,6 +568,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_per_day": 6,         # YouTube upload quota guard, across all kinds
         "min_gap_minutes": 90,    # between any two releases
         "kick_first_hours": 24,   # nothing goes out until this long after the stream ended
+        "stream_budget": {},      # most releases per stream by kind, e.g. {segment = 10, short = 8}:
+                                  # the best go (Shorts by score, segments by chat heat); {} = all
+        "budget_hours": 8.0,      # a stream this long gets the whole budget; others scale with length
+        "stale_days": 0,          # an item not out this many days after its first allowed slot
+                                  # never goes (keeps releases current); 0 = off
         "clip_order": "score",    # score (best first) or stream (oldest stream first)
         "mix_shows": True,        # shows take turns in each kind's queue; false = one queue
         "priority": False,        # set in a stream's config.toml: its items go ahead of every

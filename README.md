@@ -30,7 +30,11 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **review**: every item goes to Kitsu and Discord. Approve, reject, hold, or leave a note asking for a change.
   Notes become retakes: the item is re-cut or re-thumbnailed and comes back for review.
 - **schedule / upload**: approved items get release slots and go to YouTube as private videos with a publish time
-  (or stay private for you to publish by hand: `[youtube] manual_publish`). Past the channel's daily
+  (or stay private for you to publish by hand: `[youtube] manual_publish`). To stay current rather
+  than build a backlog, `[schedule] stream_budget` caps each stream's releases per kind (scaled by its
+  length; the best Shorts by score, segments and compilations by chat heat) and `stale_days` lets go of
+  whatever isn't out that many days after it could first go. Items let go stay approved in Kitsu
+  (war room filter "Not going out"); pin one with "Publish at" to send it anyway. Past the channel's daily
   upload limit, upload the file in Studio and `clipper upload --attach <item> <link>` fills in the rest.
   Descriptions link to the longer video each one comes from (a clip to its segment at the clip's
   offset, a segment to its compilation) once that video is public; every upload run adds the link

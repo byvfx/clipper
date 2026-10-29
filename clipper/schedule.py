@@ -13,6 +13,12 @@ date for that day's first slot) pins an item; everything else fills the [schedul
 slots: clip/short/segment/compilation days and times, at most max_per_day releases,
 min_gap_minutes apart, never before kick_first_hours after the stream ended.
 
+stream_budget caps how many of each kind one stream releases (scaled by its length against
+budget_hours): the best go, Shorts by score and segments and compilations by mean chat
+heat over their span; pinned, pre-show and uploaded items count first. stale_days drops
+whatever hasn't gone out that many days after its first allowed slot, so releases stay
+current instead of piling into a backlog.
+
 With mix_shows, the shows take turns for each kind's slots (each show keeps its own
 order), so one show's backlog can't hold back another's.
 
@@ -31,6 +37,8 @@ from zoneinfo import ZoneInfo
 from . import jsonstate
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+# Unscheduled reasons for items that won't go out at all (not just waiting for a slot).
+DROPPED = ("stale", "over the stream's")
 KINDS = {"pick": "clip", "segment": "segment", "compilation": "compilation", "short": "short"}
 ENTITY = {"clip": "Shot", "segment": "Sequence", "compilation": "Sequence", "short": "Shot"}
 
@@ -50,6 +58,25 @@ def parse_when(text: str, tz: ZoneInfo, first_time: str) -> datetime | None:
             dt = datetime.combine(dt.date(), time.fromisoformat(first_time))
         return dt.replace(tzinfo=tz)
     return None
+
+
+def budget_for(ssc: dict, hours: float) -> dict[str, int]:
+    """A stream's per-kind release budget, scaled by its length (at least 1 of each)."""
+    scale = hours / ssc["budget_hours"]
+    return {k: max(1, round(n * scale)) for k, n in (ssc["stream_budget"] or {}).items()}
+
+
+def segment_heat(sdir: Path, segments: list[dict]) -> dict[str, float]:
+    """Mean chat heat (signals.parquet) over each segment's span, by segment id."""
+    import numpy as np
+    import pyarrow.parquet as pq
+
+    path = sdir / "signals.parquet"
+    if not path.exists():
+        return {}
+    heat = np.nan_to_num(pq.read_table(path, columns=["heat"]).column("heat").to_numpy(), nan=0.0)
+    return {s["id"]: float(heat[int(s["start_s"]):int(s["end_s"])].mean())
+            for s in segments if int(s["end_s"]) > int(s["start_s"])}
 
 
 def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[list[dict], list[dict]]:
@@ -72,17 +99,26 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
         if meta.get("kind") == "preshow":
             earliest = started
         priority = bool(ssc["priority"])
+        budget = budget_for(ssc, meta["duration_s"] / 3600)
+        expires = (earliest + timedelta(days=ssc["stale_days"])
+                   if ssc["stale_days"] and not asap else None)
+        seg_data = json.loads((sdir / "segments.json").read_text(encoding="utf-8"))
+        # Only read for streams that are still current and have a budget to rank against.
+        heat = (segment_heat(sdir, seg_data.get("segments", []))
+                if {"segment", "compilation"} & budget.keys()
+                and (not expires or expires > datetime.now(tz)) else {})
         approved_segments = set()
         for key, r in review.items():
             kind = KINDS[r["kind"]]
             fields = r.get("fields", {})
+            score = fields.get("Score") or (heat.get(r["id"], 0) if kind == "segment" else 0)
             item = {"key": f"{sdir.name}/{key}", "stream": sdir.name, "show": show, "kind": kind,
                     "id": r["id"], "file": str((sdir / r["file"]).resolve()),
                     "title": fields.get("YouTube title") or key,
-                    "score": float(fields.get("Score") or 0), "stream_start": started,
+                    "score": float(score), "stream_start": started,
                     "earliest": earliest, "entity": (ENTITY[kind], state[key]["entity_id"]),
                     "override_text": fields.get("Publish at") or "", "asap": asap,
-                    "priority": priority}
+                    "priority": priority, "budget": budget.get(kind), "expires": expires}
             if r["decision"] != "approved":
                 skipped.append({"key": item["key"], "reason": r["decision"]})
             elif truthy(fields.get("Hold")):
@@ -91,18 +127,20 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                 items.append(item)
                 if kind == "segment":
                     approved_segments.add(r["id"])
-        seg_data = json.loads((sdir / "segments.json").read_text(encoding="utf-8"))
         def seg_keys(comp: dict, sdir: Path = sdir, review: dict = review) -> list[str]:
             return [f"{sdir.name}/{k}" for k, r in review.items()
                     if r["kind"] == "segment" and r["id"] in comp["segments"]]
         for comp in seg_data.get("compilations", []):
             key = f"{sdir.name}/comp-{comp['file'].removesuffix('.mp4')}"
+            comp_heat = [heat[s] for s in comp["segments"] if s in heat]
+            comp_score = sum(comp_heat) / len(comp_heat) if comp_heat else 0
             if key.split("/", 1)[1] in review:
                 # Published as its own Kitsu item: its decision was used above; it still
                 # waits for its segments' slots.
                 for it in items:
                     if it["key"] == key:
                         it["segment_keys"] = seg_keys(comp)
+                        it["score"] = it["score"] or comp_score
                 continue
             missing = [s for s in comp["segments"] if s not in approved_segments]
             video = sdir / "compilations" / comp["file"]
@@ -112,9 +150,10 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                 continue
             items.append({"key": key, "stream": sdir.name, "show": show, "kind": "compilation",
                           "id": comp["topic"], "file": str(video.resolve()),
-                          "title": comp["title"], "score": 0, "stream_start": started,
+                          "title": comp["title"], "score": comp_score, "stream_start": started,
                           "earliest": earliest, "entity": None, "override_text": "",
-                          "segment_keys": seg_keys(comp), "priority": priority})
+                          "segment_keys": seg_keys(comp), "priority": priority,
+                          "budget": budget.get("compilation"), "expires": expires})
     return items, skipped
 
 
@@ -245,16 +284,33 @@ def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc:
     for it in items:
         if it["key"] not in placed and it.get("asap") and not it.get("bad"):
             place(it, max(now, it["earliest"]), "asap")
+    # 1c. Each stream's budget per kind: the best go; what's placed already counts first.
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for it in items:
+        if it.get("budget") is not None and not it.get("bad"):
+            groups.setdefault((it["stream"], it["kind"]), []).append(it)
+    for (_, kind), group in groups.items():
+        room = group[0]["budget"] - sum(it["key"] in placed for it in group)
+        rest = sorted((it for it in group if it["key"] not in placed),
+                      key=lambda it: (-it["score"], it["key"]))
+        for it in rest[max(room, 0):]:
+            it["over"] = True
+            skipped.append({"key": it["key"],
+                            "reason": f"over the stream's {kind} budget ({group[0]['budget']})"})
+
+    def current(it: dict, when: datetime) -> bool:
+        return not it.get("expires") or when <= it["expires"]
+
     # 2. Keep earlier assignments that are still ahead of us (or already uploaded). A newly
     #    approved priority item frees the automatic slots of other streams' items of its kind.
     jump = {it["kind"] for it in items if it["priority"] and it["key"] not in old}
     for it in items:
         prev = old.get(it["key"])
-        if it["key"] in placed or it.get("bad") or not prev or (prev["source"] == "auto" and (
+        if it["key"] in placed or it.get("bad") or it.get("over") or not prev or (prev["source"] == "auto" and (
                 reshuffle or (it["kind"] in jump and not it["priority"]))):
             continue
         when = datetime.fromisoformat(prev["publish_at"]).astimezone(tz)
-        if when > now and when >= it["earliest"]:
+        if when > now and when >= it["earliest"] and current(it, when):
             place(it, when, prev["source"] if prev["source"] != "pinned" else "auto")
     # 3. Fill open slots in order.
     def order(it: dict):
@@ -263,35 +319,51 @@ def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc:
         return (it["stream_start"], it["key"])
     queue = {}
     for k in ("clip", "short", "segment", "compilation"):
-        waiting = [it for it in items if it["kind"] == k and it["key"] not in placed and not it.get("bad")]
+        waiting = [it for it in items if it["kind"] == k and it["key"] not in placed
+                   and not it.get("bad") and not it.get("over")]
+        # Out of date already: leave them out of the queues, or the shows' turns skew
+        # toward whichever show has fewer of them.
+        for it in [it for it in waiting if not current(it, now)]:
+            waiting.remove(it)
+            skipped.append({"key": it["key"],
+                            "reason": f"stale: not out by {it['expires'].astimezone(tz):%m-%d %H:%M}"})
         parts = [sorted((it for it in waiting if it["priority"] == p), key=order) for p in (True, False)]
         queue[k] = [it for q in parts for it in (take_turns(q) if sc["mix_shows"] else q)]
-    # Freed slots can be today's: refill from today then, or they stay empty.
-    all_slots = slots(sc, tz, min(start, now.date()) if jump else start)
+    # Freed slots can be today's: refill from today then, or they stay empty. With
+    # stale_days, today's open slots count too: windows are short.
+    all_slots = slots(sc, tz, min(start, now.date()) if jump or sc["stale_days"] else start)
 
     def fill(kinds: tuple[str, ...]) -> None:
         for when, kind in all_slots:
             if kind not in kinds or when <= now or not queue[kind] or not fits(when, taken, sc):
                 continue
-            pick = next((it for it in queue[kind] if it["earliest"] <= when), None)
+            pick = next((it for it in queue[kind]
+                         if it["earliest"] <= when and current(it, when)), None)
             if pick:
                 queue[kind].remove(pick)
                 place(pick, when, "auto")
 
     fill(("clip", "short", "segment"))
-    # Compilations go out only after every one of their segments has.
+    # Compilations go out only after every one of their segments has, except segments that
+    # won't go at all (over budget or stale): the compilation is where those get seen.
+    let_go = {it["key"] for it in items if it.get("over")} | {
+        it["key"] for it in queue["segment"] if it.get("expires")}
     for it in list(queue["compilation"]):
-        parts = [placed.get(k) for k in it["segment_keys"]]
-        if not all(parts):
+        keys = it["segment_keys"]
+        if any(k not in placed and k not in let_go for k in keys):
             queue["compilation"].remove(it)
             skipped.append({"key": it["key"], "reason": "a segment has no slot yet"})
             continue
-        last = max(datetime.fromisoformat(p["publish_at"]) for p in parts)
-        it["earliest"] = max(it["earliest"], last + timedelta(minutes=1))
+        last = max((datetime.fromisoformat(placed[k]["publish_at"]) for k in keys if k in placed),
+                   default=None)
+        if last:
+            it["earliest"] = max(it["earliest"], last + timedelta(minutes=1))
     fill(("compilation",))
     for kind, rest in queue.items():
-        skipped += [{"key": it["key"], "reason": f"no free {kind} slot in {sc['horizon_days']} days"}
-                    for it in rest]
+        skipped += [{"key": it["key"], "reason":
+                     f"stale: no free {kind} slot by {it['expires'].astimezone(tz):%m-%d %H:%M}"
+                     if it.get("expires")
+                     else f"no free {kind} slot in {sc['horizon_days']} days"} for it in rest]
     for key, plats in platforms.items():
         if key in placed:
             continue

@@ -84,7 +84,14 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   watching kinocasinogaming + donflurgundy), Kitsu :8090, the streams share, photos share, cut container.
 - **Shows:** kino and c404 live through review → schedule; dsp and blade are config-only tests; `trish` is a
   placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI).
-- **Schedule:** full 14 days out (207/207 slots on 10-28), backlog mostly caught up. Upload cap 15/day.
+- **Schedule: stay current, no backlog (live 2026-10-29 09:51).** 15/day couldn't keep up (~140
+  approved a week vs 105 slots, newest stream 15 days behind). Now `stream_budget = { segment = 10,
+  short = 8, compilation = 1 }` per 8 h (`budget_hours`; Don ~7/6/1), `stale_days = 3`, slots a day:
+  6 Shorts (09/11/13/15/18/20), 8 segments (08/10/12/14/16/17/19/22), compilation 21:00; `[scoring]
+  max_picks` 14 (was 10). The old backlog's unuploaded slots dropped (backup
+  schedule.before_stay_current_2026-10-29.json); the 10-26/27/28 streams fill through 11-01. Items let
+  go stay approved in Kitsu (war room filter "Not going out"); pin with "Publish at" to send one anyway.
+  Watch the first week: if good items keep going stale while streams overlap, try `stale_days = 4`.
 - **Archive:** Jer (The Quartering) 11,571 items / 2,732 h transcribed on Modal, FTS index built,
   `archive ask` works; link checks built but not yet run against the real services. Other archive
   projects (#44 Jerry Banfield, #45 Papa Meat, #47 Ben Avery) wait on the desktop install and permissions.
@@ -122,8 +129,8 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   public, 2026-10-28 (marked `related_video` in schedule.json). `clipper upload --related` lists what's
   due and the 09:00 digest carries the same list; after setting them, `clipper upload --related <keys or
   links>` records them. Still to do as their segments go up:
-  kick-133423456 v01_w10 (10-29) and v04_t28 (10-30), kick-132380636 v01_t29 (11-02), kick-132733064
-  v01_t27 (11-04). kick-133423456 v02_t12 and kick-133940023 v14_t35 fall outside every segment: pick one
+  kick-133423456 v01_w10 (10-29) and v04_t28 (10-30). (kick-132380636 v01_t29 and kick-132733064
+  v01_t27: their segments were let go on 10-29 and won't go up.) kick-133423456 v02_t12 and kick-133940023 v14_t35 fall outside every segment: pick one
   by hand or leave them. Verify whether `thumbnails.set` works on Shorts before turning on
   `[youtube] short_thumbnails`.
 - Old approved Short titles/descriptions that still say "hosts" (Kitsu text; uploads go as written).
