@@ -354,13 +354,11 @@ def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo) -> N
         return fmaps[name]
 
     for (etype, eid), it in by_entity.items():
-        get, update = ((gazu.shot.get_sequence, gazu.shot.update_sequence_data)
-                       if etype == "Sequence" else (gazu.shot.get_shot, gazu.shot.update_shot_data))
         field = fmap_of(it["key"].split("/", 1)[0]).get((etype, "Scheduled"))
         if not field:
             continue
         e = placed.get(it["key"])
         value = (f"{datetime.fromisoformat(e['publish_at']).astimezone(tz):%Y-%m-%d %H:%M}"
                  if e else "")
-        if ((get(eid).get("data") or {}).get(field) or "") != value:
-            update(eid, {field: value})
+        if (review.entity_data(gazu, etype, eid).get(field) or "") != value:
+            review.write_data(gazu, etype, eid, {field: value})

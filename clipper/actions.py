@@ -97,13 +97,8 @@ def _set_columns(gazu, cfg: dict, item: Item, values: dict[str, str]) -> None:
     cfg = for_stream(cfg, item.stream_dir)
     proj = gazu.project.get_project_by_name(review.project_name(cfg))
     fmap = review.column_fields(gazu, proj)
-    etype = review.ENTITY[item.state["kind"]]
-    missing = [n for n in values if (etype, n) not in fmap]
-    if missing:
-        raise ClipperError(f"Kitsu has no {etype} column {missing}; run clipper review publish")
-    update = (gazu.shot.update_sequence_data if etype == "Sequence"
-              else gazu.shot.update_shot_data)
-    update(item.state["entity_id"], {fmap[(etype, n)]: v for n, v in values.items()})
+    review.set_columns(gazu, fmap, review.ENTITY[item.state["kind"]], item.state["entity_id"], values,
+                       strict=True)
 
 
 def _status(cfg: dict, item: Item, short: str, text: str) -> None:

@@ -582,12 +582,8 @@ def kitsu_url(cfg: dict, meta: dict, url: str) -> None:
         return  # a compilation not published as its own Kitsu item
     cfg = for_stream(cfg, meta["stream_dir"])  # the show's own Kitsu production
     gazu = review.connect(cfg["review"])
-    etype = review.ENTITY[st["kind"]]
-    field = review.column_fields(gazu, gazu.project.get_project_by_name(review.project_name(cfg))).get(
-        (etype, "YouTube URL"))
-    if field:
-        update = gazu.shot.update_sequence_data if etype == "Sequence" else gazu.shot.update_shot_data
-        update(st["entity_id"], {field: url})
+    fmap = review.column_fields(gazu, gazu.project.get_project_by_name(review.project_name(cfg)))
+    review.set_columns(gazu, fmap, review.ENTITY[st["kind"]], st["entity_id"], {"YouTube URL": url})
 
 
 def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | None = None,
