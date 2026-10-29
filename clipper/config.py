@@ -776,10 +776,14 @@ def stream_channel(sdir: Path) -> str:
     key = str(sdir)
     if key in _CHANNELS:
         return _CHANNELS[key]
-    try:
-        channel = json.loads((sdir / "meta.json").read_text(encoding="utf-8")).get("channel") or ""
-    except (OSError, ValueError):
-        return ""
+    channel = ""
+    # live/state.json: a stream the NAS recorder is still on has no meta.json yet
+    for p in (sdir / "meta.json", sdir / "live" / "state.json"):
+        try:
+            channel = json.loads(p.read_text(encoding="utf-8")).get("channel") or ""
+        except (OSError, ValueError):
+            continue
+        break
     if channel:
         _CHANNELS[key] = channel
     return channel

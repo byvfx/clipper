@@ -144,8 +144,10 @@ def stream_info(cfg: dict, sdir: Path) -> dict:
     live = load(sdir / "live" / "state.json", {})
     running = run.get("status") == "running" and age_s(run.get("heartbeat")) < 15 * 60
     return {"id": sdir.name, "show": sc["show"]["key"], "show_name": sc["meta"]["show_name"] or "",
-            "channel": meta.get("channel", ""), "title": meta.get("title", ""),
-            "started_at": meta.get("started_at", ""), "duration_s": meta.get("duration_s"),
+            "channel": meta.get("channel") or live.get("channel", ""),
+            "title": meta.get("title") or live.get("title", ""),
+            "started_at": meta.get("started_at") or live.get("stream_started_at") or "",
+            "duration_s": meta.get("duration_s"),
             "stages": stages, "run_status": "running" if running else run.get("status", ""),
             "run_error": run.get("error", ""), "recording": live.get("status", ""),
             "published": (sdir / "review_state.json").exists()}
@@ -208,10 +210,11 @@ def all_rows(cfg: dict, streams: list | None = None) -> list[dict]:
 
 
 def stream_infos(cfg: dict, streams: list) -> list[dict]:
-    """stream_info for every recorded stream, newest first, skipping any that can't be read."""
+    """stream_info for every recorded or recording stream, newest first, skipping any that
+    can't be read. A stream the NAS recorder is on has only live/ until it finishes."""
     infos = []
     for d, names, sig in streams:
-        if "meta.json" not in names:
+        if "meta.json" not in names and "live" not in names:
             continue
         try:
             infos.append(_cached(d, "info", sig, lambda d=d: stream_info(cfg, d)))
