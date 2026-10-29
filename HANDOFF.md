@@ -70,6 +70,8 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   finish in DaVinci Resolve. Rupert is recurring and voiced by the user. Quality over cost.
 - Second channel **Sloth Beat** (#46: Papa Meat, Ben Avery, On Cinema; teen-fan-magazine look, HTML/CSS
   covers via Playwright when built). Runs from the desktop as the first clean install. Permissions open.
+- Recorder alerts go to both the webhook channel (deploy/record/env.local; also "is live" / "video back")
+  and DMs (warnings only), so warnings arrive twice: kept on purpose (user, 2026-10-28).
 - Model calls are logged to `logs/costs.jsonl` (`clipper costs`); say what a rerun costs before doing it.
 - The taste layer is the asset (prompts, clipper.toml show tables, house_style, Kitsu): see "Back up".
 
@@ -129,7 +131,6 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 - Decisions on #66 (transcript-framed edits): which item kinds, replace or sit beside the plain cut,
   sound effects, order after #67. #27 TikTok content rules. Sloth Beat handle check (@slothbeat).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
-- Recorder warnings arrive twice (webhook channel + DM) until the webhook in deploy/record/env.local is dropped.
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
   MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
