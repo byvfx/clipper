@@ -40,9 +40,10 @@ from .bleep import Bleeper
 from .config import for_stream
 from .cut import encode_args, ffmpeg_cut, keyframe_before
 from .errors import ClipperError
+from .llm import Claude
 from .media import source_file
-from .scoring import Claude, load_words
 from .segments import slug
+from .transcript import load_words
 
 CENTER = {"description": "anything else: the middle of the frame",
           "panels": [{"src": [0.0, 0.0, 1.0, 1.0]}], "caption_y": 0.72}

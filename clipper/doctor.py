@@ -477,7 +477,7 @@ def check_online(cfg: dict, role: str) -> None:
         check_llm_online(cfg)
     if role != "nas" and os.environ.get("ANTHROPIC_API_KEY"):
         try:
-            from .scoring import Claude
+            from .llm import Claude
             Claude(cfg).client.models.retrieve(cfg["scoring"]["model_a"])
             ok("online", f"Anthropic API answers ({cfg['scoring']['model_a']} available)")
         except Exception as e:  # noqa: BLE001

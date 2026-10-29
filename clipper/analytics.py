@@ -27,6 +27,7 @@ from pathlib import Path
 
 from . import jsonstate
 from .config import _root, for_stream
+from .states import split_key
 
 ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
 
@@ -61,7 +62,7 @@ def credentials(cfg: dict, sign_in: bool = False):
 
 def entry_details(cfg: dict, e: dict) -> dict:
     sdir = cfg["paths"]["streams"] / e["stream"]
-    key = e["key"].split("/", 1)[1]
+    key = split_key(e["key"])[1]
     fields = (jsonstate.read(sdir / "review.json", {}).get(key) or {}).get("fields") or {}
     sc = for_stream(cfg, sdir) if sdir.exists() else cfg
     return {"show": sc["show"]["key"], "show_name": sc["meta"]["show_name"],

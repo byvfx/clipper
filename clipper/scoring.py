@@ -12,8 +12,6 @@ compared. --dry-run writes the Pass A requests to scoring_requests/ without call
 
 from __future__ import annotations
 
-import json
-import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -23,7 +21,9 @@ import numpy as np
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .llm import LLM
+from .llm import Claude, preflight
+from .prompts import Prompts
+from .transcript import load_words, snap, transcript_lines
 
 CATEGORIES = ["fail", "win", "joke", "insight", "reaction", "hot_take"]
 
@@ -109,82 +109,6 @@ SUMMARY_BLOCK_S = 900
 
 # ---------- inputs ----------
 
-UNNAMED = re.compile(r"SPEAKER_\d+")
-
-
-def load_words(stream_dir: Path) -> list[dict]:
-    """words.jsonl. When `clipper speakers` named at least one voice (other than music),
-    each word also gets `who`: the name, "?" for a voice nobody matched, None for no turn."""
-    lines = (stream_dir / "words.jsonl").read_text(encoding="utf-8").splitlines()
-    words = [json.loads(line) for line in lines]
-    names = {w.get("speaker") for w in words} - {None, "music"}
-    if any(not UNNAMED.fullmatch(n) for n in names):
-        for w in words:
-            spk = w.get("speaker")
-            w["who"] = "?" if spk and UNNAMED.fullmatch(spk) else spk
-    return words
-
-
-TURN_MIN_WORDS = 3  # a shorter change of voice inside a line is a turn edge a word off
-
-
-def transcript_lines(words: list[dict], a: float, b: float, speakers: bool = True) -> list[str]:
-    """One line per WhisperX segment overlapping [a, b): "[start_s] text". With speaker names
-    (load_words `who`), a line also splits where the voice changes, and the first line of each
-    turn is tagged: "[start_s] [PPP] text", "[?]" for an unnamed voice, "[music]"."""
-    tags = speakers and bool(words) and "who" in words[0]
-    out, cur, seg = [], [], None
-    for w in words:
-        if w["end"] < a or w["start"] >= b:
-            continue
-        if w["seg"] != seg and cur:
-            out.append(cur)
-            cur = []
-        seg = w["seg"]
-        cur.append(w)
-    if cur:
-        out.append(cur)
-    if not tags:
-        return [_line(line) for line in out]
-    lines, said = [], None
-    for line in out:
-        for spk, run in turns(line):
-            tag = ("?" if UNNAMED.fullmatch(spk) else spk) if spk and spk != said else ""
-            lines.append(_line(run, tag))
-            said = spk or said
-    return lines
-
-
-def turns(line: list[dict]) -> list[tuple[str | None, list[dict]]]:
-    """A line's words split by speaker. Words with no turn stay with the run they are in;
-    runs under TURN_MIN_WORDS words join their longer neighbour (pyannote's turns and
-    WhisperX's word times disagree by a word or so at each change)."""
-    runs: list[list] = []
-    for w in line:
-        s = w.get("speaker")
-        if runs and (s is None or s == runs[-1][0] or runs[-1][0] is None):
-            runs[-1][0] = runs[-1][0] or s
-            runs[-1][1].append(w)
-        else:
-            runs.append([s, [w]])
-    while len(runs) > 1:
-        i = min(range(len(runs)), key=lambda k: len(runs[k][1]))
-        if len(runs[i][1]) >= TURN_MIN_WORDS:
-            break
-        j = i - 1 if i == len(runs) - 1 or (i and len(runs[i - 1][1]) >= len(runs[i + 1][1])) else i + 1
-        lo = min(i, j)
-        runs[lo:lo + 2] = [[runs[j][0], runs[lo][1] + runs[lo + 1][1]]]
-        if lo and runs[lo - 1][0] == runs[lo][0]:  # the merge can make two neighbours one voice
-            runs[lo - 1:lo + 1] = [[runs[lo][0], runs[lo - 1][1] + runs[lo][1]]]
-        if lo + 1 < len(runs) and runs[lo + 1][0] == runs[lo][0]:
-            runs[lo:lo + 2] = [[runs[lo][0], runs[lo][1] + runs[lo + 1][1]]]
-    return [(s, ws) for s, ws in runs]
-
-
-def _line(line: list[dict], tag: str = "") -> str:
-    return f"[{line[0]['start']:.1f}] " + (f"[{tag}] " if tag else "") + " ".join(x["word"] for x in line)
-
-
 def signal_table(sig: dict, a: int, b: int, bin_s: int = 10) -> str:
     rows = ["t_start  chat/min  react  clip  loud_z  heat"]
     for s in range(a, b, bin_s):
@@ -211,70 +135,6 @@ def load_chat(stream_dir: Path, meta: dict) -> list[dict]:
     return msgs
 
 
-def snap(words: list[dict], t: float, key: str) -> float:
-    i = min(range(len(words)), key=lambda k: abs(words[k][key] - t))
-    return words[i][key]
-
-
-# ---------- prompts ----------
-
-def read_sections(path: Path, prefix: str, fmt: dict) -> dict[str, str]:
-    """Split a rule file on "## name" lines into {prefix_name: text}."""
-    out, name, buf = {}, None, []
-    for line in path.read_text(encoding="utf-8").format(**fmt).splitlines():
-        if line.startswith("## "):
-            if name:
-                out[f"{prefix}_{name}"] = "\n".join(buf).strip()
-            name, buf = line[3:].strip(), []
-        else:
-            buf.append(line)
-    if name:
-        out[f"{prefix}_{name}"] = "\n".join(buf).strip()
-    return out
-
-
-# Prompts that write text viewers see; [scoring] house_style rules are appended to them.
-VIEWER_FACING = {"score_a", "score_b", "meta", "chapters", "segments", "compilation",
-                 "thumbnail", "thumbnail_enquirer", "preshow", "oneoff", "pick", "retake",
-                 "receipts_stories"}
-
-
-class Prompts:
-    def __init__(self, cfg: dict):
-        sc = cfg["scoring"]
-        self.version = sc["prompt_version"]
-        self.dir: Path = cfg["paths"]["prompts"]
-        self.house_style: list[str] = list(sc.get("house_style") or [])
-        self.vars = {"channel_name": sc["channel_name"], "audience": sc["audience"],
-                     "tone": sc["tone"], "max_picks": sc["max_picks"],
-                     "stream_context": sc["stream_context"],
-                     "max_source_audio_s": sc["max_source_audio_s"],
-                     "scan_max_per_block": sc["scan_max_per_block"],
-                     "known_figures": sc["known_figures"]}
-        # Swappable rule files, <kind>_<mode>_<version>.md, split into "## <section>" parts
-        # that fill {<kind>_<section>} placeholders. v3+: third_party; v4+: audience.
-        for kind, key, modes in (("third_party", "third_party_audio", ("reject", "allow_reactions")),
-                                 ("audience", "audience_knowledge", ("strangers", "fans"))):
-            if sc[key] not in modes:
-                raise ClipperError(f"scoring.{key} must be one of {modes}, not {sc[key]!r}")
-            rule = self.dir / f"{kind}_{sc[key]}_{self.version}.md"
-            if rule.exists():
-                self.vars.update(read_sections(rule, kind, self.vars))
-        # v3 prompts name the third-party sections {third_party_rule} / {third_party_rule_b}.
-        if "third_party_pass_a" in self.vars:
-            self.vars["third_party_rule"] = self.vars["third_party_pass_a"]
-            self.vars["third_party_rule_b"] = self.vars["third_party_pass_b"]
-
-    def get(self, name: str) -> str:
-        text = (self.dir / f"{name}_{self.version}.md").read_text(encoding="utf-8")
-        text = text.format(**self.vars)
-        if name in VIEWER_FACING and self.house_style:
-            text = (text.rstrip() + "\n\nHouse style for anything viewers see (titles, "
-                    "descriptions, hooks, chapter and thumbnail text):\n"
-                    + "\n".join(f"- {rule}" for rule in self.house_style) + "\n")
-        return text
-
-
 def pass_a_user(w: dict, words: list[dict], sig: dict, lead_in_s: int) -> str:
     lead = transcript_lines(words, max(0, w["start_s"] - lead_in_s), w["start_s"])
     body = transcript_lines(words, w["start_s"], w["end_s"])
@@ -292,10 +152,6 @@ def pass_a_user(w: dict, words: list[dict], sig: dict, lead_in_s: int) -> str:
 
 
 # ---------- API ----------
-
-# Every stage's model calls go through clipper/llm.py, which picks the provider from the
-# model string; `Claude` stays the name the stages import.
-Claude = LLM
 
 
 # ---------- passes ----------
@@ -476,11 +332,6 @@ def run_pass_b(kept: list[dict], summary: list[dict], words: list[dict], cfg: di
     result["unaccounted"] = sorted(ids - set(seen))
     result["unknown_ids"] = sorted(set(seen) - ids)
     return {**result, "status": "ok", **out}
-
-
-def preflight(claude: Claude, model: str) -> None:
-    """One tiny call so account problems stop the run with one clear line."""
-    claude.preflight(model)
 
 
 def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:

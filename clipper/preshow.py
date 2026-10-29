@@ -29,8 +29,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-import subprocess
-import sys
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -38,7 +36,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import jsonstate, media
+from . import jsonstate, media, ytdl
 from .config import for_show, for_stream
 
 log = logging.getLogger("clipper.preshow")
@@ -97,8 +95,8 @@ def feed(channel_id: str, ua: str) -> list[dict]:
         return rss_feed(channel_id, ua)
     except (urllib.error.URLError, ET.ParseError, TimeoutError) as e:
         log.info("pre-show feed %s: RSS failed (%s), listing the channel with yt-dlp", channel_id, e)
-    r = ytdlp("--flat-playlist", "--playlist-end", "8", "--print", "%(id)s	%(title)s",
-              f"https://www.youtube.com/channel/{channel_id}/videos")
+    r = ytdl.run("--flat-playlist", "--playlist-end", "8", "--print", "%(id)s	%(title)s",
+                 f"https://www.youtube.com/channel/{channel_id}/videos")
     out = []
     for line in r.stdout.splitlines():
         vid, _, title = line.partition("	")
@@ -107,7 +105,7 @@ def feed(channel_id: str, ua: str) -> list[dict]:
                         "url": f"https://www.youtube.com/watch?v={vid}"})
     if not out:
         raise RuntimeError(f"pre-show feed {channel_id}: RSS and yt-dlp both failed "
-                           f"({r.stderr.strip().splitlines()[-1:]})")
+                           f"({ytdl.last_error(r)})")
     return out
 
 
@@ -128,8 +126,8 @@ def published_at(e: dict) -> datetime:
     """When an entry went up. yt-dlp's channel listing has no dates, so look the video up
     (only done for entries that already match the title pattern and aren't grabbed)."""
     if not e["published"]:
-        r = ytdlp("--skip-download", "--no-playlist", "--print",
-                  "%(timestamp|)s", e["url"])
+        r = ytdl.run("--skip-download", "--no-playlist", "--print",
+                     "%(timestamp|)s", e["url"])
         ts = r.stdout.strip().splitlines()[-1:] or [""]
         try:
             e["published"] = datetime.fromtimestamp(float(ts[0]), UTC).isoformat()
@@ -146,45 +144,24 @@ def grabbed(cfg: dict, video_id: str) -> bool:
     return (stream_of(cfg, video_id) / "meta.json").exists()
 
 
-def ytdlp(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "-m", "yt_dlp", "--no-progress", *args],
-                          check=False, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace")
-
-
-def ytdlp_signed_in_if_blocked(cfg: dict, *args: str) -> subprocess.CompletedProcess:
-    """yt-dlp, and once more signed in with [paths] youtube_cookies when YouTube's bot check
-    stops it ("Sign in to confirm you're not a bot"). Pre-shows only (user, 2026-10-26): a few
-    videos a week, so the account is barely seen; `archive` keeps to age-restricted retries."""
-    r = ytdlp(*args)
-    cookies = cfg["paths"]["youtube_cookies"]
-    if r.returncode and "not a bot" in r.stderr and cookies.is_file():
-        from .archive import netscape_cookies  # archive imports this module
-
-        log.info("YouTube bot check, retrying signed in")
-        r = ytdlp("--cookies", str(netscape_cookies(cookies)), *args)
-    return r
-
-
 def fetch(cfg: dict, url: str, key: str, window: dict | None = None) -> Path:
     """Download one video into streams/yt-<id>/; meta.json last, so a failed or partial
     download is retried (and resumed) by the next check. `window` ({start_s, end_s or
     None, about}) marks a one-off: the segment is one stretch of the video, not all of it."""
     sc = for_show(cfg, key)
     pc = sc["preshow"]
-    info = ytdlp_signed_in_if_blocked(cfg, "-J", "--no-playlist", url)
+    info, _ = ytdl.run_retrying(cfg, "-J", "--no-playlist", url, retry_on=ytdl.BOT)
     if info.returncode:
-        raise RuntimeError(f"yt-dlp: {info.stderr.strip().splitlines()[-1:]}")
+        raise RuntimeError(f"yt-dlp: {ytdl.last_error(info)}")
     v = json.loads(info.stdout)
     d = stream_of(cfg, v["id"])
     d.mkdir(parents=True, exist_ok=True)
     src = d / "source.mp4"
     if not src.exists():
-        r = ytdlp_signed_in_if_blocked(cfg, "--no-playlist", "-f", pc["format"],
-                                       "--merge-output-format", "mp4",
-                                       "-o", str(d / "source.%(ext)s"), v["webpage_url"])
+        r, _ = ytdl.run_retrying(cfg, "--no-playlist", "-f", pc["format"], "--merge-output-format", "mp4",
+                         "-o", str(d / "source.%(ext)s"), v["webpage_url"], retry_on=ytdl.BOT)
         if r.returncode or not src.exists():
-            raise RuntimeError(f"yt-dlp download: {r.stderr.strip().splitlines()[-1:]}")
+            raise RuntimeError(f"yt-dlp download: {ytdl.last_error(r)}")
     published = datetime.fromtimestamp(v.get("timestamp") or v.get("release_timestamp")
                                        or datetime.now(UTC).timestamp(), UTC)
     meta = {"stream_id": d.name, "kind": "preshow", "source": "youtube", "show": key,
@@ -261,9 +238,11 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
     compilations. Title and description come from one small model call over the transcript.
     With a window in meta.json (a one-off grabbed with --from/--to), the segment is the
     stretch the model marks inside that window instead."""
+    from .llm import Claude, preflight
     from .media import source_file
-    from .scoring import Claude, Prompts, load_words, preflight, transcript_lines
+    from .prompts import Prompts
     from .segments import slug
+    from .transcript import load_words, transcript_lines
 
     cfg = for_stream(cfg, stream_dir)
     pc = cfg["preshow"]

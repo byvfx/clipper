@@ -47,7 +47,6 @@ import discord
 from discord import app_commands
 
 from . import actions, alerts, cardsync, notify, preshow, retake, schedule
-from .config import _root
 from .errors import ClipperError
 from .timefmt import length
 
@@ -313,9 +312,7 @@ class Bot(discord.Client):
 
     async def _clipper_bg(self, name: str, args: list[str]) -> int | None:
         """Run `clipper <args>` as a child process, its output into the bot log."""
-        cmd = [sys.executable, "-m", "clipper.cli"]
-        if _root(self.cfg).get("_file"):
-            cmd += ["--config", str(_root(self.cfg)["_file"])]
+        cmd = actions.clipper_cmd(self.cfg)
         log.info(f"{name}: starting")
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -408,31 +405,13 @@ class Bot(discord.Client):
 
     def do(self, action: str, ref: str, text, who: str) -> tuple[dict, str]:
         """text: what the form said; for "details", {Kitsu column: new value}."""
-        cfg = self.cfg
-        item = actions.resolve(cfg, ref)
-        if action == "hold":
-            on = not actions.refresh(cfg, item)["hold"]
-            row = actions.hold(cfg, item, on, who)
-        else:
-            fn = {"approve": lambda: actions.approve(cfg, item, "", who),
-                  "reject": lambda: actions.reject(cfg, item, text, who),
-                  "changes": lambda: actions.changes(cfg, item, text, who),
-                  "reopen": lambda: actions.reopen(cfg, item, who),
-                  "pin": lambda: actions.pin(cfg, item, text, who),
-                  "details": lambda: actions.edit_meta(cfg, item, text, who),
-                  "thumbtext": lambda: actions.thumbtext(cfg, item, text, who)}.get(action)
-            if not fn:
-                raise ClipperError(f"unknown action {action!r}")
-            row = fn()
-        note = ""
-        if cfg["discord"]["replan"]:
-            schedule.run(cfg, sync_first=False)
-            row = actions.describe(cfg, item.stream_dir)[item.key]
-        if row["scheduled"]:
-            note = f"; scheduled {row['scheduled'][:16].replace('T', ' ')}"
-        elif row["decision"] == "approved" and cfg["discord"]["replan"]:
-            note = "; no free slot yet" if not row["hold"] else "; held, not scheduled"
-        return row, note
+        item = actions.resolve(self.cfg, ref)
+        if action == "details":  # the bot's name for an edit; its form gives {column: value}
+            row = actions.decide(self.cfg, item, "edit", who, values=text)
+        else:  # hold flips (on=None), as the card's one Hold button does
+            row = actions.decide(self.cfg, item, action, who, text=text)
+        row, note = actions.replan(self.cfg, item, action, row)
+        return row, f"; {note}" if note else ""
 
     async def apply(self, interaction: discord.Interaction, action: str, ref: str, text) -> None:
         who = self.who(interaction)
