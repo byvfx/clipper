@@ -11,7 +11,9 @@ keep README and SETUP true whenever behaviour changes.
 
 - Every pipeline stage is a `clipper <stage>` subcommand, wired in `clipper/cli.py`,
   one module per stage in `clipper/`. New functionality is a subcommand or a flag on one,
-  never a loose script.
+  never a loose script. A new command's parser goes in its group's `add_<group>` in cli.py
+  and its name in `COMMAND_GROUPS` (a test checks); a new pipeline stage is also a row in
+  `clipper/stages.py`, which the worker and `clipper run` read.
 - A stream is `streams/<id>/`; stages read and write files there and are idempotent, so
   `clipper run` can skip what is done. Review state is `review.json`, retakes `retakes.json`.
   JSON files go through `clipper/jsonstate.py`: `load`/`read` (retry a file mid-replace),

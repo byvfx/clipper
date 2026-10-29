@@ -540,28 +540,27 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
     bot.run(cfg)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(prog="clipper")
-    ap.add_argument("--config", help="path to clipper.toml (default: $CLIPPER_CONFIG or ./clipper.toml)")
-    ap.add_argument("--show", help="use this [shows.<key>] profile (default: the stream's, by Kick channel)")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+COMMAND_GROUPS = [
+    ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
+    ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'analytics']),
+    ('Services (long-running)', ['record', 'worker', 'bot', 'warroom', 'alert']),
+    ('Extras', ['weekly', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
+    ('Setup and checks', ['setup', 'doctor', 'shows']),
+]
 
+
+def command_list() -> str:
+    """`clipper -h`'s list of commands by group (argparse prints one flat list)."""
+    return "\n\n".join(f"{title}:\n  " + " ".join(names) for title, names in COMMAND_GROUPS)
+
+
+def add_pipeline(sub) -> None:
+    """Pipeline: a stream from recording to review, in run order."""
     p = sub.add_parser("fetch", help="resolve a Kick VOD url, pull chat and video")
     p.add_argument("url")
     p.add_argument("--no-video", action="store_true")
     p.add_argument("--no-chat", action="store_true")
     p.set_defaults(fn=cmd_fetch)
-
-    p = sub.add_parser("record", help="record live streams with real-time chat (NAS service)")
-    rsub = p.add_subparsers(dest="action", required=True)
-    p.set_defaults(fn=cmd_record)
-    r = rsub.add_parser("watch", help="watch [record] channels; record each stream they go live with")
-    r.add_argument("--channel", action="append", help="only this channel (repeatable)")
-    r = rsub.add_parser("now", help="record one channel's current (or next) stream, then exit")
-    r.add_argument("channel", help="Kick channel slug")
-    r.add_argument("--max-s", type=float, help="stop after this many seconds and finalize")
-    r = rsub.add_parser("finalize", help="join an interrupted recording's parts and write its files")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
 
     p = sub.add_parser("preshow", help="grab a show's pre-show from its YouTube channel, as one whole video")
     rsub = p.add_subparsers(dest="action", required=True)
@@ -592,104 +591,6 @@ def main() -> None:
     p.add_argument("--enroll", action="store_true",
                    help="keep the named voices (these --name ones, else every hand-named one) for the show")
     p.set_defaults(fn=cmd_speakers)
-
-    p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
-    rsub = p.add_subparsers(dest="action", required=True)
-    p.set_defaults(fn=cmd_narrate)
-    r = rsub.add_parser("speak", help="script text file -> <script>.read.mp3 in [narrate] voice_id (perform to it)")
-    r.add_argument("script", help="UTF-8 text; eleven_v3 tags like [sighs] [pause] allowed")
-    r.add_argument("--voice-id", help="override [narrate] voice_id")
-    r.add_argument("-o", "--out", help="output path")
-    r.add_argument("--stability", type=float, help="0 creative | 0.5 natural | 1 steadiest (eleven_v3)")
-    r.add_argument("--style", type=float, help="0-1 style exaggeration")
-    r.add_argument("--speed", type=float, help="0.7-1.2")
-    r = rsub.add_parser("voice", help="take (video or audio) -> <take>.voiced.mp4/.mp3 in [narrate] voice_id")
-    r.add_argument("take")
-    r.add_argument("--voice-id", help="override [narrate] voice_id")
-    r.add_argument("-o", "--out", help="output path")
-    r = rsub.add_parser("voices", help="list your voices and the shared library; --add one")
-    r.add_argument("--search")
-    r.add_argument("--accent", help="e.g. british")
-    r.add_argument("--gender", help="male | female | neutral")
-    r.add_argument("--age", help="young | middle_aged | old")
-    r.add_argument("--add", metavar="OWNER:VOICE_ID", help="add a library voice to your account")
-    r.add_argument("--name", default="Mother Moo", help="name for --add")
-
-    p = sub.add_parser("perform", help="lip-sync take to a read: find takes, cut at pauses, stitch the renders")
-    rsub = p.add_subparsers(dest="action", required=True)
-    p.set_defaults(fn=cmd_perform)
-    r = rsub.add_parser("prepare", help="find the takes, cut take N at the read's pauses -> DIR/pieceN.mp4")
-    r.add_argument("recording", help="the phone/webcam video, the read playing out loud in it")
-    r.add_argument("--read", required=True, help="the read the takes follow (clipper narrate speak)")
-    r.add_argument("--take", type=int, default=1, help="which take (default 1)")
-    r.add_argument("--out", help="output folder (default <recording>.perform)")
-    r = rsub.add_parser("status", help="which pieces are rendered")
-    r.add_argument("dir")
-    r = rsub.add_parser("stitch", help="renderN.mp4 at their read times + the read -> final.mp4")
-    r.add_argument("dir")
-    r = rsub.add_parser("lipsync", help="redraw the mouth to match the read (LatentSync on Modal, or Sync)")
-    r.add_argument("target", nargs="?", help="a perform dir (uses final.mp4 + its read) or a video")
-    r.add_argument("--engine", choices=["latentsync", "sync", "both"],
-                   help="default [perform] lipsync_engine")
-    r.add_argument("--audio", help="the audio to sync to (default: the dir's read)")
-    r.add_argument("--deploy", action="store_true", help="deploy the LatentSync Modal app")
-
-    p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee): list, transcribe on Modal")
-    rsub = p.add_subparsers(dest="action", required=True)
-    p.set_defaults(fn=cmd_archive)
-    r = rsub.add_parser("add", help="list a channel's long-form videos into a subject's catalog")
-    r.add_argument("subject", help="short name, e.g. jer")
-    r.add_argument("url", nargs="+", help="YouTube channel/tab or Odysee channel url")
-    r = rsub.add_parser("transcribe", help="transcribe catalog items not done yet, on Modal")
-    r.add_argument("subject")
-    r.add_argument("--limit", type=int, help="at most this many items")
-    r.add_argument("--oldest", action="store_true", help="oldest first (default newest first)")
-    r.add_argument("--gpu", help="Modal GPU (default [archive] gpu)")
-    r.add_argument("--parallel", type=int, help="items at once (default [archive] parallel)")
-    r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
-    r.add_argument("--diarize", action="store_true", help="speaker turns too (default [archive] diarize)")
-    r = rsub.add_parser("status", help="items, hours transcribed, errors, cost, link checks")
-    r.add_argument("subject", nargs="?")
-    r = rsub.add_parser("check", help="are the source links still up? (no downloads, no cost)")
-    r.add_argument("subject")
-    r.add_argument("--ids", nargs="+", help="just these items (default: not checked in "
-                   "[archive] link_recheck_days)")
-    r.add_argument("--all", action="store_true", help="every item, however recently checked")
-    r.add_argument("--limit", type=int, help="at most this many items")
-    r = rsub.add_parser("links", help="items by link status (default: every link not alive)")
-    r.add_argument("subject")
-    r.add_argument("--status", choices=["dead", "restricted", "alive", "all"])
-    r = rsub.add_parser("index", help="build the subject's keyword index (index.sqlite; no cost)")
-    r.add_argument("subject")
-    r.add_argument("--rebuild", action="store_true", help="start the index over")
-    r = rsub.add_parser("search", help="search the transcripts: hits with date, link at the moment")
-    r.add_argument("subject")
-    r.add_argument("query", help='FTS5: costco dog | "costco dog" | costco OR walmart | coff*')
-    r.add_argument("--limit", type=int, default=20)
-    r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
-    r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
-    r.add_argument("--by", choices=["rank", "date", "oldest"], default="rank",
-                   help="best match (default), newest first, or oldest first")
-    r.add_argument("--years", action="store_true", help="matching windows per year, not hits")
-    r = rsub.add_parser("ask", help="plain question: a cheap model searches the index, picks the fits")
-    r.add_argument("subject")
-    r.add_argument("question", help="e.g. 'Jer saying he would never sell out to a sponsor'")
-    r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
-    r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
-    r.add_argument("--limit", type=int, default=15, help="options shown")
-
-    p = sub.add_parser("modal", help="Modal now: containers, runs, failures, this month's spend, archives")
-    p.add_argument("--backfill", action="store_true",
-                   help="add runs from before the run log (transcript.json cost records), once")
-    p.set_defaults(fn=cmd_modal)
-
-    p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
-    p.add_argument("--month", help="YYYY-MM (default: this month, UTC)")
-    p.add_argument("--json", action="store_true", help="the report as JSON")
-    p.add_argument("--backfill", action="store_true",
-                   help="add model spend earlier runs recorded in their output files, once")
-    p.add_argument("--dry-run", action="store_true", help="with --backfill: list, write nothing")
-    p.set_defaults(fn=cmd_costs)
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
@@ -751,27 +652,6 @@ def main() -> None:
     p.add_argument("--at", type=float, help="with --save-example: seconds into the stream")
     p.set_defaults(fn=cmd_shorts)
 
-    p = sub.add_parser("weekly", help="the week's streams -> a ten-page tabloid issue (weekly/<saturday>/)")
-    p.add_argument("--week", help="any day of the wanted Sun-Sat week, YYYY-MM-DD (default: this week)")
-    p.add_argument("--headline", help="editor's note for the draft: the cover story, e.g. \"Ethan Klein\"")
-    p.add_argument("--gather", action="store_true", help="only rebuild week.json and stats.json")
-    p.add_argument("--draft", action="store_true", help="draft issue.json again (the old one is kept as a backup)")
-    p.add_argument("--render", action="store_true", help="only render the pages from issue.json")
-    p.add_argument("--only", help="render only these pages, e.g. 01,07")
-    p.add_argument("--format", help="tiktok (1080x1440), youtube (1080x1080 in youtube/) or both, comma-separated; "
-                                    "default [weekly] formats")
-    p.add_argument("--write", nargs="?", const="03,04,05", metavar="PAGES",
-                   help="write the articles again with the writer prompt (03 cover story, 04, 05; default all three)")
-    p.set_defaults(fn=cmd_weekly)
-
-    p = sub.add_parser("receipts", help="old clips of the archive subject for a stream's stories, "
-                                        "one video uploaded private (#48)")
-    p.add_argument("action", choices=["find", "list", "script", "cut", "upload"])
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-    p.add_argument("--segments", help="find: only these segments, e.g. s02,s05 (default: by topic/figure)")
-    p.add_argument("--again", action="store_true", help="upload: a second copy even if one is up")
-    p.set_defaults(fn=cmd_receipts)
-
     p = sub.add_parser("pick", help="Shorts from a stretch you name: find, cut, render, send to review")
     p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
     p.add_argument("--from", dest="start", metavar="TIME", help="start, e.g. 4:05:00 or 4:05 (H:MM)")
@@ -789,6 +669,18 @@ def main() -> None:
                    help="keep moments that overlap an existing pick")
     p.set_defaults(fn=cmd_pick)
 
+    p = sub.add_parser("run", help="run every pipeline stage not done yet: transcribe ... review publish")
+    p.add_argument("stream")
+    from .stages import NAMES as STAGE_NAMES
+    p.add_argument("--only", help="just these stages, comma-separated: " + ", ".join(STAGE_NAMES))
+    p.add_argument("--from", dest="from_", choices=STAGE_NAMES, metavar="STAGE",
+                   help="rerun from this stage on: " + ", ".join(STAGE_NAMES))
+    p.add_argument("--force", action="store_true", help="rerun stages even if done")
+    p.set_defaults(fn=cmd_run)
+
+
+def add_review(sub) -> None:
+    """Review and publish."""
     p = sub.add_parser("review", help="Kitsu review: publish, sync, and per-item decisions")
     rsub = p.add_subparsers(dest="action", required=True)
     p.set_defaults(fn=cmd_review)
@@ -899,23 +791,6 @@ def main() -> None:
     p.add_argument("--dry-run", action="store_true", help="show files and captions, send nothing")
     p.set_defaults(fn=cmd_tiktok)
 
-    p = sub.add_parser("run", help="run every pipeline stage not done yet: transcribe ... review publish")
-    p.add_argument("stream")
-    from .stages import NAMES as STAGE_NAMES
-    p.add_argument("--only", help="just these stages, comma-separated: " + ", ".join(STAGE_NAMES))
-    p.add_argument("--from", dest="from_", choices=STAGE_NAMES, metavar="STAGE",
-                   help="rerun from this stage on: " + ", ".join(STAGE_NAMES))
-    p.add_argument("--force", action="store_true", help="rerun stages even if done")
-    p.set_defaults(fn=cmd_run)
-
-    p = sub.add_parser("worker", help="GPU machine: `clipper run` each finished recording")
-    p.add_argument("--once", action="store_true", help="one pass, then exit")
-    p.add_argument("--status", action="store_true", help="run state of each recording")
-    p.set_defaults(fn=cmd_worker)
-
-    p = sub.add_parser("bot", help="Discord review bot: buttons on review cards, slash commands")
-    p.set_defaults(fn=cmd_bot)
-
     p = sub.add_parser("analytics", help="YouTube stats of uploads -> analytics.json (feeds scoring)")
     p.add_argument("--sign-in", action="store_true", help="once: grant read-only YouTube Analytics")
     p.add_argument("--list", dest="list_only", action="store_true", help="print analytics.json, best first")
@@ -925,6 +800,28 @@ def main() -> None:
     p.add_argument("--month", help="with --report: YYYY-MM (default: this month)")
     p.add_argument("--refresh", action="store_true", help="with --report: refresh analytics.json first")
     p.set_defaults(fn=cmd_analytics)
+
+
+def add_services(sub) -> None:
+    """Services: long-running."""
+    p = sub.add_parser("record", help="record live streams with real-time chat (NAS service)")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_record)
+    r = rsub.add_parser("watch", help="watch [record] channels; record each stream they go live with")
+    r.add_argument("--channel", action="append", help="only this channel (repeatable)")
+    r = rsub.add_parser("now", help="record one channel's current (or next) stream, then exit")
+    r.add_argument("channel", help="Kick channel slug")
+    r.add_argument("--max-s", type=float, help="stop after this many seconds and finalize")
+    r = rsub.add_parser("finalize", help="join an interrupted recording's parts and write its files")
+    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+
+    p = sub.add_parser("worker", help="GPU machine: `clipper run` each finished recording")
+    p.add_argument("--once", action="store_true", help="one pass, then exit")
+    p.add_argument("--status", action="store_true", help="run state of each recording")
+    p.set_defaults(fn=cmd_worker)
+
+    p = sub.add_parser("bot", help="Discord review bot: buttons on review cards, slash commands")
+    p.set_defaults(fn=cmd_bot)
 
     p = sub.add_parser("warroom", help="local dashboard: live shows, pipeline, review queue, schedule")
     p.add_argument("--port", type=int, help="default [warroom] port (8765)")
@@ -938,12 +835,131 @@ def main() -> None:
     p.add_argument("--send", action="store_true", help="digest: DM it now too")
     p.set_defaults(fn=cmd_alert)
 
-    p = sub.add_parser("doctor", help="check this machine: ffmpeg, GPU, fonts, keys, Kitsu/Discord/NAS")
-    p.add_argument("--offline", action="store_true", help="skip the network checks")
-    p.add_argument("--role", choices=["all", "gpu", "bot", "nas"], default="all",
-                   help="only what this machine runs (gpu worker, bot, nas recorder)")
-    p.set_defaults(fn=cmd_doctor)
 
+def add_extras(sub) -> None:
+    """Extras: side projects and reports."""
+    p = sub.add_parser("weekly", help="the week's streams -> a ten-page tabloid issue (weekly/<saturday>/)")
+    p.add_argument("--week", help="any day of the wanted Sun-Sat week, YYYY-MM-DD (default: this week)")
+    p.add_argument("--headline", help="editor's note for the draft: the cover story, e.g. \"Ethan Klein\"")
+    p.add_argument("--gather", action="store_true", help="only rebuild week.json and stats.json")
+    p.add_argument("--draft", action="store_true", help="draft issue.json again (the old one is kept as a backup)")
+    p.add_argument("--render", action="store_true", help="only render the pages from issue.json")
+    p.add_argument("--only", help="render only these pages, e.g. 01,07")
+    p.add_argument("--format", help="tiktok (1080x1440), youtube (1080x1080 in youtube/) or both, comma-separated; "
+                                    "default [weekly] formats")
+    p.add_argument("--write", nargs="?", const="03,04,05", metavar="PAGES",
+                   help="write the articles again with the writer prompt (03 cover story, 04, 05; default all three)")
+    p.set_defaults(fn=cmd_weekly)
+
+    p = sub.add_parser("receipts", help="old clips of the archive subject for a stream's stories, "
+                                        "one video uploaded private (#48)")
+    p.add_argument("action", choices=["find", "list", "script", "cut", "upload"])
+    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    p.add_argument("--segments", help="find: only these segments, e.g. s02,s05 (default: by topic/figure)")
+    p.add_argument("--again", action="store_true", help="upload: a second copy even if one is up")
+    p.set_defaults(fn=cmd_receipts)
+
+    p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee): list, transcribe on Modal")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_archive)
+    r = rsub.add_parser("add", help="list a channel's long-form videos into a subject's catalog")
+    r.add_argument("subject", help="short name, e.g. jer")
+    r.add_argument("url", nargs="+", help="YouTube channel/tab or Odysee channel url")
+    r = rsub.add_parser("transcribe", help="transcribe catalog items not done yet, on Modal")
+    r.add_argument("subject")
+    r.add_argument("--limit", type=int, help="at most this many items")
+    r.add_argument("--oldest", action="store_true", help="oldest first (default newest first)")
+    r.add_argument("--gpu", help="Modal GPU (default [archive] gpu)")
+    r.add_argument("--parallel", type=int, help="items at once (default [archive] parallel)")
+    r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
+    r.add_argument("--diarize", action="store_true", help="speaker turns too (default [archive] diarize)")
+    r = rsub.add_parser("status", help="items, hours transcribed, errors, cost, link checks")
+    r.add_argument("subject", nargs="?")
+    r = rsub.add_parser("check", help="are the source links still up? (no downloads, no cost)")
+    r.add_argument("subject")
+    r.add_argument("--ids", nargs="+", help="just these items (default: not checked in "
+                   "[archive] link_recheck_days)")
+    r.add_argument("--all", action="store_true", help="every item, however recently checked")
+    r.add_argument("--limit", type=int, help="at most this many items")
+    r = rsub.add_parser("links", help="items by link status (default: every link not alive)")
+    r.add_argument("subject")
+    r.add_argument("--status", choices=["dead", "restricted", "alive", "all"])
+    r = rsub.add_parser("index", help="build the subject's keyword index (index.sqlite; no cost)")
+    r.add_argument("subject")
+    r.add_argument("--rebuild", action="store_true", help="start the index over")
+    r = rsub.add_parser("search", help="search the transcripts: hits with date, link at the moment")
+    r.add_argument("subject")
+    r.add_argument("query", help='FTS5: costco dog | "costco dog" | costco OR walmart | coff*')
+    r.add_argument("--limit", type=int, default=20)
+    r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
+    r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
+    r.add_argument("--by", choices=["rank", "date", "oldest"], default="rank",
+                   help="best match (default), newest first, or oldest first")
+    r.add_argument("--years", action="store_true", help="matching windows per year, not hits")
+    r = rsub.add_parser("ask", help="plain question: a cheap model searches the index, picks the fits")
+    r.add_argument("subject")
+    r.add_argument("question", help="e.g. 'Jer saying he would never sell out to a sponsor'")
+    r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
+    r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
+    r.add_argument("--limit", type=int, default=15, help="options shown")
+
+    p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_narrate)
+    r = rsub.add_parser("speak", help="script text file -> <script>.read.mp3 in [narrate] voice_id (perform to it)")
+    r.add_argument("script", help="UTF-8 text; eleven_v3 tags like [sighs] [pause] allowed")
+    r.add_argument("--voice-id", help="override [narrate] voice_id")
+    r.add_argument("-o", "--out", help="output path")
+    r.add_argument("--stability", type=float, help="0 creative | 0.5 natural | 1 steadiest (eleven_v3)")
+    r.add_argument("--style", type=float, help="0-1 style exaggeration")
+    r.add_argument("--speed", type=float, help="0.7-1.2")
+    r = rsub.add_parser("voice", help="take (video or audio) -> <take>.voiced.mp4/.mp3 in [narrate] voice_id")
+    r.add_argument("take")
+    r.add_argument("--voice-id", help="override [narrate] voice_id")
+    r.add_argument("-o", "--out", help="output path")
+    r = rsub.add_parser("voices", help="list your voices and the shared library; --add one")
+    r.add_argument("--search")
+    r.add_argument("--accent", help="e.g. british")
+    r.add_argument("--gender", help="male | female | neutral")
+    r.add_argument("--age", help="young | middle_aged | old")
+    r.add_argument("--add", metavar="OWNER:VOICE_ID", help="add a library voice to your account")
+    r.add_argument("--name", default="Mother Moo", help="name for --add")
+
+    p = sub.add_parser("perform", help="lip-sync take to a read: find takes, cut at pauses, stitch the renders")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_perform)
+    r = rsub.add_parser("prepare", help="find the takes, cut take N at the read's pauses -> DIR/pieceN.mp4")
+    r.add_argument("recording", help="the phone/webcam video, the read playing out loud in it")
+    r.add_argument("--read", required=True, help="the read the takes follow (clipper narrate speak)")
+    r.add_argument("--take", type=int, default=1, help="which take (default 1)")
+    r.add_argument("--out", help="output folder (default <recording>.perform)")
+    r = rsub.add_parser("status", help="which pieces are rendered")
+    r.add_argument("dir")
+    r = rsub.add_parser("stitch", help="renderN.mp4 at their read times + the read -> final.mp4")
+    r.add_argument("dir")
+    r = rsub.add_parser("lipsync", help="redraw the mouth to match the read (LatentSync on Modal, or Sync)")
+    r.add_argument("target", nargs="?", help="a perform dir (uses final.mp4 + its read) or a video")
+    r.add_argument("--engine", choices=["latentsync", "sync", "both"],
+                   help="default [perform] lipsync_engine")
+    r.add_argument("--audio", help="the audio to sync to (default: the dir's read)")
+    r.add_argument("--deploy", action="store_true", help="deploy the LatentSync Modal app")
+
+    p = sub.add_parser("modal", help="Modal now: containers, runs, failures, this month's spend, archives")
+    p.add_argument("--backfill", action="store_true",
+                   help="add runs from before the run log (transcript.json cost records), once")
+    p.set_defaults(fn=cmd_modal)
+
+    p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
+    p.add_argument("--month", help="YYYY-MM (default: this month, UTC)")
+    p.add_argument("--json", action="store_true", help="the report as JSON")
+    p.add_argument("--backfill", action="store_true",
+                   help="add model spend earlier runs recorded in their output files, once")
+    p.add_argument("--dry-run", action="store_true", help="with --backfill: list, write nothing")
+    p.set_defaults(fn=cmd_costs)
+
+
+def add_setup(sub) -> None:
+    """Setup and checks."""
     from .setup import STEPS
     p = sub.add_parser("setup", help="guided first run on a new machine: roles, folders, encoder, keys")
     p.add_argument("--step", choices=STEPS, help="do this step again")
@@ -954,8 +970,24 @@ def main() -> None:
     p.add_argument("--sync-args", action="store_true", help=argparse.SUPPRESS)  # for deploy/bootstrap
     p.set_defaults(fn=cmd_setup)
 
+    p = sub.add_parser("doctor", help="check this machine: ffmpeg, GPU, fonts, keys, Kitsu/Discord/NAS")
+    p.add_argument("--offline", action="store_true", help="skip the network checks")
+    p.add_argument("--role", choices=["all", "gpu", "bot", "nas"], default="all",
+                   help="only what this machine runs (gpu worker, bot, nas recorder)")
+    p.set_defaults(fn=cmd_doctor)
+
     p = sub.add_parser("shows", help="list the [shows] profiles and which streams belong to each")
     p.set_defaults(fn=cmd_shows)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(prog="clipper", epilog=command_list(),
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--config", help="path to clipper.toml (default: $CLIPPER_CONFIG or ./clipper.toml)")
+    ap.add_argument("--show", help="use this [shows.<key>] profile (default: the stream's, by Kick channel)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for add in (add_pipeline, add_review, add_services, add_extras, add_setup):
+        add(sub)
 
     args = ap.parse_args()
     try:
