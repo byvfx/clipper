@@ -138,8 +138,8 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 ## Open work
 **Maintainability audit 2026-10-28:** `reports/code-audit-2026-10-28.md` (bugs B1-B16, then phases
 0-4: bug fixes, tests/CI, shared modules, stage registry and splits, ease of use). Not filed as
-issues. **Phase 0 done 2026-10-28** (B1-B3, B5, B6, B8-B11, B16, Shorts 15/59 defaults), not yet
-committed; the bot needs a restart to pick up B1/B2/B8 (`deploy\discord\bot-task.ps1 -Restart`).
+issues. **Phase 0 done 2026-10-28** (B1-B3, B5, B6, B8-B11, B16, Shorts 15/59 defaults), commit
+2147ac9 (not pushed); bot restarted 17:20, first jobs-loop replan + upload ran clean at 17:21-17:32.
 Left from the B list: B4 (`--show` with a stream), B7 (enum validation), B12-B15. Next: phase 1.
 Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #77 (M12 quota tracking, L6, L10,
 L11, L13, L16-L18, repo hygiene), #72 (provider side-by-side, `clipper edit`), #50 (revenue once
