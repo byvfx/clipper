@@ -52,3 +52,41 @@ def test_cut_before():
     assert worker.cut_before("meta", on) == ("cut", ("segments", "compilations"))
     assert worker.cut_before("meta", off) == ("cut", ("segments", "compilations", "clips"))
     assert worker.cut_before("transcribe", on) is None
+
+
+def test_without_fast_lane_shorts_follow_the_cut(tmp_path):
+    """B17: Shorts are cut from clips/, which only the slow cut makes then."""
+    order = worker.plan(cfg(fast_lane=False), tmp_path)
+    assert order.index("shorts") == order.index("cut") + 1
+    assert order[-1] == "review"
+
+
+def test_an_empty_cut_folder_is_not_done(tmp_path):
+    """B14: cut makes segments/ before cutting anything; a crashed cut isn't done."""
+    run = worker.Run(tmp_path, cfg()["worker"])
+    (tmp_path / "segments").mkdir()
+    (tmp_path / "clips").mkdir()
+    assert not run.done("cut") and not run.done("clips")
+    (tmp_path / "segments" / "s01_x.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "clips" / "01_x_y.json").write_text("{}", encoding="utf-8")
+    assert run.done("cut") and run.done("clips")
+
+
+def test_every_stage_has_a_cli_command():
+    from clipper import stages
+    for st in stages.STAGES:
+        for wc in ({"fast_lane": True, "notify": True}, {"fast_lane": False, "notify": False}):
+            args = stages.argv(st.name, "S", wc)
+            assert "S" in args and args[0] in {"signals", "transcribe", "score", "segments", "cut",
+                                               "meta", "thumbs", "shorts", "review"}
+
+
+def test_run_from_follows_the_planned_order():
+    """`run --from cut` without the fast lane redoes Shorts (cut from cut's clips);
+    `--from shorts` doesn't recut."""
+    from clipper import stages
+    off, on = cfg(fast_lane=False)["worker"], cfg()["worker"]
+    assert stages.from_stage("cut", off)[:2] == ["cut", "shorts"]
+    assert "cut" not in stages.from_stage("shorts", off)
+    assert stages.from_stage("cut", on) == ["cut", "meta", "thumbs", "review"]
+    assert stages.from_stage("shorts", on)[0] == "shorts" and "cut" in stages.from_stage("shorts", on)

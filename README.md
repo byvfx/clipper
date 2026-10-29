@@ -228,6 +228,10 @@ Click a live show's chip to watch it in a player on the page or on kick.com in a
 window; the chip also says whether the NAS is recording it. The review queue works from the
 keyboard (J/K to move, A approve, R reject, C retake note, H hold, Space/arrows for the
 video, O to pop it out into its own window); press `?` in the war room for the full list.
+On a desktop the panels can be moved: Layout > Arrange panels, then drag a panel by its
+title into the top, left, middle, right or bottom zone, or into the hidden tray; each side
+column has a width. The browser keeps the arrangement; Layout > Save as names it in
+`[paths] warroom_layouts`, where every machine can pick it. Phones keep their tabs.
 The search box looks through every stream's titles, descriptions, topics and hashtags, and
 what is said in each video (its captions); status, date and show filters combine with it, and
 the view is in the page's URL, so it can be bookmarked. Tick items (shift-click for a range,

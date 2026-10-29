@@ -41,6 +41,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
         "costs": "logs/costs.jsonl",  # every model call's cost (`clipper costs`, the war room)
         "warroom_undo": "logs/warroom_undo.json",  # the war room's last 20 actions, for Undo
+        "warroom_layouts": "logs/warroom_layouts.json",  # the war room's saved panel layouts
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
     },

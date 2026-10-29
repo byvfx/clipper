@@ -35,44 +35,19 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import preshow
+from . import preshow, stages
 from .config import for_stream, show_of_channel
 
 log = logging.getLogger("clipper.worker")
 
-STAGES = ["signals", "transcribe", "score", "segments",
-          "clips", "clips_meta", "clips_thumbs", "shorts", "clips_review",
-          "cut", "meta", "thumbs", "review"]
-FAST_LANE = STAGES[:STAGES.index("clips_review") + 1]
-# The fast-lane twin of each slow stage ([worker] stages lists the slow names).
-FAST_TWIN = {"cut": "clips", "meta": "clips_meta", "thumbs": "clips_thumbs",
-             "review": "clips_review"}
-# Stages that only have work when the cut before them made videos, and which cut that is
-# (without the fast lane, "cut" cuts everything and the clips stages don't run).
-AFTER_CUT = {"clips_meta": "clips", "clips_thumbs": "clips", "clips_review": "clips",
-             "meta": "cut", "thumbs": "cut", "shorts": "cut", "review": "cut"}
-
-# Output that shows a stage already ran (for streams processed before run.json): any of
-# these paths, globs allowed.
-DONE_MARKERS = {
-    "signals": ["windows.json"],
-    "transcribe": ["words.jsonl"],
-    "score": ["candidates.json"],
-    "segments": ["segments.json"],
-    "clips": ["clips"],
-    "clips_meta": ["metadata/clips"],
-    "clips_thumbs": ["clips/*.jpg"],
-    "shorts": ["shorts.json"],
-    "clips_review": ["review_state.json"],
-    "cut": ["segments"],
-    "meta": ["metadata/segments"],
-    "thumbs": ["segments/*.jpg"],
-    "review": ["review/s[0-9]*.mp4"],
-}
+# The stage table lives in clipper/stages.py; these names stay for the war room and cli.
+STAGES = stages.NAMES
+FAST_LANE = stages.FAST_LANE
+FAST_TWIN = stages.FAST_TWIN
 
 
 def output_found(stream_dir: Path, stage: str) -> bool:
-    return any(next(stream_dir.glob(m), None) is not None for m in DONE_MARKERS[stage])
+    return any(next(stream_dir.glob(m), None) is not None for m in stages.BY_NAME[stage].done)
 
 
 def setup_logging() -> None:
@@ -113,19 +88,7 @@ def write_json(path: Path, data: dict) -> None:
 
 
 def stage_args(stage: str, stream: str, wc: dict) -> list[str]:
-    if stage in ("review", "clips_review"):
-        return ["review", "publish", stream] + ([] if wc["notify"] else ["--no-notify"])
-    if stage == "clips":
-        return ["cut", stream, "picks"]
-    if stage == "transcribe":  # the worker only runs it when it means to (not done, or forced)
-        return ["transcribe", stream, "--force"]
-    if wc["fast_lane"]:
-        if stage == "cut":
-            return ["cut", stream, "segments", "compilations"]
-        if stage in ("meta", "thumbs", "clips_meta", "clips_thumbs"):
-            # Only what has no draft/cover yet: the clips in review keep theirs.
-            return [stage.removeprefix("clips_"), stream, "--missing"]
-    return [stage.removeprefix("clips_"), stream]
+    return stages.argv(stage, stream, wc)
 
 
 def keep_awake(on: bool) -> None:
@@ -219,24 +182,18 @@ def default_stages(cfg: dict, stream_dir: Path) -> list[str]:
     return wanted
 
 
-def plan(cfg: dict, stream_dir: Path, stages: list[str] | None = None,
+def plan(cfg: dict, stream_dir: Path, names: list[str] | None = None,
          lane: str | None = None) -> list[str]:
-    """The stages to run, in order: `stages` as given, or the stream's defaults; lane
+    """The stages to run, in order: `names` as given, or the stream's defaults; lane
     "fast" or "slow" keeps one side of FAST_LANE."""
-    order = [s for s in STAGES if s in (stages or default_stages(cfg, stream_dir))]
+    order = stages.order(names or default_stages(cfg, stream_dir), cfg["worker"])
     if lane:
         order = [s for s in order if (s in FAST_LANE) == (lane == "fast")]
     return order
 
 
 def cut_before(stage: str, wc: dict) -> tuple[str, tuple[str, ...]] | None:
-    """The cut stage `stage` waits on, and the folders that cut fills."""
-    cut = "clips" if stage == "shorts" and wc["fast_lane"] else AFTER_CUT.get(stage)
-    if not cut:
-        return None
-    if cut == "clips":
-        return cut, ("clips",)
-    return cut, ("segments", "compilations") + (() if wc["fast_lane"] else ("clips",))
+    return stages.cut_before(stage, wc)
 
 
 def waiting(cfg: dict, stream_dir: Path, lane: str | None = None) -> bool:
