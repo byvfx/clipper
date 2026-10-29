@@ -30,15 +30,9 @@ from pathlib import Path
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
+from .media import source_file
 from .segments import slug
 from .timefmt import hms
-
-
-def source_file(stream_dir: Path) -> Path:
-    for p in sorted(stream_dir.glob("source.*")):
-        if p.suffix not in (".part", ".ytdl") and "Frag" not in p.name:
-            return p
-    raise ClipperError(f"no source video in {stream_dir}")
 
 
 def keyframes(stream_dir: Path, src: Path) -> list[float]:

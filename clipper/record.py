@@ -46,7 +46,7 @@ from typing import Any
 
 import requests
 
-from . import jsonstate, kick
+from . import jsonstate, kick, media
 from .errors import ClipperError
 
 log = logging.getLogger("clipper.record")
@@ -552,16 +552,6 @@ class Recording:
 
 # ---------- finalize ----------
 
-def _probe_duration(path: Path) -> float | None:
-    try:
-        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                              "-of", "csv=p=0", str(path)],
-                             check=True, capture_output=True, text=True).stdout.strip()
-        return float(out)
-    except (subprocess.CalledProcessError, ValueError):
-        return None
-
-
 def _uncovered(spans: list[list[float]], a: float, b: float, min_s: float) -> list[tuple[float, float]]:
     out, cur = [], a
     for s, e in sorted(spans):
@@ -614,7 +604,7 @@ def finalize(d: Path, cfg: dict, alerts: Alerts | None = None) -> dict | None:
 
     # 1. video: stream-copy the parts into one file
     for p in parts:
-        p.duration_s = _probe_duration(d / p.file) or p.duration_s
+        p.duration_s = media.try_duration(d / p.file) or p.duration_s
     ext = rc["container"]
     src = d / f"source.{ext}"
     tmp = d / f"source.tmp.{ext}"
@@ -629,7 +619,7 @@ def finalize(d: Path, cfg: dict, alerts: Alerts | None = None) -> dict | None:
                         "-f", "concat", "-safe", "0", "-i", str(listing),
                         "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", str(tmp)], check=True)
         tmp.replace(src)
-    duration = _probe_duration(src) or sum(p.duration_s for p in parts)
+    duration = media.try_duration(src) or sum(p.duration_s for p in parts)
 
     mapping = source_map(parts)
     t0 = parts[0].wall_start

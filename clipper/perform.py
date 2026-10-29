@@ -38,7 +38,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import jsonstate
+from . import jsonstate, media
 from .errors import ClipperError
 
 SR = 8000  # analysis sample rate for take detection
@@ -90,12 +90,6 @@ def cut_points(sil: list[tuple[float, float]], end: float, pc: dict) -> list[flo
     return cuts + [round(end, 3)]
 
 
-def duration(path: Path) -> float:
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                          str(path)], capture_output=True, text=True, check=True).stdout
-    return float(out.strip())
-
-
 def prepare(recording: Path, read: Path, pc: dict, take: int = 1, out: Path | None = None) -> Path:
     out = out or recording.with_name(f"{recording.stem}.perform")
     out.mkdir(parents=True, exist_ok=True)
@@ -108,7 +102,7 @@ def prepare(recording: Path, read: Path, pc: dict, take: int = 1, out: Path | No
     if not 1 <= take <= len(takes):
         raise ClipperError(f"--take {take}: the recording has {len(takes)} take(s)")
     t0 = takes[take - 1][0]
-    end = min(len(rd) / SR + pc["tail_s"], duration(recording) - t0)
+    end = min(len(rd) / SR + pc["tail_s"], media.duration(recording) - t0)
     cuts = cut_points(pauses(read, pc), end, pc)
     pieces = []
     for i, (a, b) in enumerate(pairwise(cuts), 1):
@@ -133,7 +127,7 @@ def status(d: Path) -> dict:
     m = jsonstate.load(d / "manifest.json")
     for p in m["pieces"]:
         r = d / p["render"]
-        got = f"{duration(r):.2f} s rendered" if r.exists() else "not rendered yet"
+        got = f"{media.duration(r):.2f} s rendered" if r.exists() else "not rendered yet"
         print(f"{p['piece']}: read {p['start']:.2f}-{p['end']:.2f} s -> {p['render']}: {got}")
     return m
 
@@ -162,7 +156,7 @@ def stitch(d: Path, pc: dict) -> Path:
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(final), "-vf", "scale=-2:720", "-c:v", "libx264",
                     "-crf", "24", "-preset", "slow", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
                     str(phone)], check=True)
-    print(f"{final} ({duration(final):.1f} s), {phone.name} ({phone.stat().st_size / 2**20:.0f} MB)")
+    print(f"{final} ({media.duration(final):.1f} s), {phone.name} ({phone.stat().st_size / 2**20:.0f} MB)")
     return final
 
 
@@ -236,15 +230,15 @@ def lipsync(target: Path, pc: dict, engine: str, audio: Path | None = None) -> P
     with tempfile.TemporaryDirectory() as td:
         wav = Path(td) / "read.wav"
         # Padded to the video's length: the models stop where the audio stops (the final hold).
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(audio), "-af", f"apad=whole_dur={duration(video):.3f}",
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(audio), "-af", f"apad=whole_dur={media.duration(video):.3f}",
                         "-ac", "1", "-ar", "16000", str(wav)], check=True)
         raw = Path(td) / "raw.mp4"
         raw.write_bytes((lipsync_latentsync if engine == "latentsync" else lipsync_sync)(video, wav, pc))
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-i", str(audio), "-map", "0:v", "-map", "1:a",
-                        "-af", f"apad=whole_dur={duration(raw):.3f}", "-c:v", "libx264", "-crf", "16", "-preset",
-                        "medium", "-c:a", "aac", "-b:a", "192k", "-t", f"{duration(raw):.3f}", "-movflags", "+faststart",
+                        "-af", f"apad=whole_dur={media.duration(raw):.3f}", "-c:v", "libx264", "-crf", "16", "-preset",
+                        "medium", "-c:a", "aac", "-b:a", "192k", "-t", f"{media.duration(raw):.3f}", "-movflags", "+faststart",
                         str(out)], check=True)
-    print(f"{out} ({duration(out):.1f} s)")
+    print(f"{out} ({media.duration(out):.1f} s)")
     return out
 
 

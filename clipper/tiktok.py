@@ -47,7 +47,7 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate, rumble, youtube
+from . import jsonstate, media, rumble, youtube
 from .config import for_stream
 from .errors import ClipperError
 from .review import draft_fields, hashtag_line
@@ -285,7 +285,6 @@ def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
     room = tc["max_per_24h"] - sent_last_24h(sched, exclude=again)
     if not dry_run:
         print(f"TikTok account: {whoami(cfg)}; {max(room, 0)} of {tc['max_per_24h']} drafts left in 24 h")
-    from .notify import probe_duration
 
     for e in todo:
         t = tiktok_of(e)
@@ -300,7 +299,7 @@ def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
             print(f"  {e['key']}: video missing ({video}); rerun clipper shorts")
             continue
         text = caption(e, cfg)
-        secs = probe_duration(video)
+        secs = media.duration(video)
         long = f"; {secs:.0f} s is past TikTok's 3 min for most accounts" if secs > 180 else ""
         if re.search(r"\bhosts?\b", text, re.IGNORECASE):
             print(f"  {e['key']}: warning: the caption says host(s); retitle it in Kitsu first")

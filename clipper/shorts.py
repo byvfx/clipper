@@ -35,11 +35,12 @@ import time
 from itertools import pairwise
 from pathlib import Path
 
-from . import jsonstate
+from . import jsonstate, media
 from .bleep import Bleeper
 from .config import for_stream
-from .cut import encode_args, ffmpeg_cut, keyframe_before, source_file
+from .cut import encode_args, ffmpeg_cut, keyframe_before
 from .errors import ClipperError
+from .media import source_file
 from .scoring import Claude, load_words
 from .segments import slug
 
@@ -428,14 +429,6 @@ def write_ass(words: list[dict], t0: float, dur: float, sc: dict, scenes: list[t
 
 # ---------- render ----------
 
-def probe_size(video: Path) -> tuple[int, int]:
-    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-                          "stream=width,height", "-of", "csv=p=0", str(video)],
-                         check=True, capture_output=True, text=True).stdout.strip()
-    w, h = out.split(",")[:2]
-    return int(w), int(h)
-
-
 def measure_loudness(video: Path, sc: dict) -> dict:
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-vn", "-af",
                         (f"loudnorm=I={sc['lufs']}:TP={sc['true_peak']}:LRA={sc['lra']}"
@@ -651,7 +644,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         n_bleeps = ffmpeg_cut(src, cut, a, b, sc["cut_codec"] or cfg["cut"]["clip_codec"], sc["cut_crf"],
                               keyframe=keyframe_before(stream_dir, src, a),
                               bleep=(audio_bleeper, words))
-        W, H = probe_size(cut)
+        W, H = media.size(cut)
         parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"])) for s, e, n in scenes]
         ass = work / f"{key}.ass" if sc["captions"] else None
         n_caps = write_ass(words, a, dur, sc, [(s, e, layouts[n]) for s, e, n in scenes],

@@ -31,6 +31,7 @@ from pathlib import Path
 
 import requests
 
+from . import media
 from .errors import ClipperError
 
 API = "https://api.elevenlabs.io"
@@ -60,12 +61,6 @@ def key(nc: dict) -> str:
     return k
 
 
-def duration(path: Path) -> float:
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                          str(path)], capture_output=True, text=True, check=True).stdout
-    return float(out.strip() or 0)
-
-
 def convert(audio: Path, nc: dict, voice_id: str) -> bytes:
     """One speech-to-speech call; returns the encoded audio in nc['output_format']."""
     with open(audio, "rb") as f:
@@ -84,7 +79,7 @@ def voice(take: Path, nc: dict, voice_id: str = "", out: Path | None = None) -> 
     voice_id = voice_id or nc["voice_id"]
     if not voice_id:
         raise ClipperError("no voice: set [narrate] voice_id, or pass --voice-id (clipper narrate voices)")
-    dur = duration(take)
+    dur = media.duration(take)
     if dur > nc["max_s"]:
         raise ClipperError(f"{take.name} is {dur:.0f} s; split takes longer than [narrate] max_s "
                          f"({nc['max_s']} s) at pauses first")
@@ -126,7 +121,7 @@ def speak(text: str, nc: dict, out: Path, voice_id: str = "", overrides: dict | 
     if not r.ok:
         raise ClipperError(f"ElevenLabs text to speech: HTTP {r.status_code}: {r.text[:300]}")
     out.write_bytes(r.content)
-    print(f"{out}  ({duration(out):.1f} s, voice {voice_id}, {len(text)} characters, "
+    print(f"{out}  ({media.duration(out):.1f} s, voice {voice_id}, {len(text)} characters, "
           f"settings {body.get('voice_settings', 'voice default')})")
     return out
 

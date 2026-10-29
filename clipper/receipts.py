@@ -48,7 +48,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import jsonstate
+from . import jsonstate, media
 from .archive import netscape_cookies, subject_dir
 from .bleep import Bleeper
 from .config import for_stream
@@ -309,7 +309,7 @@ def still(work: Path, name: str, lines: list[tuple], rc: dict, bug: str, dst: Pa
                    ":line_spacing=14")
           for k, (font, size, color, y, text) in enumerate(lines)]
     vf.append(drawtext(lines[-1][0], tag, 30, "white@0.6", "w-text_w-48", "h-text_h-40"))
-    dur = max(rc["card_s"], duration(vo) + rc["vo_pad_s"]) if vo else rc["card_s"]
+    dur = max(rc["card_s"], media.duration(vo) + rc["vo_pad_s"]) if vo else rc["card_s"]
     d = f"{dur:.2f}"
     audio = ["-i", str(vo), "-af", f"{loudnorm(rc)},aresample=48000,aformat=channel_layouts=stereo,apad"] if vo \
         else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
@@ -472,12 +472,6 @@ def describe(data: dict, chapters: list[tuple[float, str]]) -> str:
     return "\n".join(parts).strip()
 
 
-def duration(p: Path) -> float:
-    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                        str(p)], capture_output=True, text=True, check=True)
-    return float(r.stdout.strip())
-
-
 def cut(sdir: Path, cfg: dict) -> Path:
     cfg = for_stream(cfg, sdir)
     rc = cfg["receipts"]
@@ -495,7 +489,7 @@ def cut(sdir: Path, cfg: dict) -> Path:
     def add(p: Path) -> None:
         nonlocal t
         parts.append(p)
-        t += duration(p)
+        t += media.duration(p)
 
     if not used(data):
         raise ClipperError("no story has a receipt with use = true")

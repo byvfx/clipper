@@ -32,15 +32,14 @@ import time
 from pathlib import Path
 
 from .errors import ClipperError
+from .media import source_file
 
 
 def extract_audio(stream_dir: Path) -> Path:
     wav = stream_dir / "audio.wav"
     if wav.exists():
         return wav
-    sources = sorted(p for p in stream_dir.glob("source.*") if p.suffix != ".part")
-    if not sources:
-        raise ClipperError(f"no source.* in {stream_dir}")
+    src = source_file(stream_dir)
     tmp = wav.with_suffix(".tmp.wav")
     # A recording with dropped segments has timestamp jumps; WAV has no timestamps, so
     # without aresample the samples close up over each gap and every transcript time
@@ -48,7 +47,7 @@ def extract_audio(stream_dir: Path) -> Path:
     # fills each gap with silence, first_pts=0 keeps the start where the source starts.
     subprocess.run(
         ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-         "-i", str(sources[0]), "-vn", "-af", "aresample=async=1:first_pts=0",
+         "-i", str(src), "-vn", "-af", "aresample=async=1:first_pts=0",
          "-ac", "1", "-ar", "16000", str(tmp)],
         check=True,
     )

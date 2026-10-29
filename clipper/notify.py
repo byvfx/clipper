@@ -28,7 +28,7 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate
+from . import jsonstate, media
 from .config import for_stream
 from .errors import ClipperError
 from .timefmt import length
@@ -137,18 +137,12 @@ def card(r: dict) -> tuple[dict, list[dict]]:
 
 # ---------- previews ----------
 
-def probe_duration(path: Path) -> float:
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                          "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True)
-    return float(out.stdout.strip())
-
-
 def discord_preview(r: dict, dc: dict) -> tuple[Path, bool]:
     """A preview under the upload limit; True when it's only the opening excerpt."""
     src = r["preview"] if r["preview"].exists() else r["file"]
     dst = r["preview"].parent / "discord" / f"{r['key']}.mp4"
     dst.parent.mkdir(parents=True, exist_ok=True)
-    duration = r["duration_s"] or probe_duration(src)
+    duration = r["duration_s"] or media.duration(src)
     limit = dc["max_upload_mb"] * 1e6 * 0.97
     budget_kbit = limit * 0.93 * 8 / 1000  # leave room for container overhead
     audio = 64
