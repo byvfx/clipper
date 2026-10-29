@@ -868,7 +868,9 @@ def make_handler(cfg: dict):
                     self.send_json({"error": "not found"}, 404)
             except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                 pass
-            except (Exception, SystemExit) as e:  # noqa: BLE001
+            except SystemExit as e:  # clipper's own messages (a bad ref): safe to show
+                self.send_json({"error": str(e)}, 400)
+            except Exception as e:  # noqa: BLE001
                 self.fail(e)
 
         def do_POST(self):

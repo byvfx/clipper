@@ -63,8 +63,8 @@ set, the bot checks that channel's feed every few minutes, grabs each new pre-sh
 off the end): transcribe, one segment, cut, meta, thumbs, review. No clips and no Shorts. Once approved, `clipper schedule` places it
 "asap", outside the release slots, and the next `clipper upload` publishes it at once.
 `clipper preshow list` shows the feed; `clipper preshow fetch <url>` grabs an older one.
-The same path takes a **one-off** from any YouTube video: `clipper preshow fetch <url> --show
-<key> --from 1:30:00 [--to 2:10:00] --about "what the stretch is"` grabs it and the segments
+The same path takes a **one-off** from any YouTube video: `clipper --show <key> preshow fetch
+<url> --from 1:30:00 [--to 2:10:00] --about "what the stretch is"` grabs it and the segments
 stage asks the model for the exact start and end inside that window (prompts/oneoff_<v>.md), so one
 long segment comes out, not the whole video. A show that is not on Kick gets a placeholder
 channel in its `[shows.<key>]` table. `[thumbnail] teasers = false` (per show) drops the

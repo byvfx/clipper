@@ -20,9 +20,14 @@ runs per streams folder (a lock file). deploy/discord/bot-task.ps1 runs it at lo
 Every [preshow] poll_minutes it runs `clipper preshow check --run`: new pre-shows on the
 shows' YouTube channels are grabbed and put through the pipeline (clipper/preshow.py).
 
-There is no bulk approve and no upload from Discord: every release needs its own
-Approve, and `clipper upload` stays a separate job. Slash commands are registered on
-[discord] guild_id only. The bot needs no privileged intents.
+Background jobs (`jobs_loop`, their own loop, independent of the card refresh): every
+[youtube] auto_upload_minutes `clipper schedule` then `clipper upload`; every [tiktok]
+auto_send_minutes `clipper tiktok --auto`; every [analytics] auto_hours `clipper analytics`;
+with [retake] auto, `clipper retake` when Kitsu has new retake notes. Each runs as a child
+process and a non-zero exit is DMed.
+
+There is no bulk approve: every release needs its own Approve. Slash commands are
+registered on [discord] guild_id only. The bot needs no privileged intents.
 """
 
 from __future__ import annotations
@@ -163,12 +168,9 @@ class Bot(discord.Client):
         self.retake_proc: asyncio.subprocess.Process | None = None
         self.retake_again = False
         self.upload_proc: asyncio.subprocess.Process | None = None
-        self.last_upload = 0.0
         self.analytics_proc: asyncio.subprocess.Process | None = None
         self.preshow_proc: asyncio.subprocess.Process | None = None
-        self.last_analytics = 0.0
         self.tiktok_proc: asyncio.subprocess.Process | None = None
-        self.last_tiktok = 0.0
         register_commands(self)
 
     async def setup_hook(self) -> None:
@@ -178,6 +180,7 @@ class Bot(discord.Client):
         await self.tree.sync(guild=guild)
         if self.cfg["discord"]["refresh_minutes"] > 0:
             self.loop.create_task(self.refresh_cards())
+        self.loop.create_task(self.jobs_loop())
         if preshow.watched(self.cfg) and self.cfg["preshow"]["poll_minutes"] > 0:
             self.loop.create_task(self.preshow_loop())
         if self.cfg["notify"]["enabled"]:
@@ -204,30 +207,50 @@ class Bot(discord.Client):
                 log.exception("card refresh failed")
             if edited:
                 log.info(f"card refresh: {edited} card(s) updated")
-            every_up = self.cfg["youtube"]["auto_upload_minutes"] * 60
-            if every_up > 0 and time.monotonic() - self.last_upload >= every_up \
-                    and not (self.upload_proc and self.upload_proc.returncode is None):
-                self.last_upload = time.monotonic()
-                self.loop.create_task(self._auto_upload())
-            every_tt = self.cfg["tiktok"]["auto_send_minutes"] * 60
-            if every_tt > 0 and time.monotonic() - self.last_tiktok >= every_tt \
-                    and self.cfg["paths"]["tiktok_token"].exists() \
-                    and not (self.tiktok_proc and self.tiktok_proc.returncode is None):
-                self.last_tiktok = time.monotonic()
-                self.loop.create_task(self._clipper_bg("tiktok", ["tiktok", "--auto"]))
-            every_an =self.cfg["analytics"]["auto_hours"] * 3600
-            if every_an > 0 and time.monotonic() - self.last_analytics >= every_an \
-                    and self.cfg["paths"]["youtube_token"].exists() \
-                    and '"uploaded"' in (self.cfg["paths"]["schedule"].read_text(encoding="utf-8")
-                                         if self.cfg["paths"]["schedule"].exists() else ""):
-                self.last_analytics = time.monotonic()
-                self.loop.create_task(self._clipper_bg("analytics", ["analytics"]))
-            try:  # retake notes made in Kitsu since the last pass (review.json just synced)
-                if self.cfg["retake"]["auto"] and await asyncio.to_thread(retake.pending, self.cfg):
-                    self.start_retake()
-            except (Exception, SystemExit):  # SystemExit would stop the event loop, and the bot
-                log.exception("retake check failed")
             await asyncio.sleep(every)
+
+    def running(self, name: str) -> bool:
+        proc = getattr(self, f"{name}_proc")
+        return bool(proc and proc.returncode is None)
+
+    def jobs(self) -> list[tuple[str, float, object, object]]:
+        """(name, every s, ready() -> bool, start()) for the background jobs; every <= 0 is off."""
+        cfg, paths = self.cfg, self.cfg["paths"]
+        has_upload = lambda: paths["schedule"].exists() \
+            and '"uploaded"' in paths["schedule"].read_text(encoding="utf-8")
+        return [
+            ("upload", cfg["youtube"]["auto_upload_minutes"] * 60,
+             lambda: not self.running("upload"),
+             lambda: self.loop.create_task(self._auto_upload())),
+            ("tiktok", cfg["tiktok"]["auto_send_minutes"] * 60,
+             lambda: paths["tiktok_token"].exists() and not self.running("tiktok"),
+             lambda: self.loop.create_task(self._clipper_bg("tiktok", ["tiktok", "--auto"]))),
+            ("analytics", cfg["analytics"]["auto_hours"] * 3600,
+             lambda: paths["youtube_token"].exists() and has_upload(),
+             lambda: self.loop.create_task(self._clipper_bg("analytics", ["analytics"]))),
+            # retake notes made in Kitsu (review.json is synced by the card refresh and the replan)
+            ("retake", (cfg["discord"]["refresh_minutes"] or 10) * 60 if cfg["retake"]["auto"] else 0,
+             lambda: retake.pending(cfg), self.start_retake),
+        ]
+
+    async def jobs_loop(self) -> None:
+        """Start each background job when it's due. Its own loop, not the card refresh's,
+        so turning card refresh off ([discord] refresh_minutes = 0) leaves uploads running."""
+        await self.wait_until_ready()
+        await asyncio.sleep(30)
+        last: dict[str, float] = {}
+        while not self.is_closed():
+            for name, every, ready, start in self.jobs():
+                if every <= 0 or time.monotonic() - last.get(name, float("-inf")) < every:
+                    continue
+                try:
+                    if not await asyncio.to_thread(ready):
+                        continue
+                    last[name] = time.monotonic()
+                    start()
+                except (Exception, SystemExit):  # SystemExit would stop the event loop, and the bot
+                    log.exception(f"{name} check failed")
+            await asyncio.sleep(60)
 
     async def preshow_loop(self) -> None:
         """Grab new pre-shows from the shows' YouTube feeds and run them, every poll_minutes."""
@@ -314,9 +337,11 @@ class Bot(discord.Client):
             return None
 
     async def _auto_upload(self) -> None:
-        """Replan first (slots that passed get new ones), then upload what's due."""
-        if await self._clipper_bg("upload", ["schedule"]) == 0:
-            await self._clipper_bg("upload", ["upload"])
+        """Replan first (slots that passed get new ones), then upload what's due. A failed
+        replan (Kitsu down) is DMed on its own and the upload still runs on the last plan,
+        so one outage doesn't miss every slot that hour."""
+        await self._clipper_bg("upload", ["schedule"])
+        await self._clipper_bg("upload", ["upload"])
 
     async def _retake(self) -> None:
         await self._clipper_bg("retake", ["retake"])

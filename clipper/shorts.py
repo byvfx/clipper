@@ -557,15 +557,13 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     bleeper = Bleeper({**cfg["bleep"], "patterns": cfg["bleep"]["patterns"]
                        if cfg["bleep"]["mode"] != "off" else []})
     audio_bleeper = Bleeper(cfg["bleep"])
+    # shorts.json is re-read per Short and changed under its lock: a retake can set a
+    # window_override while this runs, and a whole-file write would drop it.
     state_path = stream_dir / "shorts.json"
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
-    review = {}
-    if (stream_dir / "review.json").exists():
-        review = json.loads((stream_dir / "review.json").read_text(encoding="utf-8"))
-    uploaded = set()  # on YouTube already: their files stay what was uploaded
-    if cfg["paths"]["schedule"].exists():
-        sched = json.loads(cfg["paths"]["schedule"].read_text(encoding="utf-8"))
-        uploaded = {e["key"] for e in sched["entries"] if e.get("status") == "uploaded"}
+    review = jsonstate.read(stream_dir / "review.json", {})
+    sched = jsonstate.read(cfg["paths"]["schedule"], {})
+    uploaded = {e["key"] for e in sched.get("entries", [])  # on YouTube already: their files
+                if e.get("status") == "uploaded"}          # stay what was uploaded
     out_dir, work = stream_dir / "shorts", stream_dir / "shorts" / "work"
     out_dir.mkdir(exist_ok=True)
     layouts = with_examples(layouts, cfg)
@@ -599,7 +597,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         b = min(b, a + sc["max_s"])
         dur = round(b - a, 3)
         dst = out_dir / f"{key}_{slug(p['title'])}.mp4"
-        prev = state.get(key, {})
+        prev = jsonstate.read(state_path, {}).get(key, {})
         if prev.get("window_override"):  # set by a retake: used as it is
             a, b = prev["window_override"]
             dur = round(b - a, 3)
@@ -674,12 +672,12 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
                 "clip": clip_video.name if clip_video != dst else ""}
         jsonstate.write(dst.with_suffix(".json"), side)
         write_draft(stream_dir, clip_video, dst, p, sc)
-        state[key] = {"file": f"shorts/{dst.name}", "layout": label, **multi, "layout_by": how,
-                      "in_s": a, "out_s": b,
-                      **({"window_override": prev["window_override"]}
-                         if prev.get("window_override") else {}),
-                      "sig": sig}
-        jsonstate.write(state_path, state)
+        with jsonstate.update(state_path, {}) as state:
+            override = (state.get(key) or {}).get("window_override")  # as the file has it now
+            state[key] = {"file": f"shorts/{dst.name}", "layout": label, **multi, "layout_by": how,
+                          "in_s": a, "out_s": b,
+                          **({"window_override": override} if override else {}),
+                          "sig": sig}
         done.append(side)
         print(f"{key}  {dur:5.1f}s  {label:<8} ({how})  {n_caps} captions, {n_bleeps} bleeps, "
               f"{loud['input_lufs']:.1f} -> {sc['lufs']} LUFS  -> {dst.name} ({time.time() - t:.0f}s)",
@@ -688,7 +686,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         print(f"layout picks cost ${claude.cost:.4f}")
     if check:
         return []
-    jsonstate.write(state_path, state)  # marks the stage done
+    with jsonstate.update(state_path, {}):  # marks the stage done
+        pass
     print(f"{len(done)} shorts rendered, {len(picks) - len(done)} unchanged or skipped")
     if done:  # their vertical covers, from the clips' thumbnail choices (no model calls)
         from . import thumbs

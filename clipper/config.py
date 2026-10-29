@@ -433,9 +433,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "cut_crf": 16,
         "keep_work": False,       # keep shorts/work/ (intermediate cut, .ass captions)
         "pad_s": 0.15,            # room before the first and after the last word
-        "window": "clip",         # clip: the pick's in/out | short: scoring's 15-60 s short window
-        "min_s": 90,              # widen shorter windows by whole transcript lines to this
-        "max_s": 179,             # longest Short (YouTube files vertical videos up to 3:00 as Shorts)
+        "window": "short",        # short: scoring's 15-60 s short window | clip: the pick's in/out
+        "min_s": 15,              # widen shorter windows by whole transcript lines to this
+        "max_s": 59,              # longest Short: over 60 s, any Content ID claim blocks it worldwide
         "end_pause_s": 0.7,       # window "short": end on a sentence end or a pause this long; 0 = off
         "fade_in_s": 0.05,
         "fade_out_s": 0.25,

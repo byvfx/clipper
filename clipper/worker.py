@@ -25,7 +25,6 @@ so nothing is copied. It also runs pre-shows the bot grabbed from YouTube
 from __future__ import annotations
 
 import ctypes
-import json
 import logging
 import os
 import socket
@@ -96,8 +95,13 @@ def age_s(iso: str | None) -> float:
 
 
 def read_json(path: Path) -> dict:
+    """The file's JSON, or {} if it's missing or broken. A file another process is
+    replacing is retried (jsonstate.read), not read as {}: run.json taken for empty
+    would be saved back over clips_ready/finished."""
+    from . import jsonstate
+
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return jsonstate.read(path, {})
     except (OSError, ValueError):
         return {}
 

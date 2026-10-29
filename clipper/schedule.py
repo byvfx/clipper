@@ -156,7 +156,9 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
     now = datetime.now(tz)
     start = date.fromisoformat(sc["start"]) if sc["start"] else now.date() + timedelta(days=1)
 
-    if sync_first:
+    if sync_first and dry_run:  # a sync writes review.json and can post Kitsu comments
+        print("dry run: decisions as last synced (review.json), Kitsu not read")
+    elif sync_first:
         from . import review
         for state in sorted(streams_dir.glob("*/review_state.json")):
             review.sync(state.parent, cfg)

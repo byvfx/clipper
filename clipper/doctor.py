@@ -624,10 +624,13 @@ def check_role_settings(cfg: dict, role: str) -> None:
         fail("config", f"[schedule] timezone {cfg['schedule']['timezone']!r} isn't a time zone",
              'an IANA name, e.g. "America/Los_Angeles"')
     dc = cfg["discord"]
-    if role in ("all", "bot") and dc.get("enabled", True):
-        for k in ("guild_id", "allowed_user_ids"):
-            (ok if dc.get(k) else fail)("config", f"[discord] {k}" + (" set" if dc.get(k) else " not set"),
-                                        "" if dc.get(k) else "the bot refuses to start without it; see SETUP")
+    # --role bot always (the bot needs them even with card posting off); "all" when Discord is on
+    if role == "bot" or (role == "all" and dc["enabled"]):
+        for k, why in (("guild_id", "the bot refuses to start without it"),
+                       ("allowed_user_ids", "the bot refuses to start without it"),
+                       ("review_channel_id", "review cards have nowhere to go")):
+            (ok if dc[k] else fail)("config", f"[discord] {k}" + (" set" if dc[k] else " not set"),
+                                    "" if dc[k] else f"{why}; see SETUP")
     if role in ("all", "nas"):
         chans = cfg["record"].get("channels")
         (ok if chans else warn)("config", "[record] channels " + ("set" if chans else "empty: the recorder has nothing to watch"),

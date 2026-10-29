@@ -611,16 +611,18 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     if links_only:
         backfill_links(cfg, sched, sched_path, dry_run, limit)
         return
-    yt = upload_due(cfg, sched, sched_path, dry_run, limit)
+    yt, failed = upload_due(cfg, sched, sched_path, dry_run, limit)
     try:  # links on videos already up whose longer video went public since
-        backfill_links(cfg, json.loads(sched_path.read_text(encoding="utf-8")), sched_path,
-                       dry_run, None, yt)
+        backfill_links(cfg, jsonstate.read(sched_path), sched_path, dry_run, None, yt)
     except (Exception, SystemExit) as ex:  # noqa: BLE001  # the uploads are done either way
         print(f"  warning: source links: {type(ex).__name__}: {ex}")
+    if failed:  # a non-zero exit is what makes the bot DM it
+        raise SystemExit(f"{len(failed)} upload(s) failed: {'; '.join(failed)}"[:900])
 
 
 def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: int | None):
-    """Upload what's due; returns the YouTube client if it made one."""
+    """Upload what's due; returns the YouTube client if it made one, and "key: error" for
+    each upload that failed."""
     yc, paths = cfg["youtube"], cfg["paths"]
     tz = ZoneInfo(sched["timezone"])
     now = datetime.now(UTC)
@@ -646,13 +648,14 @@ def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: i
         print(f"  {recent} uploaded in the last 24 h ([youtube] max_per_24h = {yc['max_per_24h']}): "
               f"{room} more now")
     due = due[:min(limit or yc["max_per_run"], room)]
-    refresh_review(cfg, due)
+    if not dry_run:  # a sync writes review.json (and can post Kitsu comments)
+        refresh_review(cfg, due)
     for e in missed:
         print(f"  missed slot {e['publish_at']}: {e['title'][:60]} (rerun clipper schedule)")
     print(f"{len(due)} due within {yc['upload_ahead_hours']} h" + (" (dry run)" if dry_run else "")
           + ("; uploads stay private ([youtube] manual_publish)" if yc["manual_publish"] else ""))
     if not due:
-        return None
+        return None, []
     sources: dict = {}
     if dry_run:
         for e in due:
@@ -666,31 +669,31 @@ def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: i
                   f"links to {', '.join(p['id'] for _, p, _ in parents) or '-'} (if public by then)")
             if m["masked"]:
                 print(f"      masked banned words in {', '.join(m['masked'])}: fix the Kitsu columns too")
-        return None
+        return None, []
 
     yt = service(paths)
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
-    playlists = json.loads(cache_path.read_text()) if cache_path.exists() else {}
-    failed = 0
+    playlists = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.exists() else {}
+    failed: list[str] = []
     for e in due:
         # #77 M5: one bad entry (a missing file, a refused upload) no longer blocks every
         # later one each hour; it's noted on the entry and the run moves on. A quota or daily
         # limit refusal stops the run, since everything after would fail the same way.
         try:
             upload_one(cfg, yt, e, sched, sched_path, sources, playlists, cache_path, tz)
-        except Exception as ex:  # noqa: BLE001
+        except (Exception, SystemExit) as ex:  # noqa: BLE001  # SystemExit: a missing file etc.
             reason = getattr(ex, "reason", "") or ""
             text = f"{type(ex).__name__}: {ex}"[:300]
             print(f"  FAILED {e['key']}: {text}", flush=True)
             mark(sched_path, e["key"], last_error=text,
                  last_error_at=datetime.now(UTC).isoformat(timespec="seconds"))
-            failed += 1
+            failed.append(f"{e['key']}: {text[:150]}")
             if any(s in f"{reason} {ex}" for s in ("quotaExceeded", "uploadLimitExceeded", "dailyLimitExceeded")):
                 print("  YouTube's quota or upload limit: stopping this run", flush=True)
                 break
     if failed:
-        print(f"{failed} upload(s) failed; the error is on their schedule.json entries")
-    return yt
+        print(f"{len(failed)} upload(s) failed; the error is on their schedule.json entries")
+    return yt, failed
 
 
 def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: dict,

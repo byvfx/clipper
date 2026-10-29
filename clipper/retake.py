@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -440,16 +441,21 @@ def publish_retake(cfg: dict, sdir: Path, key: str, entry: dict) -> None:
     print(f"  {short}: in Kitsu as rev {st.get('revision')}")
 
 
+def unpublished(cfg: dict) -> list[tuple[Path, str, dict]]:
+    """Retakes applied while Kitsu or Discord was down, not yet published."""
+    return [(d, key, h) for d in review_dirs(cfg)
+            for key, hs in load(d / "retakes.json", {}).items()
+            for h in hs if h.get("publish") == "pending"]
+
+
 def finish_pending(cfg: dict) -> None:
-    """Retakes applied while Kitsu or Discord was down: publish them now (no new plan)."""
-    for d in review_dirs(cfg):
-        for key, hs in load(d / "retakes.json", {}).items():
-            for h in hs:
-                if h.get("publish") == "pending":
-                    try:
-                        publish_retake(cfg, d, key, h)
-                    except Exception as e:  # noqa: BLE001  # try again next run
-                        print(f"{d.name}/{key}: retake still not in Kitsu: {type(e).__name__}: {e}")
+    """Publish the unpublished retakes now (no new plan). Call it holding the Lock, or two
+    runs can publish the same one."""
+    for d, key, h in unpublished(cfg):
+        try:
+            publish_retake(cfg, d, key, h)
+        except Exception as e:  # noqa: BLE001  # try again next run
+            print(f"{d.name}/{key}: retake still not in Kitsu: {type(e).__name__}: {e}")
 
 
 # ---------- command ----------
@@ -459,6 +465,7 @@ class Lock:
 
     def __init__(self, cfg: dict):
         self.path = cfg["paths"]["streams"] / ".retake.lock"
+        self.token = f"{socket.gethostname()} {os.getpid()} {time.time()}"
 
     def __enter__(self):
         try:
@@ -468,12 +475,20 @@ class Lock:
                 raise SystemExit("another clipper retake is running") from None
             self.path.unlink(missing_ok=True)
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(fd, str(os.getpid()).encode())
+        os.write(fd, self.token.encode())
         os.close(fd)
         return self
 
+    def touch(self) -> None:
+        """Still running: a long run's lock isn't taken for stale (#77 L1)."""
+        os.utime(self.path)
+
     def __exit__(self, *exc):
-        self.path.unlink(missing_ok=True)
+        try:  # only our own lock: one taken over as stale belongs to the newer run
+            if self.path.read_text(encoding="utf-8") == self.token:
+                self.path.unlink()
+        except OSError:
+            pass
 
 
 def run(cfg: dict, stream: str | None = None, item: str | None = None,
@@ -501,15 +516,16 @@ def run(cfg: dict, stream: str | None = None, item: str | None = None,
                 except SystemExit as e:
                     print(f"{d.name}: not synced ({e})")
         todo = pending(root, stream)
-        if not dry_run:
-            finish_pending(root)
-    if not todo:
+    finish = not item and not dry_run and unpublished(root)
+    if not todo and not finish:
         print("no retakes waiting")
         return []
     out = []
-    with Lock(root):
+    with Lock(root) as lock:
+        if finish:
+            finish_pending(root)
         for sdir, key, r in todo[:root["retake"]["max_per_run"]]:
-            os.utime(Lock(root).path)  # #77 L1: still running; a long run's lock isn't stale
+            lock.touch()
             try:
                 out.append(process(root, sdir, key, r["comment"], note_id(r), dry_run))
             except Exception as e:  # noqa: BLE001 - one bad item shouldn't stop the rest
