@@ -48,10 +48,13 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import jsonstate, media
 from .archive import netscape_cookies, subject_dir
 from .bleep import Bleeper
 from .config import for_stream
 from .cut import encode_args
+from .errors import ClipperError
+from .timefmt import clock
 
 STORIES_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["stories"],
@@ -72,8 +75,8 @@ def out_dir(sdir: Path) -> Path:
 def load(sdir: Path) -> dict:
     p = out_dir(sdir) / "receipts.json"
     if not p.exists():
-        raise SystemExit(f"no receipts for {sdir.name} yet: clipper receipts find {sdir.name}")
-    return json.loads(p.read_text(encoding="utf-8"))
+        raise ClipperError(f"no receipts for {sdir.name} yet: clipper receipts find {sdir.name}")
+    return jsonstate.load(p)
 
 
 def save(sdir: Path, data: dict) -> None:
@@ -88,11 +91,6 @@ def about_subject(seg: dict, rc: dict) -> bool:
     if seg.get("kind") == "intro":
         return False
     return seg.get("topic") in rc["topics"] or bool(set(seg.get("figures") or []) & set(rc["figures"]))
-
-
-def hms(t: float) -> str:
-    t = int(t)
-    return f"{t // 3600}:{t // 60 % 60:02d}:{t % 60:02d}" if t >= 3600 else f"{t // 60}:{t % 60:02d}"
 
 
 # ---------- find ----------
@@ -122,7 +120,7 @@ def clip_bounds(idir: Path, win_start: float, quote: str, rc: dict) -> tuple[flo
         q_start, q_end = near[at]["start"], near[min(at + len(q), len(near)) - 1]["end"]
     else:
         q_start, q_end = win_start, win_start + 25
-    segs = json.loads((idir / "transcript.json").read_text(encoding="utf-8")).get("segments") or []
+    segs = jsonstate.load(idir / "transcript.json").get("segments") or []
     a, b = q_start - rc["lead_s"], q_end + rc["tail_s"]
     starts = [s["start"] for s in segs if a - 8 <= s["start"] <= a]
     ends = [s["end"] for s in segs if b <= s["end"] <= b + 6]
@@ -141,10 +139,10 @@ def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
     rc = cfg["receipts"]
     subject = rc["subject"]
     adir = subject_dir(cfg, subject)
-    segs = json.loads((sdir / "segments.json").read_text(encoding="utf-8"))["segments"]
+    segs = jsonstate.load(sdir / "segments.json")["segments"]
     picked = [s for s in segs if (s["id"] in only if only else about_subject(s, rc))]
     if not picked:
-        raise SystemExit(f"{sdir.name}: no segments about {subject} (topics {rc['topics']}, "
+        raise ClipperError(f"{sdir.name}: no segments about {subject} (topics {rc['topics']}, "
                          f"figures {rc['figures']}); name some with --segments")
     words = load_words(sdir)
     blocks = []
@@ -227,7 +225,7 @@ def show(sdir: Path, data: dict | None = None) -> None:
             mark = "x" if r["use"] else " "
             warn = "" if r["quote_found"] else "  (quote not found in words: check the range)"
             print(f"  [{mark}] {r['id']} {r['fit']:<6} {r['date'] or '????-??-??'} {r['channel']} "
-                  f"{hms(r['start'])}-{hms(r['end'])} ({r['end'] - r['start']:.0f} s){warn}")
+                  f"{clock(r['start'])}-{clock(r['end'])} ({r['end'] - r['start']:.0f} s){warn}")
             print(f"        {r['title'][:80]}")
             print(f"        \"{r['quote']}\"")
             print(f"        {r['link']}")
@@ -245,7 +243,7 @@ def first_font(paths: list[str]) -> Path:
     for f in paths:
         if Path(f).exists():
             return Path(f)
-    raise SystemExit(f"no font found among {paths}; set [receipts] fonts / text_fonts")
+    raise ClipperError(f"no font found among {paths}; set [receipts] fonts / text_fonts")
 
 
 def esc(p: Path) -> str:
@@ -287,7 +285,7 @@ def download(cfg: dict, r: dict, dst: Path) -> None:
     if dst.exists():
         return
     if r["source"] != "youtube":
-        raise SystemExit(f"{r['id']}: only YouTube receipts can be cut so far ({r['url']})")
+        raise ClipperError(f"{r['id']}: only YouTube receipts can be cut so far ({r['url']})")
     tmp = dst.with_name(dst.stem + ".dl.mp4")
     args = ["--download-sections", f"*{r['start']:.2f}-{r['end']:.2f}", "--force-keyframes-at-cuts",
             "-f", cfg["receipts"]["format"], "--merge-output-format", "mp4", "--no-playlist",
@@ -311,7 +309,7 @@ def still(work: Path, name: str, lines: list[tuple], rc: dict, bug: str, dst: Pa
                    ":line_spacing=14")
           for k, (font, size, color, y, text) in enumerate(lines)]
     vf.append(drawtext(lines[-1][0], tag, 30, "white@0.6", "w-text_w-48", "h-text_h-40"))
-    dur = max(rc["card_s"], duration(vo) + rc["vo_pad_s"]) if vo else rc["card_s"]
+    dur = max(rc["card_s"], media.duration(vo) + rc["vo_pad_s"]) if vo else rc["card_s"]
     d = f"{dur:.2f}"
     audio = ["-i", str(vo), "-af", f"{loudnorm(rc)},aresample=48000,aformat=channel_layouts=stereo,apad"] if vo \
         else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
@@ -377,7 +375,7 @@ def script(sdir: Path, cfg: dict) -> None:
                          f'title="{r["title"]}">\n{said}\n</receipt>')
         blocks.append("\n".join(parts) + "\n</story>")
     if not blocks:
-        raise SystemExit("no story has a receipt with use = true")
+        raise ClipperError("no story has a receipt with use = true")
     prompts = Prompts(cfg)
     prompts.version = rc["script_prompt_version"]
     prompts.vars.update(subject=data["subject"], show_name=data["show"])
@@ -386,7 +384,7 @@ def script(sdir: Path, cfg: dict) -> None:
     out, _ = claude.json_call(rc["script_model"], prompts.get("receipts_script"), "\n\n".join(blocks),
                               SCRIPT_SCHEMA, rc["script_effort"])
     if not out:
-        raise SystemExit("the model returned no script (refusal); write it in receipts.json by hand")
+        raise ClipperError("the model returned no script (refusal); write it in receipts.json by hand")
     lines = {s["id"]: s for s in out["stories"]}
     data["script"] = {"open": out["open"], "close": out["close"],
                       "model": rc["script_model"], "written_at": datetime.now(UTC).isoformat(timespec="seconds")}
@@ -470,14 +468,8 @@ def describe(data: dict, chapters: list[tuple[float, str]]) -> str:
             parts.append(f"- {r['date'] or 'undated'}, {r['channel']}, \"{r['title']}\": {r['link']}")
         parts.append("")
     if len(chapters) >= 3:
-        parts += ["Chapters:", *(f"{hms(t)} {name}" for t, name in chapters), ""]
+        parts += ["Chapters:", *(f"{clock(t)} {name}" for t, name in chapters), ""]
     return "\n".join(parts).strip()
-
-
-def duration(p: Path) -> float:
-    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                        str(p)], capture_output=True, text=True, check=True)
-    return float(r.stdout.strip())
 
 
 def cut(sdir: Path, cfg: dict) -> Path:
@@ -497,10 +489,10 @@ def cut(sdir: Path, cfg: dict) -> Path:
     def add(p: Path) -> None:
         nonlocal t
         parts.append(p)
-        t += duration(p)
+        t += media.duration(p)
 
     if not used(data):
-        raise SystemExit("no story has a receipt with use = true")
+        raise ClipperError("no story has a receipt with use = true")
     if vo := voiced(cfg, sdir, sc.get("open", "")):
         chapters.append((t, "Open"))
         still(work, "open", [(big, 150, "0xFFD400", 360, "RECEIPTS"),
@@ -519,7 +511,7 @@ def cut(sdir: Path, cfg: dict) -> Path:
                                                 (small, 44, "0xDDDDDD", 640, r["channel"])], rc, bug, lead, vo)
                 add(lead)
             src = work / f"{r['item']}_{r['start']:.2f}-{r['end']:.2f}.mp4"
-            print(f"{r['id']} {r['date']} {r['channel']} {hms(r['start'])}-{hms(r['end'])}", flush=True)
+            print(f"{r['id']} {r['date']} {r['channel']} {clock(r['start'])}-{clock(r['end'])}", flush=True)
             download(cfg, r, src)
             dst = work / f"{r['id']}.mp4"
             n = clip(cfg, adir, r, src, fonts, bug, bleeper, dst)
@@ -539,7 +531,7 @@ def cut(sdir: Path, cfg: dict) -> Path:
     (out_dir(sdir) / "description.txt").write_text(f"{data['title']}\n\n{desc}\n", encoding="utf-8")
     data.update(cut_at=datetime.now(UTC).isoformat(timespec="seconds"), duration_s=round(t, 1))
     save(sdir, data)
-    print(f"{final} ({hms(t)}, {len(chapters)} stories, {time.time() - t0:.0f} s); "
+    print(f"{final} ({clock(t)}, {len(chapters)} stories, {time.time() - t0:.0f} s); "
           f"title and description in {out_dir(sdir) / 'description.txt'}")
     return final
 
@@ -553,11 +545,11 @@ def upload(sdir: Path, cfg: dict, again: bool = False) -> None:
     data = load(sdir)
     final = out_dir(sdir) / "receipts.mp4"
     if not final.exists() or not data.get("cut_at"):
-        raise SystemExit(f"cut it first: clipper receipts cut {sdir.name}")
+        raise ClipperError(f"cut it first: clipper receipts cut {sdir.name}")
     if data.get("youtube") and not again:
-        raise SystemExit(f"already uploaded: {data['youtube']['url']} (--again for a second copy)")
+        raise ClipperError(f"already uploaded: {data['youtube']['url']} (--again for a second copy)")
     if final.stat().st_mtime < datetime.fromisoformat(data["cut_at"]).timestamp() - 5:
-        raise SystemExit("receipts.mp4 is older than the last cut; cut again")
+        raise ClipperError("receipts.mp4 is older than the last cut; cut again")
     yc = cfg["youtube"]
     mask = Bleeper({**cfg["bleep"], "mode": "bleep"}).mask
     desc_file = (out_dir(sdir) / "description.txt").read_text(encoding="utf-8")

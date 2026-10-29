@@ -45,7 +45,6 @@ create projects, shots and tasks (Admin, or Studio Manager on an existing projec
 from __future__ import annotations
 
 import bisect
-import json
 import os
 import subprocess
 import time
@@ -53,6 +52,7 @@ from pathlib import Path
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .segments import slug
 
 TASK_TYPES = {"Segment": ("#48bfe3", "Sequence"), "Horizontal": ("#5e60ce", "Shot"),
@@ -153,15 +153,15 @@ def connect(rc: dict):
     import gazu
 
     if not rc["host"] or "<" in rc["host"]:
-        raise SystemExit("set [review] host to your Kitsu API URL (Kitsu URL + /api) in clipper.toml")
+        raise ClipperError("set [review] host to your Kitsu API URL (Kitsu URL + /api) in clipper.toml")
     token = os.environ.get(rc["token_env"], "")
     if not token:
-        raise SystemExit(f"set ${rc['token_env']} to a Kitsu bot token (Kitsu > Bots)")
+        raise ClipperError(f"set ${rc['token_env']} to a Kitsu bot token (Kitsu > Bots)")
     gazu.cache.disable()  # cached "not found" lookups would hide what we just created
     gazu.set_host(rc["host"])
     gazu.set_token(token)
     if not gazu.client.host_is_up():
-        raise SystemExit(f"Kitsu not reachable at {rc['host']}")
+        raise ClipperError(f"Kitsu not reachable at {rc['host']}")
     return gazu
 
 
@@ -203,7 +203,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
     """Every reviewable output of a stream that has been cut: segments, then clips. cfg
     gives titles the show name ([meta] title_format)."""
     cfg = for_stream(cfg, stream_dir) if cfg else cfg
-    seg_data = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))
+    seg_data = jsonstate.load(stream_dir / "segments.json")
     cut_segs = sorted((s for s in seg_data["segments"] if s["cut"]), key=lambda s: s["start_s"])
     starts = [s["start_s"] for s in cut_segs]
 
@@ -214,7 +214,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
     out = []
     if "segments" in include:
         for side in sorted((stream_dir / "segments").glob("*.json")):
-            d = json.loads(side.read_text(encoding="utf-8"))
+            d = jsonstate.load(side)
             out.append({"kind": "segment", "key": sequence_name(d), "seq": sequence_name(d),
                         "seq_title": d["title"], "type": "Segment",
                         "file": side.with_suffix(".mp4"), "title": d["title"],
@@ -224,7 +224,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "meta": d})
     if "picks" in include:
         for i, side in enumerate(sorted((stream_dir / "clips").glob("*.json")), 1):
-            d = json.loads(side.read_text(encoding="utf-8"))
+            d = jsonstate.load(side)
             seg = segment_of(d["in_s"])
             out.append({"kind": "pick", "key": f"c{i:02d}_{d['id']}", "shot": f"c{i:02d}_{d['id']}",
                         "seq": sequence_name(seg) if seg else OTHER_SEQUENCE,
@@ -238,7 +238,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "meta": d})
     if "shorts" in include:
         for side in sorted((stream_dir / "shorts").glob("v*.json")):
-            d = json.loads(side.read_text(encoding="utf-8"))
+            d = jsonstate.load(side)
             seg = segment_of(d["in_s"])
             out.append({"kind": "short", "key": d["key"], "shot": d["key"],
                         "seq": sequence_name(seg) if seg else OTHER_SEQUENCE,
@@ -252,7 +252,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "meta": d})
     if "compilations" in include:
         for side in sorted((stream_dir / "compilations").glob("*.json")):
-            d = json.loads(side.read_text(encoding="utf-8"))
+            d = jsonstate.load(side)
             key = f"comp-{side.stem}"
             out.append({"kind": "compilation", "key": key, "seq": key,
                         "seq_title": d["title"], "type": "Compilation",
@@ -263,7 +263,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
     ls = Listing()
     out = [it for it in out if ls.exists(it["file"])]
     thumbs_path = stream_dir / "thumbnails.json"
-    thumbs = json.loads(thumbs_path.read_text(encoding="utf-8")) if thumbs_path.exists() else {}
+    thumbs = jsonstate.read(thumbs_path, {})
     for it in out:
         it["thumb_key"] = f"{it['file'].parent.name}/{it['file'].stem}"
         if it["thumb_key"] in thumbs:
@@ -271,7 +271,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
         # Prefer the upload metadata draft for what reviewers read and edit.
         draft = stream_dir / "metadata" / FOLDERS[it["kind"]] / f"{it['file'].stem}.json"
         if ls.exists(draft):
-            upload = draft_fields(json.loads(draft.read_text(encoding="utf-8")))
+            upload = draft_fields(jsonstate.load(draft))
         else:
             upload = {"YouTube title": it["title"], "YouTube description": it["description"]}
         upload["YouTube title"] = full_title(cfg, upload["YouTube title"])
@@ -292,7 +292,7 @@ def episode_name(stream_dir: Path, rc: dict, tz: str = "America/Los_Angeles") ->
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(stream_dir / "meta.json")
     aired = datetime.fromisoformat(meta["started_at"]).astimezone(ZoneInfo(tz))
     return rc["episode_name"].format(date=f"{aired:%Y-%m-%d}", stream_id=stream_dir.name,
                                      title=meta.get("title", ""))
@@ -491,7 +491,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         return seqs[name]
 
     state_path = stream_dir / "review_state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    state = jsonstate.read(state_path, {})
     published: list[str] = []
     for it in todo:
         seq = sequence(it["seq"], it["seq_title"])
@@ -563,7 +563,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
               for key, st in sorted(state.items()) if st["kind"] == "short"]
     if shorts:
         ensure_playlist(gazu, proj, ep, "Shorts", "shot", shorts)
-    seg_data = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))
+    seg_data = jsonstate.load(stream_dir / "segments.json")
     by_id = {st["id"]: st for st in state.values() if st["kind"] == "segment"}
     for comp in seg_data.get("compilations", []):
         if all(s in by_id for s in comp["segments"]):
@@ -586,7 +586,7 @@ def attach_thumbnails(stream_dir: Path, cfg: dict, gazu=None, keys: list[str] | 
     whose thumbnail and revision haven't changed; replaces our own earlier upload."""
     cfg = for_stream(cfg, stream_dir)
     state_path = stream_dir / "review_state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state = jsonstate.load(state_path)
     todo = []
     for key, st in state.items():
         if keys is not None and key not in keys:
@@ -638,7 +638,7 @@ def ensure_links(stream_dir: Path, cfg: dict, gazu=None) -> dict:
     """review_state.json with kitsu_url/episode_url on every item (older publishes lack them)."""
     cfg = for_stream(cfg, stream_dir)
     state_path = stream_dir / "review_state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state = jsonstate.load(state_path)
     missing = [st for st in state.values() if "kitsu_url" not in st]
     if missing:
         gazu = gazu or connect(cfg["review"])
@@ -688,7 +688,7 @@ def apply_thumbnail_text(stream_dir: Path, cfg: dict, gazu, fmap: dict,
     from . import thumbs
 
     tpath = stream_dir / "thumbnails.json"
-    tstate = json.loads(tpath.read_text(encoding="utf-8")) if tpath.exists() else {}
+    tstate = jsonstate.read(tpath, {})
     texts, applied = {}, {}
     for key, (st, task, fields) in edits.items():
         raw = fields[THUMB_COL]
@@ -698,7 +698,7 @@ def apply_thumbnail_text(stream_dir: Path, cfg: dict, gazu, fmap: dict,
             continue
         try:
             text = thumbs.check_text(cfg, raw)
-        except SystemExit as e:
+        except ClipperError as e:
             text = tstate[tkey]["text"]
             note = f"{NOTE_PREFIX} Thumbnail text not used: {e}. Kept {text!r}"
             gazu.task.add_comment(task, gazu.task.get_task_status(task["task_status_id"]), note)
@@ -727,7 +727,7 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
     items and keep the rest of review.json as it was."""
     cfg = for_stream(cfg, stream_dir)
     rc = cfg["review"]
-    state = json.loads((stream_dir / "review_state.json").read_text(encoding="utf-8"))
+    state = jsonstate.load(stream_dir / "review_state.json")
     review_path = stream_dir / "review.json"
     gazu = connect(rc)
     fmap = column_fields(gazu, gazu.project.get_project_by_name(project_name(cfg)))

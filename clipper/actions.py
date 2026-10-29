@@ -27,15 +27,16 @@ that item.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import review
+from . import jsonstate, review
 from .config import for_stream, stream_dir
+from .errors import ClipperError
+from .timefmt import length
 
 OPEN = ("pending", "changes_requested")  # decisions still waiting on you
 
@@ -62,7 +63,7 @@ def review_dirs(cfg: dict) -> list[Path]:
 
 
 def load_json(path: Path, default=None):
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+    return jsonstate.read(path, default)
 
 
 def resolve(cfg: dict, ref: str, stream: str | None = None) -> Item:
@@ -76,9 +77,9 @@ def resolve(cfg: dict, ref: str, stream: str | None = None) -> Item:
                 or [k for k in state if k.startswith(ref)])
         hits += [Item(d, k, state[k]) for k in keys]
     if not hits:
-        raise SystemExit(f"no review item {ref!r}" + (f" in {stream}" if stream else ""))
+        raise ClipperError(f"no review item {ref!r}" + (f" in {stream}" if stream else ""))
     if len(hits) > 1:
-        raise SystemExit(f"{ref!r} matches {len(hits)} items: "
+        raise ClipperError(f"{ref!r} matches {len(hits)} items: "
                          + ", ".join(h.ref for h in hits[:8]) + "; give more of the name")
     return hits[0]
 
@@ -99,7 +100,7 @@ def _set_columns(gazu, cfg: dict, item: Item, values: dict[str, str]) -> None:
     etype = review.ENTITY[item.state["kind"]]
     missing = [n for n in values if (etype, n) not in fmap]
     if missing:
-        raise SystemExit(f"Kitsu has no {etype} column {missing}; run clipper review publish")
+        raise ClipperError(f"Kitsu has no {etype} column {missing}; run clipper review publish")
     update = (gazu.shot.update_sequence_data if etype == "Sequence"
               else gazu.shot.update_shot_data)
     update(item.state["entity_id"], {fmap[(etype, n)]: v for n, v in values.items()})
@@ -128,14 +129,14 @@ def approve(cfg: dict, item: Item, comment: str = "", who: str = "") -> dict:
 
 def reject(cfg: dict, item: Item, reason: str, who: str = "") -> dict:
     if not reason.strip():
-        raise SystemExit("reject needs a reason (it becomes a scoring example)")
+        raise ClipperError("reject needs a reason (it becomes a scoring example)")
     _status(cfg, item, "rejected", reason.strip())
     return refresh(cfg, item)
 
 
 def changes(cfg: dict, item: Item, what: str, who: str = "") -> dict:
     if not what.strip():
-        raise SystemExit("say what to change")
+        raise ClipperError("say what to change")
     _status(cfg, item, "retake", what.strip())
     return refresh(cfg, item)
 
@@ -166,7 +167,7 @@ def pin(cfg: dict, item: Item, when: str, who: str = "") -> dict:
     when = (when or "").strip()
     sc = cfg["schedule"]
     if when and not parse_when(when, ZoneInfo(sc["timezone"]), "00:00"):
-        raise SystemExit(f"Publish at must be YYYY-MM-DD HH:MM or YYYY-MM-DD, not {when!r}")
+        raise ClipperError(f"Publish at must be YYYY-MM-DD HH:MM or YYYY-MM-DD, not {when!r}")
     _columns(cfg, item, {"Publish at": when},
              (f"Publish at {when}" if when else "Unpinned") + _by(who))
     return refresh(cfg, item)
@@ -175,9 +176,9 @@ def pin(cfg: dict, item: Item, when: str, who: str = "") -> dict:
 def check_title(title: str) -> str:
     title = " ".join((title or "").split())
     if not title:
-        raise SystemExit("title is empty")
+        raise ClipperError("title is empty")
     if len(title) > 100:
-        raise SystemExit(f"YouTube titles are at most 100 characters ({len(title)} given)")
+        raise ClipperError(f"YouTube titles are at most 100 characters ({len(title)} given)")
     return title
 
 
@@ -190,7 +191,7 @@ TAG_BUDGET = 480  # what clipper/youtube.py keeps of YouTube's ~500-character ta
 
 def _no_empty(name: str, value: str) -> str:
     if not value:  # publish refills an empty column, and upload falls back to the draft
-        raise SystemExit(f"{name} is empty; an empty column falls back to the generated one")
+        raise ClipperError(f"{name} is empty; an empty column falls back to the generated one")
     return value
 
 
@@ -203,7 +204,7 @@ def check_description(text: str) -> str:
     text = "\n".join(line.rstrip() for line in (text or "").strip().splitlines())
     size = _yt_bytes(text)
     if size > 5000:
-        raise SystemExit(f"YouTube descriptions are at most 5000 bytes ({size} given)")
+        raise ClipperError(f"YouTube descriptions are at most 5000 bytes ({size} given)")
     return _no_empty("description", text)
 
 
@@ -216,10 +217,10 @@ def check_tags(text: str) -> str:
     tags = [t for t in tags if t]
     long = [t for t in tags if len(t) > 100]
     if long:
-        raise SystemExit(f"a tag is at most 100 characters: {long[0][:40]!r}…")
+        raise ClipperError(f"a tag is at most 100 characters: {long[0][:40]!r}…")
     total = sum(len(t) + 1 for t in tags)
     if total > TAG_BUDGET:
-        raise SystemExit(f"tags come to {total} characters; YouTube allows about 500 and "
+        raise ClipperError(f"tags come to {total} characters; YouTube allows about 500 and "
                          f"upload keeps the first {TAG_BUDGET}, so drop some")
     return _no_empty("tags", ", ".join(tags))
 
@@ -282,14 +283,14 @@ def edit_meta(cfg: dict, item: Item, values: dict[str, str], who: str = "") -> d
     cfg = for_stream(cfg, item.stream_dir)
     values = {name: META[name][0](v) for name, v in values.items()}
     if not values:
-        raise SystemExit("nothing to change")
+        raise ClipperError("nothing to change")
     if "YouTube description" in values or "Hashtags" in values:
         row = describe(cfg, item.stream_dir)[item.key]
         desc = values.get("YouTube description", row["description"])
         tags_line = values.get("Hashtags", row["hashtags"])
         size = _yt_bytes(f"{desc}\n\n{tags_line}")
         if size > 5000:  # upload adds the hashtag line to the description
-            raise SystemExit(f"description plus hashtag line is {size} bytes; "
+            raise ClipperError(f"description plus hashtag line is {size} bytes; "
                              "YouTube allows 5000")
     notes = []
     for name, v in values.items():
@@ -323,7 +324,7 @@ def thumbtext(cfg: dict, item: Item, text: str, who: str = "") -> dict:
     text = check_text(cfg, " ".join(text.split()))
     thumbs = load_json(item.stream_dir / "thumbnails.json", {})
     if video_key(item.stream_dir / item.state["file"].replace("\\", "/")) not in thumbs:
-        raise SystemExit(f"{item.ref} has no thumbnail yet; run clipper thumbs first")
+        raise ClipperError(f"{item.ref} has no thumbnail yet; run clipper thumbs first")
     _columns(cfg, item, {review.THUMB_COL: text}, f"Thumbnail text: {text}{_by(who)}")
     return refresh(cfg, item)
 
@@ -434,13 +435,6 @@ def status(cfg: dict, sync: bool = False) -> dict:
 
 # ---------- text for the CLI (and Discord's lists) ----------
 
-def mmss(s: float | None) -> str:
-    if s is None:
-        return "?"
-    s = round(s)
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
-
-
 def decision_text(r: dict) -> str:
     out = r["decision"].replace("_", " ")
     if r["hold"]:
@@ -452,7 +446,7 @@ def decision_text(r: dict) -> str:
 
 def row_line(r: dict) -> str:
     extra = f" | hook: {r['hook']}" if r["hook"] else ""
-    return (f"{r['short']:<22} {r['kind']:<7} {mmss(r['duration_s']):>7}  "
+    return (f"{r['short']:<22} {r['kind']:<7} {length(r['duration_s']):>7}  "
             f"[{decision_text(r)}] {r['title']}{extra}")
 
 

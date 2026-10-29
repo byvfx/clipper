@@ -35,10 +35,12 @@ import time
 from itertools import pairwise
 from pathlib import Path
 
-from . import jsonstate
+from . import jsonstate, media
 from .bleep import Bleeper
 from .config import for_stream
-from .cut import encode_args, ffmpeg_cut, keyframe_before, source_file
+from .cut import encode_args, ffmpeg_cut, keyframe_before
+from .errors import ClipperError
+from .media import source_file
 from .scoring import Claude, load_words
 from .segments import slug
 
@@ -160,7 +162,7 @@ def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tu
         even = lambda v: int(v) // 2 * 2
         crops.append((even(x), even(y), even(w), even(h), ph))
     if sum(c[4] for c in crops) != out_h:
-        raise SystemExit(f"layout panels add up to {sum(c[4] for c in crops)} px, not {out_h}")
+        raise ClipperError(f"layout panels add up to {sum(c[4] for c in crops)} px, not {out_h}")
     return crops
 
 
@@ -326,7 +328,7 @@ def save_example(stream_dir: Path, cfg: dict, name: str, at: float) -> Path:
     """The source frame at `at` s as the reference screenshot of layout `name`."""
     cfg = for_stream(cfg, stream_dir)
     if name not in layouts_of(cfg["shorts"]):
-        raise SystemExit(f"no layout {name!r}; this show has {', '.join(layouts_of(cfg['shorts']))}")
+        raise ClipperError(f"no layout {name!r}; this show has {', '.join(layouts_of(cfg['shorts']))}")
     out = example_dir(cfg) / f"{name}.jpg"
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{at:.3f}",
@@ -427,14 +429,6 @@ def write_ass(words: list[dict], t0: float, dur: float, sc: dict, scenes: list[t
 
 # ---------- render ----------
 
-def probe_size(video: Path) -> tuple[int, int]:
-    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-                          "stream=width,height", "-of", "csv=p=0", str(video)],
-                         check=True, capture_output=True, text=True).stdout.strip()
-    w, h = out.split(",")[:2]
-    return int(w), int(h)
-
-
 def measure_loudness(video: Path, sc: dict) -> dict:
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-vn", "-af",
                         (f"loudnorm=I={sc['lufs']}:TP={sc['true_peak']}:LRA={sc['lra']}"
@@ -443,7 +437,7 @@ def measure_loudness(video: Path, sc: dict) -> dict:
                        check=False)
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr)
     if not m:
-        raise SystemExit(f"loudnorm measurement failed for {video.name}")
+        raise ClipperError(f"loudnorm measurement failed for {video.name}")
     return json.loads(m.group(0))
 
 
@@ -514,7 +508,7 @@ def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dic
     """The clip's upload draft with the Shorts hashtag first (YouTube files any vertical
     video under 3 minutes as a Short; the tag helps it surface there)."""
     src = stream_dir / "metadata" / "clips" / f"{clip_video.stem}.json"
-    draft = json.loads(src.read_text(encoding="utf-8")) if src.exists() else {
+    draft = jsonstate.load(src) if src.exists() else {
         "title": pick["title"], "description": pick.get("reason", ""), "hashtags": [], "tags": []}
     tag = sc["hashtag"].lstrip("#")
     old_line = " ".join(f"#{h.lstrip('#')}" for h in draft.get("hashtags", []))
@@ -542,14 +536,14 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     codec = sc["codec"] or cfg["cut"]["clip_codec"]
     layouts = layouts_of(sc)
     if sc["default_layout"] not in layouts:
-        raise SystemExit(f"shorts.default_layout {sc['default_layout']!r} isn't one of {list(layouts)}")
+        raise ClipperError(f"shorts.default_layout {sc['default_layout']!r} isn't one of {list(layouts)}")
     if layout and layout not in layouts:
-        raise SystemExit(f"no layout {layout!r}; this show has {', '.join(layouts)}")
-    cands = json.loads((stream_dir / "candidates.json").read_text(encoding="utf-8"))
+        raise ClipperError(f"no layout {layout!r}; this show has {', '.join(layouts)}")
+    cands = jsonstate.load(stream_dir / "candidates.json")
     segs = []
     if (stream_dir / "segments.json").exists():
-        segs = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))["segments"]
-    end_of_stream = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))["duration_s"]
+        segs = jsonstate.load(stream_dir / "segments.json")["segments"]
+    end_of_stream = jsonstate.load(stream_dir / "meta.json")["duration_s"]
     by_id = {r["id"]: r for r in cands["pass_a"]}
     picks = cands["pass_b"].get("picks", [])
     words = load_words(stream_dir)
@@ -650,7 +644,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         n_bleeps = ffmpeg_cut(src, cut, a, b, sc["cut_codec"] or cfg["cut"]["clip_codec"], sc["cut_crf"],
                               keyframe=keyframe_before(stream_dir, src, a),
                               bleep=(audio_bleeper, words))
-        W, H = probe_size(cut)
+        W, H = media.size(cut)
         parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"])) for s, e, n in scenes]
         ass = work / f"{key}.ass" if sc["captions"] else None
         n_caps = write_ass(words, a, dur, sc, [(s, e, layouts[n]) for s, e, n in scenes],

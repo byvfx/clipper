@@ -32,6 +32,8 @@ import threading
 import time
 from typing import Any
 
+from .errors import ClipperError
+
 PROVIDERS = {  # prefix -> (base URL, key env var)
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
@@ -241,7 +243,7 @@ class LLM:
             try:
                 self._compat(model, [{"role": "user", "content": "Say OK."}], "low", 16)
             except RuntimeError as e:
-                raise SystemExit(f"{model} unavailable: {e}") from None
+                raise ClipperError(f"{model} unavailable: {e}") from None
             return
         import anthropic
 
@@ -250,7 +252,7 @@ class LLM:
                                         messages=[{"role": "user", "content": "Say OK."}])
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError,
                 anthropic.BadRequestError) as e:
-            raise SystemExit(f"Claude API unavailable ({e.status_code}): {e.message}") from None
+            raise ClipperError(f"Claude API unavailable ({e.status_code}): {e.message}") from None
 
     # ---------- Claude ----------
 
@@ -310,11 +312,11 @@ class LLM:
         base, env = PROVIDERS[prov]
         base = (self.lc["local_base_url"] if prov == "local" else base).rstrip("/")
         if not base:
-            raise SystemExit(f"{model}: set [llm] local_base_url in clipper.toml "
+            raise ClipperError(f"{model}: set [llm] local_base_url in clipper.toml "
                              "(an OpenAI-compatible server, e.g. http://<host>:11434/v1)")
         key = os.environ.get(env, "")
         if not key and prov != "local":
-            raise SystemExit(f"{model}: set the {env} environment variable")
+            raise ClipperError(f"{model}: set the {env} environment variable")
         body: dict[str, Any] = {"model": name, "messages": messages,
                                 ("max_completion_tokens" if prov == "openai" else "max_tokens"): max_tokens}
         if response_format:

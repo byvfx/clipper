@@ -23,7 +23,6 @@ schedule.json (the upload step reads it) and each item's Kitsu "Scheduled" colum
 
 from __future__ import annotations
 
-import json
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -60,9 +59,9 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
     for review_path in sorted(streams_dir.glob("*/review.json")):
         sdir = review_path.parent
         show = show_of_channel(cfg, stream_channel(sdir))
-        review = json.loads(review_path.read_text(encoding="utf-8"))
-        state = json.loads((sdir / "review_state.json").read_text(encoding="utf-8"))
-        meta = json.loads((sdir / "meta.json").read_text(encoding="utf-8"))
+        review = jsonstate.load(review_path)
+        state = jsonstate.load(sdir / "review_state.json")
+        meta = jsonstate.load(sdir / "meta.json")
         started = datetime.fromisoformat(meta["started_at"])
         ssc = for_stream(cfg, sdir)["schedule"]  # a stream's config.toml may change these
         earliest = started + timedelta(seconds=meta["duration_s"], hours=ssc["kick_first_hours"])
@@ -91,7 +90,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                 items.append(item)
                 if kind == "segment":
                     approved_segments.add(r["id"])
-        seg_data = json.loads((sdir / "segments.json").read_text(encoding="utf-8"))
+        seg_data = jsonstate.load(sdir / "segments.json")
         def seg_keys(comp: dict, sdir: Path = sdir, review: dict = review) -> list[str]:
             return [f"{sdir.name}/{k}" for k, r in review.items()
                     if r["kind"] == "segment" and r["id"] in comp["segments"]]
@@ -188,7 +187,7 @@ def previous(out_path: Path) -> tuple[dict, dict]:
     """The last plan's entries by key, and other platforms' records by key."""
     old, platforms = {}, {}
     if out_path.exists():
-        prev_sched = json.loads(out_path.read_text(encoding="utf-8"))
+        prev_sched = jsonstate.load(out_path)
         old = {e["key"]: e for e in prev_sched["entries"]}
         # Other platforms' records (clipper rumble), kept while an item is unscheduled too.
         platforms = {e["key"]: e["platforms"] for e in prev_sched["entries"]
@@ -312,7 +311,7 @@ def upcoming(cfg: dict, days: int = 7) -> list[dict]:
         return []
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     now = datetime.now(tz)
-    entries = json.loads(path.read_text(encoding="utf-8"))["entries"]
+    entries = jsonstate.load(path)["entries"]
     return [e for e in entries
             if now <= datetime.fromisoformat(e["publish_at"]) <= now + timedelta(days=days)]
 
@@ -342,7 +341,7 @@ def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo) -> N
     # Also clear entities that were scheduled before but are no longer eligible.
     streams_dir: Path = cfg["paths"]["streams"]
     for state_path in streams_dir.glob("*/review_state.json"):
-        for key, st in json.loads(state_path.read_text(encoding="utf-8")).items():
+        for key, st in jsonstate.load(state_path).items():
             ent = (ENTITY[KINDS[st["kind"]]], st["entity_id"])
             by_entity.setdefault(ent, {"key": f"{state_path.parent.name}/{key}", "entity": ent})
     # Column ids differ per Kitsu production, and each show has its own production.

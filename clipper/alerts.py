@@ -34,6 +34,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import jsonstate
+
 log = logging.getLogger("clipper.alerts")
 
 _SEQ = itertools.count()
@@ -90,7 +92,7 @@ def _state_path(cfg: dict) -> Path:
 
 def load_state(cfg: dict) -> dict:
     try:
-        st = json.loads(_state_path(cfg).read_text(encoding="utf-8"))
+        st = jsonstate.load(_state_path(cfg))
     except (OSError, ValueError):
         st = {}
     return {"sent": {}, "digest": "", "disk_at": 0.0, **st}
@@ -122,7 +124,7 @@ def checks(cfg: dict, st: dict, now: datetime) -> None:
         st["digest"] = now.date().isoformat()
         try:
             text = digest(cfg, now)
-        except (Exception, SystemExit) as e:  # noqa: BLE001  # say so once, rather than every pass
+        except Exception as e:  # noqa: BLE001  # say so once, rather than every pass
             log.warning("digest: %s: %s", type(e).__name__, e)
             text = f"Daily digest failed: {type(e).__name__}: {e}"[:1900]
         send(cfg, "digest", text, key=f"digest:{now.date()}")
@@ -150,7 +152,7 @@ def pending(cfg: dict, link: str = "") -> tuple[list[str], list[Path], dict]:
     lines, linked = [], False
     for f in files:
         try:
-            ev = json.loads(f.read_text(encoding="utf-8"))
+            ev = jsonstate.load(f)
         except (OSError, ValueError):
             continue
         if ev["kind"] not in nc["kinds"] and ev["kind"] != "test":
@@ -226,7 +228,7 @@ def related_lines(cfg: dict, now: datetime, show: int = 5) -> list[str]:
     from . import youtube
 
     try:
-        sched = json.loads(cfg["paths"]["schedule"].read_text(encoding="utf-8"))
+        sched = jsonstate.load(cfg["paths"]["schedule"])
         todo = youtube.related_todo(cfg, sched, now)
     except (OSError, ValueError, KeyError) as e:  # the digest still goes out without this part
         log.warning("digest related videos: %s: %s", type(e).__name__, e)

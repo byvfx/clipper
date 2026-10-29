@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import bisect
 import io
-import json
 import shlex
 import subprocess
 import tarfile
@@ -30,21 +29,17 @@ from pathlib import Path
 
 from . import jsonstate
 from .config import for_stream
-from .segments import hms, slug
-
-
-def source_file(stream_dir: Path) -> Path:
-    for p in sorted(stream_dir.glob("source.*")):
-        if p.suffix not in (".part", ".ytdl") and "Frag" not in p.name:
-            return p
-    raise SystemExit(f"no source video in {stream_dir}")
+from .errors import ClipperError
+from .media import source_file
+from .segments import slug
+from .timefmt import hms
 
 
 def keyframes(stream_dir: Path, src: Path) -> list[float]:
     """Video keyframe times in seconds from the start of the file (what -ss uses)."""
     cache = stream_dir / "keyframes.json"
     if cache.exists():
-        return json.loads(cache.read_text())
+        return jsonstate.load(cache)
     probe = lambda args: subprocess.run(
         ["ffprobe", "-v", "error", *args, str(src)], check=True, capture_output=True, text=True
     ).stdout
@@ -152,7 +147,7 @@ def copy_cut(stream_dir: Path, src: Path, dst: Path, start: float, end: float,
     check_sync(dst)
     got = stream_durations(dst).get("video", 0)
     if abs(got - (end - k)) > 0.5:
-        raise SystemExit(f"{dst.name}: {got:.1f}s of video for {end - k:.1f}s from keyframe "
+        raise ClipperError(f"{dst.name}: {got:.1f}s of video for {end - k:.1f}s from keyframe "
                          f"{k}; the seek missed it")
     return k, n
 
@@ -161,7 +156,7 @@ def check_sync(path: Path) -> None:
     # ~0.1 s of video offset is normal (B-frame delay, covered by the MP4 edit list).
     off = stream_offsets(path)
     if abs(off.get("video", 0) - off.get("audio", 0)) > 0.25:
-        raise SystemExit(f"{path.name}: audio/video start {off}; the cut is out of sync")
+        raise ClipperError(f"{path.name}: audio/video start {off}; the cut is out of sync")
 
 
 def write_sidecar(path: Path, data: dict) -> None:
@@ -170,7 +165,7 @@ def write_sidecar(path: Path, data: dict) -> None:
 
 def cut_segments(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None:
     cfg = for_stream(cfg, stream_dir)
-    data = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))
+    data = jsonstate.load(stream_dir / "segments.json")
     segs = [s for s in data["segments"] if (s["id"] in ids if ids else s["cut"])]
     src = source_file(stream_dir)
     out_dir = stream_dir / "segments"
@@ -213,7 +208,7 @@ def compilation_parts(segs: list[dict]) -> tuple[list[tuple[float, float]], list
 def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = None) -> None:
     """One video per topic with several segments, e.g. every Quartering segment in order."""
     cfg = for_stream(cfg, stream_dir)
-    data = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))
+    data = jsonstate.load(stream_dir / "segments.json")
     by_id = {s["id"]: s for s in data["segments"]}
     seg_dir, out_dir = stream_dir / "segments", stream_dir / "compilations"
     out_dir.mkdir(exist_ok=True)
@@ -226,7 +221,7 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         if missing:
             cut_segments(stream_dir, cfg, missing)
         # The real cut starts (keyframes) live in each segment's sidecar.
-        segs = [json.loads((seg_dir / s["file"]).with_suffix(".json").read_text(encoding="utf-8"))
+        segs = [jsonstate.load((seg_dir / s["file"]).with_suffix(".json"))
                 for s in segs]
         spans, chapters, t = compilation_parts(segs)
         lines = []
@@ -254,7 +249,7 @@ def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None
     if not path.exists():  # not scored, e.g. a pre-show: no picks by design
         print("no candidates.json: no picks to cut")
         return
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = jsonstate.load(path)
     by_id = {r["id"]: r for r in data["pass_a"]}
     src = source_file(stream_dir)
     out_dir = stream_dir / "clips"
@@ -290,13 +285,13 @@ def on_nas(stream_dir: Path, cfg: dict, argv: list[str]) -> None:
     cc = for_stream(cfg, stream_dir)["cut"]
     missing = [k for k in ("nas_host", "nas_data") if not cc[k]]
     if missing:
-        raise SystemExit(f"[cut] backend = \"nas\" needs [cut] {', '.join(missing)} in clipper.toml")
+        raise ClipperError(f"[cut] backend = \"nas\" needs [cut] {', '.join(missing)} in clipper.toml")
     if stream_dir.resolve().parent != Path(cfg["paths"]["streams"]).resolve():
-        raise SystemExit(f"{stream_dir} is not under paths.streams; the NAS only sees those "
+        raise ClipperError(f"{stream_dir} is not under paths.streams; the NAS only sees those "
                          f"(CLIPPER_CUT_BACKEND=local to cut it here)")
     toml = (cfg.get("_root") or cfg).get("_file")  # a resolved config keeps the loaded one in _root
     if not toml:
-        raise SystemExit("[cut] backend = \"nas\" needs a clipper.toml to send along")
+        raise ClipperError("[cut] backend = \"nas\" needs a clipper.toml to send along")
     buf = io.BytesIO()
     pkg = Path(__file__).parent
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -319,6 +314,6 @@ def on_nas(stream_dir: Path, cfg: dict, argv: list[str]) -> None:
     r = subprocess.run(["ssh", "-o", "BatchMode=yes", cc["nas_host"], remote], input=buf.getvalue(),
                        check=False)
     if r.returncode:
-        raise SystemExit(f"cut on {cc['nas_host']} failed (exit {r.returncode}); a run still going "
+        raise ClipperError(f"cut on {cc['nas_host']} failed (exit {r.returncode}); a run still going "
                          f"there: ssh {cc['nas_host']} docker rm -f clipper-cut-{sid}")
     print(f"cut on {cc['nas_host']} in {time.time() - t:.0f}s", flush=True)

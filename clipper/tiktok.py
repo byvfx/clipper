@@ -47,8 +47,9 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate, rumble, youtube
+from . import jsonstate, media, rumble, youtube
 from .config import for_stream
+from .errors import ClipperError
 from .review import draft_fields, hashtag_line
 
 AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
@@ -64,10 +65,10 @@ SINGLE_MAX = 64 * MB
 def client(paths: dict) -> dict:
     p: Path = paths["tiktok_client"]
     if not p.exists():
-        raise SystemExit(f"no TikTok client key; put {{\"client_key\": ..., \"client_secret\": ...}} in {p}")
+        raise ClipperError(f"no TikTok client key; put {{\"client_key\": ..., \"client_secret\": ...}} in {p}")
     c = json.loads(p.read_text(encoding="utf-8-sig"))
     if not c.get("client_key") or not c.get("client_secret"):
-        raise SystemExit(f"{p} needs client_key and client_secret")
+        raise ClipperError(f"{p} needs client_key and client_secret")
     return c
 
 
@@ -85,7 +86,7 @@ def token_request(c: dict, **form) -> dict:
                       timeout=30)
     body = r.json() if r.content else {}
     if r.status_code >= 400 or "access_token" not in body:
-        raise SystemExit(f"TikTok token request failed: {body.get('error')} "
+        raise ClipperError(f"TikTok token request failed: {body.get('error')} "
                          f"{body.get('error_description', r.text[:200])}")
     return body
 
@@ -138,9 +139,9 @@ def sign_in(cfg: dict) -> dict:
     for s in servers:
         s.server_close()
     if not got:
-        raise SystemExit("TikTok sign-in timed out (10 min); run: clipper tiktok --sign-in")
+        raise ClipperError("TikTok sign-in timed out (10 min); run: clipper tiktok --sign-in")
     if got.get("state") != state or "code" not in got:
-        raise SystemExit("TikTok sign-in failed: "
+        raise ClipperError("TikTok sign-in failed: "
                          f"{got.get('error_description') or got.get('error') or 'state did not match'}")
     tok = save_token(paths, token_request(c, code=got["code"], grant_type="authorization_code",
                                           redirect_uri=redirect, code_verifier=verifier))
@@ -152,17 +153,17 @@ def sign_in(cfg: dict) -> dict:
 def access_token(paths: dict) -> str:
     p: Path = paths["tiktok_token"]
     if not p.exists():
-        raise SystemExit("not signed in to TikTok; run: clipper tiktok --sign-in")
-    tok = json.loads(p.read_text(encoding="utf-8"))
+        raise ClipperError("not signed in to TikTok; run: clipper tiktok --sign-in")
+    tok = jsonstate.load(p)
     if time.time() < tok.get("expires_at", 0):
         return tok["access_token"]
     if time.time() >= tok.get("refresh_expires_at", 0):
-        raise SystemExit("TikTok sign-in expired; run: clipper tiktok --sign-in")
+        raise ClipperError("TikTok sign-in expired; run: clipper tiktok --sign-in")
     try:
         tok = save_token(paths, token_request(client(paths), grant_type="refresh_token",
                                               refresh_token=tok["refresh_token"]))
-    except SystemExit as e:
-        raise SystemExit(f"{e}; run: clipper tiktok --sign-in")
+    except ClipperError as e:
+        raise ClipperError(f"{e}; run: clipper tiktok --sign-in")
     return tok["access_token"]
 
 
@@ -173,7 +174,7 @@ def call(paths: dict, path: str, body: dict | None = None, method: str = "POST")
     out = r.json() if r.content else {}
     err = out.get("error") or {}
     if r.status_code >= 400 or err.get("code") not in (None, "ok"):
-        raise SystemExit(f"TikTok {path}: {r.status_code} {err.get('code')} {err.get('message', '')}".strip())
+        raise ClipperError(f"TikTok {path}: {r.status_code} {err.get('code')} {err.get('message', '')}".strip())
     return out.get("data") or {}
 
 
@@ -195,9 +196,9 @@ def caption(e: dict, cfg: dict) -> str:
     m = youtube.metadata(e, cfg)
     video = Path(e["file"])
     draft_path = sdir / "metadata" / video.parent.name / f"{video.stem}.json"
-    draft = json.loads(draft_path.read_text(encoding="utf-8")) if draft_path.exists() else {}
+    draft = jsonstate.read(draft_path, {})
     review_path = sdir / "review.json"
-    fields = (json.loads(review_path.read_text(encoding="utf-8")).get(m["review_key"], {})
+    fields = (jsonstate.load(review_path).get(m["review_key"], {})
               .get("fields", {}) if review_path.exists() else {})
     tags = (fields.get("Hashtags") or (draft_fields(draft).get("Hashtags") if draft else "") or "")
     tags = [t for t in dict.fromkeys(hashtag_line(tags).split() + hashtag_line(list(tc["hashtags"])).split())
@@ -246,7 +247,7 @@ def upload_file(paths: dict, video: Path) -> str:
                 if r.status_code in (200, 201, 206):
                     break
                 if r.status_code < 500 or attempt == 3:
-                    raise SystemExit(f"TikTok upload chunk {i + 1}/{count}: {r.status_code} {r.text[:200]}")
+                    raise ClipperError(f"TikTok upload chunk {i + 1}/{count}: {r.status_code} {r.text[:200]}")
                 time.sleep(5 * (attempt + 1))
     return data["publish_id"]
 
@@ -284,7 +285,6 @@ def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
     room = tc["max_per_24h"] - sent_last_24h(sched, exclude=again)
     if not dry_run:
         print(f"TikTok account: {whoami(cfg)}; {max(room, 0)} of {tc['max_per_24h']} drafts left in 24 h")
-    from .notify import probe_duration
 
     for e in todo:
         t = tiktok_of(e)
@@ -299,7 +299,7 @@ def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
             print(f"  {e['key']}: video missing ({video}); rerun clipper shorts")
             continue
         text = caption(e, cfg)
-        secs = probe_duration(video)
+        secs = media.duration(video)
         long = f"; {secs:.0f} s is past TikTok's 3 min for most accounts" if secs > 180 else ""
         if re.search(r"\bhosts?\b", text, re.IGNORECASE):
             print(f"  {e['key']}: warning: the caption says host(s); retitle it in Kitsu first")
@@ -357,7 +357,7 @@ def repost_caption(cfg: dict, ref: str) -> None:
     e = rumble.resolve(rumble.load_schedule(cfg), ref)
     t = tiktok_of(e)
     if not t.get("caption"):
-        raise SystemExit(f"{e['key']} hasn't been sent to TikTok")
+        raise ClipperError(f"{e['key']} hasn't been sent to TikTok")
     notify_caption(cfg, e, t["caption"])
     print(f"{e['key']}: caption posted\n    {t['caption']}")
 
@@ -372,7 +372,7 @@ def status(cfg: dict, stream: str | None = None, check: bool = True, quiet: bool
         if check and t.get("status") == "sent":
             try:
                 s = post_status(cfg["paths"], t["publish_id"])
-            except SystemExit as ex:
+            except ClipperError as ex:
                 print(f"  {e['key']}: status check failed: {ex}")
                 s = {}
             new = {"PUBLISH_COMPLETE": "posted", "FAILED": "failed"}.get(s.get("status", ""))
