@@ -433,6 +433,7 @@ def config_path(args: argparse.Namespace) -> str:
 
 
 def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
+    from . import stages as stage_table
     from . import worker
 
     worker.setup_logging()
@@ -442,7 +443,7 @@ def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
             raise ClipperError(f"run: unknown stage {args.from_!r}; stages: {', '.join(worker.STAGES)}")
         if args.only and args.from_:
             raise ClipperError("run: --only or --from, not both")
-        stages = args.only.split(",") if args.only else worker.STAGES[worker.STAGES.index(args.from_):]
+        stages = args.only.split(",") if args.only else stage_table.from_stage(args.from_, cfg["worker"])
         bad = set(stages) - set(worker.STAGES)
         if bad:
             raise ClipperError(f"run: unknown stage {sorted(bad)}; stages: {', '.join(worker.STAGES)}")
