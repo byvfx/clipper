@@ -141,7 +141,10 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 0-4: bug fixes, tests/CI, shared modules, stage registry and splits, ease of use). Not filed as
 issues. **Phase 0 done 2026-10-28** (B1-B3, B5, B6, B8-B11, B16, Shorts 15/59 defaults), commit
 2147ac9 (not pushed); bot restarted 17:20, first jobs-loop replan + upload ran clean at 17:21-17:32.
-Left from the B list: B4 (`--show` with a stream), B7 (enum validation), B12-B15. Next: phase 1.
+Left from the B list: B4 (`--show` with a stream), B7 (enum validation), B12-B15, B17 (shorts
+before cut with the fast lane off). **Phase 1 done 2026-10-29:** `tests/` (32 offline pytest tests,
+<1 s), ruff pinned in pyproject (`required-version`, rules = that version's defaults), dev group,
+`.github/workflows/check.yml`, example toml now documents every key (a test checks it). Next: phase 2.
 Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #77 (M12 quota tracking, L6, L10,
 L11, L13, L16-L18, repo hygiene), #72 (provider side-by-side, `clipper edit`), #50 (revenue once
 monetized), #42 (closes after the first check-in). Roadmaps, issues only: NAS hub #14 (#9 war room on
@@ -172,7 +175,8 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 - **NAS recorder deploy:** `bash deploy/record/deploy.sh`, only when nothing is live.
 - **Per-stream overrides** (a big night): `streams/<id>/config.toml` (`[schedule] priority = true`,
   `kick_first_hours = 0`, more picks). `CLIPPER_SCHEDULE_START=<date> clipper schedule --reshuffle` refills today.
-- **Checks:** `clipper doctor --role gpu --offline`, `uvx ruff check clipper`, test stream `kick-131151926`.
+- **Checks:** `clipper doctor --role gpu --offline`, `uvx ruff@0.17.3 check clipper tests`,
+  `.venv/Scripts/python.exe -m pytest -q`, test stream `kick-131151926`.
 - **Clean-Windows test of the install (#78):** `git archive HEAD` into a folder, a `.wsb` that maps it
   read-only plus an answers file and a writable out folder, and a LogonCommand script that copies the code
   to `C:\clipper`, runs `deploy\bootstrap.ps1 --answers ... --offline`, then doctor and `setup --check`

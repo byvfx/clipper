@@ -73,6 +73,7 @@ These are real behaviour problems, not style issues, and most are a few lines ea
 | B14 | `cut.py:177,254`, `worker.py:58` | The "cut" and "clips" done markers are directories created before any cutting, so a crashed cut with no run.json counts as done | Markers on `segments/*.json`, `clips/*.json` | Low |
 | B15 | `cut.py:228`, `signals.py:253`, `transcribe.py:170`, `speakers.py:104` | Compilation mp4s and the windows/diarization/speakers JSONs are written in place, not tmp+replace (against the #75 convention) | `jsonstate.write`; tmp+replace for the mp4 | Low |
 | B16 | `README.md:66` **(verified)** | `clipper preshow fetch <url> --show <key>` fails: `--show` is a top-level option (`clipper --show <key> preshow fetch ...`) | Fix the README | Low |
+| B17 | `worker.py:43-45,52` (found writing phase 1 tests) | With `[worker] fast_lane = false`, `STAGES` order runs `shorts` before `cut`, and `shorts` renders from `clips/*.mp4` (`shorts.py:636`), so it finds nothing. This install has the fast lane on | Order `shorts` after `cut` when the fast lane is off, or have `plan` place it after its `cut_before` | Low |
 
 ## 1. Shared building blocks (duplication)
 

@@ -193,6 +193,23 @@ def cut_segments(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> N
         list(pool.map(one, segs))
 
 
+def compilation_parts(segs: list[dict]) -> tuple[list[tuple[float, float]], list[dict], float]:
+    """Each part's (file start, end) in stream time, the chapters, and the total length.
+
+    A part's keyframe lead-in replays the end of the part before it when the two are
+    back to back in the stream, so each part ends where the next one's file begins.
+    A copy can stop anywhere (only starts need keyframes); nothing is dropped. Chapters
+    are each part's offset in the compilation, from those actual cut lengths."""
+    begin = [s.get("cut_start_s", s["start_s"]) for s in segs]
+    ends = [min(s["end_s"], b) if b > a else s["end_s"]
+            for s, (a, b) in zip(segs, pairwise(begin))] + [segs[-1]["end_s"]]
+    chapters, t = [], 0.0
+    for s, b, end in zip(segs, begin, ends):
+        chapters.append({"start_s": round(t, 1), "id": s["id"], "title": s["title"]})
+        t += end - b
+    return list(zip(begin, ends)), chapters, t
+
+
 def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = None) -> None:
     """One video per topic with several segments, e.g. every Quartering segment in order."""
     cfg = for_stream(cfg, stream_dir)
@@ -211,14 +228,9 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         # The real cut starts (keyframes) live in each segment's sidecar.
         segs = [json.loads((seg_dir / s["file"]).with_suffix(".json").read_text(encoding="utf-8"))
                 for s in segs]
-        # A part's keyframe lead-in replays the end of the part before it when the two are
-        # back to back in the stream, so each part ends where the next one's file begins.
-        # A copy can stop anywhere (only starts need keyframes); nothing is dropped.
-        begin = [s.get("cut_start_s", s["start_s"]) for s in segs]
-        ends = [min(s["end_s"], b) if b > a else s["end_s"]
-                for s, (a, b) in zip(segs, pairwise(begin))] + [segs[-1]["end_s"]]
+        spans, chapters, t = compilation_parts(segs)
         lines = []
-        for s, b, end in zip(segs, begin, ends):
+        for s, (b, end) in zip(segs, spans):
             lines.append(f"file '{(seg_dir / s['file']).resolve().as_posix()}'\n")
             if end < s["end_s"]:
                 lines.append(f"outpoint {end - b:.3f}\n")
@@ -229,11 +241,6 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
                         "-safe", "0", "-i", str(listing), "-c", "copy",
                         "-movflags", "+faststart", str(dst)], check=True)
         listing.unlink()
-        # Chapters: each part's offset in the compilation, from the actual cut lengths.
-        chapters, t = [], 0.0
-        for s, b, end in zip(segs, begin, ends):
-            chapters.append({"start_s": round(t, 1), "id": s["id"], "title": s["title"]})
-            t += end - b
         chapter_text = "\n".join(f"{hms(c['start_s'])} {c['title']}" for c in chapters)
         write_sidecar(dst, {**comp, "duration_s": round(t, 1), "chapters": chapters,
                             "chapter_text": chapter_text,

@@ -574,6 +574,29 @@ def _uncovered(spans: list[list[float]], a: float, b: float, min_s: float) -> li
     return [(x, y) for x, y in out if y > x]
 
 
+def source_map(parts: list[Part]) -> list[dict]:
+    """Where each part starts on the wall clock and in the joined source."""
+    mapping, at = [], 0.0
+    for p in parts:
+        mapping.append({"file": p.file, "wall_start": p.wall_start, "src_start": round(at, 3),
+                        "duration_s": round(p.duration_s, 3)})
+        at += p.duration_s
+    return mapping
+
+
+def source_time(mapping: list[dict], ts: float, tail_s: float) -> float | None:
+    """Wall-clock ts as source time. Chat trails the video by a few seconds, so tail_s
+    past each part's end still counts; messages from inside a gap have no video to
+    belong to (None)."""
+    for m in reversed(mapping):
+        if ts >= m["wall_start"]:
+            off = ts - m["wall_start"]
+            if off <= m["duration_s"] + tail_s:
+                return round(m["src_start"] + off, 3)
+            return None
+    return None
+
+
 def finalize(d: Path, cfg: dict, alerts: Alerts | None = None) -> dict | None:
     """Join parts, write chat.jsonl / meta.json / audio.wav, run on_finish."""
     rc = cfg["record"]
@@ -607,25 +630,12 @@ def finalize(d: Path, cfg: dict, alerts: Alerts | None = None) -> dict | None:
         tmp.replace(src)
     duration = _probe_duration(src) or sum(p.duration_s for p in parts)
 
-    # wall clock -> source time, part by part
-    mapping, at = [], 0.0
-    for p in parts:
-        mapping.append({"file": p.file, "wall_start": p.wall_start, "src_start": round(at, 3),
-                        "duration_s": round(p.duration_s, 3)})
-        at += p.duration_s
+    mapping = source_map(parts)
     t0 = parts[0].wall_start
     wall_end = parts[-1].wall_start + parts[-1].duration_s
 
     def to_t(ts: float) -> float | None:
-        # chat trails the video by a few seconds, so keep chat_tail_s past each part's end;
-        # messages from inside a gap have no video to belong to
-        for m in reversed(mapping):
-            if ts >= m["wall_start"]:
-                off = ts - m["wall_start"]
-                if off <= m["duration_s"] + rc["chat_tail_s"]:
-                    return round(m["src_start"] + off, 3)
-                return None
-        return None
+        return source_time(mapping, ts, rc["chat_tail_s"])
 
     # 2. chat: live rows + history backfill for the time the socket was down
     seen: dict[str, dict] = {}

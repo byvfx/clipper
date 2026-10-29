@@ -1,0 +1,21 @@
+# Lint and tests on every push to main and every pull request. The same two commands
+# run locally (see CLAUDE.md "Checks").
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - name: Install (base dependencies + dev group; no GPU extras)
+        run: uv sync --locked
+      - name: Ruff
+        run: uv run ruff check clipper tests
+      - name: Tests
+        run: uv run pytest -q

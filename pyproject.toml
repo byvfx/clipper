@@ -42,6 +42,23 @@ discord = [
 [project.scripts]
 clipper = "clipper.cli:main"
 
+# Tests and lint (`uv sync` installs this group; CI runs both, .github/workflows/check.yml).
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff==0.17.3",
+]
+
+# The rules are ruff's own defaults for this version, so the pin is the rule set: the
+# same on every machine and in CI. Change both pins together, then fix what the new
+# version reports.
+[tool.ruff]
+required-version = "==0.17.3"
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

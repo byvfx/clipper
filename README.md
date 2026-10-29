@@ -271,7 +271,8 @@ clipper/              the package, one module per stage, cli.py wires them
 prompts/              versioned prompt files; the version in use is set in clipper.toml
 deploy/               bootstrap (new machine), NAS recorder (Docker), Kitsu (Docker), Windows worker and bot tasks
 streams/<id>/         one folder per stream: source, transcript, cuts, metadata, review state
-clipper.example.toml  every setting, documented
+clipper.example.toml  every setting, documented (a test checks it against config.py)
+tests/                offline tests (pytest); CI runs them and ruff on every push
 SETUP.md              installing on a new machine
 HANDOFF.md            current state between work sessions (short); docs/log/ has the dated diary
 ```

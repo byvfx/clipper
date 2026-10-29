@@ -36,8 +36,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "archive": "archive",     # `clipper archive` subjects: <subject>/catalog.json + one dir per item
         "youtube_cookies": "secrets/youtube_cookies.txt",  # optional, Netscape cookies.txt: `archive` age-restricted items, pre-shows on a bot check
         "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
-        "costs": "logs/costs.jsonl",
-        "warroom_undo": "logs/warroom_undo.json",  # the war room's last 20 actions, for Undo  # every model call's cost (`clipper costs`, the war room)
+        "costs": "logs/costs.jsonl",  # every model call's cost (`clipper costs`, the war room)
+        "warroom_undo": "logs/warroom_undo.json",  # the war room's last 20 actions, for Undo
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
     },
