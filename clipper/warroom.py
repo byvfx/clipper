@@ -471,6 +471,44 @@ def recent_actions(cfg: dict) -> list[dict]:
             for a in d["actions"]]
 
 
+# ---------- saved panel layouts ----------
+# The page arranges its panels in zones; a layout is {"zones": {zone: [panel, ...]},
+# "widths": {"left": px, "right": px}}. Named layouts are kept here so every machine and
+# browser sees them; the one in use is remembered by each browser.
+
+LAYOUT_ZONES = ("top", "left", "middle", "right", "bottom", "hidden")
+
+
+def layouts(cfg: dict) -> dict:
+    return jsonstate.read(Path(cfg["paths"]["warroom_layouts"]), {"layouts": {}})
+
+
+def save_layout(cfg: dict, body: dict) -> dict:
+    """{name, layout} saves (or replaces) a named layout; {name, delete: true} removes it."""
+    name = str(body.get("name") or "").strip()
+    if not name or len(name) > 40:
+        raise ClipperError("a layout needs a name of 1-40 characters")
+    lay = body.get("layout") or {}
+    if not body.get("delete"):
+        zones, widths = lay.get("zones"), lay.get("widths") or {}
+        if not isinstance(zones, dict) or set(zones) - set(LAYOUT_ZONES) or not all(
+                isinstance(v, list) and all(isinstance(x, str) and re.fullmatch(r"[a-z_]{1,30}", x) for x in v)
+                for v in zones.values()):
+            raise ClipperError("not a layout: zones must be lists of panel names")
+        if set(widths) - {"left", "right"} or not all(isinstance(w, int) and 200 <= w <= 900 for w in widths.values()):
+            raise ClipperError("not a layout: widths are left/right in px, 200-900")
+        lay = {"zones": zones, "widths": widths}
+    path = Path(cfg["paths"]["warroom_layouts"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with jsonstate.update(path, {"layouts": {}}) as d:
+        if body.get("delete"):
+            d["layouts"].pop(name, None)
+        else:
+            d["layouts"][name] = lay
+        out = {"layouts": dict(d["layouts"])}
+    return out
+
+
 def _inverse(cfg: dict, item: actions.Item, action: str, before: dict, values: dict, who: str) -> dict:
     if action in ("approve", "reject", "changes", "reopen"):
         return actions.restore(cfg, item, before["status"], who)
@@ -778,6 +816,7 @@ GET_API = {
     "/api/undo": lambda cfg, qs: {"actions": recent_actions(cfg)},
     "/api/cover": lambda cfg, qs: cover_get(cfg, _q(qs, "ref")),
     "/api/search": lambda cfg, qs: search_transcripts(cfg, _q(qs, "q")),
+    "/api/layouts": lambda cfg, qs: layouts(cfg),
 }
 POST_API = {
     "/api/check": _check,
@@ -789,6 +828,7 @@ POST_API = {
     "/api/sync": _sync,
     "/api/replan": _replan,
     "/api/retake": lambda cfg, body: {"started": start_retake(cfg)},
+    "/api/layouts": save_layout,
 }
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "[::1]")
 
