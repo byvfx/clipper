@@ -22,6 +22,7 @@ import numpy as np
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .llm import LLM
 
 CATEGORIES = ["fail", "win", "joke", "insight", "reaction", "hot_take"]
@@ -255,7 +256,7 @@ class Prompts:
         for kind, key, modes in (("third_party", "third_party_audio", ("reject", "allow_reactions")),
                                  ("audience", "audience_knowledge", ("strangers", "fans"))):
             if sc[key] not in modes:
-                raise SystemExit(f"scoring.{key} must be one of {modes}, not {sc[key]!r}")
+                raise ClipperError(f"scoring.{key} must be one of {modes}, not {sc[key]!r}")
             rule = self.dir / f"{kind}_{sc[key]}_{self.version}.md"
             if rule.exists():
                 self.vars.update(read_sections(rule, kind, self.vars))
@@ -303,7 +304,7 @@ def stream_summary(stream_dir: Path, words: list[dict], n: int, cfg: dict,
                    claude: Claude, prompts: Prompts) -> list[dict]:
     path = stream_dir / f"summary_{prompts.version}.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        return jsonstate.load(path)
     sc = cfg["scoring"]
     system = prompts.get("summary")
 
@@ -313,6 +314,8 @@ def stream_summary(stream_dir: Path, words: list[dict], n: int, cfg: dict,
             return {"start_s": a, "summary": "(no speech)"}
         try:
             text, _ = claude.text_call(sc["model_a"], system, "\n".join(lines), sc["effort_a"])
+        except ClipperError:  # no key, or the API down after retries: stop the stage
+            raise
         except Exception as e:  # noqa: BLE001  # one bad block shouldn't sink the run
             print(f"summary block {a}: {type(e).__name__}: {e}")
             return {"start_s": a, "summary": "(unavailable)", "failed": True}
@@ -333,7 +336,7 @@ def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
     """Find own-voice moments block by block, independent of chat heat."""
     path = stream_dir / f"scan_{prompts.version}.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        return jsonstate.load(path)
     sc = cfg["scoring"]
     system = prompts.get("scan")
 
@@ -344,6 +347,8 @@ def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
         try:
             out, _ = claude.json_call(sc["model_a"], system, "\n".join(lines), SCAN_SCHEMA,
                                       sc["effort_a"])
+        except ClipperError:  # no key, or the API down after retries: stop the stage
+            raise
         except Exception as e:  # noqa: BLE001  # one bad block shouldn't sink the scan
             print(f"scan block {a}: {type(e).__name__}: {e}")
             return None
@@ -404,6 +409,8 @@ def run_pass_a(windows: list[dict], words: list[dict], sig: dict, cfg: dict,
         user = pass_a_user(w, words, sig, sc["lead_in_s"])
         try:
             out, meta = claude.json_call(sc["model_a"], system, user, PASS_A_SCHEMA, sc["effort_a"])
+        except ClipperError:  # no key, or the API down after retries: stop the stage
+            raise
         except Exception as e:  # noqa: BLE001  # one bad window shouldn't sink the stream
             return {**rec, "status": "error", "error": f"{type(e).__name__}: {e}"}
         rec["api"] = meta
@@ -480,8 +487,8 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
     cfg = for_stream(cfg, stream_dir)
     sc = cfg["scoring"]
     prompts = Prompts(cfg)
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
-    windows = json.loads((stream_dir / "windows.json").read_text(encoding="utf-8"))["windows"]
+    meta = jsonstate.load(stream_dir / "meta.json")
+    windows = jsonstate.load(stream_dir / "windows.json")["windows"]
     words = load_words(stream_dir)
     sig = load_signals(stream_dir)
 

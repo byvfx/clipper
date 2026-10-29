@@ -26,7 +26,6 @@ and the link. About a cent a question.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import sqlite3
@@ -34,7 +33,9 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from . import jsonstate
 from .archive import load_catalog, subject_dir
+from .errors import ClipperError
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
@@ -73,7 +74,7 @@ def build(cfg: dict, subject: str, rebuild: bool) -> None:
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
     if not cat:
-        raise SystemExit(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
+        raise ClipperError(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
     if rebuild:
         (d / "index.sqlite").unlink(missing_ok=True)
     db = connect(d)
@@ -87,9 +88,9 @@ def build(cfg: dict, subject: str, rebuild: bool) -> None:
             todo.append((i, tp))
     print(f"{subject}: {len(todo)} items to index ({len(have)} already in index.sqlite)")
     for k, (i, tp) in enumerate(todo, 1):
-        segs = json.loads(tp.read_text(encoding="utf-8")).get("segments") or []
+        segs = jsonstate.load(tp).get("segments") or []
         mp = d / i / "meta.json"
-        meta = {**cat[i], **(json.loads(mp.read_text(encoding="utf-8")) if mp.exists() else {})}
+        meta = {**cat[i], **jsonstate.read(mp, {})}
         wins = windows(segs, size_s)
         db.execute("DELETE FROM windows WHERE item = ?", (i,))
         db.executemany("INSERT INTO windows (text, item, start) VALUES (?, ?, ?)",
@@ -124,7 +125,7 @@ def link(url: str, source: str, start: float) -> str:
 def open_index(cfg: dict, subject: str) -> sqlite3.Connection:
     d = subject_dir(cfg, subject)
     if not (d / "index.sqlite").exists():
-        raise SystemExit(f"no index for {subject!r} yet: clipper archive index {subject}")
+        raise ClipperError(f"no index for {subject!r} yet: clipper archive index {subject}")
     return connect(d)
 
 
@@ -205,7 +206,7 @@ def search(cfg: dict, subject: str, query: str, limit: int, since: str | None, b
             f"snippet(windows, 0, '[', ']', ' ... ', 40) {base} ORDER BY {order} LIMIT ?",
             [*params, limit]).fetchall()
     except sqlite3.OperationalError as e:  # bad FTS5 syntax, e.g. an unclosed quote
-        raise SystemExit(f"query {query!r}: {e}") from e
+        raise ClipperError(f"query {query!r}: {e}") from e
     print(f"{query!r}: {total} windows in {vids} videos; showing {len(rows)} by {by}\n")
     for date, channel, title, url, source, start, snip in rows:
         print(f"{date or '????-??-??'}  {channel}  {title[:70]!r}")

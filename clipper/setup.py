@@ -35,8 +35,9 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import config, doctor
+from . import config, doctor, jsonstate
 from .config import _root
+from .errors import ClipperError
 
 STEPS = ("mode", "roles", "machine", "keys", "check")
 TITLES = {"mode": "Join or start fresh", "roles": "What this machine runs",
@@ -71,7 +72,7 @@ class Ask:
             value = str(given if given is not None else default)
             err = check(value) if check else None
             if err:
-                raise SystemExit(f"{key} = {value!r}: {err}")
+                raise ClipperError(f"{key} = {value!r}: {err}")
             return value
         while True:
             raw = input(f"  {prompt}" + (f" [{default}]" if default else "") + ": ").strip() or default
@@ -85,7 +86,7 @@ class Ask:
         if given is not None or not self.interactive:
             value = str(given if given is not None else default)
             if value not in options:
-                raise SystemExit(f"{key} = {value!r}: one of {', '.join(options)}")
+                raise ClipperError(f"{key} = {value!r}: one of {', '.join(options)}")
             return value
         print(f"  {prompt}")
         keys = list(options)
@@ -107,7 +108,7 @@ class Ask:
             value = list(given if given is not None else default)
             bad = [v for v in value if v not in options]
             if bad or not value:
-                raise SystemExit(f"{key} = {value!r}: some of {', '.join(options)}")
+                raise ClipperError(f"{key} = {value!r}: some of {', '.join(options)}")
             return value
         print(f"  {prompt}")
         keys = list(options)
@@ -145,7 +146,7 @@ def state_path(cfg: dict) -> Path:
 
 def load_state(cfg: dict) -> dict:
     try:
-        st = json.loads(state_path(cfg).read_text(encoding="utf-8"))
+        st = jsonstate.load(state_path(cfg))
     except (OSError, ValueError):
         st = {}
     st.setdefault("done", {})
@@ -400,7 +401,7 @@ def step_roles(cfg: dict, st: dict, ask: Ask) -> None:
             say("Installing them, then setup carries on.")
         else:
             say(f"Run `uv sync {args}`, then `clipper setup` again to carry on.")
-        raise SystemExit(EXIT_SYNC)
+        raise ClipperError(status=EXIT_SYNC)
 
 
 def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
@@ -446,7 +447,7 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
             say(f"-> clipper.toml: [schedule] timezone = {toml_value(tz)}")
 
     if not shutil.which("ffmpeg"):
-        raise SystemExit("ffmpeg isn't on PATH: run deploy/bootstrap (or winget install Gyan.FFmpeg / "
+        raise ClipperError("ffmpeg isn't on PATH: run deploy/bootstrap (or winget install Gyan.FFmpeg / "
                          "brew install ffmpeg), open a new terminal, then clipper setup --step machine")
     if roles == ["recorder"]:
         return
@@ -459,7 +460,7 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
         say(f"Encoder {codec} (from clipper.toml) doesn't work here; trying the others.")
         works = [c for c in encoders_here(hw) if doctor.encoder_works(c)[0]]
         if not works:
-            raise SystemExit("no H.264 encoder works in this ffmpeg; install a full build "
+            raise ClipperError("no H.264 encoder works in this ffmpeg; install a full build "
                              "(gyan.dev 'full', or BtbN's gpl build) and run clipper setup --step machine")
         chosen = ask.choice("clip_codec", "Encoder for cuts, Shorts and previews",
                             {c: c + (" (CPU, slowest)" if c == "libx264" else "") for c in works}, works[0])
@@ -489,7 +490,7 @@ def check_key(name: str, cfg: dict) -> tuple[bool, str]:
                              headers={"Authorization": f"Bot {token(cfg)}"}, timeout=15)
             return (True, f"Discord bot {r.json().get('username', '?')}") if r.ok \
                 else (False, f"Discord refused it (HTTP {r.status_code})")
-    except (Exception, SystemExit) as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         return False, f"{type(e).__name__}: {str(e)[:160]}"
     return True, "set"
 

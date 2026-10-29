@@ -51,6 +51,8 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
+from . import jsonstate
+from .errors import ClipperError
 from .signals import EMOTE
 
 W, H, MX = 1080, 1440, 56
@@ -97,7 +99,7 @@ def next_issue_number(cfg: dict, here: Path) -> int:
     for p in Path(cfg["paths"]["weekly"]).glob("*/issue.json"):
         if p.parent != here:
             try:
-                nums.append(int(json.loads(p.read_text(encoding="utf-8")).get("issue") or 0))
+                nums.append(int(jsonstate.load(p).get("issue") or 0))
             except (OSError, ValueError):
                 pass
     return max(nums + [cfg["weekly"]["first_issue"] - 1]) + 1
@@ -107,7 +109,7 @@ def next_issue_number(cfg: dict, here: Path) -> int:
 
 def _load(p: Path, default=None):
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        return jsonstate.load(p)
     except (OSError, ValueError):
         return default
 
@@ -264,7 +266,7 @@ def gather(cfg: dict, start: datetime, end: datetime, here: Path) -> tuple[dict,
         print(f"  {sdir.name}: {show_name} {at:%a %b %d}, {hours:.1f} h, {len(segments)} segments, "
               f"{len(hooks)} hooks, {len(streams[sdir.name]['faces'])} faces")
     if not streams:
-        raise SystemExit(f"no streams started {start:%Y-%m-%d} to {end:%Y-%m-%d} under {root}")
+        raise ClipperError(f"no streams started {start:%Y-%m-%d} to {end:%Y-%m-%d} under {root}")
     week = {"start": start.strftime("%Y-%m-%d"), "end": (end - timedelta(days=1)).strftime("%Y-%m-%d"),
             "label": week_label(start), "streams": streams}
     return week, stats_of(week)
@@ -406,7 +408,7 @@ def draft(cfg: dict, here: Path, week: dict, stats: dict, headline: str) -> dict
     print(f"  drafting issue {issue:02d} with {wc['model']} ({len(user) // 4:,} tokens of week)...")
     out, meta = json_text(claude, wc["model"], system, user, wc["effort"])
     if out is None:
-        raise SystemExit(f"the model refused to draft the issue ({meta})")
+        raise ClipperError(f"the model refused to draft the issue ({meta})")
     if missing := check_issue(out):
         print(f"  ! the draft is missing {', '.join(missing)}; edit issue.json", file=sys.stderr)
     out = {"issue": issue, "week": week["label"], "start": week["start"], "end": week["end"],
@@ -535,7 +537,7 @@ class Faces:
                 sid, _, key = pin.partition("/")
                 hit = next((f for f in week["streams"].get(sid, {}).get("faces", []) if f["key"] == key), None)
                 if not hit:
-                    raise SystemExit(f"issue.json faces: no thumbnail {key!r} in {sid}")
+                    raise ClipperError(f"issue.json faces: no thumbnail {key!r} in {sid}")
                 pin = {"frame": hit["frame"], "face": hit["face"]}
             frame = Path(pin["frame"])
             if not frame.is_absolute():
@@ -673,7 +675,7 @@ class Fonts:
         for key in ("headline", "condensed", "serif_italic", "serif_bold_italic", "black", "bold"):
             p = next((f for f in wc[f"{key}_fonts"] if Path(f).exists()), None)
             if not p:
-                raise SystemExit(f"[weekly] {key}_fonts: none of {wc[f'{key}_fonts']} exist (clipper doctor)")
+                raise ClipperError(f"[weekly] {key}_fonts: none of {wc[f'{key}_fonts']} exist (clipper doctor)")
             self.paths[key] = p
 
     def impact(self, size: int) -> ImageFont.FreeTypeFont:
@@ -1438,7 +1440,7 @@ def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool
     if write:
         pages = sorted({int(x) for x in write.split(",") if x.strip()} & set(ARTICLE_PAGES))
         if not pages:
-            raise SystemExit("--write takes article pages: 03, 04, 05")
+            raise ClipperError("--write takes article pages: 03, 04, 05")
         backup = here / f"issue.before_write_{datetime.now():%Y-%m-%d_%H%M}.json"
         backup.write_text(json.dumps(issue, indent=1, ensure_ascii=False), encoding="utf-8")
         issue = write_articles(cfg, here, week, stats, issue, pages, headline)
@@ -1447,7 +1449,7 @@ def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool
     formats = [f.strip() for f in fmt.split(",") if f.strip()] or list(cfg["weekly"]["formats"])
     bad = [f for f in formats if f not in ("tiktok", "youtube")]
     if bad:
-        raise SystemExit(f"--format takes tiktok and/or youtube, not {', '.join(bad)}")
+        raise ClipperError(f"--format takes tiktok and/or youtube, not {', '.join(bad)}")
     r = Renderer(cfg, here, week, stats, issue)
     which = {x.strip() for x in only.split(",") if x.strip()} or None
     for f in formats:

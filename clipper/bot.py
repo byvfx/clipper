@@ -48,6 +48,8 @@ from discord import app_commands
 
 from . import actions, alerts, cardsync, notify, preshow, retake, schedule
 from .config import _root
+from .errors import ClipperError
+from .timefmt import length
 
 log = logging.getLogger("clipper.bot")
 
@@ -361,13 +363,13 @@ class Bot(discord.Client):
         return False
 
     async def blocking(self, fn, *args, **kwargs):
-        """Run clipper code (sync, may print or raise SystemExit) off the event loop."""
+        """Run clipper code (sync, may print or raise ClipperError) off the event loop."""
         def run():
             out = io.StringIO()
             try:
                 with contextlib.redirect_stdout(out):
                     return fn(*args, **kwargs)
-            except SystemExit as e:
+            except (ClipperError, SystemExit) as e:
                 raise UserError(str(e)) from None
             finally:
                 if out.getvalue().strip():
@@ -385,7 +387,7 @@ class Bot(discord.Client):
             try:
                 item = actions.resolve(self.cfg, ref)
                 row = actions.describe(self.cfg, item.stream_dir)[item.key]
-            except (SystemExit, KeyError) as e:
+            except (ClipperError, KeyError) as e:
                 await interaction.response.send_message(f"Can't edit {ref}: {e}", ephemeral=True)
                 return
             await interaction.response.send_modal(Details(self, ref, row))
@@ -397,7 +399,7 @@ class Bot(discord.Client):
                     item = actions.resolve(self.cfg, ref)
                     row = actions.describe(self.cfg, item.stream_dir)[item.key]
                     default = row[{"pin": "publish_at", "thumbtext": "thumb_text"}[action]]
-                except (SystemExit, KeyError):
+                except (ClipperError, KeyError):
                     pass
             await interaction.response.send_modal(Form(self, action, ref, default[:100]))
             return
@@ -420,7 +422,7 @@ class Bot(discord.Client):
                   "details": lambda: actions.edit_meta(cfg, item, text, who),
                   "thumbtext": lambda: actions.thumbtext(cfg, item, text, who)}.get(action)
             if not fn:
-                raise SystemExit(f"unknown action {action!r}")
+                raise ClipperError(f"unknown action {action!r}")
             row = fn()
         note = ""
         if cfg["discord"]["replan"]:
@@ -519,7 +521,7 @@ def register_commands(bot: Bot) -> None:
             return await fail(interaction, e)
         if not rows:
             return await interaction.followup.send("Nothing waiting for review.")
-        lines = [f"`{r['short']}` {actions.mmss(r['duration_s'])} "
+        lines = [f"`{r['short']}` {length(r['duration_s'])} "
                  f"[{r['title'][:80]}]({r['kitsu_url']}) · {actions.decision_text(r)}"
                  for r in rows]
         pages = chunks(lines)
@@ -610,20 +612,20 @@ def single_instance(cfg: dict):
             fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         f.close()
-        raise SystemExit(f"another clipper bot is already running (lock {path})") from None
+        raise ClipperError(f"another clipper bot is already running (lock {path})") from None
     return f
 
 
 def run(cfg: dict) -> None:
     dc = cfg["discord"]
     if not notify.user_ids(dc):
-        raise SystemExit("set [discord] allowed_user_ids (your Discord user id) in clipper.toml")
+        raise ClipperError("set [discord] allowed_user_ids (your Discord user id) in clipper.toml")
     if not dc["guild_id"]:
-        raise SystemExit("set [discord] guild_id (your server's id) in clipper.toml")
+        raise ClipperError("set [discord] guild_id (your server's id) in clipper.toml")
     setup_logging(cfg["paths"]["bot_log"])
     try:
         lock = single_instance(cfg)
-    except SystemExit as e:
+    except ClipperError as e:
         log.error(str(e))
         raise
     log.info(f"clipper bot starting (pid {os.getpid()}); card refresh every "

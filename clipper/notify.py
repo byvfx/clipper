@@ -28,8 +28,10 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate
+from . import jsonstate, media
 from .config import for_stream
+from .errors import ClipperError
+from .timefmt import length
 
 API = "https://discord.com/api/v10"
 COLORS = {"pending": 0x5865F2, "changes_requested": 0xFEE75C, "approved": 0x57F287,
@@ -51,9 +53,9 @@ def token(cfg: dict) -> str:
     if not tok and path.exists():
         tok = path.read_text(encoding="utf-8-sig").strip()
     if not tok:
-        raise SystemExit(f"no Discord bot token: set ${dc['token_env']} or put it in {path}")
+        raise ClipperError(f"no Discord bot token: set ${dc['token_env']} or put it in {path}")
     if tok.count(".") != 2:
-        raise SystemExit("that isn't a bot token (Developer Portal > your app > Bot > Reset "
+        raise ClipperError("that isn't a bot token (Developer Portal > your app > Bot > Reset "
                          "Token; the OAuth2 client secret won't work)")
     return tok
 
@@ -89,18 +91,18 @@ class Rest:
                 time.sleep(float(r.json().get("retry_after", 1)) + 0.2)
                 continue
             if r.status_code >= 400:
-                raise SystemExit(f"Discord {method} {path}: {r.status_code} {r.text[:300]}")
+                raise ClipperError(f"Discord {method} {path}: {r.status_code} {r.text[:300]}")
             return r.json() if r.content else {}
-        raise SystemExit(f"Discord {method} {path}: still rate limited")
+        raise ClipperError(f"Discord {method} {path}: still rate limited")
 
 
 # ---------- cards ----------
 
 def card(r: dict) -> tuple[dict, list[dict]]:
     """Embed + button rows for one item (actions.describe row). Used by notify and bot."""
-    from .actions import decision_text, mmss
+    from .actions import decision_text
 
-    bits = [KIND_LABEL.get(r["kind"], r["kind"]), mmss(r["duration_s"])]
+    bits = [KIND_LABEL.get(r["kind"], r["kind"]), length(r["duration_s"])]
     if r["kind"] in ("pick", "short"):
         bits += [f"score {r['score']}" if r["score"] else "", r["category"],
                  f"found by {r['found_by']}" if r["found_by"] else ""]
@@ -135,18 +137,12 @@ def card(r: dict) -> tuple[dict, list[dict]]:
 
 # ---------- previews ----------
 
-def probe_duration(path: Path) -> float:
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                          "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True)
-    return float(out.stdout.strip())
-
-
 def discord_preview(r: dict, dc: dict) -> tuple[Path, bool]:
     """A preview under the upload limit; True when it's only the opening excerpt."""
     src = r["preview"] if r["preview"].exists() else r["file"]
     dst = r["preview"].parent / "discord" / f"{r['key']}.mp4"
     dst.parent.mkdir(parents=True, exist_ok=True)
-    duration = r["duration_s"] or probe_duration(src)
+    duration = r["duration_s"] or media.duration(src)
     limit = dc["max_upload_mb"] * 1e6 * 0.97
     budget_kbit = limit * 0.93 * 8 / 1000  # leave room for container overhead
     audio = 64
@@ -172,7 +168,7 @@ def discord_preview(r: dict, dc: dict) -> tuple[Path, bool]:
             tmp.replace(dst)
             return dst, excerpt
         video *= 0.8
-    raise SystemExit(f"{r['key']}: preview still over {dc['max_upload_mb']} MB")
+    raise ClipperError(f"{r['key']}: preview still over {dc['max_upload_mb']} MB")
 
 
 # ---------- posting ----------
@@ -206,9 +202,9 @@ def ensure_thread(api: Rest, cfg: dict, sdir: Path, dstate: dict, rows: list[dic
         try:
             api("GET", f"/channels/{dstate['thread_id']}")
             return dstate["thread_id"]
-        except SystemExit:
+        except ClipperError:
             pass  # deleted: make a new one
-    meta = json.loads((sdir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(sdir / "meta.json")
     show = cfg["meta"]["show_name"] or cfg["review"]["project"] or "Stream"
     name = dc["thread_name"].format(show=show, date=meta["started_at"][:10],
                                     stream_id=sdir.name, title=meta.get("title", ""))[:100]
@@ -238,7 +234,7 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
 
     dc = cfg["discord"]
     if not dc["review_channel_id"]:
-        raise SystemExit("set [discord] review_channel_id in clipper.toml")
+        raise ClipperError("set [discord] review_channel_id in clipper.toml")
     review.sync(sdir, cfg, quiet=True)
     rows = list(actions.describe(cfg, sdir).values())
     if not rows:
@@ -248,7 +244,7 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
     todo = [r for r in rows if not want or r["key"] in want or r["key"].split("_")[0] in want]
     api = Rest(cfg)
     dpath = sdir / "discord.json"
-    dstate = json.loads(dpath.read_text(encoding="utf-8")) if dpath.exists() else {}
+    dstate = jsonstate.read(dpath, {})
     thread_id = ensure_thread(api, cfg, sdir, dstate, rows)
     save_state(dpath, dstate)
     posted = 0
@@ -259,7 +255,7 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
         t = time.time()
         file, excerpt = discord_preview(r, dc)
         embed, components = card(r)
-        content = (f"First {int(dc['excerpt_s'])} s of {actions.mmss(r['duration_s'])}; "
+        content = (f"First {int(dc['excerpt_s'])} s of {length(r['duration_s'])}; "
                    f"full preview in Kitsu." if excerpt else None)
         if note:
             content = note + (f"\n{content}" if content else "")

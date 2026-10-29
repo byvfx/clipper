@@ -44,7 +44,8 @@ from pathlib import Path
 
 import requests
 
-from . import speakers, transcribe
+from . import jsonstate, speakers, transcribe
+from .errors import ClipperError
 from .modalmon import head_record, tracked
 from .preshow import ytdlp
 
@@ -60,7 +61,7 @@ def subject_dir(cfg: dict, subject: str) -> Path:
 
 def load_catalog(d: Path) -> dict[str, dict]:
     p = d / "catalog.json"
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    return jsonstate.read(p, {})
 
 
 def save_json(d: Path, name: str, data: dict) -> None:
@@ -76,7 +77,7 @@ def save_catalog(d: Path, cat: dict[str, dict]) -> None:
 
 def load_links(d: Path) -> dict[str, dict]:
     p = d / "links.json"
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    return jsonstate.read(p, {})
 
 
 # ---------- listing ----------
@@ -90,7 +91,7 @@ def list_youtube(url: str) -> list[dict]:
         if r.returncode and len(tabs) > 1 and "does not have" in r.stderr:
             continue  # e.g. no streams tab
         if r.returncode:
-            raise SystemExit(f"yt-dlp {tab}: {r.stderr.strip().splitlines()[-1:]}")
+            raise ClipperError(f"yt-dlp {tab}: {r.stderr.strip().splitlines()[-1:]}")
         data = json.loads(r.stdout)
         for e in data.get("entries") or []:
             items.append({"id": f"yt-{e['id']}", "source": "youtube",
@@ -111,7 +112,7 @@ def list_odysee(url: str) -> list[dict]:
     name = "@" + url.split("@", 1)[1].split("/")[0].split(":")[0]
     ch = odysee("resolve", {"urls": [f"lbry://{name}"]})[f"lbry://{name}"]
     if "error" in ch:
-        raise SystemExit(f"odysee {name}: {ch['error'].get('name')}")
+        raise ClipperError(f"odysee {name}: {ch['error'].get('name')}")
     items, page = [], 1
     while True:
         r = odysee("claim_search", {"channel_ids": [ch["claim_id"]], "page": page, "page_size": 50,
@@ -211,7 +212,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
         if r.returncode or not audio:
             raise RuntimeError(f"yt-dlp: {r.stderr.strip().splitlines()[-1:]}")
         info_path = idir / "audio.info.json"
-        info = json.loads(info_path.read_text(encoding="utf-8"))
+        info = jsonstate.load(info_path)
         info_path.unlink()
         ts = info.get("timestamp") or info.get("release_timestamp")
         meta.update(title=info.get("title") or it["title"], description=info.get("description") or "",
@@ -239,7 +240,7 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
     if not cat:
-        raise SystemExit(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
+        raise ClipperError(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
     todo = [it for it in cat.values() if not (d / it["id"] / "words.jsonl").exists()]
     links = load_links(d)
     dead = {i for i, lk in links.items() if lk["status"] == "dead"}
@@ -371,13 +372,13 @@ def check_links(cfg: dict, subject: str, ids: list[str] | None, everything: bool
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
     if not cat:
-        raise SystemExit(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
+        raise ClipperError(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
     ac = cfg["archive"]
     links = load_links(d)
     if ids:
         missing = [i for i in ids if i not in cat]
         if missing:
-            raise SystemExit(f"not in {subject}'s catalog: {' '.join(missing)}")
+            raise ClipperError(f"not in {subject}'s catalog: {' '.join(missing)}")
         todo = [cat[i] for i in ids]
     else:
         cutoff = datetime.now(UTC) - timedelta(days=ac["link_recheck_days"])
@@ -458,7 +459,7 @@ def list_links(cfg: dict, subject: str, status: str | None) -> None:
     d = subject_dir(cfg, subject)
     cat, links = load_catalog(d), load_links(d)
     if not links:
-        raise SystemExit(f"no link checks for {subject!r} yet: clipper archive check {subject}")
+        raise ClipperError(f"no link checks for {subject!r} yet: clipper archive check {subject}")
     rows = [(i, lk) for i, lk in links.items()
             if (lk["status"] != "alive" if status is None else status in ("all", lk["status"]))]
     for i, lk in sorted(rows, key=lambda r: r[1]["since"], reverse=True):

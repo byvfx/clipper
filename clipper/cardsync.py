@@ -24,6 +24,7 @@ from pathlib import Path
 
 from . import actions, jsonstate, notify, review
 from .config import for_stream
+from .errors import ClipperError
 
 log = logging.getLogger("clipper.cardsync")
 STATE = "discord_cards.json"
@@ -108,7 +109,7 @@ def refresh_stream(cfg: dict, sdir: Path, api: notify.Rest | None = None,
             if new_thumb:
                 notify.replace_thumb(api, thread_id, mid, row)
                 seen[f"{mid}/thumb"] = row["thumb_mtime"]
-        except SystemExit as e:  # deleted message, archived/locked thread...
+        except ClipperError as e:  # deleted message, archived/locked thread...
             log.warning("could not refresh %s card: %s", row["short"], e)
             if "Unknown Message" in str(e) or " 404 " in str(e):
                 seen[mid] = sig  # gone for good; stop trying

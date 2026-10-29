@@ -12,14 +12,15 @@ missing compilation text without paying for a new split (--force re-splits).
 
 from __future__ import annotations
 
-import json
 import re
 from itertools import pairwise
 from pathlib import Path
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
+from .timefmt import hms
 
 KINDS = ["intro", "commentary", "reaction", "call", "gambling", "ad_read", "break",
          "outro", "other"]
@@ -61,11 +62,6 @@ COMPILATION_SCHEMA = {
 }
 
 
-def hms(s: float) -> str:
-    s = int(s)
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
-
-
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:50]
 
@@ -93,7 +89,7 @@ def split(stream_dir: Path, cfg: dict, claude: Claude, prompts: Prompts) -> dict
     out, meta = claude.json_call(seg_cfg["model"], prompts.get("segments"), transcript, SCHEMA,
                                  seg_cfg["effort"], fallback=True, stream=True)
     if out is None:
-        raise SystemExit(f"segments: model refused ({meta.get('refusal')})")
+        raise ClipperError(f"segments: model refused ({meta.get('refusal')})")
     segs = sorted(out["segments"], key=lambda s: s["start_s"])
     for i, s in enumerate(segs, 1):
         s["id"] = f"s{i:02d}"
@@ -148,7 +144,7 @@ def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     claude = Claude(cfg)
 
     if path.exists() and not force:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = jsonstate.load(path)
     else:
         preflight(claude, seg_cfg["model"])
         data = split(stream_dir, cfg, claude, prompts)

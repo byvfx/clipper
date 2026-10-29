@@ -1,27 +1,20 @@
-"""A ratchet on raw `json.loads(path.read_text())`. State files other processes replace
-(schedule.json, review.json, run.json, ...) should be read with jsonstate.read, which
-retries a file caught mid-replace instead of failing or reading it as empty. Each module
-may not gain raw reads; when you convert some, lower its number here."""
+"""JSON files are read with jsonstate.load / jsonstate.read, not json.loads(path.read_text()):
+a file another process is replacing (schedule.json, review.json, run.json, ...) is retried
+instead of failing or being read as empty. JSONL and files with a BOM (utf-8-sig, written
+by other tools) are read line by line or as text, so they are left alone."""
 import re
 
 from conftest import ROOT
 
-RAW_READ = re.compile(r"json\.loads\(.*\.read_text\(")
-
-ALLOWED = {
-    "actions": 1, "alerts": 3, "analytics": 1, "archive": 3, "archive_index": 2, "config": 1,
-    "costs": 2, "cut": 5, "doctor": 2, "kick": 1, "meta": 6, "modalmon": 2, "notify": 2,
-    "perform": 2, "pick": 1, "preshow": 3, "receipts": 5, "record": 1, "retake": 1,
-    "review": 14, "rumble": 4, "schedule": 7, "scoring": 4, "segments": 1, "setup": 1,
-    "shorts": 4, "signals": 2, "speakers": 9, "thumbs": 10, "tiktok": 4, "warroom": 1,
-    "weekly": 2, "youtube": 14,
-}
+RAW_READ = re.compile(r"json\.loads\([^)]*\.read_text\(")
 
 
-def test_no_new_raw_json_reads():
-    over = []
+def test_no_raw_json_reads():
+    found = []
     for path in sorted((ROOT / "clipper").glob("*.py")):
-        n = len(RAW_READ.findall(path.read_text(encoding="utf-8")))
-        if n > ALLOWED.get(path.stem, 0):
-            over.append(f"{path.name}: {n} (allowed {ALLOWED.get(path.stem, 0)})")
-    assert not over, "use jsonstate.read(path, default) for: " + ", ".join(over)
+        if path.name in ("jsonstate.py", "modal_app.py"):  # modal_app runs without the package
+            continue
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if RAW_READ.search(line) and "utf-8-sig" not in line:
+                found.append(f"{path.name}:{n}")
+    assert not found, "use jsonstate.load(path) or jsonstate.read(path, default): " + ", ".join(found)

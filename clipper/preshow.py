@@ -38,7 +38,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import jsonstate
+from . import jsonstate, media
 from .config import for_show, for_stream
 
 log = logging.getLogger("clipper.preshow")
@@ -73,7 +73,7 @@ WINDOW_PAD_S = 1.0   # keep this much room around the model's bounds
 
 def is_preshow(stream_dir: Path) -> bool:
     try:
-        meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+        meta = jsonstate.load(stream_dir / "meta.json")
     except (OSError, ValueError):
         return False
     return meta.get("kind") == "preshow"
@@ -256,22 +256,12 @@ def show_list(cfg: dict) -> None:
 
 # ---------- the `segments` stage for a pre-show ----------
 
-def video_duration(path: Path) -> float | None:
-    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-                        "stream=duration", "-of", "csv=p=0", str(path)],
-                       check=False, capture_output=True, text=True)
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return None
-
-
 def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     """segments.json with one segment covering the whole video: no topic split, and no
     compilations. Title and description come from one small model call over the transcript.
     With a window in meta.json (a one-off grabbed with --from/--to), the segment is the
     stretch the model marks inside that window instead."""
-    from .cut import source_file
+    from .media import source_file
     from .scoring import Claude, Prompts, load_words, preflight, transcript_lines
     from .segments import slug
 
@@ -279,12 +269,12 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
     pc = cfg["preshow"]
     path = stream_dir / "segments.json"
     if path.exists() and not force:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = jsonstate.load(path)
         print(f"{data['segments'][0]['id']}: {data['segments'][0]['title']} (already written)")
         return data["segments"]
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(stream_dir / "meta.json")
     words = load_words(stream_dir)
-    full = video_duration(source_file(stream_dir)) or meta["duration_s"]
+    full = media.try_duration(source_file(stream_dir), video=True) or meta["duration_s"]
     window = meta.get("window") or {}
     start = float(window.get("start_s") or 0.0)
     end = min(full, float(window["end_s"])) if window.get("end_s") else full

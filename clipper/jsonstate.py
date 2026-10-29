@@ -34,12 +34,20 @@ _held_guard = threading.Lock()
 def read(path: Path, default: Any = None) -> Any:
     """The file's JSON, or `default` if it doesn't exist (a copy, if it's a dict or list).
     A file that exists but isn't JSON still raises: that's worth knowing about."""
+    try:
+        return load(path)
+    except FileNotFoundError:
+        return json.loads(json.dumps(default)) if default is not None else None
+
+
+def load(path: Path) -> Any:
+    """The file's JSON; FileNotFoundError if it doesn't exist. Use this (or `read`) for every
+    JSON file rather than json.loads(path.read_text()): a file another process is replacing
+    is retried instead of failing."""
     for attempt in range(10):
         try:
             text = path.read_text(encoding="utf-8")
             break
-        except FileNotFoundError:
-            return json.loads(json.dumps(default)) if default is not None else None
         except PermissionError:  # a writer is replacing it (Windows, the NAS share)
             if attempt == 9:
                 raise

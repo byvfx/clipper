@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import base64
 import io
-import json
 import re
 import subprocess
 import time
@@ -47,6 +46,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .meta import duration, load_assets
 from .scoring import Claude, Prompts, load_signals, preflight
 
@@ -125,7 +125,7 @@ def candidate_times(x: dict, sig: dict | None, tc: dict) -> list[float]:
     """Video-local times to try, most promising first."""
     dur = duration(x)
     if x["kind"] == "clip":
-        side = json.loads(x["video"].with_suffix(".json").read_text(encoding="utf-8"))
+        side = jsonstate.load(x["video"].with_suffix(".json"))
         a = side["in_s"]
         hook, payoff = side["short_in_s"] - a, side["short_out_s"] - a
         ts = [hook + 1.0, payoff - 1.5, (hook + payoff) / 2, hook + 3.0, payoff - 4.0]
@@ -373,7 +373,7 @@ def font_path(tc: dict, key: str = "font") -> str:
     for p in [tc.get(key) or tc["font"], *tc["fonts"]]:
         if p and Path(p).exists():
             return str(p)
-    raise SystemExit("thumbnail: no font found; set [thumbnail] font to a .ttf path")
+    raise ClipperError("thumbnail: no font found; set [thumbnail] font to a .ttf path")
 
 
 def font_at_cap(path: str, cap: float) -> ImageFont.FreeTypeFont:
@@ -669,7 +669,7 @@ def own_context(key: str, me: dict, stream_dir: Path, own_band: str = "") -> dic
     texts = [me["teaser"]] if me.get("teaser") else []
     draft = stream_dir / "metadata" / f"{key}.json"
     if draft.exists():
-        chapters = json.loads(draft.read_text(encoding="utf-8")).get("chapters") or []
+        chapters = jsonstate.load(draft).get("chapters") or []
         texts += [clean_text(c["title"], 12) for c in chapters]
 
     def words(t: str) -> set[str]:
@@ -906,7 +906,7 @@ def short_covers(stream_dir: Path, state: dict, tc_enq: dict, date: str, own_ban
     by_clip = {e["id"]: (k, e) for k, e in state.items()
                if e.get("kind") == "clip" and e.get("style") == "enquirer"}
     out = []
-    for skey, s in json.loads(shorts_path.read_text(encoding="utf-8")).items():
+    for skey, s in jsonstate.load(shorts_path).items():
         cid = skey.split("_", 1)[1] if "_" in skey else skey  # v01_t20 -> t20
         video = stream_dir / s["file"]
         if (clip_ids is not None and cid not in clip_ids) or (short_keys is not None and skey not in short_keys):
@@ -936,7 +936,7 @@ def shorts_only(stream_dir: Path, cfg: dict, short_keys: set[str] | None = None,
         return 0
     tc["_photos"] = photos(tc)
     tc_enq, date, own_band = enquirer_setup(stream_dir, cfg, tc)
-    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state = jsonstate.load(state_path)
     done = short_covers(stream_dir, state, tc_enq, date, own_band,
                         Bleeper({**cfg["bleep"], "mode": "bleep"}), short_keys=short_keys)
     for r in done:
@@ -962,7 +962,7 @@ def printable(e: dict, bleeper) -> dict:
 def enquirer_setup(stream_dir: Path, cfg: dict, tc: dict) -> tuple[dict, str, str]:
     """(tc with the masthead and badge names, the cover date, the pre-show band or "")."""
     meta_path = stream_dir / "meta.json"
-    smeta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    smeta = jsonstate.read(meta_path, {})
     started = smeta.get("started_at", "")
     own_band = ""
     if smeta.get("kind") == "preshow" and cfg["preshow"].get("teasers") is not None:
@@ -987,7 +987,7 @@ def enquirer_setup(stream_dir: Path, cfg: dict, tc: dict) -> tuple[dict, str, st
 def asset_info(stream_dir: Path, x: dict, review: dict) -> dict:
     """Title as it will upload (Kitsu edit > metadata draft > cut title), hook, about."""
     draft = stream_dir / "metadata" / x["video"].parent.name / f"{x['video'].stem}.json"
-    d = json.loads(draft.read_text(encoding="utf-8")) if draft.exists() else {}
+    d = jsonstate.read(draft, {})
     rel = x["video"].relative_to(stream_dir).as_posix()
     fields = next((r.get("fields") or {} for r in review.values()
                    if r.get("file", "").replace("\\", "/") == rel), {})
@@ -1002,19 +1002,19 @@ def video_key(video: Path) -> str:
 
 
 def check_text(cfg: dict, text: str) -> str:
-    """Reviewer text for a thumbnail, cleaned like the model's; SystemExit if it's empty
+    """Reviewer text for a thumbnail, cleaned like the model's; ClipperError if it's empty
     or has a word the channel never prints."""
     from .bleep import Bleeper
 
     tc = cfg["thumbnail"]
     out = clean_text(text, tc["max_words"])
     if not out:
-        raise SystemExit("thumbnail text is empty")
+        raise ClipperError("thumbnail text is empty")
     if len(text.split()) > tc["max_words"]:
-        raise SystemExit(f"thumbnail text is at most {tc['max_words']} words")
+        raise ClipperError(f"thumbnail text is at most {tc['max_words']} words")
     bleeper = Bleeper({**cfg["bleep"], "mode": "bleep"})
     if unsafe(out, bleeper):
-        raise SystemExit(f"thumbnail text {bleeper.mask(out)!r} has a word the channel never prints")
+        raise ClipperError(f"thumbnail text {bleeper.mask(out)!r} has a word the channel never prints")
     return out
 
 
@@ -1023,10 +1023,10 @@ def set_texts(stream_dir: Path, cfg: dict, texts: dict[str, str]) -> dict[str, s
     re-render them (and re-attach them in Kitsu) without model calls. The highlight is
     kept only while its word is still in the text. Returns the keys changed."""
     state_path = stream_dir / "thumbnails.json"
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    state = jsonstate.read(state_path, {})
     missing = [k for k in texts if k not in state]
     if missing:
-        raise SystemExit(f"no thumbnail yet for {missing}; run clipper thumbs first")
+        raise ClipperError(f"no thumbnail yet for {missing}; run clipper thumbs first")
     norm = lambda w: re.sub(r"\W", "", w.upper())  # as compose() matches the highlight
     changed = {}
     for key, text in texts.items():
@@ -1052,21 +1052,21 @@ def set_photos(stream_dir: Path, cfg: dict, ids: list[str], photo: str | None = 
     tc = {**for_stream(cfg, stream_dir)["thumbnail"]}
     tc["_photos"] = photos(tc)
     state_path = stream_dir / "thumbnails.json"
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    state = jsonstate.read(state_path, {})
     keys = [k for k, e in state.items() if e["id"] in ids]
     if missing := sorted(set(ids) - {state[k]["id"] for k in keys}):
-        raise SystemExit(f"no thumbnail yet for {missing}; run clipper thumbs first")
+        raise ClipperError(f"no thumbnail yet for {missing}; run clipper thumbs first")
     changed = []
     for field, name in (("photo", photo), ("teaser_photo", teaser_photo)):
         if name is None:
             continue
         on_file = photo_name(tc, name)
         if name and not on_file:
-            raise SystemExit(f"no photo of {name!r} in [thumbnail] photos "
+            raise ClipperError(f"no photo of {name!r} in [thumbnail] photos "
                              f"({tc['photos'] or 'unset'}): {', '.join(tc['_photos']) or 'none'}")
         for k in keys:
             if state[k].get("style") != "enquirer":
-                raise SystemExit(f"{state[k]['id']}: photos are for enquirer covers only")
+                raise ClipperError(f"{state[k]['id']}: photos are for enquirer covers only")
             if state[k].get(field, "") != on_file:
                 if on_file:
                     state[k][field] = on_file
@@ -1092,9 +1092,9 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
     tc["_photos"] = photos(tc) if tc["style"] == "enquirer" else {}
     assets = [x for x in load_assets(stream_dir) if not ids or x["id"] in ids]
     if not assets:
-        raise SystemExit("no cut assets" + (f" matching {ids}" if ids else "; run `clipper cut` first"))
+        raise ClipperError("no cut assets" + (f" matching {ids}" if ids else "; run `clipper cut` first"))
     state_path = stream_dir / "thumbnails.json"
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    state = jsonstate.read(state_path, {})
     if missing:
         kept = len(assets)
         assets = [x for x in assets if asset_key(x) not in state]
@@ -1103,7 +1103,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
             return []
         print(f"{len(assets)} videos without a thumbnail ({kept - len(assets)} kept)")
     review_path = stream_dir / "review.json"
-    review = json.loads(review_path.read_text(encoding="utf-8")) if review_path.exists() else {}
+    review = jsonstate.read(review_path, {})
     # Banned words are always enforced on thumbnail text, whatever [bleep] mode is.
     bleeper = Bleeper({**cfg["bleep"], "mode": "bleep"})
 
@@ -1114,7 +1114,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
     if compose_only:
         missing = [asset_key(x) for x in todo if asset_key(x) not in state]
         if missing:
-            raise SystemExit(f"--compose-only: no choice yet for {missing}; run without it first")
+            raise ClipperError(f"--compose-only: no choice yet for {missing}; run without it first")
         todo = []
     claude = None
     if todo:
@@ -1164,7 +1164,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
                 state[key] = entry  # each paid pick is kept as soon as it's made
                 state = jsonstate.merge(state_path, state, [key])
         if failed:
-            raise SystemExit(f"thumbnails failed for {', '.join(failed)}; the other picks are saved, "
+            raise ClipperError(f"thumbnails failed for {', '.join(failed)}; the other picks are saved, "
                              "rerun clipper thumbs for these")
 
     tc_enq, date, own_band = enquirer_setup(stream_dir, cfg, tc)
@@ -1206,7 +1206,7 @@ def cover_info(stream_dir: Path, cfg: dict, key: str) -> dict:
     cfg = for_stream(cfg, stream_dir)
     state = jsonstate.read(stream_dir / "thumbnails.json", {}) or {}
     if key not in state:
-        raise SystemExit("no cover yet for this item (a Short's cover follows its clip: edit the clip's)")
+        raise ClipperError("no cover yet for this item (a Short's cover follows its clip: edit the clip's)")
     e = dict(state[key])
     if e.get("style") == "enquirer" and e.get("headline") and e["text"] != " ".join(e["headline"]):
         e["headline"] = enquirer_lines(e["text"])  # a hand edit of the words: what the cover prints
@@ -1233,24 +1233,24 @@ def _clean_changes(cfg: dict, e: dict, changes: dict) -> dict:
         if k in changes and changes[k] is not None:
             v = int(changes[k])
             if not 1 <= v <= n:
-                raise SystemExit(f"{k} must be 1-{n}")
+                raise ClipperError(f"{k} must be 1-{n}")
             out[k] = v
     for k in ("face", "inset_face"):
         if changes.get(k):
             b = {d: round(float(changes[k][d]), 4) for d in ("x", "y", "width", "height")}
             if not (0 <= b["x"] < 1 and 0 <= b["y"] < 1 and 0.03 <= b["width"] <= 1 and 0.03 <= b["height"] <= 1):
-                raise SystemExit(f"{k} box is outside the frame")
+                raise ClipperError(f"{k} box is outside the frame")
             out[k] = b
     for k in ("photo", "teaser_photo"):
         if k in changes:
             name = (changes[k] or "").strip()
             if name and not photo_name(tc, name):
-                raise SystemExit(f"no photo of {name!r} in [thumbnail] photos")
+                raise ClipperError(f"no photo of {name!r} in [thumbnail] photos")
             out[k] = photo_name(tc, name) if name else ""
     if "headline" in changes:
         lines = [" ".join(str(x).split()).upper() for x in changes["headline"] if str(x).strip()][:3]
         if not lines:
-            raise SystemExit("the headline is empty")
+            raise ClipperError("the headline is empty")
         out["headline"], out["text"] = lines, " ".join(lines)
     elif "text" in changes:
         out["text"] = check_text(cfg, changes["text"])
@@ -1259,7 +1259,7 @@ def _clean_changes(cfg: dict, e: dict, changes: dict) -> dict:
             out[k] = " ".join(str(changes[k] or "").split())
     for k in ("text", "attribution", "subhead", "band_kicker", "band_headline", "teaser"):
         if out.get(k) and unsafe(out[k], bleeper):
-            raise SystemExit(f"{k} {bleeper.mask(out[k])!r} has a word the channel never prints")
+            raise ClipperError(f"{k} {bleeper.mask(out[k])!r} has a word the channel never prints")
     return out
 
 
@@ -1272,7 +1272,7 @@ def edit_cover(stream_dir: Path, cfg: dict, key: str, changes: dict, preview: bo
     state_path = stream_dir / "thumbnails.json"
     state = jsonstate.read(state_path, {}) or {}
     if key not in state:
-        raise SystemExit("no cover yet for this item")
+        raise ClipperError("no cover yet for this item")
     e = {**state[key], **_clean_changes(cfg, state[key], changes)}
     for k in ("photo", "teaser_photo"):
         if e.get(k) == "":
@@ -1281,7 +1281,7 @@ def edit_cover(stream_dir: Path, cfg: dict, key: str, changes: dict, preview: bo
         e["t"] = e["frames"][e["frame"] - 1]["t"]
     x = next((a for a in load_assets(stream_dir) if asset_key(a) == key), None)
     if x is None:
-        raise SystemExit(f"{key}: the cut video is gone")
+        raise ClipperError(f"{key}: the cut video is gone")
     if preview:
         from .bleep import Bleeper
 

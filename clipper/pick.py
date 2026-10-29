@@ -23,15 +23,14 @@ candidates.json). The request is kept on each record ("request").
 
 from __future__ import annotations
 
-import json
 import math
-import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 from . import jsonstate
 from .config import for_stream
+from .errors import ClipperError
 from .scoring import (
     Claude,
     Prompts,
@@ -41,6 +40,7 @@ from .scoring import (
     snap,
     transcript_lines,
 )
+from .timefmt import hms, parse_time
 
 PICK_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -73,28 +73,6 @@ BLOCK_S = 900  # scoring's summary blocks
 
 
 # ---------- times ----------
-
-def parse_time(s: str) -> float:
-    """H:MM:SS, H:MM (hours, minutes), 4h13m / 4h13m20s / 253m, or plain seconds."""
-    s = s.strip().lower()
-    if ":" in s:
-        parts = [float(x) for x in s.split(":")]
-        if len(parts) == 2:
-            parts.append(0.0)
-        if len(parts) != 3:
-            raise ValueError(f"not a time: {s!r}")
-        return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    m = re.fullmatch(r"(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s?)?", s)
-    if not m or not any(m.groups()):
-        raise ValueError(f"not a time: {s!r}")
-    h, mi, sec = (float(x) if x else 0.0 for x in m.groups())
-    return h * 3600 + mi * 60 + sec
-
-
-def hms(t: float) -> str:
-    t = max(0, round(t))
-    return f"{t // 3600}:{t // 60 % 60:02d}:{t % 60:02d}"
-
 
 class Clock:
     """Stream clock (Kick's, from when the stream went live) <-> video clock (the
@@ -136,7 +114,7 @@ class Clock:
 # ---------- helpers ----------
 
 def load(path: Path, default):
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+    return jsonstate.read(path, default)
 
 
 def worker_busy(sdir: Path, cfg: dict) -> str:
@@ -197,7 +175,7 @@ def locate(sdir: Path, cfg: dict, about: str, claude: Claude, prompts: Prompts,
                                        key=lambda p: int(p.stem[9:]) if p.stem[9:].isdigit() else 0,
                                        reverse=True)), None)
     if not summary:
-        raise SystemExit("no stream summary to search (run `clipper score` first); "
+        raise ClipperError("no stream summary to search (run `clipper score` first); "
                          "give --from/--to or --at instead")
     timeline = "\n".join(f"[{b['start_s'] // 60:>3} min] {b['summary']}" for b in summary)
     pc = cfg["pick"]
@@ -273,9 +251,9 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
     pc = cfg["pick"]
     cands_path = stream_dir / "candidates.json"
     if not cands_path.exists():
-        raise SystemExit("no candidates.json: run `clipper score` first")
+        raise ClipperError("no candidates.json: run `clipper score` first")
     if not dry_run and (who := worker_busy(stream_dir, cfg)):
-        raise SystemExit(f"{stream_dir.name} is being processed by {who}; try again when it's done")
+        raise ClipperError(f"{stream_dir.name} is being processed by {who}; try again when it's done")
     meta = load(stream_dir / "meta.json", {})
     clock = Clock(meta, clock_use)
     print(f"{stream_dir.name}: {clock.describe()}")
@@ -287,17 +265,17 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
         stretches = [(max(0.0, t - pc["span_s"] / 2), t + pc["span_s"] / 2)]
     elif start or end:
         if not (start and end):
-            raise SystemExit("give both --from and --to (or --at)")
+            raise ClipperError("give both --from and --to (or --at)")
         a, b = clock.to_video(parse_time(start)), clock.to_video(parse_time(end))
         if b <= a:
-            raise SystemExit("--to must be after --from")
+            raise ClipperError("--to must be after --from")
         stretches = [(a, b)]
     elif not about:
-        raise SystemExit("say where (--from/--to or --at) or what (--about)")
+        raise ClipperError("say where (--from/--to or --at) or what (--about)")
     stretches = [(a, min(b, duration)) for a, b in stretches]
     for a, b in stretches:
         if b - a > pc["max_span_s"]:
-            raise SystemExit(f"{hms(b - a)} is longer than [pick] max_span_s ({hms(pc['max_span_s'])}); "
+            raise ClipperError(f"{hms(b - a)} is longer than [pick] max_span_s ({hms(pc['max_span_s'])}); "
                              "narrow it or raise the key")
 
     prompts = Prompts(cfg)
@@ -311,7 +289,7 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
         print(f"looking for {about!r} in the stream summary")
         stretches = locate(stream_dir, cfg, about, claude, prompts, clock)
         if not stretches:
-            raise SystemExit("nothing in the stream summary matches; try --find with a word "
+            raise ClipperError("nothing in the stream summary matches; try --find with a word "
                              "from it, or give --from/--to")
 
     cands = load(cands_path, {})

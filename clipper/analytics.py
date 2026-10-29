@@ -22,7 +22,6 @@ Scoring (Pass B) gets a short "how past uploads did" block per show once at leas
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -54,7 +53,7 @@ def credentials(cfg: dict, sign_in: bool = False):
         finally:
             youtube.SCOPES = scopes
     creds = youtube.credentials(paths)
-    granted = json.loads(Path(paths["youtube_token"]).read_text(encoding="utf-8")).get("scopes") or []
+    granted = jsonstate.load(Path(paths["youtube_token"])).get("scopes") or []
     if ANALYTICS_SCOPE in granted:
         creds = Credentials.from_authorized_user_file(str(paths["youtube_token"]))
     return creds, ANALYTICS_SCOPE in granted

@@ -14,6 +14,9 @@ keep README and SETUP true whenever behaviour changes.
   never a loose script.
 - A stream is `streams/<id>/`; stages read and write files there and are idempotent, so
   `clipper run` can skip what is done. Review state is `review.json`, retakes `retakes.json`.
+  JSON files go through `clipper/jsonstate.py`: `load`/`read` (retry a file mid-replace),
+  `write` (tmp + replace), `update`/`merge` (under a lock). A test fails on a raw
+  `json.loads(path.read_text())`.
 - Config: defaults in `clipper/config.py` < `clipper.toml` < `clipper.local.toml` (this machine's
   own values, written by `clipper setup`) < `CLIPPER_<SECTION>_<KEY>` env; the last two also win
   over show and stream overrides.
@@ -24,6 +27,9 @@ keep README and SETUP true whenever behaviour changes.
   its own Kitsu production. Everything uploads to one YouTube channel.
 - Model calls go through `clipper/llm.py` (`scoring.Claude` is an alias); the provider is the
   model string's prefix (`openai:`, `gemini:`, `local:`, bare = Claude). Don't call an SDK directly.
+- Errors: library code raises `ClipperError` (`clipper/errors.py`) with a one-line message, never
+  `SystemExit`; only `cli.main` turns it into an exit. The bot, war room and worker catch it
+  like any exception. A test fails on a new `raise SystemExit` outside cli.py.
 - Prompts are `prompts/<name>_<version>.md`; the version in use is a config key. Add a new
   version rather than editing one that produced reviewed output.
 
