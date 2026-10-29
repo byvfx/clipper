@@ -524,13 +524,13 @@ def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     from . import doctor
 
-    raise ClipperError(doctor.main(cfg, offline=args.offline, role=args.role))
+    raise SystemExit(doctor.main(cfg, offline=args.offline, role=args.role))
 
 
 def cmd_setup(cfg: dict, args: argparse.Namespace) -> None:
     from . import setup
 
-    raise ClipperError(setup.main(args.config, step=args.step, answers=args.answers, check_only=args.check,
+    raise SystemExit(setup.main(args.config, step=args.step, answers=args.answers, check_only=args.check,
                                 print_sync=args.sync_args, offline=args.offline))
 
 
@@ -959,7 +959,9 @@ def main() -> None:
     try:
         run_command(args)
     except ClipperError as e:
-        raise SystemExit(str(e)) from None
+        if str(e):
+            print(e, file=sys.stderr)
+        raise SystemExit(e.status) from None
 
 
 def run_command(args: argparse.Namespace) -> None:

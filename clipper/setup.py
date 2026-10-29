@@ -401,7 +401,7 @@ def step_roles(cfg: dict, st: dict, ask: Ask) -> None:
             say("Installing them, then setup carries on.")
         else:
             say(f"Run `uv sync {args}`, then `clipper setup` again to carry on.")
-        raise ClipperError(EXIT_SYNC)
+        raise ClipperError(status=EXIT_SYNC)
 
 
 def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
