@@ -360,3 +360,13 @@ class LLM:
         elif choice.get("finish_reason") == "length":
             raise RuntimeError(f"{model} hit max_tokens ({meta['request_id']})")
         return data, meta
+
+
+# Every stage's model calls go through clipper/llm.py, which picks the provider from the
+# model string; `Claude` stays the name the stages use.
+Claude = LLM
+
+
+def preflight(claude: LLM, model: str) -> None:
+    """One tiny call so account problems stop the run with one clear line."""
+    claude.preflight(model)

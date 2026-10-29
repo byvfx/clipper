@@ -31,16 +31,11 @@ from pathlib import Path
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .scoring import (
-    Claude,
-    Prompts,
-    load_words,
-    preflight,
-    signal_table,
-    snap,
-    transcript_lines,
-)
+from .llm import Claude, preflight
+from .prompts import Prompts
+from .scoring import signal_table
 from .timefmt import hms, parse_time
+from .transcript import load_words, snap, transcript_lines
 
 PICK_SCHEMA = {
     "type": "object", "additionalProperties": False,

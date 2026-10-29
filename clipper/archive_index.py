@@ -241,7 +241,7 @@ def answer(cfg: dict, subject: str, question: str, since: str | None, before: st
     """Question in plain words -> FTS5 queries (model) -> pooled hits -> the ones that fit (model).
     The fitting hits, strong first then oldest first, each with fit, quote and why added.
     claude keeps the running cost (`clipper receipts` asks one question per story)."""
-    from .scoring import Prompts
+    from .prompts import Prompts
 
     ac = cfg["archive"]
     db = open_index(cfg, subject)
@@ -280,7 +280,7 @@ def answer(cfg: dict, subject: str, question: str, since: str | None, before: st
 
 def ask(cfg: dict, subject: str, question: str, since: str | None, before: str | None,
         limit: int) -> None:
-    from .scoring import Claude, preflight
+    from .llm import Claude, preflight
 
     claude = Claude(cfg)
     quiet_http()

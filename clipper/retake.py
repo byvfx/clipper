@@ -111,8 +111,8 @@ def short_key(st: dict) -> str:
 
 
 def context(cfg: dict, sdir: Path, key: str, st: dict, row: dict) -> str:
-    from .scoring import load_words, transcript_lines
     from .shorts import layouts_of
+    from .transcript import load_words, transcript_lines
 
     kind = {"pick": "clip", "short": "Short", "segment": "segment",
             "compilation": "compilation"}[st["kind"]]
@@ -154,7 +154,8 @@ def context(cfg: dict, sdir: Path, key: str, st: dict, row: dict) -> str:
 
 
 def plan(cfg: dict, sdir: Path, key: str, st: dict, row: dict, note: str) -> tuple[dict, float]:
-    from .scoring import Claude, Prompts
+    from .llm import Claude
+    from .prompts import Prompts
     from .shorts import layouts_of
 
     rc = cfg["retake"]
@@ -186,8 +187,8 @@ def plan(cfg: dict, sdir: Path, key: str, st: dict, row: dict, note: str) -> tup
 # ---------- applying it ----------
 
 def snap_trim(cfg: dict, sdir: Path, st: dict, trim: dict) -> tuple[float, float] | None:
-    from .scoring import load_words
     from .shorts import snap_window
+    from .transcript import load_words
 
     meta = load(sdir / "meta.json", {})
     a = max(0.0, float(trim["start_s"]))

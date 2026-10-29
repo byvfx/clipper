@@ -19,8 +19,10 @@ from pathlib import Path
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
+from .llm import Claude, preflight
+from .prompts import Prompts
 from .timefmt import hms
+from .transcript import load_words, snap, transcript_lines
 
 KINDS = ["intro", "commentary", "reaction", "call", "gambling", "ad_read", "break",
          "outro", "other"]

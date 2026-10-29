@@ -47,8 +47,10 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
+from .llm import Claude, preflight
 from .meta import duration, load_assets
-from .scoring import Claude, Prompts, load_signals, preflight
+from .prompts import Prompts
+from .scoring import load_signals
 
 W, H = 1280, 720
 PICK_SCHEMA = {

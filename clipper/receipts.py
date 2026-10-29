@@ -133,7 +133,9 @@ def clip_bounds(idir: Path, win_start: float, quote: str, rc: dict) -> tuple[flo
 
 def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
     from . import archive_index
-    from .scoring import Claude, Prompts, load_words, preflight, transcript_lines
+    from .llm import Claude, preflight
+    from .prompts import Prompts
+    from .transcript import load_words, transcript_lines
 
     cfg = for_stream(cfg, sdir)
     rc = cfg["receipts"]
@@ -353,7 +355,8 @@ def used(data: dict) -> list[tuple[dict, list[dict]]]:
 def script(sdir: Path, cfg: dict) -> None:
     """Mother Moo's read for the used stories and receipts -> receipts.json (open, close,
     each story's and receipt's vo). Edit the lines there; `cut` voices what changed."""
-    from .scoring import Claude, Prompts, preflight
+    from .llm import Claude, preflight
+    from .prompts import Prompts
 
     cfg = for_stream(cfg, sdir)
     rc = cfg["receipts"]
@@ -422,7 +425,7 @@ def voiced(cfg: dict, sdir: Path, text: str) -> Path | None:
 
 def clip(cfg: dict, adir: Path, r: dict, src: Path, fonts: tuple[Path, Path], bug: str,
          bleeper: Bleeper, dst: Path) -> int:
-    from .scoring import load_words
+    from .transcript import load_words
 
     rc, work = cfg["receipts"], dst.parent
     big, small = fonts

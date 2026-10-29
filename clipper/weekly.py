@@ -392,7 +392,7 @@ def draft_user(week: dict, stats: dict, headline: str, issue: int, photos: dict[
 
 
 def draft(cfg: dict, here: Path, week: dict, stats: dict, headline: str) -> dict:
-    from .scoring import Claude, preflight
+    from .llm import Claude, preflight
     from .thumbs import photos as photo_dir
 
     wc = cfg["weekly"]
@@ -462,7 +462,7 @@ def write_articles(cfg: dict, here: Path, week: dict, stats: dict, issue: dict, 
                    note: str = "") -> dict:
     """Rewrite the deck, columns and pull quote of these article pages with the writer prompt,
     one call each; a page that would overflow is sent back once with how much to cut."""
-    from .scoring import Claude, preflight
+    from .llm import Claude, preflight
 
     wc = cfg["weekly"]
     pdir = Path(cfg["paths"]["prompts"])

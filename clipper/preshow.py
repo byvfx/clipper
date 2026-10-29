@@ -238,9 +238,11 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
     compilations. Title and description come from one small model call over the transcript.
     With a window in meta.json (a one-off grabbed with --from/--to), the segment is the
     stretch the model marks inside that window instead."""
+    from .llm import Claude, preflight
     from .media import source_file
-    from .scoring import Claude, Prompts, load_words, preflight, transcript_lines
+    from .prompts import Prompts
     from .segments import slug
+    from .transcript import load_words, transcript_lines
 
     cfg = for_stream(cfg, stream_dir)
     pc = cfg["preshow"]
