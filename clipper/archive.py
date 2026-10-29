@@ -44,10 +44,9 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate, speakers, transcribe
+from . import jsonstate, speakers, transcribe, ytdl
 from .errors import ClipperError
 from .modalmon import head_record, tracked
-from .preshow import ytdlp
 
 log = logging.getLogger(__name__)
 
@@ -87,11 +86,11 @@ def list_youtube(url: str) -> list[dict]:
     tabs = [url] if url.endswith(("/videos", "/streams")) else [f"{url}/videos", f"{url}/streams"]
     items = []
     for tab in tabs:
-        r = ytdlp("--flat-playlist", "-J", tab)
+        r = ytdl.run("--flat-playlist", "-J", tab)
         if r.returncode and len(tabs) > 1 and "does not have" in r.stderr:
             continue  # e.g. no streams tab
         if r.returncode:
-            raise ClipperError(f"yt-dlp {tab}: {r.stderr.strip().splitlines()[-1:]}")
+            raise ClipperError(f"yt-dlp {tab}: {ytdl.last_error(r)}")
         data = json.loads(r.stdout)
         for e in data.get("entries") or []:
             items.append({"id": f"yt-{e['id']}", "source": "youtube",
@@ -155,27 +154,6 @@ def estimate_usd(hours: float, gpu: str, diarize: bool = False) -> float:
     return gpu_h * GPU_PRICES.get(gpu, 0.0)
 
 
-def netscape_cookies(path: Path) -> Path:
-    """yt-dlp reads only Netscape cookies.txt; a browser extension's JSON export (a list of
-    {domain, path, secure, expirationDate, name, value}, or an object holding that list
-    under "cookies") is converted beside it."""
-    text = path.read_text(encoding="utf-8-sig").lstrip()
-    if not text.startswith(("[", "{")):
-        return path
-    data = json.loads(text)
-    if isinstance(data, dict):
-        data = data.get("cookies") or []
-    lines = ["# Netscape HTTP Cookie File"]
-    for c in data:
-        dom = c["domain"]
-        lines.append("\t".join([dom, "TRUE" if dom.startswith(".") else "FALSE", c.get("path") or "/",
-                                "TRUE" if c.get("secure") else "FALSE",
-                                str(int(c.get("expirationDate") or 0)), c["name"], c["value"]]))
-    out = path.with_name(f"{path.stem}.netscape.txt")
-    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return out
-
-
 def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
     """One item: words.jsonl and transcript.json in idir; returns the cost record."""
     tc = dict(cfg["transcribe"], backend="modal", diarize=cfg["archive"]["diarize"])
@@ -198,19 +176,10 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
     if it["source"] == "youtube":
         args = ["-f", cfg["archive"]["youtube_format"], "--write-info-json", "--no-playlist",
                 "-o", str(idir / "audio.%(ext)s"), it["url"]]
-        r = ytdlp(*args)
-        cookies = cfg["paths"]["youtube_cookies"]
-        # Age-restricted only: these go out signed in, so the account is seen as little as possible.
-        # Not "Sign in to confirm" alone: the bot check ("...you're not a bot") says that too, and
-        # retrying those signed in would put the whole run on the account and hide the block.
-        err = r.stderr.lower()
-        if r.returncode and ("confirm your age" in err or "age-restricted" in err) and cookies.is_file():
-            log.info("%s: age-restricted, retrying signed in", it["id"])
-            r = ytdlp("--cookies", str(netscape_cookies(cookies)), *args)
-            signed_in = True
+        r, signed_in = ytdl.run_retrying(cfg, *args, retry_on=ytdl.AGE)  # see ytdl's docstring
         audio = [p for p in idir.glob("audio.*") if p.suffix not in (".json", ".part")]
         if r.returncode or not audio:
-            raise RuntimeError(f"yt-dlp: {r.stderr.strip().splitlines()[-1:]}")
+            raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
         info_path = idir / "audio.info.json"
         info = jsonstate.load(info_path)
         info_path.unlink()

@@ -48,8 +48,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import jsonstate, media
-from .archive import netscape_cookies, subject_dir
+from . import jsonstate, media, ytdl
+from .archive import subject_dir
 from .bleep import Bleeper
 from .config import for_stream
 from .cut import encode_args
@@ -280,8 +280,6 @@ def out_args(rc: dict) -> list[str]:
 
 
 def download(cfg: dict, r: dict, dst: Path) -> None:
-    from .preshow import ytdlp
-
     if dst.exists():
         return
     if r["source"] != "youtube":
@@ -290,13 +288,9 @@ def download(cfg: dict, r: dict, dst: Path) -> None:
     args = ["--download-sections", f"*{r['start']:.2f}-{r['end']:.2f}", "--force-keyframes-at-cuts",
             "-f", cfg["receipts"]["format"], "--merge-output-format", "mp4", "--no-playlist",
             "-o", str(tmp), r["url"]]
-    res = ytdlp(*args)
-    cookies = cfg["paths"]["youtube_cookies"]
-    err = res.stderr.lower()
-    if res.returncode and ("confirm your age" in err or "age-restricted" in err) and cookies.is_file():
-        res = ytdlp("--cookies", str(netscape_cookies(cookies)), *args)
+    res, _ = ytdl.run_retrying(cfg, *args, retry_on=ytdl.AGE)
     if res.returncode or not tmp.exists():
-        raise RuntimeError(f"{r['id']} yt-dlp: {res.stderr.strip().splitlines()[-1:]}")
+        raise RuntimeError(f"{r['id']} yt-dlp: {ytdl.last_error(res)}")
     tmp.replace(dst)
 
 
