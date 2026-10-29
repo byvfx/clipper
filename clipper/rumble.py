@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo
 
 from . import jsonstate, youtube
 from .errors import ClipperError
+from .states import split_key
 
 LICENSE_NOTES = {
     "Rumble Only": "non-exclusive, monetized on Rumble only; the YouTube copy is unaffected",
@@ -75,7 +76,7 @@ def rumble_of(e: dict) -> dict:
 
 
 def short_key(e: dict) -> str:
-    return e["key"].split("/", 1)[1]
+    return split_key(e["key"])[1]
 
 
 def resolve(sched: dict, ref: str) -> dict:
@@ -223,12 +224,7 @@ def push_kitsu(cfg: dict, updates: list[tuple[dict, dict]]) -> None:
             st = states[sdir].get(short_key(e))
             if not st:
                 continue  # compilations have no Kitsu entity
-            etype = review.ENTITY[st["kind"]]
-            data = {fmap[(etype, n)]: v for n, v in values.items() if (etype, n) in fmap}
-            update = (gazu.shot.update_sequence_data if etype == "Sequence"
-                      else gazu.shot.update_shot_data)
-            if data:
-                update(st["entity_id"], data)
+            review.set_columns(gazu, fmap, review.ENTITY[st["kind"]], st["entity_id"], values)
     except Exception as ex:  # noqa: BLE001  # schedule.json is the record; Kitsu is a view
         print(f"  warning: Kitsu not updated: {ex}")
 

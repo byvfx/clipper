@@ -34,12 +34,11 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import jsonstate
+from .states import ENTITY, RELEASE_KIND, split_key
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Unscheduled reasons for items that won't go out at all (not just waiting for a slot).
 DROPPED = ("stale", "over the stream's")
-KINDS = {"pick": "clip", "segment": "segment", "compilation": "compilation", "short": "short"}
-ENTITY = {"clip": "Shot", "segment": "Sequence", "compilation": "Sequence", "short": "Shot"}
 
 
 def truthy(v) -> bool:
@@ -108,14 +107,14 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                 and (not expires or expires > datetime.now(tz)) else {})
         approved_segments = set()
         for key, r in review.items():
-            kind = KINDS[r["kind"]]
+            kind = RELEASE_KIND[r["kind"]]
             fields = r.get("fields", {})
             score = fields.get("Score") or (heat.get(r["id"], 0) if kind == "segment" else 0)
             item = {"key": f"{sdir.name}/{key}", "stream": sdir.name, "show": show, "kind": kind,
                     "id": r["id"], "file": str((sdir / r["file"]).resolve()),
                     "title": fields.get("YouTube title") or key,
                     "score": float(score), "stream_start": started,
-                    "earliest": earliest, "entity": (ENTITY[kind], state[key]["entity_id"]),
+                    "earliest": earliest, "entity": (ENTITY[r["kind"]], state[key]["entity_id"]),
                     "override_text": fields.get("Publish at") or "", "asap": asap,
                     "priority": priority, "budget": budget.get(kind), "expires": expires}
             if r["decision"] != "approved":
@@ -133,7 +132,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
             key = f"{sdir.name}/comp-{comp['file'].removesuffix('.mp4')}"
             comp_heat = [heat[s] for s in comp["segments"] if s in heat]
             comp_score = sum(comp_heat) / len(comp_heat) if comp_heat else 0
-            if key.split("/", 1)[1] in review:
+            if split_key(key)[1] in review:
                 # Published as its own Kitsu item: its decision was used above; it still
                 # waits for its segments' slots.
                 for it in items:
@@ -414,7 +413,7 @@ def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo) -> N
     streams_dir: Path = cfg["paths"]["streams"]
     for state_path in streams_dir.glob("*/review_state.json"):
         for key, st in jsonstate.load(state_path).items():
-            ent = (ENTITY[KINDS[st["kind"]]], st["entity_id"])
+            ent = (ENTITY[st["kind"]], st["entity_id"])
             by_entity.setdefault(ent, {"key": f"{state_path.parent.name}/{key}", "entity": ent})
     # Column ids differ per Kitsu production, and each show has its own production.
     fmaps: dict[str, dict] = {}
@@ -426,13 +425,11 @@ def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo) -> N
         return fmaps[name]
 
     for (etype, eid), it in by_entity.items():
-        get, update = ((gazu.shot.get_sequence, gazu.shot.update_sequence_data)
-                       if etype == "Sequence" else (gazu.shot.get_shot, gazu.shot.update_shot_data))
-        field = fmap_of(it["key"].split("/", 1)[0]).get((etype, "Scheduled"))
+        field = fmap_of(split_key(it["key"])[0]).get((etype, "Scheduled"))
         if not field:
             continue
         e = placed.get(it["key"])
         value = (f"{datetime.fromisoformat(e['publish_at']).astimezone(tz):%Y-%m-%d %H:%M}"
                  if e else "")
-        if ((get(eid).get("data") or {}).get(field) or "") != value:
-            update(eid, {field: value})
+        if (review.entity_data(gazu, etype, eid).get(field) or "") != value:
+            review.write_data(gazu, etype, eid, {field: value})

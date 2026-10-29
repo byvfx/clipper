@@ -107,7 +107,7 @@ def ffmpeg_cut(src: Path, dst: Path, start: float, end: float, codec: str, crf: 
 
 def make_bleep(stream_dir: Path, cfg: dict) -> tuple | None:
     from .bleep import Bleeper
-    from .scoring import load_words
+    from .transcript import load_words
 
     b = Bleeper(cfg["bleep"])
     return (b, load_words(stream_dir)) if b.on else None

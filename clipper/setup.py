@@ -476,7 +476,7 @@ def check_key(name: str, cfg: dict) -> tuple[bool, str]:
     import requests
     try:
         if name == "ANTHROPIC_API_KEY":
-            from .scoring import Claude
+            from .llm import Claude
             model = cfg["scoring"]["model_a"]
             Claude(cfg).client.models.retrieve(model)
             return True, f"Anthropic answers ({model} available)"

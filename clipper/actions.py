@@ -28,13 +28,14 @@ that item.
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import jsonstate, review
-from .config import for_stream, stream_dir
+from .config import _root, for_stream, stream_dir
 from .errors import ClipperError
 from .timefmt import length
 
@@ -97,13 +98,8 @@ def _set_columns(gazu, cfg: dict, item: Item, values: dict[str, str]) -> None:
     cfg = for_stream(cfg, item.stream_dir)
     proj = gazu.project.get_project_by_name(review.project_name(cfg))
     fmap = review.column_fields(gazu, proj)
-    etype = review.ENTITY[item.state["kind"]]
-    missing = [n for n in values if (etype, n) not in fmap]
-    if missing:
-        raise ClipperError(f"Kitsu has no {etype} column {missing}; run clipper review publish")
-    update = (gazu.shot.update_sequence_data if etype == "Sequence"
-              else gazu.shot.update_shot_data)
-    update(item.state["entity_id"], {fmap[(etype, n)]: v for n, v in values.items()})
+    review.set_columns(gazu, fmap, review.ENTITY[item.state["kind"]], item.state["entity_id"], values,
+                       strict=True)
 
 
 def _status(cfg: dict, item: Item, short: str, text: str) -> None:
@@ -334,6 +330,57 @@ def refresh(cfg: dict, item: Item) -> dict:
     cfg = for_stream(cfg, item.stream_dir)
     review.sync(item.stream_dir, cfg, keys=[item.key], quiet=True)
     return describe(cfg, item.stream_dir)[item.key]
+
+
+# ---------- one entry point for the bot and the war room ----------
+
+ACTIONS = ("approve", "reject", "changes", "reopen", "hold", "pin", "edit", "thumbtext")
+REPLANS = ("approve", "reject", "changes", "reopen", "hold", "pin")  # these move the schedule
+
+
+def decide(cfg: dict, item: Item, action: str, who: str, text: str = "", on: bool | None = None,
+           values: dict[str, str] | None = None) -> dict:
+    """One review action on one item; returns its card data. text: the note, reason, pin
+    or thumbnail text; on: hold or release (None flips it); values: {Kitsu column: new
+    value} for "edit"."""
+    if action == "hold":
+        return hold(cfg, item, (not refresh(cfg, item)["hold"]) if on is None else on, who)
+    fn = {"approve": lambda: approve(cfg, item, text, who),
+          "reject": lambda: reject(cfg, item, text, who),
+          "changes": lambda: changes(cfg, item, text, who),
+          "reopen": lambda: reopen(cfg, item, who),
+          "pin": lambda: pin(cfg, item, text, who),
+          "edit": lambda: edit_meta(cfg, item, values or {}, who),
+          "thumbtext": lambda: thumbtext(cfg, item, text, who)}.get(action)
+    if not fn:
+        raise ClipperError(f"unknown action {action!r}")
+    return fn()
+
+
+def replan(cfg: dict, item: Item, action: str, row: dict) -> tuple[dict, str]:
+    """After an action that moves the schedule ([discord] replan on): `clipper schedule`
+    without a Kitsu sync, then the item's card data again and a note on where it landed."""
+    from . import schedule
+
+    if not (cfg["discord"]["replan"] and action in REPLANS):
+        return row, ""
+    schedule.run(cfg, sync_first=False)
+    row = describe(cfg, item.stream_dir)[item.key]
+    if row["scheduled"]:
+        return row, f"scheduled {row['scheduled'][:16].replace('T', ' ')}"
+    if row["decision"] == "approved":
+        if row["hold"]:
+            return row, "held, not scheduled"
+        return row, f"not going out: {row['dropped']}" if row.get("dropped") else "no free slot yet"
+    return row, ""
+
+
+def clipper_cmd(cfg: dict) -> list[str]:
+    """The command line for a background `clipper` run with this config."""
+    cmd = [sys.executable, "-m", "clipper.cli"]
+    if _root(cfg).get("_file"):
+        cmd += ["--config", str(_root(cfg)["_file"])]
+    return cmd
 
 
 # ---------- reading ----------

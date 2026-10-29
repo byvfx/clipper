@@ -54,14 +54,16 @@ from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
 from .segments import slug
+from .states import ENTITY, Decision
 
 TASK_TYPES = {"Segment": ("#48bfe3", "Sequence"), "Horizontal": ("#5e60ce", "Shot"),
               "Compilation": ("#f77f00", "Sequence"), "Vertical": ("#ef476f", "Shot")}
 FOLDERS = {"pick": "clips", "segment": "segments", "compilation": "compilations",
            "short": "shorts"}
 OTHER_SEQUENCE = "s00_other"
-DECISIONS = {"approved": "approved", "done": "approved", "retake": "changes_requested",
-             "rejected": "rejected", "wfa": "pending"}
+# Kitsu task status (short name) -> review.json decision; any other status is pending.
+DECISIONS = {"approved": Decision.APPROVED, "done": Decision.APPROVED, "retake": Decision.CHANGES,
+             "rejected": Decision.REJECTED, "wfa": Decision.PENDING}
 
 # The "Clipping" project template: production settings, task types, statuses and the
 # custom columns (metadata descriptors) every clipping production gets.
@@ -117,7 +119,6 @@ COLUMNS = [
     ("Shot", "Thumbnail text", "string", None),
 ]
 THUMB_COL = "Thumbnail text"
-ENTITY = {"segment": "Sequence", "pick": "Shot", "compilation": "Sequence", "short": "Shot"}
 SEQUENCE_KINDS = ("segment", "compilation")
 # Comments clipper adds to record a column change (Hold, Publish at, title); sync never
 # takes one of these as the reason for a decision.
@@ -392,6 +393,35 @@ def column_fields(gazu, proj: dict) -> dict[tuple[str, str], str]:
             for d in gazu.project.all_metadata_descriptors(proj)}
 
 
+# A review item is a Kitsu Shot (picks, Shorts) or Sequence (segments, compilations):
+# ENTITY[kind]. These read and write its custom columns, keyed by field id (column_fields).
+
+def entity_data(gazu, etype: str, eid: str) -> dict:
+    """The item's custom columns as {field id: value}."""
+    get = gazu.shot.get_sequence if etype == "Sequence" else gazu.shot.get_shot
+    return get(eid).get("data") or {}
+
+
+def write_data(gazu, etype: str, eid: str, data: dict) -> None:
+    """Set some of the item's custom columns ({field id: value}); the others are kept."""
+    update = gazu.shot.update_sequence_data if etype == "Sequence" else gazu.shot.update_shot_data
+    update(eid, data)
+
+
+def set_columns(gazu, fmap: dict, etype: str, eid: str, values: dict[str, str],
+                strict: bool = False) -> dict:
+    """Set columns by name ({"YouTube URL": url}). A column the production doesn't have is
+    skipped, or with strict refused (run `clipper review publish` to add it). Returns
+    what was written, by field id."""
+    missing = [n for n in values if (etype, n) not in fmap]
+    if missing and strict:
+        raise ClipperError(f"Kitsu has no {etype} column {missing}; run clipper review publish")
+    data = {fmap[(etype, n)]: v for n, v in values.items() if (etype, n) in fmap}
+    if data:
+        write_data(gazu, etype, eid, data)
+    return data
+
+
 def ensure_project(gazu, name: str) -> tuple[dict, dict]:
     """The show's production, built from the Clipping template. An existing production
     without our columns gets the template applied once (it only adds what's missing).
@@ -532,9 +562,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         if not st:
             continue
         etype = ENTITY[it["kind"]]
-        get, update = ((gazu.shot.get_sequence, gazu.shot.update_sequence_data)
-                       if etype == "Sequence" else (gazu.shot.get_shot, gazu.shot.update_shot_data))
-        current = get(st["entity_id"]).get("data") or {}
+        current = entity_data(gazu, etype, st["entity_id"])
         values = {fmap[(etype, n)]: str(v) for n, v in it["fields"].items() if (etype, n) in fmap}
         before = {fmap[(etype, n)]: str(v) for n, v in st.get("fields", {}).items()
                   if (etype, n) in fmap}
@@ -548,7 +576,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         if tf in missing:
             st["thumbnail_text"] = missing[tf]
         if missing:
-            update(st["entity_id"], missing)
+            write_data(gazu, etype, st["entity_id"], missing)
             filled += 1
         st["fields"] = {n: str(v) for n, v in it["fields"].items()}  # what we proposed
     state = jsonstate.merge(state_path, state, [it["key"] for it in todo if it["key"] in state])
@@ -707,9 +735,7 @@ def apply_thumbnail_text(stream_dir: Path, cfg: dict, gazu, fmap: dict,
             texts[tkey] = text
         if text != raw:
             etype = ENTITY[st["kind"]]
-            update = (gazu.shot.update_sequence_data if etype == "Sequence"
-                      else gazu.shot.update_shot_data)
-            update(st["entity_id"], {fmap[(etype, THUMB_COL)]: text})
+            write_data(gazu, etype, st["entity_id"], {fmap[(etype, THUMB_COL)]: text})
             fields[THUMB_COL] = text
         applied[key] = text
     for tkey, text in thumbs.set_texts(stream_dir, cfg, texts).items():
@@ -740,8 +766,7 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
         task = gazu.task.get_task(st["task_id"])
         status = statuses[task["task_status_id"]]
         etype = ENTITY[st["kind"]]
-        get = gazu.shot.get_sequence if etype == "Sequence" else gazu.shot.get_shot
-        data = get(st["entity_id"]).get("data") or {}
+        data = entity_data(gazu, etype, st["entity_id"])
         fields = {n: data.get(f) for (e, n), f in fmap.items() if e == etype}
         if fields.get(THUMB_COL) and fields[THUMB_COL] != st.get("thumbnail_text"):
             thumb_edits[key] = (st, task, fields)
@@ -749,7 +774,7 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
         cid, comment = (decision_comment_entry(gazu, task) if status in ("retake", "rejected")
                         else ("", ""))
         out[key] = {"kind": st["kind"], "id": st["id"], "file": st["file"],
-                    "status": status, "decision": DECISIONS.get(status, status),
+                    "status": status, "decision": str(DECISIONS.get(status, Decision.PENDING)),
                     "comment": comment, "comment_id": cid,
                     "fields": fields,
                     "edited": sorted(n for n, v in fields.items()
