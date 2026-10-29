@@ -116,6 +116,40 @@ section.panel { background: var(--panel); border: 1px solid var(--line); border-
 .panel h2 .sp { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--faint); }
 .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 
+/* Layouts: on a desktop the panels sit in zones (Layout button: drag them, save layouts).
+   Phones keep their one-view tabs. */
+body.layout main { grid-template-columns: var(--cols); grid-template-areas: var(--areas); align-items: start; }
+body.layout #vPipe { display: none; }
+.zone { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.zone[data-zone="top"] { grid-area: top; } .zone[data-zone="left"] { grid-area: left; }
+.zone[data-zone="middle"] { grid-area: middle; } .zone[data-zone="right"] { grid-area: right; }
+.zone[data-zone="bottom"] { grid-area: bottom; } .zone[data-zone="hidden"] { grid-area: hidden; }
+@media (max-width: 1250px) { body.layout main { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; }
+  body.layout .zone { grid-area: auto; } }
+body.editing .zone { display: flex; min-height: 64px; padding: 8px; border-radius: 12px;
+  outline: 1px dashed var(--line); outline-offset: 2px; }
+body.editing .zone > .zone-h { font: 600 10px var(--mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--faint); display: flex; gap: 10px; align-items: center; }
+body.editing .zone[data-zone="hidden"] { flex-flow: row wrap; align-items: flex-start; }
+body.editing .zone[data-zone="hidden"] > .zone-h { width: 100%; }
+.zone[data-zone="hidden"] > section > :not(h2) { display: none; }
+.zone-h { display: none; }
+.zone-h select { font: inherit; background: var(--panel2); color: var(--dim); border: 1px solid var(--line); border-radius: 5px; }
+body.editing .panel h2 { cursor: grab; user-select: none; }
+body.editing .panel h2::before { content: "⠿"; color: var(--faint); }
+.panel.dragging { opacity: .35; }
+.drop-mark { height: 4px; border-radius: 2px; background: var(--accent); flex: none; }
+.layout-menu { position: fixed; z-index: 30; min-width: 230px; padding: 6px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px #000a; }
+.layout-menu button { display: flex; width: 100%; justify-content: space-between; gap: 10px; padding: 7px 10px;
+  background: none; border: 0; border-radius: 6px; color: var(--text); font: 13px var(--sans); text-align: left; cursor: pointer; }
+.layout-menu button:hover { background: var(--line); }
+.layout-menu .sep { height: 1px; background: var(--line); margin: 5px 2px; }
+.layout-menu .on { color: var(--accent); }
+.layout-menu .lbl { padding: 4px 10px; font: 600 10px var(--mono); letter-spacing: .1em; color: var(--faint); }
+.layout-menu .row { display: flex; } .layout-menu .row > button:first-child { flex: 1; }
+.layout-menu .del { width: auto; color: var(--faint); } .layout-menu .del:hover { color: var(--red); }
+
 .stream { padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .stream:last-child { border-bottom: 0; }
 .stream .top { display: flex; gap: 8px; align-items: baseline; }
@@ -294,7 +328,7 @@ nav.views { display: none; }
   html, body { font-size: 15px; }
   header { position: static; gap: 8px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
   .brand { font-size: 13px; }
-  .clock, #keysBtn { display: none; }
+  .clock, #keysBtn, #layoutBtn { display: none; }
   .tools { margin-left: auto; }
   .tools .btn { padding: 8px 10px; }
   .lives { order: 3; width: 100%; flex-wrap: nowrap; overflow-x: auto; }
@@ -361,33 +395,34 @@ nav.views { display: none; }
   <div class="tools">
     <button class="btn" id="syncBtn" title="Read decisions and edits from Kitsu now">⟳ Sync Kitsu</button>
     <button class="btn" id="replanBtn" title="Rerun clipper schedule">Replan</button>
+    <button class="btn" id="layoutBtn" title="Arrange the panels: drag them, save layouts">Layout</button>
     <button class="btn" id="keysBtn" title="Keyboard shortcuts (?)">?</button>
   </div>
 </header>
 
 <main>
   <div class="col" id="vPipe">
-    <section class="panel"><h2>Pipeline <span class="sp" id="pipeSub"></span></h2><div id="streams"></div></section>
-    <section class="panel"><h2>Retakes <span class="sp" id="retakeSub"></span></h2><div class="feed" id="retakes"></div></section>
-    <section class="panel"><h2>Health</h2><div class="health" id="health"></div></section>
-    <section class="panel"><h2>Modal <span class="sp" id="cloudSub"></span></h2><div class="cloud" id="cloud"><div class="empty">Asking Modal…</div></div></section>
-    <section class="panel"><h2>Costs <span class="sp" id="costSub"></span></h2><div class="cloud" id="costs"><div class="empty">Adding up…</div></div></section>
+    <section class="panel" data-panel="pipeline"><h2>Pipeline <span class="sp" id="pipeSub"></span></h2><div id="streams"></div></section>
+    <section class="panel" data-panel="retakes"><h2>Retakes <span class="sp" id="retakeSub"></span></h2><div class="feed" id="retakes"></div></section>
+    <section class="panel" data-panel="health"><h2>Health</h2><div class="health" id="health"></div></section>
+    <section class="panel" data-panel="modal"><h2>Modal <span class="sp" id="cloudSub"></span></h2><div class="cloud" id="cloud"><div class="empty">Asking Modal…</div></div></section>
+    <section class="panel" data-panel="costs"><h2>Costs <span class="sp" id="costSub"></span></h2><div class="cloud" id="costs"><div class="empty">Adding up…</div></div></section>
   </div>
 
-  <section class="panel" id="vQueue">
+  <section class="panel" id="vQueue" data-panel="queue">
     <h2>Review queue <span class="sp" id="queueSub"></span></h2>
     <div class="queue-bar" id="queueBar"></div>
     <div class="bulk" id="bulk" hidden></div>
     <div class="grid" id="grid"></div>
   </section>
 
-  <section class="panel" id="vStats">
+  <section class="panel" id="vStats" data-panel="stats">
     <h2>Analytics <span class="sp" id="statsSub"></span>
       <select id="statsMonth" style="margin-left:auto" title="Month"></select></h2>
     <div class="stats" id="stats"><div class="empty">Reading analytics.json…</div></div>
   </section>
 
-  <section class="panel" id="vSched">
+  <section class="panel" id="vSched" data-panel="schedule">
     <h2>Schedule <span class="sp" id="schedSub"></span></h2>
     <div class="uploads" id="uploads"></div>
     <div class="sched-tools" id="schedTools"></div>
@@ -1417,6 +1452,162 @@ document.addEventListener("keydown", e => {
     else { LIVEMENU = LIVE.indexOf(on[0]); renderLive(); }
   }
 });
+
+// ---------- layouts: drag panels between zones, save named layouts ----------
+// A layout is {zones: {zone: [panel, ...]}, widths: {left: px, right: px}}. The one in use is
+// kept by this browser; named ones are saved in clipper (/api/layouts, every machine sees them).
+const ZONES = ["top", "left", "middle", "right", "bottom", "hidden"];
+const DEFAULT_LAYOUT = { zones: { left: ["pipeline", "retakes", "health", "modal", "costs"], middle: ["queue"],
+  right: ["schedule"], bottom: ["stats"] }, widths: { left: 300, right: 340 } };
+const WIDTHS = [260, 300, 340, 420, 520, 640];  // side column widths, px
+const DESKTOP = matchMedia("(min-width: 701px)");
+const HOME = [...document.querySelectorAll("[data-panel]")].map(p => [p, p.parentNode]);  // the page as written (phones)
+let LAYOUT = currentLayout(), LAYOUT_NAME = store.get("warroom.layoutName") || "", SAVED = {}, EDITING = false;
+let PDRAG = null;
+const MARK = Object.assign(document.createElement("div"), { className: "drop-mark" });
+
+function currentLayout() {
+  try { const l = JSON.parse(store.get("warroom.layout")); if (l && l.zones) return l; } catch { /* none yet */ }
+  return structuredClone(DEFAULT_LAYOUT);
+}
+function zoneEl(z) {
+  let el = $(`main > .zone[data-zone="${z}"]`);
+  if (!el) {
+    el = Object.assign(document.createElement("div"), { className: "zone" });
+    el.dataset.zone = z;
+    const side = z === "left" || z === "right";
+    el.innerHTML = `<div class="zone-h">${z === "hidden" ? "hidden: drag a panel here to hide it" : z}${side
+      ? ` <select data-width="${z}" title="Column width">${WIDTHS.map(px => `<option value="${px}">${px} px</option>`).join("")}</select>` : ""}</div>`;
+    $("main").append(el);
+  }
+  return el;
+}
+function panels(el) { return [...el.querySelectorAll(":scope > section[data-panel]")]; }
+function applyLayout() {
+  const main = $("main");
+  if (!DESKTOP.matches) {  // phones: the page as written, one view at a time
+    for (const [p, parent] of HOME) parent.append(p);
+    main.querySelectorAll(":scope > .zone").forEach(z => z.remove());
+    document.body.classList.remove("layout", "editing");
+    return;
+  }
+  const placed = new Set();
+  for (const z of ZONES) {
+    const el = zoneEl(z);
+    for (const name of LAYOUT.zones[z] || []) {
+      const p = $(`[data-panel="${name}"]`);
+      if (p && !placed.has(p)) { el.append(p); placed.add(p); }
+    }
+  }
+  for (const [p] of HOME) {  // a panel the layout doesn't know (new since it was saved): its default place
+    if (placed.has(p)) continue;
+    const z = ZONES.find(z => (DEFAULT_LAYOUT.zones[z] || []).includes(p.dataset.panel)) || "middle";
+    zoneEl(z).append(p);
+  }
+  const used = z => EDITING || panels(zoneEl(z)).length > 0;
+  let cols = ["left", "middle", "right"].filter(used);
+  if (!cols.length) cols = ["middle"];
+  const w = { ...DEFAULT_LAYOUT.widths, ...(LAYOUT.widths || {}) };
+  const size = cols.map(z => z === "middle" || !cols.includes("middle") && z === cols.at(-1) ? "minmax(0, 1fr)" : `${w[z]}px`);
+  const rows = [["top"], [], ["bottom"], ["hidden"]].map((r, i) => i === 1 ? cols : cols.map(() => r[0]))
+    .filter((r, i) => i === 1 || (i === 3 ? EDITING : used(r[0])));
+  main.style.setProperty("--cols", size.join(" "));
+  main.style.setProperty("--areas", rows.map(r => `"${r.join(" ")}"`).join(" "));
+  for (const z of ZONES) {
+    const el = zoneEl(z);
+    el.style.display = (z === "hidden" ? EDITING : used(z)) && (rows.flat().includes(z)) ? "" : "none";
+    const sel = el.querySelector("select[data-width]");
+    if (sel) sel.value = String(w[z]);
+  }
+  document.querySelectorAll("[data-panel] > h2").forEach(h => { h.draggable = EDITING; });
+  document.body.classList.add("layout");
+  document.body.classList.toggle("editing", EDITING);
+}
+function readLayout() {
+  const zones = {};
+  for (const z of ZONES) zones[z] = panels(zoneEl(z)).map(p => p.dataset.panel);
+  return { zones, widths: { ...DEFAULT_LAYOUT.widths, ...(LAYOUT.widths || {}) } };
+}
+function keepLayout() { store.set("warroom.layout", JSON.stringify(LAYOUT)); store.set("warroom.layoutName", LAYOUT_NAME || null); }
+function sameLayout(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function useLayout(lay, name) { LAYOUT = structuredClone(lay); LAYOUT_NAME = name; keepLayout(); applyLayout(); }
+
+document.addEventListener("dragstart", e => {
+  const h = EDITING && e.target.closest?.("section[data-panel] > h2");
+  if (!h) return;
+  PDRAG = h.parentNode;
+  PDRAG.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", PDRAG.dataset.panel);
+});
+document.addEventListener("dragover", e => {
+  const zone = PDRAG && e.target.closest?.("main > .zone");
+  if (!zone) return;
+  e.preventDefault();
+  const row = zone.dataset.zone === "hidden";
+  const before = panels(zone).filter(p => p !== PDRAG).find(p => {
+    const r = p.getBoundingClientRect();
+    return row ? e.clientY < r.bottom && e.clientX < r.left + r.width / 2 : e.clientY < r.top + r.height / 2;
+  });
+  if (before) zone.insertBefore(MARK, before); else zone.append(MARK);
+});
+document.addEventListener("drop", e => {
+  if (!PDRAG || !MARK.parentNode) return;
+  e.preventDefault();
+  MARK.parentNode.insertBefore(PDRAG, MARK);
+  MARK.remove();
+  LAYOUT = readLayout(); keepLayout(); applyLayout();
+});
+document.addEventListener("dragend", () => { PDRAG?.classList.remove("dragging"); PDRAG = null; MARK.remove(); });
+document.addEventListener("change", e => {
+  const side = e.target.dataset?.width;
+  if (!side) return;
+  LAYOUT.widths = { ...DEFAULT_LAYOUT.widths, ...(LAYOUT.widths || {}), [side]: +e.target.value };
+  keepLayout(); applyLayout();
+});
+
+function closeLayoutMenu() { $("#layoutMenu")?.remove(); }
+async function openLayoutMenu() {
+  try { SAVED = (await api("/api/layouts")).layouts || {}; } catch (e) { toast("Saved layouts: " + e.message, true); }
+  closeLayoutMenu();
+  const changed = LAYOUT_NAME && SAVED[LAYOUT_NAME] && !sameLayout(SAVED[LAYOUT_NAME], LAYOUT);
+  const m = Object.assign(document.createElement("div"), { className: "layout-menu", id: "layoutMenu" });
+  m.innerHTML = `<button data-lay="edit">${EDITING ? "Done arranging" : "Arrange panels…"}<span>drag titles</span></button>
+    ${changed ? `<button data-lay="save">Save “${esc(LAYOUT_NAME)}”</button>` : ""}
+    <button data-lay="saveas">Save as…</button>
+    <div class="sep"></div><div class="lbl">SAVED LAYOUTS</div>
+    ${Object.keys(SAVED).sort().map(n => `<div class="row"><button data-lay="use" data-name="${esc(n)}" class="${n === LAYOUT_NAME ? "on" : ""}">${esc(n)}${n === LAYOUT_NAME && changed ? " (changed)" : ""}</button><button class="del" data-lay="del" data-name="${esc(n)}" title="Delete">×</button></div>`).join("")
+      || `<div class="lbl" style="font-weight:400;letter-spacing:0">none yet</div>`}
+    <div class="sep"></div><button data-lay="default">Default layout</button>`;
+  document.body.append(m);
+  const r = $("#layoutBtn").getBoundingClientRect();
+  m.style.top = `${r.bottom + 6}px`; m.style.right = `${innerWidth - r.right}px`;
+}
+async function saveLayoutAs(name) {
+  try {
+    SAVED = (await api("/api/layouts", { name, layout: LAYOUT })).layouts;
+    LAYOUT_NAME = name; keepLayout(); toast(`Layout “${name}” saved`);
+  } catch (e) { toast(e.message, true); }
+}
+$("#layoutBtn").onclick = e => { e.stopPropagation(); $("#layoutMenu") ? closeLayoutMenu() : openLayoutMenu(); };
+document.addEventListener("click", async e => {
+  const b = e.target.closest?.("#layoutMenu [data-lay]");
+  if (!b) { if (!e.target.closest?.("#layoutMenu")) closeLayoutMenu(); return; }
+  const what = b.dataset.lay, name = b.dataset.name;
+  closeLayoutMenu();
+  if (what === "edit") { EDITING = !EDITING; applyLayout(); if (EDITING) toast("Drag a panel by its title. Layout → Done when finished."); }
+  else if (what === "save") saveLayoutAs(LAYOUT_NAME);
+  else if (what === "saveas") { const n = prompt("Save this layout as", LAYOUT_NAME || "My layout"); if (n && n.trim()) saveLayoutAs(n.trim()); }
+  else if (what === "use") useLayout(SAVED[name], name);
+  else if (what === "default") useLayout(DEFAULT_LAYOUT, "");
+  else if (what === "del" && confirm(`Delete the layout “${name}”?`)) {
+    try { SAVED = (await api("/api/layouts", { name, delete: true })).layouts; if (name === LAYOUT_NAME) { LAYOUT_NAME = ""; keepLayout(); } toast(`Deleted “${name}”`); }
+    catch (err) { toast(err.message, true); }
+  }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && EDITING) { EDITING = false; applyLayout(); } });
+DESKTOP.addEventListener("change", applyLayout);
+addEventListener("resize", () => { if (DESKTOP.matches !== document.body.classList.contains("layout")) applyLayout(); });
+applyLayout();
 
 loadHash(); refresh(); refreshLive(); refreshCloud(); refreshCosts(); refreshStats();
 setInterval(refresh, 15000);

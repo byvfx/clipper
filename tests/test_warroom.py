@@ -5,6 +5,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 from clipper import warroom
+from clipper.errors import ClipperError
 
 
 @pytest.fixture
@@ -50,3 +51,18 @@ def test_with_a_token_any_host_with_the_key(serve):
 def test_routes_are_tables():
     assert "/api/items" in warroom.GET_API and "/api/action" in warroom.POST_API
     assert set(warroom.POST_API) >= {"/api/undo", "/api/bulk", "/api/replan", "/api/retake"}
+
+
+def test_saved_layouts(tmp_path):
+    cfg = {"paths": {"warroom_layouts": tmp_path / "logs" / "layouts.json"}}
+    assert warroom.layouts(cfg) == {"layouts": {}}
+    lay = {"zones": {"top": ["schedule"], "left": ["pipeline"], "middle": ["queue"]}, "widths": {"left": 300}}
+    assert warroom.save_layout(cfg, {"name": "Mine", "layout": lay})["layouts"]["Mine"] == lay
+    assert warroom.layouts(cfg)["layouts"]["Mine"] == lay
+    for bad in ({"zones": {"sideways": []}}, {"zones": {"top": "schedule"}},
+                {"zones": {"top": []}, "widths": {"left": 5000}}):
+        with pytest.raises(ClipperError, match="not a layout"):
+            warroom.save_layout(cfg, {"name": "Bad", "layout": bad})
+    with pytest.raises(ClipperError, match="name"):
+        warroom.save_layout(cfg, {"name": " ", "layout": lay})
+    assert warroom.save_layout(cfg, {"name": "Mine", "delete": True}) == {"layouts": {}}
