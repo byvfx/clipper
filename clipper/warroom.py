@@ -24,7 +24,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import webbrowser
@@ -414,9 +413,7 @@ def modal_status(cfg: dict) -> dict:
 def start_retake(cfg: dict) -> bool:
     if (cfg["paths"]["streams"] / ".retake.lock").exists():
         return False
-    cmd = [sys.executable, "-m", "clipper.cli"]
-    if _root(cfg).get("_file"):
-        cmd += ["--config", str(_root(cfg)["_file"])]
+    cmd = actions.clipper_cmd(cfg)
     log = Path(cfg["paths"]["bot_log"]).with_name("retake.log") if cfg["paths"]["bot_log"] else Path(os.devnull)
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "a", encoding="utf-8") as out:
@@ -428,7 +425,7 @@ def start_retake(cfg: dict) -> bool:
 
 
 WHO = "war room"
-REPLANS = ("approve", "reject", "changes", "reopen", "hold", "pin")  # actions that move the schedule
+REPLANS = actions.REPLANS
 COLUMN_OF = {"title": "YouTube title", "description": "YouTube description", "hashtags": "Hashtags",
              "tags": "Tags", "playlist": "Playlist"}  # row field -> Kitsu column
 ROW_OF = {c: f for f, c in COLUMN_OF.items()}
@@ -436,18 +433,8 @@ UNDO_MAX = 20
 
 
 def _apply(cfg: dict, item: actions.Item, action: str, body: dict, who: str) -> dict:
-    text = body.get("text", "")
-    fn = {"approve": lambda: actions.approve(cfg, item, text, who),
-          "reject": lambda: actions.reject(cfg, item, text, who),
-          "changes": lambda: actions.changes(cfg, item, text, who),
-          "reopen": lambda: actions.reopen(cfg, item, who),
-          "hold": lambda: actions.hold(cfg, item, bool(body.get("on", True)), who),
-          "pin": lambda: actions.pin(cfg, item, text, who),
-          "edit": lambda: actions.edit_meta(cfg, item, body.get("values") or {}, who),
-          "thumbtext": lambda: actions.thumbtext(cfg, item, text, who)}.get(action)
-    if not fn:
-        raise ClipperError(f"unknown action {action!r}")
-    return fn()
+    return actions.decide(cfg, item, action, who, text=body.get("text", ""),
+                          on=bool(body.get("on", True)), values=body.get("values"))
 
 
 def _before(cfg: dict, item: actions.Item) -> dict:
@@ -540,13 +527,7 @@ def do_action(cfg: dict, body: dict) -> dict:
     with LOCK:
         item = actions.resolve(cfg, ref)
         before = _before(cfg, item)
-        row = _apply(cfg, item, action, body, WHO)
-        note = ""
-        if cfg["discord"]["replan"] and action in REPLANS:
-            schedule.run(cfg, sync_first=False)
-            row = actions.describe(cfg, item.stream_dir)[item.key]
-            if row["scheduled"]:
-                note = f"scheduled {row['scheduled'][:16].replace('T', ' ')}"
+        row, note = actions.replan(cfg, item, action, _apply(cfg, item, action, body, WHO))
     uid = remember(cfg, action, f"{action} {item.short}",
                    [{"ref": item.ref, "before": before, "values": body.get("values") or {}}])
     if action == "changes" and cfg["retake"]["auto"]:

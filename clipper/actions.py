@@ -28,13 +28,14 @@ that item.
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import jsonstate, review
-from .config import for_stream, stream_dir
+from .config import _root, for_stream, stream_dir
 from .errors import ClipperError
 from .timefmt import length
 
@@ -329,6 +330,55 @@ def refresh(cfg: dict, item: Item) -> dict:
     cfg = for_stream(cfg, item.stream_dir)
     review.sync(item.stream_dir, cfg, keys=[item.key], quiet=True)
     return describe(cfg, item.stream_dir)[item.key]
+
+
+# ---------- one entry point for the bot and the war room ----------
+
+ACTIONS = ("approve", "reject", "changes", "reopen", "hold", "pin", "edit", "thumbtext")
+REPLANS = ("approve", "reject", "changes", "reopen", "hold", "pin")  # these move the schedule
+
+
+def decide(cfg: dict, item: Item, action: str, who: str, text: str = "", on: bool | None = None,
+           values: dict[str, str] | None = None) -> dict:
+    """One review action on one item; returns its card data. text: the note, reason, pin
+    or thumbnail text; on: hold or release (None flips it); values: {Kitsu column: new
+    value} for "edit"."""
+    if action == "hold":
+        return hold(cfg, item, (not refresh(cfg, item)["hold"]) if on is None else on, who)
+    fn = {"approve": lambda: approve(cfg, item, text, who),
+          "reject": lambda: reject(cfg, item, text, who),
+          "changes": lambda: changes(cfg, item, text, who),
+          "reopen": lambda: reopen(cfg, item, who),
+          "pin": lambda: pin(cfg, item, text, who),
+          "edit": lambda: edit_meta(cfg, item, values or {}, who),
+          "thumbtext": lambda: thumbtext(cfg, item, text, who)}.get(action)
+    if not fn:
+        raise ClipperError(f"unknown action {action!r}")
+    return fn()
+
+
+def replan(cfg: dict, item: Item, action: str, row: dict) -> tuple[dict, str]:
+    """After an action that moves the schedule ([discord] replan on): `clipper schedule`
+    without a Kitsu sync, then the item's card data again and a note on where it landed."""
+    from . import schedule
+
+    if not (cfg["discord"]["replan"] and action in REPLANS):
+        return row, ""
+    schedule.run(cfg, sync_first=False)
+    row = describe(cfg, item.stream_dir)[item.key]
+    if row["scheduled"]:
+        return row, f"scheduled {row['scheduled'][:16].replace('T', ' ')}"
+    if row["decision"] == "approved":
+        return row, "held, not scheduled" if row["hold"] else "no free slot yet"
+    return row, ""
+
+
+def clipper_cmd(cfg: dict) -> list[str]:
+    """The command line for a background `clipper` run with this config."""
+    cmd = [sys.executable, "-m", "clipper.cli"]
+    if _root(cfg).get("_file"):
+        cmd += ["--config", str(_root(cfg)["_file"])]
+    return cmd
 
 
 # ---------- reading ----------
