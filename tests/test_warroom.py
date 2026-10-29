@@ -59,7 +59,7 @@ def test_saved_layouts(tmp_path):
     lay = {"zones": {"top": ["schedule"], "left": ["pipeline"], "middle": ["queue"]}, "widths": {"left": 300}}
     assert warroom.save_layout(cfg, {"name": "Mine", "layout": lay})["layouts"]["Mine"] == lay
     assert warroom.layouts(cfg)["layouts"]["Mine"] == lay
-    for bad in ({"zones": {"sideways": []}}, {"zones": {"top": "schedule"}},
+    for bad in ({"zones": {"sideways": []}}, {"zones": {"top": "schedule"}}, {"zones": {"top": ['"]']}},
                 {"zones": {"top": []}, "widths": {"left": 5000}}):
         with pytest.raises(ClipperError, match="not a layout"):
             warroom.save_layout(cfg, {"name": "Bad", "layout": bad})

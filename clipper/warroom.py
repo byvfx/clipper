@@ -492,7 +492,8 @@ def save_layout(cfg: dict, body: dict) -> dict:
     if not body.get("delete"):
         zones, widths = lay.get("zones"), lay.get("widths") or {}
         if not isinstance(zones, dict) or set(zones) - set(LAYOUT_ZONES) or not all(
-                isinstance(v, list) and all(isinstance(x, str) and len(x) < 40 for x in v) for v in zones.values()):
+                isinstance(v, list) and all(isinstance(x, str) and re.fullmatch(r"[a-z_]{1,30}", x) for x in v)
+                for v in zones.values()):
             raise ClipperError("not a layout: zones must be lists of panel names")
         if set(widths) - {"left", "right"} or not all(isinstance(w, int) and 200 <= w <= 900 for w in widths.values()):
             raise ClipperError("not a layout: widths are left/right in px, 200-900")

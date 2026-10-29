@@ -1462,6 +1462,7 @@ const DEFAULT_LAYOUT = { zones: { left: ["pipeline", "retakes", "health", "modal
 const WIDTHS = [260, 300, 340, 420, 520, 640];  // side column widths, px
 const DESKTOP = matchMedia("(min-width: 701px)");
 const HOME = [...document.querySelectorAll("[data-panel]")].map(p => [p, p.parentNode]);  // the page as written (phones)
+const PANEL = new Map(HOME.map(([p]) => [p.dataset.panel, p]));  // by name; saved names are never used as selectors
 let LAYOUT = currentLayout(), LAYOUT_NAME = store.get("warroom.layoutName") || "", SAVED = {}, EDITING = false;
 let PDRAG = null;
 const MARK = Object.assign(document.createElement("div"), { className: "drop-mark" });
@@ -1495,7 +1496,7 @@ function applyLayout() {
   for (const z of ZONES) {
     const el = zoneEl(z);
     for (const name of LAYOUT.zones[z] || []) {
-      const p = $(`[data-panel="${name}"]`);
+      const p = PANEL.get(name);
       if (p && !placed.has(p)) { el.append(p); placed.add(p); }
     }
   }
@@ -1519,7 +1520,12 @@ function applyLayout() {
     const sel = el.querySelector("select[data-width]");
     if (sel) sel.value = String(w[z]);
   }
-  document.querySelectorAll("[data-panel] > h2").forEach(h => { h.draggable = EDITING; });
+  for (const [p] of HOME) {
+    const h = p.querySelector(":scope > h2");
+    h.draggable = EDITING;
+    if (EDITING) { h.tabIndex = 0; h.title = "Drag, or ↑/↓ move, ←/→ zone, H hide"; }
+    else { h.removeAttribute("tabindex"); h.removeAttribute("title"); }
+  }
   document.body.classList.add("layout");
   document.body.classList.toggle("editing", EDITING);
 }
@@ -1604,7 +1610,26 @@ document.addEventListener("click", async e => {
     catch (err) { toast(err.message, true); }
   }
 });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && EDITING) { EDITING = false; applyLayout(); } });
+// Keyboard arranging (no mouse): on a focused panel title, ↑/↓ move it within its zone,
+// ←/→ to the previous/next zone, H to the hidden tray. Caught before the queue's own keys.
+document.addEventListener("keydown", e => {
+  if (!EDITING) return;
+  if (e.key === "Escape") { EDITING = false; applyLayout(); return; }
+  const h = e.target.closest?.("section[data-panel] > h2");
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!h || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "h"].includes(k)) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  const p = h.parentNode, zone = p.parentNode, z = ZONES.indexOf(zone.dataset.zone);
+  if (k === "ArrowUp" && p.previousElementSibling?.matches("section")) zone.insertBefore(p, p.previousElementSibling);
+  else if (k === "ArrowDown" && p.nextElementSibling) p.nextElementSibling.after(p);
+  else if (k === "ArrowLeft" || k === "ArrowRight") {
+    const to = ZONES[Math.min(ZONES.length - 1, Math.max(0, z + (k === "ArrowLeft" ? -1 : 1)))];
+    zoneEl(to).append(p);
+  } else if (k === "h") zoneEl("hidden").append(p);
+  LAYOUT = readLayout(); keepLayout(); applyLayout();
+  h.focus();
+  toast(`${p.dataset.panel} → ${p.parentNode.dataset.zone}`);
+}, true);
 DESKTOP.addEventListener("change", applyLayout);
 addEventListener("resize", () => { if (DESKTOP.matches !== document.body.classList.contains("layout")) applyLayout(); });
 applyLayout();
