@@ -130,9 +130,9 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   sound effects, order after #67. #27 TikTok content rules. Sloth Beat handle check (@slothbeat).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - Recorder warnings arrive twice (webhook channel + DM) until the webhook in deploy/record/env.local is dropped.
-- `clipper setup` (#78) phase 1 is committed; to test it on a truly clean Windows, turn on
-  Windows Sandbox (admin, then reboot): `Enable-WindowsOptionalFeature -Online -FeatureName
-  Containers-DisposableClientVM`. Then the desktop (#46) and MacBook (#7) runs.
+- `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
+  desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
+  MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
 - Issue 03 of the weekly on Saturday; the monthly check-in report on 11-01.
 
 ## Open work
@@ -167,6 +167,10 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 - **Per-stream overrides** (a big night): `streams/<id>/config.toml` (`[schedule] priority = true`,
   `kick_first_hours = 0`, more picks). `CLIPPER_SCHEDULE_START=<date> clipper schedule --reshuffle` refills today.
 - **Checks:** `clipper doctor --role gpu --offline`, `uvx ruff check clipper`, test stream `kick-131151926`.
+- **Clean-Windows test of the install (#78):** `git archive HEAD` into a folder, a `.wsb` that maps it
+  read-only plus an answers file and a writable out folder, and a LogonCommand script that copies the code
+  to `C:\clipper`, runs `deploy\bootstrap.ps1 --answers ... --offline`, then doctor and `setup --check`
+  into the out folder. No keys go in. Launch the `.wsb`, wait for a DONE file (~1 min), close the Sandbox.
 
 ## Back up the taste layer (user, 2026-10-24)
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them

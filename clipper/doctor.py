@@ -274,8 +274,8 @@ def check_gpu(cfg: dict) -> None:
             ok("gpu", "Modal token in ~/.modal.toml")
         else:
             fail("gpu", "no Modal token",
-                 "modal.com -> Settings -> API Tokens; set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET "
-                 "as user env vars (or run: python -m modal token new)")
+                 "modal.com -> Settings -> API Tokens, then clipper setup --step keys "
+                 "(it saves MODAL_TOKEN_ID and MODAL_TOKEN_SECRET)")
         return
     try:
         import torch
@@ -366,16 +366,16 @@ def check_keys(cfg: dict, role: str) -> None:
         if os.environ.get("ANTHROPIC_API_KEY"):
             ok("keys", "ANTHROPIC_API_KEY set")
         else:
-            fail("keys", "ANTHROPIC_API_KEY not set", "set it as a user environment variable")
+            fail("keys", "ANTHROPIC_API_KEY not set", "clipper setup --step keys (or set it as a user env var)")
         check_llm_keys(cfg)
         rc = cfg["review"]
         if rc["host"] and "<" not in rc["host"]:
             ok("keys", f"[review] host = {rc['host']}")
         else:
-            fail("keys", "[review] host not set", "set it to your Kitsu URL + /api in clipper.toml")
+            fail("keys", "[review] host not set", "clipper setup --step keys, or set it to your Kitsu URL + /api in clipper.toml")
         (ok if os.environ.get(rc["token_env"]) else fail)(
             "keys", f"${rc['token_env']} (Kitsu bot token) " + ("set" if os.environ.get(rc["token_env"]) else "not set"),
-            "" if os.environ.get(rc["token_env"]) else "Kitsu > Bots > new token; set it as a user env var")
+            "" if os.environ.get(rc["token_env"]) else "Kitsu > Bots > new token; clipper setup --step keys")
     if cfg["discord"]["enabled"] or role == "bot":
         from .notify import token
         try:
