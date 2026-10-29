@@ -77,6 +77,13 @@ def cut_before(name: str, wc: dict) -> tuple[str, tuple[str, ...]] | None:
     return cut, ("segments", "compilations") + (() if wc["fast_lane"] else ("clips",))
 
 
+def from_stage(name: str, wc: dict) -> list[str]:
+    """`clipper run --from name`: that stage and every one after it in this config's order
+    (without the fast lane, Shorts come right after cut, so --from cut redoes them too)."""
+    full = order(NAMES, wc)
+    return full[full.index(name):]
+
+
 def order(names, wc: dict) -> list[str]:
     """`names` in pipeline order, each one after the cut it waits on (#B17: without the
     fast lane, Shorts come after the slow cut that makes their clips)."""

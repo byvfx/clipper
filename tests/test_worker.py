@@ -79,3 +79,14 @@ def test_every_stage_has_a_cli_command():
             args = stages.argv(st.name, "S", wc)
             assert "S" in args and args[0] in {"signals", "transcribe", "score", "segments", "cut",
                                                "meta", "thumbs", "shorts", "review"}
+
+
+def test_run_from_follows_the_planned_order():
+    """`run --from cut` without the fast lane redoes Shorts (cut from cut's clips);
+    `--from shorts` doesn't recut."""
+    from clipper import stages
+    off, on = cfg(fast_lane=False)["worker"], cfg()["worker"]
+    assert stages.from_stage("cut", off)[:2] == ["cut", "shorts"]
+    assert "cut" not in stages.from_stage("shorts", off)
+    assert stages.from_stage("cut", on) == ["cut", "meta", "thumbs", "review"]
+    assert stages.from_stage("shorts", on)[0] == "shorts" and "cut" in stages.from_stage("shorts", on)
