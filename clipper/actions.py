@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 from . import jsonstate, review
 from .config import for_stream, stream_dir
 from .errors import ClipperError
+from .timefmt import length
 
 OPEN = ("pending", "changes_requested")  # decisions still waiting on you
 
@@ -434,13 +435,6 @@ def status(cfg: dict, sync: bool = False) -> dict:
 
 # ---------- text for the CLI (and Discord's lists) ----------
 
-def mmss(s: float | None) -> str:
-    if s is None:
-        return "?"
-    s = round(s)
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
-
-
 def decision_text(r: dict) -> str:
     out = r["decision"].replace("_", " ")
     if r["hold"]:
@@ -452,7 +446,7 @@ def decision_text(r: dict) -> str:
 
 def row_line(r: dict) -> str:
     extra = f" | hook: {r['hook']}" if r["hook"] else ""
-    return (f"{r['short']:<22} {r['kind']:<7} {mmss(r['duration_s']):>7}  "
+    return (f"{r['short']:<22} {r['kind']:<7} {length(r['duration_s']):>7}  "
             f"[{decision_text(r)}] {r['title']}{extra}")
 
 

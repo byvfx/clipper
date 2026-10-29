@@ -30,7 +30,8 @@ from pathlib import Path
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .segments import hms, slug
+from .segments import slug
+from .timefmt import hms
 
 
 def source_file(stream_dir: Path) -> Path:

@@ -20,6 +20,7 @@ from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
 from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
+from .timefmt import hms
 
 KINDS = ["intro", "commentary", "reaction", "call", "gambling", "ad_read", "break",
          "outro", "other"]
@@ -59,11 +60,6 @@ COMPILATION_SCHEMA = {
     "required": ["title", "description"],
     "additionalProperties": False,
 }
-
-
-def hms(s: float) -> str:
-    s = int(s)
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
 def slug(text: str) -> str:

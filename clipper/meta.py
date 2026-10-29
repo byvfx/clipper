@@ -23,7 +23,7 @@ from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
 from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
-from .segments import hms
+from .timefmt import hms
 
 META_SCHEMA = {
     "type": "object",

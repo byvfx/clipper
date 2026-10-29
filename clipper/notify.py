@@ -31,6 +31,7 @@ import requests
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
+from .timefmt import length
 
 API = "https://discord.com/api/v10"
 COLORS = {"pending": 0x5865F2, "changes_requested": 0xFEE75C, "approved": 0x57F287,
@@ -99,9 +100,9 @@ class Rest:
 
 def card(r: dict) -> tuple[dict, list[dict]]:
     """Embed + button rows for one item (actions.describe row). Used by notify and bot."""
-    from .actions import decision_text, mmss
+    from .actions import decision_text
 
-    bits = [KIND_LABEL.get(r["kind"], r["kind"]), mmss(r["duration_s"])]
+    bits = [KIND_LABEL.get(r["kind"], r["kind"]), length(r["duration_s"])]
     if r["kind"] in ("pick", "short"):
         bits += [f"score {r['score']}" if r["score"] else "", r["category"],
                  f"found by {r['found_by']}" if r["found_by"] else ""]
@@ -260,7 +261,7 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
         t = time.time()
         file, excerpt = discord_preview(r, dc)
         embed, components = card(r)
-        content = (f"First {int(dc['excerpt_s'])} s of {actions.mmss(r['duration_s'])}; "
+        content = (f"First {int(dc['excerpt_s'])} s of {length(r['duration_s'])}; "
                    f"full preview in Kitsu." if excerpt else None)
         if note:
             content = note + (f"\n{content}" if content else "")

@@ -54,6 +54,7 @@ from .bleep import Bleeper
 from .config import for_stream
 from .cut import encode_args
 from .errors import ClipperError
+from .timefmt import clock
 
 STORIES_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["stories"],
@@ -90,11 +91,6 @@ def about_subject(seg: dict, rc: dict) -> bool:
     if seg.get("kind") == "intro":
         return False
     return seg.get("topic") in rc["topics"] or bool(set(seg.get("figures") or []) & set(rc["figures"]))
-
-
-def hms(t: float) -> str:
-    t = int(t)
-    return f"{t // 3600}:{t // 60 % 60:02d}:{t % 60:02d}" if t >= 3600 else f"{t // 60}:{t % 60:02d}"
 
 
 # ---------- find ----------
@@ -229,7 +225,7 @@ def show(sdir: Path, data: dict | None = None) -> None:
             mark = "x" if r["use"] else " "
             warn = "" if r["quote_found"] else "  (quote not found in words: check the range)"
             print(f"  [{mark}] {r['id']} {r['fit']:<6} {r['date'] or '????-??-??'} {r['channel']} "
-                  f"{hms(r['start'])}-{hms(r['end'])} ({r['end'] - r['start']:.0f} s){warn}")
+                  f"{clock(r['start'])}-{clock(r['end'])} ({r['end'] - r['start']:.0f} s){warn}")
             print(f"        {r['title'][:80]}")
             print(f"        \"{r['quote']}\"")
             print(f"        {r['link']}")
@@ -472,7 +468,7 @@ def describe(data: dict, chapters: list[tuple[float, str]]) -> str:
             parts.append(f"- {r['date'] or 'undated'}, {r['channel']}, \"{r['title']}\": {r['link']}")
         parts.append("")
     if len(chapters) >= 3:
-        parts += ["Chapters:", *(f"{hms(t)} {name}" for t, name in chapters), ""]
+        parts += ["Chapters:", *(f"{clock(t)} {name}" for t, name in chapters), ""]
     return "\n".join(parts).strip()
 
 
@@ -521,7 +517,7 @@ def cut(sdir: Path, cfg: dict) -> Path:
                                                 (small, 44, "0xDDDDDD", 640, r["channel"])], rc, bug, lead, vo)
                 add(lead)
             src = work / f"{r['item']}_{r['start']:.2f}-{r['end']:.2f}.mp4"
-            print(f"{r['id']} {r['date']} {r['channel']} {hms(r['start'])}-{hms(r['end'])}", flush=True)
+            print(f"{r['id']} {r['date']} {r['channel']} {clock(r['start'])}-{clock(r['end'])}", flush=True)
             download(cfg, r, src)
             dst = work / f"{r['id']}.mp4"
             n = clip(cfg, adir, r, src, fonts, bug, bleeper, dst)
@@ -541,7 +537,7 @@ def cut(sdir: Path, cfg: dict) -> Path:
     (out_dir(sdir) / "description.txt").write_text(f"{data['title']}\n\n{desc}\n", encoding="utf-8")
     data.update(cut_at=datetime.now(UTC).isoformat(timespec="seconds"), duration_s=round(t, 1))
     save(sdir, data)
-    print(f"{final} ({hms(t)}, {len(chapters)} stories, {time.time() - t0:.0f} s); "
+    print(f"{final} ({clock(t)}, {len(chapters)} stories, {time.time() - t0:.0f} s); "
           f"title and description in {out_dir(sdir) / 'description.txt'}")
     return final
 

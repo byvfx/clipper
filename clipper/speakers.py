@@ -28,6 +28,7 @@ from pathlib import Path
 
 from . import jsonstate
 from .errors import ClipperError
+from .timefmt import hms
 
 
 def voices_path(cfg: dict) -> Path:
@@ -153,11 +154,6 @@ def enroll(sdir: Path, cfg: dict, labels: list[str]) -> None:
     path = voices_path(cfg)
     path.parent.mkdir(parents=True, exist_ok=True)
     jsonstate.write(path, bank, indent=None)
-
-
-def hms(t: float) -> str:
-    t = int(t)
-    return f"{t // 3600}:{t // 60 % 60:02d}:{t % 60:02d}"
 
 
 def show(sdir: Path, cfg: dict, speakers: dict, lines: int = 3) -> None:

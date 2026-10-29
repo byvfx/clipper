@@ -24,7 +24,6 @@ candidates.json). The request is kept on each record ("request").
 from __future__ import annotations
 
 import math
-import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,6 +40,7 @@ from .scoring import (
     snap,
     transcript_lines,
 )
+from .timefmt import hms, parse_time
 
 PICK_SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -73,28 +73,6 @@ BLOCK_S = 900  # scoring's summary blocks
 
 
 # ---------- times ----------
-
-def parse_time(s: str) -> float:
-    """H:MM:SS, H:MM (hours, minutes), 4h13m / 4h13m20s / 253m, or plain seconds."""
-    s = s.strip().lower()
-    if ":" in s:
-        parts = [float(x) for x in s.split(":")]
-        if len(parts) == 2:
-            parts.append(0.0)
-        if len(parts) != 3:
-            raise ValueError(f"not a time: {s!r}")
-        return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    m = re.fullmatch(r"(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s?)?", s)
-    if not m or not any(m.groups()):
-        raise ValueError(f"not a time: {s!r}")
-    h, mi, sec = (float(x) if x else 0.0 for x in m.groups())
-    return h * 3600 + mi * 60 + sec
-
-
-def hms(t: float) -> str:
-    t = max(0, round(t))
-    return f"{t // 3600}:{t // 60 % 60:02d}:{t % 60:02d}"
-
 
 class Clock:
     """Stream clock (Kick's, from when the stream went live) <-> video clock (the

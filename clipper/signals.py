@@ -26,6 +26,7 @@ from scipy.signal import find_peaks
 
 from . import jsonstate
 from .kick import CHAT_CHUNK_S
+from .timefmt import hms
 
 EMOTE = re.compile(r"\[emote:\d+:([^\]]+)\]")
 
@@ -193,11 +194,6 @@ def pick_windows(heat: np.ndarray, sc: dict) -> list[dict]:
             windows.append({"start_s": a, "end_s": b, "peak_s": int(p),
                             "heat": float(h[p]), "peaks": [int(p)]})
     return windows
-
-
-def hms(s: float) -> str:
-    s = int(s)
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
 def run(stream_dir: Path, sc: dict) -> list[dict]:

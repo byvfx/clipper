@@ -68,7 +68,7 @@ def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
             raise ClipperError(f"preshow fetch: say which show with --show ({', '.join(cfg['shows'])})")
         window = None
         if args.start or args.end or args.about:
-            from .pick import parse_time
+            from .timefmt import parse_time
 
             window = {"start_s": parse_time(args.start) if args.start else 0.0,
                       "end_s": parse_time(args.end) if args.end else None, "about": args.about}

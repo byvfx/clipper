@@ -49,6 +49,7 @@ from discord import app_commands
 from . import actions, alerts, cardsync, notify, preshow, retake, schedule
 from .config import _root
 from .errors import ClipperError
+from .timefmt import length
 
 log = logging.getLogger("clipper.bot")
 
@@ -519,7 +520,7 @@ def register_commands(bot: Bot) -> None:
             return await fail(interaction, e)
         if not rows:
             return await interaction.followup.send("Nothing waiting for review.")
-        lines = [f"`{r['short']}` {actions.mmss(r['duration_s'])} "
+        lines = [f"`{r['short']}` {length(r['duration_s'])} "
                  f"[{r['title'][:80]}]({r['kitsu_url']}) · {actions.decision_text(r)}"
                  for r in rows]
         pages = chunks(lines)
