@@ -15,7 +15,6 @@ from there.
 
 from __future__ import annotations
 
-import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -75,14 +74,14 @@ def load_assets(stream_dir: Path) -> list[dict]:
     """Every cut video with its source time range(s). parts = [(src_start, src_end, offset)]."""
     out = []
     for side in sorted((stream_dir / "clips").glob("*.json")):
-        d = json.loads(side.read_text(encoding="utf-8"))
+        d = jsonstate.load(side)
         out.append({"kind": "clip", "id": d["id"], "video": side.with_suffix(".mp4"),
                     "title": d["title"], "hook": d.get("hook", ""), "body": "",
                     "summary": d.get("reason", ""), "topic": "", "figures": [],
                     "parts": [(d["in_s"], d["out_s"], 0.0)]})
     segs = {}
     for side in sorted((stream_dir / "segments").glob("*.json")):
-        d = json.loads(side.read_text(encoding="utf-8"))
+        d = jsonstate.load(side)
         a = d.get("cut_start_s", d["start_s"])
         segs[d["id"]] = d
         out.append({"kind": "segment", "id": d["id"], "video": side.with_suffix(".mp4"),
@@ -90,7 +89,7 @@ def load_assets(stream_dir: Path) -> list[dict]:
                     "topic": d["topic"], "figures": d.get("figures", []),
                     "parts": [(a, d["end_s"], 0.0)]})
     for side in sorted((stream_dir / "compilations").glob("*.json")):
-        d = json.loads(side.read_text(encoding="utf-8"))
+        d = jsonstate.load(side)
         offsets = {c["id"]: c["start_s"] for c in d["chapters"]}
         parts = [(segs[s].get("cut_start_s", segs[s]["start_s"]), segs[s]["end_s"], offsets[s])
                  for s in d["segments"]]
@@ -207,7 +206,7 @@ def captions_only(stream_dir: Path, cfg: dict) -> None:
                                                   encoding="utf-8")
         side = stream_dir / "metadata" / x["video"].parent.name / f"{x['video'].stem}.json"
         if side.exists():
-            d = json.loads(side.read_text(encoding="utf-8"))
+            d = jsonstate.load(side)
             for k in ("title", "description", "lead", "body"):
                 d[k] = mask(d[k])
             d["chapters"] = [{**c, "title": mask(c["title"])} for c in d["chapters"]]
@@ -229,7 +228,7 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
     prompts.version = mc["prompt_version"]
     prompts.vars.update(show_name=mc["show_name"], min_chapters=mc["min_chapters"],
                         max_chapters=mc["max_chapters"])
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(stream_dir / "meta.json")
     words = load_words(stream_dir)
     assets = load_assets(stream_dir)
     from .bleep import Bleeper
@@ -239,7 +238,7 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
         raise ClipperError("no cut assets; run `clipper cut` first")
     drafted: dict[str, dict] = {}
     if missing:
-        drafted = {x["id"]: json.loads(draft_path(stream_dir, x).read_text(encoding="utf-8"))
+        drafted = {x["id"]: jsonstate.load(draft_path(stream_dir, x))
                    for x in assets if draft_path(stream_dir, x).exists()}
         assets = [x for x in assets if x["id"] not in drafted]
         if not assets:

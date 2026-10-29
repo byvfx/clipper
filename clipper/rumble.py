@@ -50,7 +50,7 @@ def load_schedule(cfg: dict) -> dict:
     path: Path = cfg["paths"]["schedule"]
     if not path.exists():
         raise ClipperError("no schedule.json; run: clipper schedule")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return jsonstate.load(path)
 
 
 def save_platform(cfg: dict, updates: dict[str, dict | None], platform: str = "rumble") -> None:
@@ -102,7 +102,7 @@ def text_for(e: dict, cfg: dict) -> dict:
     m = youtube.metadata(e, cfg)
     video = Path(e["file"])
     draft_path = m["stream_dir"] / "metadata" / video.parent.name / f"{video.stem}.json"
-    draft = json.loads(draft_path.read_text(encoding="utf-8")) if draft_path.exists() else {}
+    draft = jsonstate.read(draft_path, {})
     desc = m["description"]
     credit = draft.get("credit", "")
     if credit and credit not in desc:  # a Kitsu edit dropped it
@@ -219,7 +219,7 @@ def push_kitsu(cfg: dict, updates: list[tuple[dict, dict]]) -> None:
             fmap = fmaps[name]
             if sdir not in states:
                 p = sdir / "review_state.json"
-                states[sdir] = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+                states[sdir] = jsonstate.read(p, {})
             st = states[sdir].get(short_key(e))
             if not st:
                 continue  # compilations have no Kitsu entity
@@ -238,7 +238,7 @@ def done_in_kitsu(cfg: dict, e: dict) -> str | None:
     p = cfg["paths"]["streams"] / e["stream"] / "review.json"
     if not p.exists():
         return None
-    f = json.loads(p.read_text(encoding="utf-8")).get(short_key(e), {}).get("fields", {})
+    f = jsonstate.load(p).get(short_key(e), {}).get("fields", {})
     url = (f.get("Rumble URL") or "").strip()
     return url or ("" if f.get("Rumble") == "uploaded" else None)
 

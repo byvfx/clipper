@@ -35,7 +35,7 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import config, doctor
+from . import config, doctor, jsonstate
 from .config import _root
 from .errors import ClipperError
 
@@ -146,7 +146,7 @@ def state_path(cfg: dict) -> Path:
 
 def load_state(cfg: dict) -> dict:
     try:
-        st = json.loads(state_path(cfg).read_text(encoding="utf-8"))
+        st = jsonstate.load(state_path(cfg))
     except (OSError, ValueError):
         st = {}
     st.setdefault("done", {})

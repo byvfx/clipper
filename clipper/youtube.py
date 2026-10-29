@@ -40,7 +40,6 @@ channel's daily upload cap; with auto_upload_minutes the bot replans and uploads
 
 from __future__ import annotations
 
-import json
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -69,7 +68,7 @@ def credentials(paths: dict, sign_in: bool = False):
     if token_path.exists() and not sign_in:
         # Keep scopes granted beyond ours (analytics --sign-in adds yt-analytics): loading with
         # SCOPES alone would refresh without them and rewrite the file without them.
-        saved = json.loads(token_path.read_text(encoding="utf-8")).get("scopes") or []
+        saved = jsonstate.load(token_path).get("scopes") or []
         creds = Credentials.from_authorized_user_file(
             str(token_path), [*SCOPES, *(s for s in saved if s not in SCOPES)])
     if creds and creds.expired and creds.refresh_token:
@@ -108,12 +107,12 @@ def metadata(entry: dict, cfg: dict) -> dict:
     sdir = cfg["paths"]["streams"] / entry["stream"]
     cfg = for_stream(cfg, sdir)  # title_format and show name are per show
     draft_path = sdir / "metadata" / video.parent.name / f"{video.stem}.json"
-    draft = json.loads(draft_path.read_text(encoding="utf-8")) if draft_path.exists() else {}
+    draft = jsonstate.read(draft_path, {})
     fields = {}
     review_path = sdir / "review.json"
     key = entry["key"].split("/", 1)[1]
     if review_path.exists():
-        fields = json.loads(review_path.read_text(encoding="utf-8")).get(key, {}).get("fields", {})
+        fields = jsonstate.load(review_path).get(key, {}).get("fields", {})
     # Kitsu's columns (your edits, or what publish put there) first, then the draft.
     proposed = draft_fields(draft) if draft else {}
     value = lambda name: fields.get(name) or proposed.get(name) or ""
@@ -170,7 +169,7 @@ def refresh_review(cfg: dict, entries: list[dict]) -> None:
 def stream_sources(sdir: Path, cache: dict) -> tuple[list[dict], dict[str, list[str]]]:
     """A stream's segment sidecars in stream order, and each compilation's segment ids."""
     if sdir not in cache:
-        load = lambda p: json.loads(p.read_text(encoding="utf-8"))
+        load = lambda p: jsonstate.load(p)
         segs = sorted((load(p) for p in (sdir / "segments").glob("*.json")),
                       key=lambda s: s["start_s"])
         comps = {f"comp-{p.stem}": load(p).get("segments", [])
@@ -192,7 +191,7 @@ def source_parents(cfg: dict, e: dict, entries: list[dict], cache: dict) -> list
     if e["kind"] == "clip":
         side = sdir / "clips" / f"{Path(e['file']).stem}.json"
         if side.exists():
-            c = json.loads(side.read_text(encoding="utf-8"))
+            c = jsonstate.load(side)
             for s in segs:
                 a = s.get("cut_start_s", s["start_s"])
                 if a <= c["in_s"] < s["end_s"] and (p := mine.get(("segment", s["id"]))):
@@ -221,7 +220,7 @@ def short_segment(cfg: dict, e: dict, entries: list[dict], cache: dict) -> dict 
     side = sdir / "shorts" / f"{Path(e['file']).stem}.json"
     if not side.exists():
         return None
-    in_s = json.loads(side.read_text(encoding="utf-8"))["in_s"]
+    in_s = jsonstate.load(side)["in_s"]
     segs, _ = stream_sources(sdir, cache)
     s = next((s for s in segs if s.get("cut_start_s", s["start_s"]) <= in_s < s["end_s"]), None)
     return s and next((x for x in entries if x["stream"] == e["stream"]
@@ -246,7 +245,7 @@ def related(cfg: dict, refs: list[str]) -> None:
     """No refs: print the Shorts waiting for a related video. With refs (schedule keys or
     the Shorts' links): record their segment as set, after you set it in Studio."""
     sched_path: Path = cfg["paths"]["schedule"]
-    sched = json.loads(sched_path.read_text(encoding="utf-8"))
+    sched = jsonstate.load(sched_path)
     todo = related_todo(cfg, sched)
     if not refs:
         print(f"{len(todo)} Shorts need their related video set in Studio")
@@ -462,7 +461,7 @@ def backfill_playlists(cfg: dict, sched: dict, sched_path: Path, dry_run: bool,
     playlist, added 2026-10-22). Each add costs 50 quota units, so --max spreads it out."""
     paths, yc = cfg["paths"], cfg["youtube"]
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
-    cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+    cache = jsonstate.read(cache_path, {})
     up = [e for e in sched["entries"] if e.get("status") == "uploaded" and e.get("video_id")]
     yt = service(paths)
     members: dict[str, set[str]] = {}
@@ -577,7 +576,7 @@ def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_pat
 def kitsu_url(cfg: dict, meta: dict, url: str) -> None:
     from . import review
 
-    state = json.loads((meta["stream_dir"] / "review_state.json").read_text(encoding="utf-8"))
+    state = jsonstate.load(meta["stream_dir"] / "review_state.json")
     st = state.get(meta["review_key"])
     if not st:
         return  # a compilation not published as its own Kitsu item
@@ -602,7 +601,7 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     sched_path: Path = paths["schedule"]
     if not sched_path.exists():
         raise ClipperError("no schedule.json; run: clipper schedule")
-    sched = json.loads(sched_path.read_text(encoding="utf-8"))
+    sched = jsonstate.load(sched_path)
     if thumbnails_only:
         backfill_thumbnails(cfg, sched, sched_path, dry_run)
         return
@@ -674,7 +673,7 @@ def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: i
 
     yt = service(paths)
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
-    playlists = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.exists() else {}
+    playlists = jsonstate.read(cache_path, {})
     failed: list[str] = []
     for e in due:
         # #77 M5: one bad entry (a missing file, a refused upload) no longer blocks every
@@ -769,7 +768,7 @@ def video_id(url: str) -> str:
 def queue(cfg: dict) -> list[dict]:
     """Approved items not on YouTube yet, in the order they would go out: scheduled ones by
     slot, then the unslotted ones as `clipper schedule` would place them next."""
-    sched = json.loads(cfg["paths"]["schedule"].read_text(encoding="utf-8"))
+    sched = jsonstate.load(cfg["paths"]["schedule"])
     by_key = {e["key"]: e for e in sched["entries"]}
     out = sorted((e for e in sched["entries"] if e.get("status") == "scheduled"),
                  key=lambda e: e["publish_at"])
@@ -803,7 +802,7 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
     item = actions.resolve(cfg, ref)
     key = item.ref
     sched_path: Path = paths["schedule"]
-    sched = json.loads(sched_path.read_text(encoding="utf-8"))
+    sched = jsonstate.load(sched_path)
     prev = next((e for e in sched["entries"] if e["key"] == key), None)
     if prev and prev.get("status") == "uploaded":
         raise ClipperError(f"{key} is already on YouTube: {prev.get('url')}")
@@ -851,5 +850,5 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
         fresh["unscheduled"] = [x for x in fresh.get("unscheduled", []) if x["key"] != key]
     print("  details set; recorded as uploaded")
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
-    playlists = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+    playlists = jsonstate.read(cache_path, {})
     finish(yt, cfg, e, m, vid, playlists, cache_path, sched_path)

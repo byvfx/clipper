@@ -28,6 +28,8 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from . import jsonstate
+
 log = logging.getLogger(__name__)
 
 RUN_TIMEOUT = timedelta(hours=4, minutes=30)  # the app's call timeout, plus slack
@@ -133,7 +135,7 @@ def backfill(cfg: dict) -> None:
         todo.append(("stream", t.parent.name, t, None))
     root = Path(cfg["paths"]["archive"])
     for cat_path in sorted(root.glob("*/catalog.json")):
-        cat = json.loads(cat_path.read_text(encoding="utf-8"))
+        cat = jsonstate.load(cat_path)
         for iid, it in cat.items():
             todo.append(("archive", f"{cat_path.parent.name}/{iid}",
                          cat_path.parent / iid / "transcript.json", it.get("duration_s")))
@@ -232,7 +234,7 @@ def archives(cfg: dict, runs: list[dict]) -> list[dict]:
     out = []
     for cat_path in sorted(root.glob("*/catalog.json")):
         d = cat_path.parent
-        cat = json.loads(cat_path.read_text(encoding="utf-8"))
+        cat = jsonstate.load(cat_path)
         done_n = errors = 0
         done_h = total_h = recent_h = recent_n = 0.0
         for iid, it in cat.items():

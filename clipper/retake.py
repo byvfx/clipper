@@ -42,7 +42,7 @@ def review_dirs(cfg: dict) -> list[Path]:
 
 
 def load(path: Path, default):
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+    return jsonstate.read(path, default)
 
 
 def note_id(r: dict) -> str:

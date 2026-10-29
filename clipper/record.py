@@ -46,7 +46,7 @@ from typing import Any
 
 import requests
 
-from . import kick
+from . import jsonstate, kick
 from .errors import ClipperError
 
 log = logging.getLogger("clipper.record")
@@ -243,7 +243,7 @@ class State:
 
     @classmethod
     def load(cls, path: Path) -> State:
-        d = json.loads(path.read_text(encoding="utf-8"))
+        d = jsonstate.load(path)
         d["parts"] = [Part(**p) for p in d["parts"]]
         return cls(**d)
 

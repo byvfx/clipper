@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import bisect
 import io
-import json
 import shlex
 import subprocess
 import tarfile
@@ -45,7 +44,7 @@ def keyframes(stream_dir: Path, src: Path) -> list[float]:
     """Video keyframe times in seconds from the start of the file (what -ss uses)."""
     cache = stream_dir / "keyframes.json"
     if cache.exists():
-        return json.loads(cache.read_text())
+        return jsonstate.load(cache)
     probe = lambda args: subprocess.run(
         ["ffprobe", "-v", "error", *args, str(src)], check=True, capture_output=True, text=True
     ).stdout
@@ -171,7 +170,7 @@ def write_sidecar(path: Path, data: dict) -> None:
 
 def cut_segments(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None:
     cfg = for_stream(cfg, stream_dir)
-    data = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))
+    data = jsonstate.load(stream_dir / "segments.json")
     segs = [s for s in data["segments"] if (s["id"] in ids if ids else s["cut"])]
     src = source_file(stream_dir)
     out_dir = stream_dir / "segments"
@@ -214,7 +213,7 @@ def compilation_parts(segs: list[dict]) -> tuple[list[tuple[float, float]], list
 def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = None) -> None:
     """One video per topic with several segments, e.g. every Quartering segment in order."""
     cfg = for_stream(cfg, stream_dir)
-    data = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))
+    data = jsonstate.load(stream_dir / "segments.json")
     by_id = {s["id"]: s for s in data["segments"]}
     seg_dir, out_dir = stream_dir / "segments", stream_dir / "compilations"
     out_dir.mkdir(exist_ok=True)
@@ -227,7 +226,7 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         if missing:
             cut_segments(stream_dir, cfg, missing)
         # The real cut starts (keyframes) live in each segment's sidecar.
-        segs = [json.loads((seg_dir / s["file"]).with_suffix(".json").read_text(encoding="utf-8"))
+        segs = [jsonstate.load((seg_dir / s["file"]).with_suffix(".json"))
                 for s in segs]
         spans, chapters, t = compilation_parts(segs)
         lines = []
@@ -255,7 +254,7 @@ def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None
     if not path.exists():  # not scored, e.g. a pre-show: no picks by design
         print("no candidates.json: no picks to cut")
         return
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = jsonstate.load(path)
     by_id = {r["id"]: r for r in data["pass_a"]}
     src = source_file(stream_dir)
     out_dir = stream_dir / "clips"

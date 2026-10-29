@@ -27,14 +27,13 @@ that item.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import review
+from . import jsonstate, review
 from .config import for_stream, stream_dir
 from .errors import ClipperError
 
@@ -63,7 +62,7 @@ def review_dirs(cfg: dict) -> list[Path]:
 
 
 def load_json(path: Path, default=None):
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+    return jsonstate.read(path, default)
 
 
 def resolve(cfg: dict, ref: str, stream: str | None = None) -> Item:

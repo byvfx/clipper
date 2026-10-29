@@ -12,7 +12,6 @@ missing compilation text without paying for a new split (--force re-splits).
 
 from __future__ import annotations
 
-import json
 import re
 from itertools import pairwise
 from pathlib import Path
@@ -149,7 +148,7 @@ def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     claude = Claude(cfg)
 
     if path.exists() and not force:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = jsonstate.load(path)
     else:
         preflight(claude, seg_cfg["model"])
         data = split(stream_dir, cfg, claude, prompts)

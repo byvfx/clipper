@@ -49,7 +49,7 @@ LIVE_CACHE: dict = {"at": 0.0, "data": []}
 
 def load(path: Path, default):
     try:
-        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+        return jsonstate.read(path, default)
     except (OSError, ValueError):
         return default
 

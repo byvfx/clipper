@@ -73,7 +73,7 @@ WINDOW_PAD_S = 1.0   # keep this much room around the model's bounds
 
 def is_preshow(stream_dir: Path) -> bool:
     try:
-        meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+        meta = jsonstate.load(stream_dir / "meta.json")
     except (OSError, ValueError):
         return False
     return meta.get("kind") == "preshow"
@@ -279,10 +279,10 @@ def write_segments(stream_dir: Path, cfg: dict, force: bool = False) -> list[dic
     pc = cfg["preshow"]
     path = stream_dir / "segments.json"
     if path.exists() and not force:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = jsonstate.load(path)
         print(f"{data['segments'][0]['id']}: {data['segments'][0]['title']} (already written)")
         return data["segments"]
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(stream_dir / "meta.json")
     words = load_words(stream_dir)
     full = video_duration(source_file(stream_dir)) or meta["duration_s"]
     window = meta.get("window") or {}

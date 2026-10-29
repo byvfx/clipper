@@ -23,6 +23,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import jsonstate
 from .config import _root, for_show
 from .errors import ClipperError
 
@@ -419,7 +420,7 @@ def check_tiktok(cfg: dict) -> None:
     if not p["tiktok_token"].exists():
         warn("keys", "TikTok client key present but not signed in", "clipper tiktok --sign-in")
         return
-    tok = json.loads(p["tiktok_token"].read_text(encoding="utf-8"))
+    tok = jsonstate.load(p["tiktok_token"])
     days = (tok.get("refresh_expires_at", 0) - time.time()) / 86400
     if days <= 0:
         fail("keys", "TikTok sign-in expired", "clipper tiktok --sign-in")

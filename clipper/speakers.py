@@ -36,7 +36,7 @@ def voices_path(cfg: dict) -> Path:
 
 def load_voices(cfg: dict) -> dict:
     try:
-        return json.loads(voices_path(cfg).read_text(encoding="utf-8"))
+        return jsonstate.load(voices_path(cfg))
     except FileNotFoundError:
         return {"model": "", "voices": {}}
 
@@ -73,14 +73,14 @@ def label_words(words: list[dict], turns: list[list]) -> list[str | None]:
 
 def apply(sdir: Path, cfg: dict) -> dict:
     """Name each speaker and write speakers.json and the `speaker` field of words.jsonl."""
-    d = json.loads((sdir / "diarization.json").read_text(encoding="utf-8"))
+    d = jsonstate.load(sdir / "diarization.json")
     sc = cfg["speakers"]
     bank = load_voices(cfg)
     if bank["voices"] and bank["model"] != d["model"]:
         print(f"enrolled voices are from {bank['model']}, this stream from {d['model']}: not matching")
         bank = {"model": "", "voices": {}}
     try:
-        old = json.loads((sdir / "speakers.json").read_text(encoding="utf-8"))["speakers"]
+        old = jsonstate.load(sdir / "speakers.json")["speakers"]
     except FileNotFoundError:
         old = {}
     talk: dict[str, float] = defaultdict(float)
@@ -122,7 +122,7 @@ def set_names(sdir: Path, names: dict[str, str]) -> None:
     path = sdir / "speakers.json"
     if not path.exists():
         raise ClipperError(f"no speakers.json in {sdir}: run `clipper speakers {sdir.name}` first")
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = jsonstate.load(path)
     for label, name in names.items():
         if label not in data["speakers"]:
             raise ClipperError(f"no {label} in this stream; speakers: {', '.join(data['speakers'])}")
@@ -136,8 +136,8 @@ def set_names(sdir: Path, names: dict[str, str]) -> None:
 
 def enroll(sdir: Path, cfg: dict, labels: list[str]) -> None:
     """Add these speakers' voices to the show's enrolled voices under their names."""
-    d = json.loads((sdir / "diarization.json").read_text(encoding="utf-8"))
-    names = json.loads((sdir / "speakers.json").read_text(encoding="utf-8"))["speakers"]
+    d = jsonstate.load(sdir / "diarization.json")
+    names = jsonstate.load(sdir / "speakers.json")["speakers"]
     bank = load_voices(cfg)
     if bank["voices"] and bank["model"] != d["model"]:
         raise ClipperError(f"{voices_path(cfg)} holds {bank['model']} voices; this stream is {d['model']}")
@@ -168,7 +168,7 @@ def show(sdir: Path, cfg: dict, speakers: dict, lines: int = 3) -> None:
         print(f"{show_key} voices: " + ", ".join(f"{n} ({len(r)})" for n, r in sorted(bank["voices"].items())))
     else:
         print(f"no enrolled voices for {show_key} yet: name speakers with --name SPEAKER_xx=Name --enroll")
-    d = json.loads((sdir / "diarization.json").read_text(encoding="utf-8"))
+    d = jsonstate.load(sdir / "diarization.json")
     wpath = sdir / "words.jsonl"
     words = [json.loads(line) for line in wpath.read_text(encoding="utf-8").splitlines() if line] \
         if wpath.exists() else []

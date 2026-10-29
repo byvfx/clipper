@@ -26,7 +26,6 @@ and the link. About a cent a question.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import sqlite3
@@ -34,6 +33,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from . import jsonstate
 from .archive import load_catalog, subject_dir
 from .errors import ClipperError
 
@@ -88,9 +88,9 @@ def build(cfg: dict, subject: str, rebuild: bool) -> None:
             todo.append((i, tp))
     print(f"{subject}: {len(todo)} items to index ({len(have)} already in index.sqlite)")
     for k, (i, tp) in enumerate(todo, 1):
-        segs = json.loads(tp.read_text(encoding="utf-8")).get("segments") or []
+        segs = jsonstate.load(tp).get("segments") or []
         mp = d / i / "meta.json"
-        meta = {**cat[i], **(json.loads(mp.read_text(encoding="utf-8")) if mp.exists() else {})}
+        meta = {**cat[i], **jsonstate.read(mp, {})}
         wins = windows(segs, size_s)
         db.execute("DELETE FROM windows WHERE item = ?", (i,))
         db.executemany("INSERT INTO windows (text, item, start) VALUES (?, ?, ?)",

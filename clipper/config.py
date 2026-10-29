@@ -17,6 +17,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from . import jsonstate
 from .errors import ClipperError
 
 DEFAULTS: dict[str, dict[str, Any]] = {
@@ -782,7 +783,7 @@ def stream_channel(sdir: Path) -> str:
     # live/state.json: a stream the NAS recorder is still on has no meta.json yet
     for p in (sdir / "meta.json", sdir / "live" / "state.json"):
         try:
-            channel = json.loads(p.read_text(encoding="utf-8")).get("channel") or ""
+            channel = jsonstate.load(p).get("channel") or ""
         except (OSError, ValueError):
             continue
         break

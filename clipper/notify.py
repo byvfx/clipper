@@ -209,7 +209,7 @@ def ensure_thread(api: Rest, cfg: dict, sdir: Path, dstate: dict, rows: list[dic
             return dstate["thread_id"]
         except ClipperError:
             pass  # deleted: make a new one
-    meta = json.loads((sdir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(sdir / "meta.json")
     show = cfg["meta"]["show_name"] or cfg["review"]["project"] or "Stream"
     name = dc["thread_name"].format(show=show, date=meta["started_at"][:10],
                                     stream_id=sdir.name, title=meta.get("title", ""))[:100]
@@ -249,7 +249,7 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
     todo = [r for r in rows if not want or r["key"] in want or r["key"].split("_")[0] in want]
     api = Rest(cfg)
     dpath = sdir / "discord.json"
-    dstate = json.loads(dpath.read_text(encoding="utf-8")) if dpath.exists() else {}
+    dstate = jsonstate.read(dpath, {})
     thread_id = ensure_thread(api, cfg, sdir, dstate, rows)
     save_state(dpath, dstate)
     posted = 0

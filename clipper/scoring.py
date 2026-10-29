@@ -304,7 +304,7 @@ def stream_summary(stream_dir: Path, words: list[dict], n: int, cfg: dict,
                    claude: Claude, prompts: Prompts) -> list[dict]:
     path = stream_dir / f"summary_{prompts.version}.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        return jsonstate.load(path)
     sc = cfg["scoring"]
     system = prompts.get("summary")
 
@@ -336,7 +336,7 @@ def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
     """Find own-voice moments block by block, independent of chat heat."""
     path = stream_dir / f"scan_{prompts.version}.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        return jsonstate.load(path)
     sc = cfg["scoring"]
     system = prompts.get("scan")
 
@@ -487,8 +487,8 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
     cfg = for_stream(cfg, stream_dir)
     sc = cfg["scoring"]
     prompts = Prompts(cfg)
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
-    windows = json.loads((stream_dir / "windows.json").read_text(encoding="utf-8"))["windows"]
+    meta = jsonstate.load(stream_dir / "meta.json")
+    windows = jsonstate.load(stream_dir / "windows.json")["windows"]
     words = load_words(stream_dir)
     sig = load_signals(stream_dir)
 

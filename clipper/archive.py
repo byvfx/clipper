@@ -44,7 +44,7 @@ from pathlib import Path
 
 import requests
 
-from . import speakers, transcribe
+from . import jsonstate, speakers, transcribe
 from .errors import ClipperError
 from .modalmon import head_record, tracked
 from .preshow import ytdlp
@@ -61,7 +61,7 @@ def subject_dir(cfg: dict, subject: str) -> Path:
 
 def load_catalog(d: Path) -> dict[str, dict]:
     p = d / "catalog.json"
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    return jsonstate.read(p, {})
 
 
 def save_json(d: Path, name: str, data: dict) -> None:
@@ -77,7 +77,7 @@ def save_catalog(d: Path, cat: dict[str, dict]) -> None:
 
 def load_links(d: Path) -> dict[str, dict]:
     p = d / "links.json"
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    return jsonstate.read(p, {})
 
 
 # ---------- listing ----------
@@ -212,7 +212,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
         if r.returncode or not audio:
             raise RuntimeError(f"yt-dlp: {r.stderr.strip().splitlines()[-1:]}")
         info_path = idir / "audio.info.json"
-        info = json.loads(info_path.read_text(encoding="utf-8"))
+        info = jsonstate.load(info_path)
         info_path.unlink()
         ts = info.get("timestamp") or info.get("release_timestamp")
         meta.update(title=info.get("title") or it["title"], description=info.get("description") or "",

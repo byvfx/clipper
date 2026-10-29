@@ -51,6 +51,7 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
+from . import jsonstate
 from .errors import ClipperError
 from .signals import EMOTE
 
@@ -98,7 +99,7 @@ def next_issue_number(cfg: dict, here: Path) -> int:
     for p in Path(cfg["paths"]["weekly"]).glob("*/issue.json"):
         if p.parent != here:
             try:
-                nums.append(int(json.loads(p.read_text(encoding="utf-8")).get("issue") or 0))
+                nums.append(int(jsonstate.load(p).get("issue") or 0))
             except (OSError, ValueError):
                 pass
     return max(nums + [cfg["weekly"]["first_issue"] - 1]) + 1
@@ -108,7 +109,7 @@ def next_issue_number(cfg: dict, here: Path) -> int:
 
 def _load(p: Path, default=None):
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        return jsonstate.load(p)
     except (OSError, ValueError):
         return default
 

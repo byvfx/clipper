@@ -48,6 +48,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import jsonstate
 from .archive import netscape_cookies, subject_dir
 from .bleep import Bleeper
 from .config import for_stream
@@ -74,7 +75,7 @@ def load(sdir: Path) -> dict:
     p = out_dir(sdir) / "receipts.json"
     if not p.exists():
         raise ClipperError(f"no receipts for {sdir.name} yet: clipper receipts find {sdir.name}")
-    return json.loads(p.read_text(encoding="utf-8"))
+    return jsonstate.load(p)
 
 
 def save(sdir: Path, data: dict) -> None:
@@ -123,7 +124,7 @@ def clip_bounds(idir: Path, win_start: float, quote: str, rc: dict) -> tuple[flo
         q_start, q_end = near[at]["start"], near[min(at + len(q), len(near)) - 1]["end"]
     else:
         q_start, q_end = win_start, win_start + 25
-    segs = json.loads((idir / "transcript.json").read_text(encoding="utf-8")).get("segments") or []
+    segs = jsonstate.load(idir / "transcript.json").get("segments") or []
     a, b = q_start - rc["lead_s"], q_end + rc["tail_s"]
     starts = [s["start"] for s in segs if a - 8 <= s["start"] <= a]
     ends = [s["end"] for s in segs if b <= s["end"] <= b + 6]
@@ -142,7 +143,7 @@ def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
     rc = cfg["receipts"]
     subject = rc["subject"]
     adir = subject_dir(cfg, subject)
-    segs = json.loads((sdir / "segments.json").read_text(encoding="utf-8"))["segments"]
+    segs = jsonstate.load(sdir / "segments.json")["segments"]
     picked = [s for s in segs if (s["id"] in only if only else about_subject(s, rc))]
     if not picked:
         raise ClipperError(f"{sdir.name}: no segments about {subject} (topics {rc['topics']}, "

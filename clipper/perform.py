@@ -130,7 +130,7 @@ def prepare(recording: Path, read: Path, pc: dict, take: int = 1, out: Path | No
 
 
 def status(d: Path) -> dict:
-    m = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+    m = jsonstate.load(d / "manifest.json")
     for p in m["pieces"]:
         r = d / p["render"]
         got = f"{duration(r):.2f} s rendered" if r.exists() else "not rendered yet"
@@ -231,7 +231,7 @@ def lipsync(target: Path, pc: dict, engine: str, audio: Path | None = None) -> P
 
     video = target / "final.mp4" if target.is_dir() else target
     if audio is None:
-        audio = Path(json.loads((target / "manifest.json").read_text(encoding="utf-8"))["read"])
+        audio = Path(jsonstate.load(target / "manifest.json")["read"])
     out = video.with_name(f"{video.stem}.lipsync-{engine}.mp4")
     with tempfile.TemporaryDirectory() as td:
         wav = Path(td) / "read.wav"

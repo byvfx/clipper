@@ -24,6 +24,7 @@ import numpy as np
 from scipy.ndimage import median_filter, uniform_filter1d
 from scipy.signal import find_peaks
 
+from . import jsonstate
 from .kick import CHAT_CHUNK_S
 
 EMOTE = re.compile(r"\[emote:\d+:([^\]]+)\]")
@@ -200,7 +201,7 @@ def hms(s: float) -> str:
 
 
 def run(stream_dir: Path, sc: dict) -> list[dict]:
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(stream_dir / "meta.json")
     n = math.ceil(meta["duration_s"])
     lag = sc["chat_lag_s"]
 

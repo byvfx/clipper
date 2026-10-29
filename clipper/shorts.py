@@ -515,7 +515,7 @@ def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dic
     """The clip's upload draft with the Shorts hashtag first (YouTube files any vertical
     video under 3 minutes as a Short; the tag helps it surface there)."""
     src = stream_dir / "metadata" / "clips" / f"{clip_video.stem}.json"
-    draft = json.loads(src.read_text(encoding="utf-8")) if src.exists() else {
+    draft = jsonstate.load(src) if src.exists() else {
         "title": pick["title"], "description": pick.get("reason", ""), "hashtags": [], "tags": []}
     tag = sc["hashtag"].lstrip("#")
     old_line = " ".join(f"#{h.lstrip('#')}" for h in draft.get("hashtags", []))
@@ -546,11 +546,11 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         raise ClipperError(f"shorts.default_layout {sc['default_layout']!r} isn't one of {list(layouts)}")
     if layout and layout not in layouts:
         raise ClipperError(f"no layout {layout!r}; this show has {', '.join(layouts)}")
-    cands = json.loads((stream_dir / "candidates.json").read_text(encoding="utf-8"))
+    cands = jsonstate.load(stream_dir / "candidates.json")
     segs = []
     if (stream_dir / "segments.json").exists():
-        segs = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))["segments"]
-    end_of_stream = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))["duration_s"]
+        segs = jsonstate.load(stream_dir / "segments.json")["segments"]
+    end_of_stream = jsonstate.load(stream_dir / "meta.json")["duration_s"]
     by_id = {r["id"]: r for r in cands["pass_a"]}
     picks = cands["pass_b"].get("picks", [])
     words = load_words(stream_dir)

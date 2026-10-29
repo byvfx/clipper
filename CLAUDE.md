@@ -14,6 +14,9 @@ keep README and SETUP true whenever behaviour changes.
   never a loose script.
 - A stream is `streams/<id>/`; stages read and write files there and are idempotent, so
   `clipper run` can skip what is done. Review state is `review.json`, retakes `retakes.json`.
+  JSON files go through `clipper/jsonstate.py`: `load`/`read` (retry a file mid-replace),
+  `write` (tmp + replace), `update`/`merge` (under a lock). A test fails on a raw
+  `json.loads(path.read_text())`.
 - Config: defaults in `clipper/config.py` < `clipper.toml` < `clipper.local.toml` (this machine's
   own values, written by `clipper setup`) < `CLIPPER_<SECTION>_<KEY>` env; the last two also win
   over show and stream overrides.

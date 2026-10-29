@@ -21,6 +21,8 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import jsonstate
+
 log = logging.getLogger(__name__)
 
 # What the running command is: set once by the CLI, read by every model call it makes.
@@ -176,7 +178,7 @@ def _sources(cfg: dict):
             if not p.exists():
                 continue
             try:
-                d = json.loads(p.read_text(encoding="utf-8"))
+                d = jsonstate.load(p)
             except (OSError, ValueError):
                 continue
             usd = sum(float(d.get(k) or 0) for k in keys) if isinstance(d, dict) else 0
@@ -186,7 +188,7 @@ def _sources(cfg: dict):
     if weekly.is_dir():
         for p in sorted(weekly.glob("*/issue.json")):
             try:
-                d = json.loads(p.read_text(encoding="utf-8"))
+                d = jsonstate.load(p)
             except (OSError, ValueError):
                 continue
             usd = float(d.get("cost_usd") or 0) + float(d.get("articles_cost_usd") or 0)

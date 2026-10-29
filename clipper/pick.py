@@ -23,7 +23,6 @@ candidates.json). The request is kept on each record ("request").
 
 from __future__ import annotations
 
-import json
 import math
 import re
 import time
@@ -137,7 +136,7 @@ class Clock:
 # ---------- helpers ----------
 
 def load(path: Path, default):
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+    return jsonstate.read(path, default)
 
 
 def worker_busy(sdir: Path, cfg: dict) -> str:

@@ -154,7 +154,7 @@ def access_token(paths: dict) -> str:
     p: Path = paths["tiktok_token"]
     if not p.exists():
         raise ClipperError("not signed in to TikTok; run: clipper tiktok --sign-in")
-    tok = json.loads(p.read_text(encoding="utf-8"))
+    tok = jsonstate.load(p)
     if time.time() < tok.get("expires_at", 0):
         return tok["access_token"]
     if time.time() >= tok.get("refresh_expires_at", 0):
@@ -196,9 +196,9 @@ def caption(e: dict, cfg: dict) -> str:
     m = youtube.metadata(e, cfg)
     video = Path(e["file"])
     draft_path = sdir / "metadata" / video.parent.name / f"{video.stem}.json"
-    draft = json.loads(draft_path.read_text(encoding="utf-8")) if draft_path.exists() else {}
+    draft = jsonstate.read(draft_path, {})
     review_path = sdir / "review.json"
-    fields = (json.loads(review_path.read_text(encoding="utf-8")).get(m["review_key"], {})
+    fields = (jsonstate.load(review_path).get(m["review_key"], {})
               .get("fields", {}) if review_path.exists() else {})
     tags = (fields.get("Hashtags") or (draft_fields(draft).get("Hashtags") if draft else "") or "")
     tags = [t for t in dict.fromkeys(hashtag_line(tags).split() + hashtag_line(list(tc["hashtags"])).split())
