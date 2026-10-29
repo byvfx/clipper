@@ -54,14 +54,16 @@ from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
 from .segments import slug
+from .states import ENTITY, Decision
 
 TASK_TYPES = {"Segment": ("#48bfe3", "Sequence"), "Horizontal": ("#5e60ce", "Shot"),
               "Compilation": ("#f77f00", "Sequence"), "Vertical": ("#ef476f", "Shot")}
 FOLDERS = {"pick": "clips", "segment": "segments", "compilation": "compilations",
            "short": "shorts"}
 OTHER_SEQUENCE = "s00_other"
-DECISIONS = {"approved": "approved", "done": "approved", "retake": "changes_requested",
-             "rejected": "rejected", "wfa": "pending"}
+# Kitsu task status (short name) -> review.json decision; any other status is pending.
+DECISIONS = {"approved": Decision.APPROVED, "done": Decision.APPROVED, "retake": Decision.CHANGES,
+             "rejected": Decision.REJECTED, "wfa": Decision.PENDING}
 
 # The "Clipping" project template: production settings, task types, statuses and the
 # custom columns (metadata descriptors) every clipping production gets.
@@ -117,7 +119,6 @@ COLUMNS = [
     ("Shot", "Thumbnail text", "string", None),
 ]
 THUMB_COL = "Thumbnail text"
-ENTITY = {"segment": "Sequence", "pick": "Shot", "compilation": "Sequence", "short": "Shot"}
 SEQUENCE_KINDS = ("segment", "compilation")
 # Comments clipper adds to record a column change (Hold, Publish at, title); sync never
 # takes one of these as the reason for a decision.
@@ -773,7 +774,7 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
         cid, comment = (decision_comment_entry(gazu, task) if status in ("retake", "rejected")
                         else ("", ""))
         out[key] = {"kind": st["kind"], "id": st["id"], "file": st["file"],
-                    "status": status, "decision": DECISIONS.get(status, status),
+                    "status": status, "decision": str(DECISIONS.get(status, Decision.PENDING)),
                     "comment": comment, "comment_id": cid,
                     "fields": fields,
                     "edited": sorted(n for n, v in fields.items()

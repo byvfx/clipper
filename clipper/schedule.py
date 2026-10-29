@@ -28,10 +28,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import jsonstate
+from .states import ENTITY, RELEASE_KIND, split_key
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-KINDS = {"pick": "clip", "segment": "segment", "compilation": "compilation", "short": "short"}
-ENTITY = {"clip": "Shot", "segment": "Sequence", "compilation": "Sequence", "short": "Shot"}
 
 
 def truthy(v) -> bool:
@@ -73,13 +72,13 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
         priority = bool(ssc["priority"])
         approved_segments = set()
         for key, r in review.items():
-            kind = KINDS[r["kind"]]
+            kind = RELEASE_KIND[r["kind"]]
             fields = r.get("fields", {})
             item = {"key": f"{sdir.name}/{key}", "stream": sdir.name, "show": show, "kind": kind,
                     "id": r["id"], "file": str((sdir / r["file"]).resolve()),
                     "title": fields.get("YouTube title") or key,
                     "score": float(fields.get("Score") or 0), "stream_start": started,
-                    "earliest": earliest, "entity": (ENTITY[kind], state[key]["entity_id"]),
+                    "earliest": earliest, "entity": (ENTITY[r["kind"]], state[key]["entity_id"]),
                     "override_text": fields.get("Publish at") or "", "asap": asap,
                     "priority": priority}
             if r["decision"] != "approved":
@@ -96,7 +95,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                     if r["kind"] == "segment" and r["id"] in comp["segments"]]
         for comp in seg_data.get("compilations", []):
             key = f"{sdir.name}/comp-{comp['file'].removesuffix('.mp4')}"
-            if key.split("/", 1)[1] in review:
+            if split_key(key)[1] in review:
                 # Published as its own Kitsu item: its decision was used above; it still
                 # waits for its segments' slots.
                 for it in items:
@@ -342,7 +341,7 @@ def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo) -> N
     streams_dir: Path = cfg["paths"]["streams"]
     for state_path in streams_dir.glob("*/review_state.json"):
         for key, st in jsonstate.load(state_path).items():
-            ent = (ENTITY[KINDS[st["kind"]]], st["entity_id"])
+            ent = (ENTITY[st["kind"]], st["entity_id"])
             by_entity.setdefault(ent, {"key": f"{state_path.parent.name}/{key}", "entity": ent})
     # Column ids differ per Kitsu production, and each show has its own production.
     fmaps: dict[str, dict] = {}
@@ -354,7 +353,7 @@ def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo) -> N
         return fmaps[name]
 
     for (etype, eid), it in by_entity.items():
-        field = fmap_of(it["key"].split("/", 1)[0]).get((etype, "Scheduled"))
+        field = fmap_of(split_key(it["key"])[0]).get((etype, "Scheduled"))
         if not field:
             continue
         e = placed.get(it["key"])

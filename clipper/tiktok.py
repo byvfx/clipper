@@ -51,6 +51,7 @@ from . import jsonstate, media, rumble, youtube
 from .config import for_stream
 from .errors import ClipperError
 from .review import draft_fields, hashtag_line
+from .states import split_key
 
 AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
 API = "https://open.tiktokapis.com/v2"
@@ -365,7 +366,7 @@ def repost_caption(cfg: dict, ref: str) -> None:
 def status(cfg: dict, stream: str | None = None, check: bool = True, quiet: bool = False) -> None:
     sched = rumble.load_schedule(cfg)
     rows = [e for e in sched["entries"] + sched.get("unscheduled", [])
-            if (not stream or e["key"].split("/", 1)[0] == stream) and tiktok_of(e)]
+            if (not stream or split_key(e["key"])[0] == stream) and tiktok_of(e)]
     updates = {}
     for e in rows:
         t = tiktok_of(e)

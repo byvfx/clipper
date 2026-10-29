@@ -50,6 +50,7 @@ from .bleep import Bleeper
 from .config import for_stream
 from .errors import ClipperError
 from .review import draft_fields, full_title, hashtag_line
+from .states import split_key
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
           "https://www.googleapis.com/auth/youtube.force-ssl"]  # captions, playlists
@@ -110,7 +111,7 @@ def metadata(entry: dict, cfg: dict) -> dict:
     draft = jsonstate.read(draft_path, {})
     fields = {}
     review_path = sdir / "review.json"
-    key = entry["key"].split("/", 1)[1]
+    key = split_key(entry["key"])[1]
     if review_path.exists():
         fields = jsonstate.load(review_path).get(key, {}).get("fields", {})
     # Kitsu's columns (your edits, or what publish put there) first, then the draft.
@@ -153,7 +154,7 @@ def refresh_review(cfg: dict, entries: list[dict]) -> None:
 
     by_stream: dict[str, list[str]] = {}
     for e in entries:
-        by_stream.setdefault(e["stream"], []).append(e["key"].split("/", 1)[1])
+        by_stream.setdefault(e["stream"], []).append(split_key(e["key"])[1])
     for stream, keys in by_stream.items():
         sdir = cfg["paths"]["streams"] / stream
         if not (sdir / "review_state.json").exists():
@@ -200,7 +201,7 @@ def source_parents(cfg: dict, e: dict, entries: list[dict], cache: dict) -> list
         return out
     # A compilation that's a Kitsu item has id comp-<stem>; one scheduled from its draft
     # alone has its topic as id, so match those on the key too (#77 M3).
-    by_key = {x["key"].split("/", 1)[1]: x for x in entries
+    by_key = {split_key(x["key"])[1]: x for x in entries
               if x["stream"] == e["stream"] and x["kind"] == "compilation"}
     out += [("segment_source", p, 0) for cid, ids in comps.items()
             if e["id"] in ids and (p := mine.get(("compilation", cid)) or by_key.get(cid))]
