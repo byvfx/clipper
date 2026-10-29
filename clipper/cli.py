@@ -901,8 +901,10 @@ def main() -> None:
 
     p = sub.add_parser("run", help="run every pipeline stage not done yet: transcribe ... review publish")
     p.add_argument("stream")
-    p.add_argument("--only", help="just these stages, e.g. transcribe,score")
-    p.add_argument("--from", dest="from_", metavar="STAGE", help="rerun from this stage on")
+    from .stages import NAMES as STAGE_NAMES
+    p.add_argument("--only", help="just these stages, comma-separated: " + ", ".join(STAGE_NAMES))
+    p.add_argument("--from", dest="from_", choices=STAGE_NAMES, metavar="STAGE",
+                   help="rerun from this stage on: " + ", ".join(STAGE_NAMES))
     p.add_argument("--force", action="store_true", help="rerun stages even if done")
     p.set_defaults(fn=cmd_run)
 
