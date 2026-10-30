@@ -174,8 +174,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # a bold sans for the masthead and barcode.
         "headline_fonts": ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
                            "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf"],
-        "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/RobotoCondensed-Bold.ttf",
-                            "/Library/Fonts/RobotoCondensed-Bold.ttf"],
+        "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                            "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf", "/Library/Fonts/RobotoCondensed-Bold.ttf"],
         "serif_italic_fonts": ["C:/Windows/Fonts/georgiai.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Italic.ttf",
                                "/Library/Fonts/Georgia Italic.ttf", "/System/Library/Fonts/Supplemental/Georgia Italic.ttf"],
         "serif_bold_italic_fonts": ["C:/Windows/Fonts/georgiaz.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Bold_Italic.ttf",
@@ -223,7 +223,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "part_links": False,      # segments also link the stream's previous and next segment
         "previous_part": "Previous part: {url}",
         "next_part": "Next part: {url}",
-        "link_updates_per_run": 20,  # description updates per run (50 quota units each)
+        "link_updates_per_run": 20,  # description updates per run (~51 quota units each: a read and a write)
     },
     "kick": {
         "channel": "",
@@ -419,6 +419,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "teasers": True,          # the three side boxes; false = the photo fills the left (one big moment)
         "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf",
                             "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                            "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf",
                             "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"],
         "condensed_variation": "Bold Condensed",  # named instance for variable fonts
         # Enquirer covers: a folder of head-and-shoulders photos named "<Person>.jpg" (or
