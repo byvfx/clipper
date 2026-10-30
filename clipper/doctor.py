@@ -476,19 +476,22 @@ def online_elevenlabs(cfg: dict) -> None:
     nc = settings(cfg)
     if not (el_key := find_key(nc)):
         return
-    r = requests.get("https://api.elevenlabs.io/v1/user", headers={"xi-api-key": el_key}, timeout=15)
-    if not r.ok:
-        fail("online", f"ElevenLabs refused the key (HTTP {r.status_code})",
-             f"check ${nc['key_env']} / {nc['key_file']}")
-        return
-    tier = (r.json().get("subscription") or {}).get("tier", "?")
-    ok("online", f"ElevenLabs answers (plan {tier})")
-    if nc["voice_id"]:
-        v = requests.get(f"https://api.elevenlabs.io/v1/voices/{nc['voice_id']}",
-                         headers={"xi-api-key": el_key}, timeout=15)
-        (ok if v.ok else fail)("online", f"ElevenLabs voice {nc['voice_id']}: "
-                               + (v.json().get("name", "?") if v.ok else f"HTTP {v.status_code}"),
-                               "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")
+    try:
+        r = requests.get("https://api.elevenlabs.io/v1/user", headers={"xi-api-key": el_key}, timeout=15)
+        if not r.ok:
+            fail("online", f"ElevenLabs refused the key (HTTP {r.status_code})",
+                 f"check ${nc['key_env']} / {nc['key_file']}")
+            return
+        tier = (r.json().get("subscription") or {}).get("tier", "?")
+        ok("online", f"ElevenLabs answers (plan {tier})")
+        if nc["voice_id"]:
+            v = requests.get(f"https://api.elevenlabs.io/v1/voices/{nc['voice_id']}",
+                             headers={"xi-api-key": el_key}, timeout=15)
+            (ok if v.ok else fail)("online", f"ElevenLabs voice {nc['voice_id']}: "
+                                   + (v.json().get("name", "?") if v.ok else f"HTTP {v.status_code}"),
+                                   "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")
+    except requests.RequestException as e:  # unreachable is a finding, not a doctor crash
+        fail("online", f"ElevenLabs didn't answer: {type(e).__name__}", "check the network")
 
 
 def online_anthropic(cfg: dict) -> None:
@@ -551,16 +554,17 @@ def online_modal(cfg: dict) -> None:
         fail("online", f"Modal app {cfg['transcribe']['modal_app']!r}: {type(e).__name__}: {str(e)[:120]}",
              "clipper transcribe --deploy (after setting the Modal token)")
     if diarizing(cfg):
+        secret = "?"  # (named before the try: modal_app itself can fail to import)
         try:
             import modal
 
-            from .modal_app import HF_SECRET
-            modal.Secret.from_name(HF_SECRET).hydrate()
-            ok("online", f"Modal secret {HF_SECRET!r} for diarization")
+            from .modal_app import HF_SECRET as secret
+            modal.Secret.from_name(secret).hydrate()
+            ok("online", f"Modal secret {secret!r} for diarization")
         except ImportError:
             pass
         except Exception as e:  # noqa: BLE001
-            fail("online", f"diarize is on but the Modal secret {HF_SECRET!r}: {type(e).__name__}",
+            fail("online", f"diarize is on but the Modal secret {secret!r}: {type(e).__name__}",
                  "see SETUP.md (Speaker labels): modal secret create huggingface HF_TOKEN=..., "
                  "then clipper transcribe --deploy")
 
