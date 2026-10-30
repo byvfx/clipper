@@ -341,12 +341,11 @@ What we learned bringing up Lolcow Cinema (October 2026). A new channel is held 
 ways the API reports badly, so do these before the first big upload run.
 
 1. **Sign in**: `clipper upload --sign-in` once, on the machine that uploads. The token
-   lands in `secrets/youtube_token.json`. First publish the Google Cloud project's app
-   (APIs & Services > OAuth consent screen > Publish app): while it is in Testing, Google
-   ends every sign-in after 7 days and uploads stop with `invalid_grant: Token has been
-   expired or revoked`. A published app you haven't had verified shows an "unverified app"
-   warning at sign-in; that's fine for your own channel. Signing in again keeps the
-   analytics scope if the saved token had it.
+   lands in `secrets/youtube_token.json`. First set the Google Cloud project's OAuth app to
+   **In production** (Google Auth Platform > Audience > Publish app; no verification
+   needed, you click past the "unverified app" warning): while it is in **Testing**, Google
+   expires the sign-in after 7 days and uploads stop with `invalid_grant`. Signing in again
+   keeps the analytics scope, and `clipper doctor` (online) tests the sign-in by refreshing it.
 2. **Verify the channel** at https://www.youtube.com/verify (phone). Without it custom
    thumbnails are refused (403); videos still go up, and `clipper upload --thumbnails` sets
    the covers afterwards. Verification can take more than one round: if Studio later

@@ -36,11 +36,13 @@ def test_replan_only_for_schedule_moves(monkeypatch):
     ran = []
     monkeypatch.setattr(schedule, "run", lambda cfg, sync_first: ran.append(sync_first))
     rows = iter([{"scheduled": "2026-11-03T16:00:00-08:00", "decision": "approved", "hold": False},
-                 {"scheduled": "", "decision": "approved", "hold": True}])
+                 {"scheduled": "", "decision": "approved", "hold": True},
+                 {"scheduled": "", "decision": "approved", "hold": False, "dropped": "stale"}])
     monkeypatch.setattr(actions, "describe", lambda cfg, sdir: {"k": next(rows)})
     cfg = {"discord": {"replan": True}}
     assert actions.replan(cfg, ITEM, "thumbtext", {"x": 1}) == ({"x": 1}, "")   # no replan
     assert actions.replan(cfg, ITEM, "approve", {})[1] == "scheduled 2026-11-03 16:00"
     assert actions.replan(cfg, ITEM, "hold", {})[1] == "held, not scheduled"
-    assert ran == [False, False]
+    assert actions.replan(cfg, ITEM, "approve", {})[1] == "not going out: stale"
+    assert ran == [False, False, False]
     assert actions.replan({"discord": {"replan": False}}, ITEM, "approve", {}) == ({}, "")

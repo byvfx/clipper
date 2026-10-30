@@ -355,7 +355,7 @@ def overview(cfg: dict) -> dict:
     for r in rows:
         d = name.get(r["decision"], r["decision"])
         counts[d] = counts.get(d, 0) + 1
-        if d == "approved" and not r["scheduled"] and not r["uploaded"]:
+        if d == "approved" and not r["scheduled"] and not r["uploaded"] and not r.get("dropped"):
             counts["approved_unscheduled"] += 1
         counts["held"] += bool(r["hold"])
     sched = load(cfg["paths"]["schedule"], {}) or {}
