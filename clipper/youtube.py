@@ -59,28 +59,37 @@ RETRY_STATUS = {500, 502, 503, 504}
 
 # ---------- auth ----------
 
-def credentials(paths: dict, sign_in: bool = False):
+def scopes(token_path: Path, wanted: list[str]) -> list[str]:
+    """wanted plus the scopes the saved token holds beyond them (analytics --sign-in adds
+    yt-analytics): loading, or signing in again, with ours alone would drop those."""
+    saved = (jsonstate.load(token_path).get("scopes") or []) if token_path.exists() else []
+    return [*wanted, *(s for s in saved if s not in wanted)]
+
+
+def credentials(paths: dict, sign_in: bool = False, force_refresh: bool = False):
+    """force_refresh: refresh even while the access token is good, since only a refresh
+    shows a sign-in that was revoked or expired (doctor)."""
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
 
     token_path: Path = paths["youtube_token"]
+    want = scopes(token_path, SCOPES)
     creds = None
     if token_path.exists() and not sign_in:
-        # Keep scopes granted beyond ours (analytics --sign-in adds yt-analytics): loading with
-        # SCOPES alone would refresh without them and rewrite the file without them.
-        saved = jsonstate.load(token_path).get("scopes") or []
-        creds = Credentials.from_authorized_user_file(
-            str(token_path), [*SCOPES, *(s for s in saved if s not in SCOPES)])
-    if creds and creds.expired and creds.refresh_token:
+        creds = Credentials.from_authorized_user_file(str(token_path), want)
+    if creds and creds.refresh_token and (creds.expired or force_refresh):
         try:
             creds.refresh(Request())
         except Exception as e:  # noqa: BLE001  # revoked, or a 7-day Testing-mode token that expired
-            raise ClipperError(f"YouTube token refresh failed ({e}); run: clipper upload --sign-in")
+            why = e.args[0] if e.args else e
+            raise ClipperError(f"YouTube sign-in no longer works ({why}); run: clipper upload --sign-in. "
+                               "If it lapses every 7 days, the Google OAuth app is still in Testing: "
+                               "publish it (Google Cloud > Google Auth Platform > Audience)")
     if not creds or not creds.valid:
         if not sign_in:
             raise ClipperError("not signed in to YouTube; run: clipper upload --sign-in")
-        flow = InstalledAppFlow.from_client_secrets_file(str(paths["youtube_client_secret"]), SCOPES)
+        flow = InstalledAppFlow.from_client_secrets_file(str(paths["youtube_client_secret"]), want)
         # select_account: always show the account chooser, which is also where a Brand
         # Account channel is picked; plain "consent" silently reuses the browser's account.
         creds = flow.run_local_server(port=0, prompt="select_account consent",
