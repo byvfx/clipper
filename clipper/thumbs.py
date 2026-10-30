@@ -561,21 +561,54 @@ def photo_name(tc: dict, name: str) -> str:
     return next((n for n in tc.get("_photos", {}) if n.lower() == (name or "").strip().lower()), "")
 
 
-def face_crop(path: Path, face: dict, size: tuple[int, int], fill: float = 0.72,
-              max_zoom: float = 2.0) -> Image.Image:
-    """Crop around a face box so the head fills `fill` of the photo's height, the face a
-    little above center, then cover-fit to size, enlarging the source at most max_zoom."""
-    img = Image.open(path).convert("RGB")
-    fw, fh = img.size
+def crop_window(fw: int, fh: int, b: dict, size: tuple[int, int], fill: float, max_zoom: float,
+                ax: float = 0.5, ay: float = 0.45) -> tuple[float, float, float, float]:
+    """The source window (x0, y0, w, h) that puts face box b's center at (ax, ay) of the
+    output with the head filling `fill` of its height, kept inside the source."""
     tw, th = size
-    b = clamp_box(face)
     cx, cy = (b["x"] + b["width"] / 2) * fw, (b["y"] + b["height"] / 2) * fh
     h = min(fh, max(b["height"] * fh / fill, th / max_zoom))
     w = h * tw / th
     if w > fw:
         w, h = fw, fw * th / tw
-    x0 = min(max(cx - w / 2, 0), fw - w)
-    y0 = min(max(cy - h * 0.45, 0), fh - h)
+    return min(max(cx - w * ax, 0), fw - w), min(max(cy - h * ay, 0), fh - h), w, h
+
+
+def clear_window(fw: int, fh: int, b: dict, size: tuple[int, int], fill: float, max_zoom: float,
+                 avoid: list[tuple[int, int, int, int]]) -> tuple[float, float, float, float]:
+    """The crop window that keeps the head out of the avoid boxes (output pixels: the
+    inset, the badge) and inside the photo: the biggest head that clears them, moved as
+    little as it can be; failing that, the one least covered."""
+    tw, th = size
+    best = None
+    for f in (fill, fill * 0.94, fill * 0.88, fill * 0.82, fill * 0.76, fill * 0.7):
+        for dx in (0, -0.06, 0.06, -0.12, 0.12, -0.18, 0.18):
+            for dy in (0, -0.05, -0.1, -0.15):
+                x0, y0, w, _ = win = crop_window(fw, fh, b, size, f, max_zoom, 0.5 + dx, 0.45 + dy)
+                s = tw / w
+                fx0, fy0 = (b["x"] * fw - x0) * s, (b["y"] * fh - y0) * s
+                fx1, fy1 = fx0 + b["width"] * fw * s, fy0 + b["height"] * fh * s
+                area = (fx1 - fx0) * (fy1 - fy0)
+                covered = area - max(0, min(fx1, tw) - max(fx0, 0)) * max(0, min(fy1, th) - max(fy0, 0))
+                for ax0, ay0, ax1, ay1 in avoid:
+                    covered += max(0, min(fx1, ax1) - max(fx0, ax0)) * max(0, min(fy1, ay1) - max(fy0, ay0))
+                rank = (round(covered / area, 2), -f, abs(dx) + abs(dy))
+                if best is None or rank < best[0]:
+                    best = (rank, win)
+    return best[1]
+
+
+def face_crop(path: Path, face: dict, size: tuple[int, int], fill: float = 0.72,
+              max_zoom: float = 2.0, avoid: list[tuple[int, int, int, int]] = ()) -> Image.Image:
+    """Crop around a face box so the head fills `fill` of the photo's height, the face a
+    little above center, then cover-fit to size, enlarging the source at most max_zoom.
+    With avoid (boxes drawn over the photo later), the head is moved or made smaller to
+    stay clear of them."""
+    img = Image.open(path).convert("RGB")
+    fw, fh = img.size
+    b = clamp_box(face)
+    x0, y0, w, h = (clear_window(fw, fh, b, size, fill, max_zoom, list(avoid)) if avoid
+                    else crop_window(fw, fh, b, size, fill, max_zoom))
     img = img.crop((round(x0), round(y0), round(x0 + w), round(y0 + h))).resize(size, Image.LANCZOS)
     img = ImageEnhance.Contrast(img).enhance(1.15)
     img = ImageEnhance.Color(img).enhance(1.25)
@@ -747,19 +780,23 @@ def compose_enquirer(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, d
             d.rectangle((8, y, 308, y + h), fill=bg, outline=BLK, width=3)
         y += h + 6
 
-    # Main face, bleeding to the bottom; reaction inset and channel badge on it.
+    # Main face, bleeding to the bottom; reaction inset and channel badge on it, the face
+    # kept clear of both.
     mx, my, mw, mh = (314, 126, 470, H - 126) if tc["teasers"] else (8, 126, 776, H - 126)
-    photo = tc.get("_photos", {}).get(photo_name(tc, e.get("photo", "")))
-    img.paste(face_crop(photo, WHOLE, (mw, mh)) if photo
-              else face_crop(frame_path(e["frame"]), e["face"], (mw, mh)), (mx, my))
     iw, ih = 176, 158
     ix, iy = mx + mw - iw - 14, H - ih - 14
-    d.rectangle((ix - 7, iy - 7, ix + iw + 7, iy + ih + 7), fill=WHT, outline=BLK, width=2)
-    img.paste(face_crop(frame_path(e["inset_frame"]), e["inset_face"], (iw, ih), fill=0.72), (ix, iy))
+    avoid = [(ix - 7 - mx, iy - 7 - my, ix + iw + 7 - mx, iy + ih + 7 - my)]
     if tc["_channel"]:
         bf2, sf = cond_font(tc, 30), cond_font(tc, 13)
         bw = int(bf2.getlength(tc["_channel"])) + 24
         bx, by = mx + 12, H - 62
+        avoid.append((bx - mx, by - my, bx + bw - mx, H - 12 - my))
+    photo = tc.get("_photos", {}).get(photo_name(tc, e.get("photo", "")))
+    img.paste(face_crop(photo, WHOLE, (mw, mh)) if photo
+              else face_crop(frame_path(e["frame"]), e["face"], (mw, mh), avoid=avoid), (mx, my))
+    d.rectangle((ix - 7, iy - 7, ix + iw + 7, iy + ih + 7), fill=WHT, outline=BLK, width=2)
+    img.paste(face_crop(frame_path(e["inset_frame"]), e["inset_face"], (iw, ih), fill=0.72), (ix, iy))
+    if tc["_channel"]:
         d.rectangle((bx, by, bx + bw, H - 12), fill=RED, outline=WHT, width=2)
         d.text((bx + bw / 2, by + 4), tc["badge_kicker"], font=sf, fill=YEL, anchor="ma")
         d.text((bx + bw / 2, H - 16), tc["_channel"], font=bf2, fill=WHT, anchor="mb")
@@ -876,20 +913,24 @@ def compose_vertical(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, d
         d.text((hx, y), line, font=sf, fill=WHT)
         y += 52
 
-    # The face to the bottom; inset and badge above the bottom title overlay.
+    # The face to the bottom, clear of the inset and badge; those above the bottom title overlay.
     py = y + 16
     pw, ph = SW - 2 * m, SH - m - py
-    photo = tc.get("_photos", {}).get(photo_name(tc, e.get("photo", "")))
-    img.paste(face_crop(photo, WHOLE, (pw, ph)) if photo
-              else face_crop(frame_path(e["frame"]), e["face"], (pw, ph), max_zoom=2.5), (m, py))
     iw, ih = 330, 296
     ix, iy = SW - m - iw - 22, max(py + 40, SH - m - ih - 380)
-    d.rectangle((ix - 9, iy - 9, ix + iw + 9, iy + ih + 9), fill=WHT, outline=BLK, width=3)
-    img.paste(face_crop(frame_path(e["inset_frame"]), e["inset_face"], (iw, ih), fill=0.72), (ix, iy))
+    avoid = [(ix - 9 - m, iy - 9 - py, ix + iw + 9 - m, iy + ih + 9 - py)]
     if tc["_channel"]:
         bf2, kf = cond_font(tc, 52), cond_font(tc, 24)
         bwid = int(bf2.getlength(tc["_channel"])) + 40
         bx, bb = m + 22, iy + ih
+        avoid.append((bx - m, bb - 104 - py, bx + bwid - m, bb - py))
+    photo = tc.get("_photos", {}).get(photo_name(tc, e.get("photo", "")))
+    img.paste(face_crop(photo, WHOLE, (pw, ph)) if photo
+              else face_crop(frame_path(e["frame"]), e["face"], (pw, ph), max_zoom=2.5, avoid=avoid),
+              (m, py))
+    d.rectangle((ix - 9, iy - 9, ix + iw + 9, iy + ih + 9), fill=WHT, outline=BLK, width=3)
+    img.paste(face_crop(frame_path(e["inset_frame"]), e["inset_face"], (iw, ih), fill=0.72), (ix, iy))
+    if tc["_channel"]:
         d.rectangle((bx, bb - 104, bx + bwid, bb), fill=RED, outline=WHT, width=3)
         d.text((bx + bwid / 2, bb - 96), tc["badge_kicker"], font=kf, fill=YEL, anchor="ma")
         d.text((bx + bwid / 2, bb - 8), tc["_channel"], font=bf2, fill=WHT, anchor="mb")
