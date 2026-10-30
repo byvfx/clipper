@@ -105,6 +105,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "subject": "jer",         # the archive subject (paths.archive/<subject>)
         "topics": ["The Quartering"],  # segments with one of these topics...
         "figures": ["Jeremy Hambly", "Jer", "The Quartering"],  # ...or one of these figures
+        # These two go with the subject: the video title's start ("" = "<subject> receipts")
+        # and its YouTube tags (the show's name is added).
+        "title": "The Quartering Receipts",
+        "tags": ["The Quartering", "Jeremy Hambly", "receipts"],
         "model": "claude-sonnet-5-5",  # reads the segments, writes the stories and questions
         "effort": "medium",
         "prompt_version": "v2",   # prompts/receipts_stories_<v>.md

@@ -602,6 +602,8 @@ ask_candidates = 80            # pooled windows the model reads (~25k tokens)
 subject = "jer"
 topics = ["The Quartering"]
 figures = ["Jeremy Hambly", "Jer", "The Quartering"]  # segments with one of the topics, or one of these figures
+title = "The Quartering Receipts"  # the video title's start; "" = "<subject> receipts"
+tags = ["The Quartering", "Jeremy Hambly", "receipts"]  # YouTube tags; the show's name is added
 per_story = 3
 model = "claude-sonnet-5-5"    # reads the segments, writes the stories and questions
 effort = "medium"
