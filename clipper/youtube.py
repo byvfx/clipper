@@ -1,7 +1,8 @@
 """YouTube upload: schedule.json entries -> private videos with publishAt.
 
   clipper upload --sign-in   one-time OAuth in your browser; token saved beside the
-                             client secret and refreshed automatically after that
+                             client secret and refreshed automatically after that (keeps
+                             the scopes the saved token has, so analytics survives it)
   clipper upload             upload every scheduled entry due within upload_ahead_hours
 
 Per video: title, description, hashtags, tags and playlist from Kitsu's columns (read
@@ -59,6 +60,18 @@ RETRY_STATUS = {500, 502, 503, 504}
 
 # ---------- auth ----------
 
+TESTING_EXPIRY = ("Google ends sign-ins after 7 days while the Cloud project's OAuth consent "
+                  "screen is in Testing; publish the app (APIs & Services > OAuth consent screen) "
+                  "to stop that")
+
+
+def scopes(token_path: Path) -> list[str]:
+    """SCOPES plus any other scope the saved token holds (analytics --sign-in adds
+    yt-analytics). Refreshing or signing in again with SCOPES alone would drop them."""
+    saved = jsonstate.read(token_path, {}).get("scopes") or []
+    return [*SCOPES, *(s for s in saved if s not in SCOPES)]
+
+
 def credentials(paths: dict, sign_in: bool = False):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
@@ -67,20 +80,18 @@ def credentials(paths: dict, sign_in: bool = False):
     token_path: Path = paths["youtube_token"]
     creds = None
     if token_path.exists() and not sign_in:
-        # Keep scopes granted beyond ours (analytics --sign-in adds yt-analytics): loading with
-        # SCOPES alone would refresh without them and rewrite the file without them.
-        saved = jsonstate.load(token_path).get("scopes") or []
-        creds = Credentials.from_authorized_user_file(
-            str(token_path), [*SCOPES, *(s for s in saved if s not in SCOPES)])
+        creds = Credentials.from_authorized_user_file(str(token_path), scopes(token_path))
     if creds and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
         except Exception as e:  # noqa: BLE001  # revoked, or a 7-day Testing-mode token that expired
-            raise ClipperError(f"YouTube token refresh failed ({e}); run: clipper upload --sign-in")
+            raise ClipperError(f"YouTube token refresh failed ({e}); run: clipper upload --sign-in. "
+                               + TESTING_EXPIRY)
     if not creds or not creds.valid:
         if not sign_in:
             raise ClipperError("not signed in to YouTube; run: clipper upload --sign-in")
-        flow = InstalledAppFlow.from_client_secrets_file(str(paths["youtube_client_secret"]), SCOPES)
+        flow = InstalledAppFlow.from_client_secrets_file(str(paths["youtube_client_secret"]),
+                                                         scopes(token_path))
         # select_account: always show the account chooser, which is also where a Brand
         # Account channel is picked; plain "consent" silently reuses the browser's account.
         creds = flow.run_local_server(port=0, prompt="select_account consent",
