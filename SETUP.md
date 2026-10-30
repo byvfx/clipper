@@ -117,7 +117,7 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    `streams` on the NAS), add one head-and-shoulders crop per person named `<Person>.jpg`
    (the whole picture is treated as the face, so crop out watermarks and logos), and set
    `[thumbnail] photos` to it. The model may then use one for a cover's face or teaser box;
-   `clipper thumbs <stream> --ids s04 --teaser-photo "Hasan Piker"` sets one by hand.
+   `clipper thumbs <stream> --items s04 --teaser-photo "Hasan Piker"` sets one by hand.
 
 7. **Check**: `uv run clipper doctor --role gpu` (or `--role bot`).
 
@@ -323,7 +323,7 @@ Save a reference screenshot of each one from a recorded stream (`clipper shorts 
 --save-example <layout> --at <seconds>`); `clipper doctor` warns while any is missing.
 A layout that frames an existing scene another way (say, only the webcams of a watch scene)
 gets `pick = false`: scene detection never chooses it and it needs no screenshot; pick it by
-hand with `clipper shorts <stream> --ids <vNN> --layout <name>`, the Kitsu Layout column or a retake.
+hand with `clipper shorts <stream> --items <vNN> --layout <name>`, the Kitsu Layout column or a retake.
 Add the slug to `[record] channels` to record it live. `clipper shows` lists every show and
 its streams; the show's Kitsu production is created on its first publish.
 

@@ -1,7 +1,7 @@
 """Vertical Shorts: each Pass B pick's short window as a 1080x1920 video.
 
 Usage:
-    clipper shorts <stream> [--ids t33,w19] [--layout watch] [--force] [--rescene] [--check]
+    clipper shorts <stream> [--items t33,w19] [--layout watch] [--force] [--rescene] [--check]
 
 For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>.mp4:
   1. the clip's window (in_s..out_s; [shorts] window = "short" uses scoring's 15-60 s
