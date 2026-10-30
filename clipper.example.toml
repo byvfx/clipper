@@ -276,6 +276,8 @@ min_brightness = 28            # skip darker frames (mean luma 0-255)
 min_sharpness = 150.0          # skip blurrier frames (variance of the Laplacian)
 min_crop = 0.4                 # most zoom allowed: a 16:9 box this share of the frame wide
 max_words = 4
+retry_prompt_version = "v1"    # prompts/thumbnail_retry_<v>.md, thumbnail_enquirer_retry_<v>.md and
+                               # thumbnail_feedback_<v>.md: asking again for unusable text, a retake's note
 # Brand look. font: a bold TTF/OTF; empty = the first of `fonts` that exists
 # (Impact on Windows/macOS, DejaVu Sans Bold on Linux).
 font = ""

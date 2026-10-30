@@ -54,9 +54,10 @@ class Prompts:
             self.vars["third_party_rule"] = self.vars["third_party_pass_a"]
             self.vars["third_party_rule_b"] = self.vars["third_party_pass_b"]
 
-    def get(self, name: str) -> str:
+    def get(self, name: str, **fill) -> str:
+        """fill: per-call placeholders on top of vars (e.g. a reviewer's note)."""
         text = (self.dir / f"{name}_{self.version}.md").read_text(encoding="utf-8")
-        text = text.format(**self.vars)
+        text = text.format(**{**self.vars, **fill})
         if name in VIEWER_FACING and self.house_style:
             text = (text.rstrip() + "\n\nHouse style for anything viewers see (titles, "
                     "descriptions, hooks, chapter and thumbnail text):\n"

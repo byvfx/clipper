@@ -11,7 +11,7 @@ RAW_READ = re.compile(r"json\.loads\([^)]*\.read_text\(")
 
 def test_no_raw_json_reads():
     found = []
-    for path in sorted((ROOT / "clipper").glob("*.py")):
+    for path in sorted((ROOT / "clipper").rglob("*.py")):
         if path.name in ("jsonstate.py", "modal_app.py"):  # modal_app runs without the package
             continue
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

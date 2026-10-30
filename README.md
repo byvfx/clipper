@@ -70,6 +70,11 @@ long segment comes out, not the whole video. A show that is not on Kick gets a p
 channel in its `[shows.<key>]` table. `[thumbnail] teasers = false` (per show) drops the
 cover's three side boxes so the photo fills the left: one big moment, no other stories to plug.
 `[preshow] teasers = false` does the same for every pre-show and one-off cover only.
+Every position, size, color and fixed word of the tabloid covers (16:9 and the Shorts' 9:16)
+is data, `LAYOUT` in `clipper/thumbs/enquirer.py`; a show changes any of it in
+`layouts/<show>/enquirer.toml` (`[paths] layouts`, beside its Shorts screenshots), e.g.
+`[colors] green = "#0b3d91"` or `[cover.inset] size = [200, 180]`, and
+`clipper thumbs <stream> --compose-only` redraws with no model calls. An unknown key is an error.
 
 **Weekly issue.** `clipper weekly` turns the week's streams (Sun-Sat) into *Lolcow Cinema
 Weekly*, a ten-page tabloid for a TikTok carousel or two YouTube Posts: a cover, contents,

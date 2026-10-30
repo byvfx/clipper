@@ -38,7 +38,7 @@ def test_library_raises_no_system_exit():
     """`raise SystemExit` outside cli.py stops the bot or the war room instead of failing one
     action. cli.py is the boundary: it exits with a status."""
     found = []
-    for path in sorted((ROOT / "clipper").glob("*.py")):
+    for path in sorted((ROOT / "clipper").rglob("*.py")):
         if path.name == "cli.py":
             continue
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -50,7 +50,7 @@ def test_library_raises_no_system_exit():
 def test_no_status_wrapped_as_a_message():
     """ClipperError's first argument is a message; an exit status goes in status=."""
     found = []
-    for path in sorted((ROOT / "clipper").glob("*.py")):
+    for path in sorted((ROOT / "clipper").rglob("*.py")):
         if path.name == "errors.py":
             continue
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
