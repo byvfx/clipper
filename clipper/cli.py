@@ -522,6 +522,17 @@ def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
             print("\nqueued; the bot DMs it within a minute")
 
 
+def cmd_config(cfg: dict, args: argparse.Namespace) -> None:
+    sdir = stream_dir(cfg, args.for_stream) if args.for_stream else None
+    e = config.explain(cfg, args.name, sdir)
+    show = f"show {e['show']}" if e["show"] else "base config, no show"
+    where = f"stream {sdir.name}, {show}" if sdir else show
+    print(f"{e['name']} = {json.dumps(e['value'], default=str)}    ({where})")
+    for i, (layer, value) in enumerate(e["layers"]):
+        last = i == len(e["layers"]) - 1
+        print(f"  {'->' if last else '  '} {layer:<28} {json.dumps(value, default=str)}")
+
+
 def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     from . import doctor
 
@@ -546,7 +557,7 @@ COMMAND_GROUPS = [
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'analytics']),
     ('Services (long-running)', ['record', 'worker', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
-    ('Setup and checks', ['setup', 'doctor', 'shows']),
+    ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
 
@@ -976,6 +987,13 @@ def add_setup(sub) -> None:
     p.add_argument("--role", choices=["all", "gpu", "bot", "nas"], default="all",
                    help="only what this machine runs (gpu worker, bot, nas recorder)")
     p.set_defaults(fn=cmd_doctor)
+
+    p = sub.add_parser("config", help="settings: where a value comes from (default, clipper.toml, show, ...)")
+    csub = p.add_subparsers(dest="action", required=True)
+    r = csub.add_parser("get", help="a setting's value and every layer that sets it, e.g. meta.model")
+    r.add_argument("name", help="section.key, e.g. bleep.mode")
+    r.add_argument("--stream", dest="for_stream", help="as this stream sees it (its show, its config.toml)")
+    p.set_defaults(fn=cmd_config)
 
     p = sub.add_parser("shows", help="list the [shows] profiles and which streams belong to each")
     p.set_defaults(fn=cmd_shows)

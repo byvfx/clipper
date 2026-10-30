@@ -157,3 +157,24 @@ def test_show_flag_sticks_for_a_stream(tmp_path):
     both = config.for_stream(config.pin_show(cfg, "c404"), sdir)
     assert (both["meta"]["srt_max_s"], both["meta"]["srt_line_chars"]) == (8, 30)
     assert config.for_stream(cfg, sdir)["meta"]["srt_max_s"] == 4      # no leak into the cache
+
+
+def test_explain_lists_each_layer(cfg_path, tmp_path, monkeypatch):
+    monkeypatch.setenv("CLIPPER_META_SRT_LINE_CHARS", "40")
+    cfg = config.load(cfg_path)
+    e = config.explain(config.pin_show(cfg, "kino"), "meta.srt_max_s")
+    assert e["value"] == 8 and [n for n, _ in e["layers"]] == ["default", "clipper.toml", "[shows.kino]"]
+    e = config.explain(cfg, "meta.srt_line_chars")
+    assert e["value"] == 40 and [n for n, _ in e["layers"]][-2:] == ["clipper.local.toml",
+                                                                     "$CLIPPER_META_SRT_LINE_CHARS"]
+    with pytest.raises(ClipperError, match="did you mean meta.srt_max_s"):
+        config.explain(cfg, "meta.srt_max")
+
+
+def test_setup_starter_config_is_clean(tmp_path):
+    from clipper import setup
+    path = tmp_path / "clipper.toml"
+    path.write_text(setup.NEW_CONFIG, encoding="utf-8")
+    cfg = config.load(path, use_local=False)
+    assert config.problems(cfg) == [] and cfg["shows"] == {}
+    assert cfg["bleep"]["mode"] == "bleep" and cfg["record"]["channels"] == []

@@ -26,7 +26,7 @@ else uv's installer and BtbN's ffmpeg build; Homebrew or apt on macOS/Linux), sy
 packages, then runs `clipper setup`:
 
 1. **Join or start fresh.** Join copies the main machine's `clipper.toml` (and, if you like, the
-   `secrets/` beside it) from a path or the share; new writes one from clipper.example.toml.
+   `secrets/` beside it) from a path or the share; new writes a short starter (only what differs from the defaults; clipper.example.toml lists every setting).
 2. **Roles.** Worker, bot, recorder (the recorder is the NAS's Docker container; setup only
    points at `deploy/record/deploy.sh`). It looks at the GPU and offers WhisperX (NVIDIA), mlx
    (Apple Silicon) or Modal, keeping the shared choice when this machine can run it. If the

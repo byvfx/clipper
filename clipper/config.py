@@ -898,6 +898,37 @@ def for_stream(cfg: dict, sdir: Path) -> dict:
     return {**res, "_pinned": True} if cfg.get("_pinned") else res
 
 
+def explain(cfg: dict, name: str, sdir: Path | None = None) -> dict:
+    """Where "section.key" comes from: every layer that sets it, in the order they apply
+    (default < clipper.toml < show < stream config.toml < clipper.local.toml < env), and the
+    value that wins, for this stream (or the config's show, or the base config)."""
+    section, _, key = name.partition(".")
+    if section not in DEFAULTS or key not in DEFAULTS[section]:
+        import difflib
+        near = difflib.get_close_matches(name, [f"{s}.{k}" for s, v in DEFAULTS.items() for k in v], 4, 0.75)
+        raise ClipperError(f"no setting {name!r}" + (f"; did you mean {', '.join(near)}?" if near else ""))
+    root = _root(cfg)
+    resolved = for_stream(cfg, sdir) if sdir else cfg
+    show = resolved["show"]["key"]
+    layers = [("default", DEFAULTS[section][key])]
+    if root.get("_file"):
+        data = tomllib.loads(Path(root["_file"]).read_text(encoding="utf-8"))
+        if key in data.get(section, {}):
+            layers.append((root["_file"].name, data[section][key]))
+    if show and key in root["shows"][show]["overrides"].get(section, {}):
+        layers.append((f"[shows.{show}]", root["shows"][show]["overrides"][section][key]))
+    if sdir and (Path(sdir) / STREAM_CONFIG).exists():
+        data = tomllib.loads((Path(sdir) / STREAM_CONFIG).read_text(encoding="utf-8"))
+        if key in data.get(section, {}):
+            layers.append((str(Path(sdir) / STREAM_CONFIG), data[section][key]))
+    if key in root["_local"].get(section, {}):
+        layers.append((LOCAL_CONFIG, root["_local"][section][key]))
+    env = f"CLIPPER_{section}_{key}".upper()
+    if env in os.environ:
+        layers.append((f"${env}", os.environ[env]))
+    return {"name": name, "value": resolved[section][key], "show": show, "layers": layers}
+
+
 def pin_show(cfg: dict, key: str) -> dict:
     """Show `key`'s config, kept by for_stream for any stream (`clipper --show <key>`)."""
     return {**for_show(cfg, key), "_pinned": True}
