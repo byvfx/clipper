@@ -232,9 +232,11 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         listing = out_dir / f"{slug(topic)}.txt"
         listing.write_text("".join(lines), encoding="utf-8")
         dst = out_dir / f"{slug(topic)}.mp4"
+        part = dst.with_name(dst.name + ".part")  # B15: a crashed join leaves no half .mp4 behind
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat",
                         "-safe", "0", "-i", str(listing), "-c", "copy",
-                        "-movflags", "+faststart", str(dst)], check=True)
+                        "-movflags", "+faststart", "-f", "mp4", str(part)], check=True)
+        part.replace(dst)
         listing.unlink()
         chapter_text = "\n".join(f"{hms(c['start_s'])} {c['title']}" for c in chapters)
         write_sidecar(dst, {**comp, "duration_s": round(t, 1), "chapters": chapters,

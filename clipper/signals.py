@@ -247,10 +247,9 @@ def run(stream_dir: Path, sc: dict) -> list[dict]:
         w["transcript_peak"] = " ".join(x["word"] for x in words[lo:hi])
         a, b = np.searchsorted(mt, [p + lag - 5, p + lag + 15])
         w["chat_sample"] = [" ".join(EMOTE.sub(r" \1 ", m["content"]).split()) for m in msgs[a:b]][:10]
-    (stream_dir / "windows.json").write_text(
-        json.dumps({"stream_id": stream_dir.name, "chat_coverage": round(float(covered.mean()), 3),
-                    "params": sc, "windows": windows}, indent=2, ensure_ascii=False),
-        encoding="utf-8")
+    jsonstate.write(stream_dir / "windows.json",
+                    {"stream_id": stream_dir.name, "chat_coverage": round(float(covered.mean()), 3),
+                     "params": sc, "windows": windows})
 
     print(f"{len(msgs)} chat msgs, coverage {covered.mean():.0%}; {len(windows)} windows")
     for w in windows:
