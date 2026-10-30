@@ -475,129 +475,186 @@ def check_narrate(cfg: dict) -> None:
 
 
 def check_online(cfg: dict, role: str) -> None:
+    """That the services this role uses answer, in this order."""
+    online_elevenlabs(cfg)
+    if role in ("all", "bot"):
+        online_youtube(cfg)
+    if role != "nas":
+        check_llm_online(cfg)
+        online_anthropic(cfg)
+        online_kitsu(cfg)
+    if cfg["discord"]["enabled"] or role == "bot":
+        online_discord(cfg)
+    if role in ("all", "gpu"):
+        online_modal(cfg)
+        online_nas_cut(cfg)
+        online_preshow_feeds(cfg)  # the worker grabs pre-shows
+    online_kick(cfg)
+
+
+def online_elevenlabs(cfg: dict) -> None:
     import requests
 
     from .narrate import find_key, settings
 
     nc = settings(cfg)
-    if el_key := find_key(nc):
+    if not (el_key := find_key(nc)):
+        return
+    try:
         r = requests.get("https://api.elevenlabs.io/v1/user", headers={"xi-api-key": el_key}, timeout=15)
         if not r.ok:
             fail("online", f"ElevenLabs refused the key (HTTP {r.status_code})",
                  f"check ${nc['key_env']} / {nc['key_file']}")
-        else:
-            tier = (r.json().get("subscription") or {}).get("tier", "?")
-            ok("online", f"ElevenLabs answers (plan {tier})")
-            if nc["voice_id"]:
-                v = requests.get(f"https://api.elevenlabs.io/v1/voices/{nc['voice_id']}",
-                                 headers={"xi-api-key": el_key}, timeout=15)
-                (ok if v.ok else fail)("online", f"ElevenLabs voice {nc['voice_id']}: "
-                                       + (v.json().get("name", "?") if v.ok else f"HTTP {v.status_code}"),
-                                       "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")
+            return
+        tier = (r.json().get("subscription") or {}).get("tier", "?")
+        ok("online", f"ElevenLabs answers (plan {tier})")
+        if nc["voice_id"]:
+            v = requests.get(f"https://api.elevenlabs.io/v1/voices/{nc['voice_id']}",
+                             headers={"xi-api-key": el_key}, timeout=15)
+            (ok if v.ok else fail)("online", f"ElevenLabs voice {nc['voice_id']}: "
+                                   + (v.json().get("name", "?") if v.ok else f"HTTP {v.status_code}"),
+                                   "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")
+    except requests.RequestException as e:  # unreachable is a finding, not a doctor crash
+        fail("online", f"ElevenLabs didn't answer: {type(e).__name__}", "check the network")
 
-    if role in ("all", "bot") and cfg["paths"]["youtube_token"].exists():
-        try:  # the file can be there long after the sign-in stopped working
-            from . import youtube
-            youtube.credentials(cfg["paths"], force_refresh=True)
-            ok("online", "YouTube sign-in works (token refreshed)")
-        except ClipperError as e:
-            fail("online", str(e).split("; run:")[0], "clipper upload --sign-in; see SETUP.md (A new YouTube channel)")
-        except ImportError as e:
-            warn("online", f"YouTube sign-in not checked: {e}", "uv sync")
-    if role != "nas":
-        check_llm_online(cfg)
-    if role != "nas" and os.environ.get("ANTHROPIC_API_KEY"):
-        try:
-            from .llm import Claude
-            Claude(cfg).client.models.retrieve(cfg["scoring"]["model_a"])
-            ok("online", f"Anthropic API answers ({cfg['scoring']['model_a']} available)")
-        except Exception as e:  # noqa: BLE001
-            fail("online", f"Anthropic API: {type(e).__name__}: {str(e)[:120]}",
-                 "check the key, or set [scoring] workspace_id / $ANTHROPIC_WORKSPACE_ID")
-    if role != "nas" and os.environ.get(cfg["review"]["token_env"]) and cfg["review"]["host"]             and "<" not in cfg["review"]["host"]:
-        try:
-            from . import review
-            from .config import for_show
-            gazu = review.connect(cfg["review"])
-            ok("online", f"Kitsu answers at {cfg['review']['host']}")
-            for key in _root(cfg)["shows"] or [""]:
-                name = review.project_name(for_show(cfg, key))
-                if gazu.project.get_project_by_name(name):
-                    ok("online", f"Kitsu production {name!r}")
-                else:
-                    warn("online", f"Kitsu production {name!r} doesn't exist yet",
-                         "created by the first `clipper review publish` of that show")
-        except Exception as e:  # noqa: BLE001
-            fail("online", f"Kitsu: {e}", "is the NAS up, and this machine on its network?")
-    if cfg["discord"]["enabled"] or role == "bot":
-        try:
-            from .notify import token
-            r = requests.get("https://discord.com/api/v10/users/@me",
-                             headers={"Authorization": f"Bot {token(cfg)}"}, timeout=15)
-            (ok if r.ok else fail)("online", f"Discord bot {r.json().get('username', '?')}" if r.ok
-                                   else f"Discord refused the token ({r.status_code})",
-                                   "" if r.ok else "reset the bot token in the Developer Portal")
-        except Exception as e:  # noqa: BLE001
-            fail("online", f"Discord: {e}")
-    if role in ("all", "gpu") and cfg["transcribe"]["backend"] == "modal":
+
+def online_youtube(cfg: dict) -> None:
+    """The YouTube sign-in still refreshes (the token file can be there long after the
+    sign-in stopped working)."""
+    if not cfg["paths"]["youtube_token"].exists():
+        return
+    try:
+        from . import youtube
+        youtube.credentials(cfg["paths"], force_refresh=True)
+        ok("online", "YouTube sign-in works (token refreshed)")
+    except ClipperError as e:
+        fail("online", str(e).split("; run:")[0], "clipper upload --sign-in; see SETUP.md (A new YouTube channel)")
+    except ImportError as e:
+        warn("online", f"YouTube sign-in not checked: {e}", "uv sync")
+
+
+def online_anthropic(cfg: dict) -> None:
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return
+    try:
+        from .llm import Claude
+        Claude(cfg).client.models.retrieve(cfg["scoring"]["model_a"])
+        ok("online", f"Anthropic API answers ({cfg['scoring']['model_a']} available)")
+    except Exception as e:  # noqa: BLE001
+        fail("online", f"Anthropic API: {type(e).__name__}: {str(e)[:120]}",
+             "check the key, or set [scoring] workspace_id / $ANTHROPIC_WORKSPACE_ID")
+
+
+def online_kitsu(cfg: dict) -> None:
+    """Kitsu, and each show's production in it."""
+    rc = cfg["review"]
+    if not (os.environ.get(rc["token_env"]) and rc["host"] and "<" not in rc["host"]):
+        return
+    try:
+        from . import review
+        gazu = review.connect(rc)
+        ok("online", f"Kitsu answers at {rc['host']}")
+        for key in _root(cfg)["shows"] or [""]:
+            name = review.project_name(for_show(cfg, key))
+            if gazu.project.get_project_by_name(name):
+                ok("online", f"Kitsu production {name!r}")
+            else:
+                warn("online", f"Kitsu production {name!r} doesn't exist yet",
+                     "created by the first `clipper review publish` of that show")
+    except Exception as e:  # noqa: BLE001
+        fail("online", f"Kitsu: {e}", "is the NAS up, and this machine on its network?")
+
+
+def online_discord(cfg: dict) -> None:
+    import requests
+
+    try:
+        from .notify import token
+        r = requests.get("https://discord.com/api/v10/users/@me",
+                         headers={"Authorization": f"Bot {token(cfg)}"}, timeout=15)
+        (ok if r.ok else fail)("online", f"Discord bot {r.json().get('username', '?')}" if r.ok
+                               else f"Discord refused the token ({r.status_code})",
+                               "" if r.ok else "reset the bot token in the Developer Portal")
+    except Exception as e:  # noqa: BLE001
+        fail("online", f"Discord: {e}")
+
+
+def online_modal(cfg: dict) -> None:
+    """The deployed transcription app (and the diarization secret), with backend = "modal"."""
+    if cfg["transcribe"]["backend"] != "modal":
+        return
+    try:
+        import modal
+        modal.Cls.from_name(cfg["transcribe"]["modal_app"], "WhisperX").hydrate()
+        ok("online", f"Modal app {cfg['transcribe']['modal_app']!r} deployed")
+    except ImportError:
+        pass  # check_gpu already failed it
+    except Exception as e:  # noqa: BLE001
+        fail("online", f"Modal app {cfg['transcribe']['modal_app']!r}: {type(e).__name__}: {str(e)[:120]}",
+             "clipper transcribe --deploy (after setting the Modal token)")
+    if diarizing(cfg):
+        secret = "?"  # (named before the try: modal_app itself can fail to import)
         try:
             import modal
-            modal.Cls.from_name(cfg["transcribe"]["modal_app"], "WhisperX").hydrate()
-            ok("online", f"Modal app {cfg['transcribe']['modal_app']!r} deployed")
-        except ImportError:
-            pass  # check_gpu already failed it
-        except Exception as e:  # noqa: BLE001
-            fail("online", f"Modal app {cfg['transcribe']['modal_app']!r}: {type(e).__name__}: {str(e)[:120]}",
-                 "clipper transcribe --deploy (after setting the Modal token)")
-        if diarizing(cfg):
-            try:
-                import modal
 
-                from .modal_app import HF_SECRET
-                modal.Secret.from_name(HF_SECRET).hydrate()
-                ok("online", f"Modal secret {HF_SECRET!r} for diarization")
-            except ImportError:
-                pass
-            except Exception as e:  # noqa: BLE001
-                fail("online", f"diarize is on but the Modal secret {HF_SECRET!r}: {type(e).__name__}",
-                     "see SETUP.md (Speaker labels): modal secret create huggingface HF_TOKEN=..., "
-                     "then clipper transcribe --deploy")
+            from .modal_app import HF_SECRET as secret
+            modal.Secret.from_name(secret).hydrate()
+            ok("online", f"Modal secret {secret!r} for diarization")
+        except ImportError:
+            pass
+        except Exception as e:  # noqa: BLE001
+            fail("online", f"diarize is on but the Modal secret {secret!r}: {type(e).__name__}",
+                 "see SETUP.md (Speaker labels): modal secret create huggingface HF_TOKEN=..., "
+                 "then clipper transcribe --deploy")
+
+
+def online_nas_cut(cfg: dict) -> None:
+    """With [cut] backend = "nas": ssh to the NAS works, and it has the image and the streams."""
     cc = cfg["cut"]
-    if role in ("all", "gpu") and cc["backend"] == "nas":
-        missing = [k for k in ("nas_host", "nas_data") if not cc[k]]
-        if missing:
-            fail("online", f"[cut] backend = \"nas\" without [cut] {', '.join(missing)}",
-                 "set them in clipper.toml (the ssh alias, and the recorder's CLIPPER_DATA)")
-        else:
-            probe = f"docker image inspect --format '{{{{.Id}}}}' {cc['nas_image']} && test -d {cc['nas_data']}/streams"
-            r = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", cc["nas_host"], probe])
-            if r.returncode == 0:
-                ok("online", f"cut on the NAS: {cc['nas_host']} has {cc['nas_image']} and {cc['nas_data']}/streams")
-            else:
-                fail("online", f"cut on the NAS: {(r.stderr or r.stdout).strip()[-160:]}",
-                     "key login to the NAS (ssh -o BatchMode=yes <host>), and deploy the recorder once "
-                     "(bash deploy/record/deploy.sh): its image does the cutting")
-    if role in ("all", "gpu"):  # the worker grabs pre-shows
-        from . import preshow
-        for key, sc in preshow.watched(_root(cfg)):
-            ch = sc["preshow"]["youtube_channel"]
-            try:
-                hits = [e for e in preshow.feed(ch, sc["kick"]["user_agent"])
-                        if re.search(sc["preshow"]["title_pattern"], e["title"])]
-                ok("online", f"pre-show feed for {key} ({ch}): {len(hits)} recent pre-shows")
-            except Exception as e:  # noqa: BLE001
-                fail("online", f"pre-show feed for {key} ({ch}): {e}",
-                     "check [shows.<key>.preshow] youtube_channel (a UC... channel id)")
+    if cc["backend"] != "nas":
+        return
+    missing = [k for k in ("nas_host", "nas_data") if not cc[k]]
+    if missing:
+        fail("online", f"[cut] backend = \"nas\" without [cut] {', '.join(missing)}",
+             "set them in clipper.toml (the ssh alias, and the recorder's CLIPPER_DATA)")
+        return
+    probe = f"docker image inspect --format '{{{{.Id}}}}' {cc['nas_image']} && test -d {cc['nas_data']}/streams"
+    r = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", cc["nas_host"], probe])
+    if r.returncode == 0:
+        ok("online", f"cut on the NAS: {cc['nas_host']} has {cc['nas_image']} and {cc['nas_data']}/streams")
+    else:
+        fail("online", f"cut on the NAS: {(r.stderr or r.stdout).strip()[-160:]}",
+             "key login to the NAS (ssh -o BatchMode=yes <host>), and deploy the recorder once "
+             "(bash deploy/record/deploy.sh): its image does the cutting")
+
+
+def online_preshow_feeds(cfg: dict) -> None:
+    from . import preshow
+    for key, sc in preshow.watched(_root(cfg)):
+        ch = sc["preshow"]["youtube_channel"]
+        try:
+            hits = [e for e in preshow.feed(ch, sc["kick"]["user_agent"])
+                    if re.search(sc["preshow"]["title_pattern"], e["title"])]
+            ok("online", f"pre-show feed for {key} ({ch}): {len(hits)} recent pre-shows")
+        except Exception as e:  # noqa: BLE001
+            fail("online", f"pre-show feed for {key} ({ch}): {e}",
+                 "check [shows.<key>.preshow] youtube_channel (a UC... channel id)")
+
+
+def online_kick(cfg: dict) -> None:
+    import requests
+
     chans = [c for s in _root(cfg)["shows"].values() for c in s["channels"]] or [cfg["kick"]["channel"]]
     chans = [c for c in chans if c]
-    if chans:
-        try:
-            r = requests.get(f"https://kick.com/api/v2/channels/{chans[0]}",
-                             headers={"User-Agent": cfg["kick"]["user_agent"]}, timeout=15)
-            (ok if r.ok else warn)("online", f"Kick API ({chans[0]}): HTTP {r.status_code}",
-                                   "" if r.ok else "Kick may be blocking this IP or user agent")
-        except Exception as e:  # noqa: BLE001
-            warn("online", f"Kick API: {e}")
+    if not chans:
+        return
+    try:
+        r = requests.get(f"https://kick.com/api/v2/channels/{chans[0]}",
+                         headers={"User-Agent": cfg["kick"]["user_agent"]}, timeout=15)
+        (ok if r.ok else warn)("online", f"Kick API ({chans[0]}): HTTP {r.status_code}",
+                               "" if r.ok else "Kick may be blocking this IP or user agent")
+    except Exception as e:  # noqa: BLE001
+        warn("online", f"Kick API: {e}")
 
 
 # ---------- command ----------

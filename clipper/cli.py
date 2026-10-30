@@ -407,7 +407,7 @@ def cmd_schedule(cfg: dict, args: argparse.Namespace) -> None:
         schedule.show(cfg, args.days)
         return
     schedule.run(cfg, sync_first=not args.no_sync, write_kitsu=not args.no_kitsu,
-                 dry_run=args.dry_run, reshuffle=args.reshuffle)
+                 dry_run=args.dry_run, reshuffle=args.reshuffle, kitsu_all=args.kitsu_all)
 
 
 def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
@@ -821,6 +821,8 @@ def add_review(sub) -> None:
     p = sub.add_parser("schedule", help="approved items -> release slots -> schedule.json")
     p.add_argument("--no-sync", action="store_true", help="use review.json as is, skip Kitsu sync")
     p.add_argument("--no-kitsu", action="store_true", help="don't write Scheduled back to Kitsu")
+    p.add_argument("--kitsu-all", action="store_true",
+                   help="check every item's Scheduled in Kitsu, not only the changed slots")
     p.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     p.add_argument("--reshuffle", action="store_true",
                    help="re-place automatic entries not yet uploaded (pinned/uploaded stay)")

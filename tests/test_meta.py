@@ -1,4 +1,6 @@
-from clipper.meta import make_srt
+from pathlib import Path
+
+from clipper.meta import compilation_chapters, draft, make_srt
 
 MC = {"srt_line_chars": 42, "srt_max_s": 6}
 
@@ -23,3 +25,28 @@ def test_srt_breaks_at_pauses_and_masks():
     srt = make_srt(words, [(0, 10, 0)], MC, mask=str.upper)
     assert "\nONE\n" in srt and "\nTWO\n" in srt
     assert srt.count("-->") == 2
+
+
+def test_compilation_chapters_from_its_segments():
+    comp = {"kind": "compilation", "id": "comp-x", "segments": ["s1", "s2"],
+            "segment_titles": {"s1": "One", "s2": "Two"}, "parts": [(100, 400, 0.0), (900, 1200, 300.0)]}
+    chapters = {"s1": [{"t": 0.0, "title": "start"}, {"t": 60.0, "title": "later"}]}
+    drafted = {"s2": {"chapters": [{"t": 0.0, "title": "s"}, {"t": 30.0, "title": "drafted"}]}}
+    compilation_chapters([comp], chapters, drafted)
+    assert chapters["comp-x"] == [{"t": 0.0, "title": "One"}, {"t": 60.0, "title": "later"},
+                                  {"t": 300.0, "title": "Two"}, {"t": 330.0, "title": "drafted"}]
+
+
+def test_draft_from_the_model_output():
+    x = {"kind": "segment", "id": "s1", "video": Path("segments/s1_a.mp4"), "title": "Old",
+         "body": "cut body", "parts": [(10.0, 70.0, 0.0)]}
+    g = {"title": " New " + "x" * 100, "lead": " Lead ", "body": "", "hashtags": [" #a", "#b", "#c", "#d"],
+         "tags": ["t"], "playlist": " Bits "}
+    mc = {"model": "m", "prompt_version": "v9"}
+    d = draft(x, g, [], "credit", "", mc, mask=str.upper)
+    assert d["title"].startswith("NEW X") and d["title_original"] == "Old"
+    assert d["description"] == "LEAD\n\nCUT BODY\n\nCREDIT\n\n#A #B #C"
+    assert d["hashtags"] == ["#a", "#b", "#c"] and d["playlist"] == "Bits"
+    assert d["duration_s"] == 60.0 and d["srt"] == "s1_a.srt"
+    assert d["problems"] == ["title 104 chars"]
+    assert draft(x, g, [], "credit", "Pre-shows", mc)["playlist"] == "Pre-shows"

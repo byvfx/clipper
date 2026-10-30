@@ -474,19 +474,14 @@ def ensure_playlist(gazu, proj: dict, ep: dict, name: str, for_entity: str,
     return pl
 
 
-def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = True,
-            only: list[str] | None = None) -> None:
-    """only: publish just these kinds of [review] include (e.g. re-cut Shorts without
-    sending re-cut segments back for review too)."""
-    cfg = for_stream(cfg, stream_dir)
+def render_previews(stream_dir: Path, cfg: dict, todo: list[dict]) -> None:
+    """Each item's low-res preview (it["preview"]), rendered before any upload (the local,
+    slow part). A compilation's preview is its segments' previews joined (no re-encode),
+    when they are all there."""
     rc = cfg["review"]
     codec = rc["preview_codec"] or cfg["cut"]["clip_codec"]
-    todo = items(stream_dir, [k for k in rc["include"] if not only or k in only], cfg)
     prev_dir = stream_dir / "review"
     prev_dir.mkdir(exist_ok=True)
-
-    # Render previews first (local, slow part), then upload. A compilation's preview is
-    # its segments' previews joined (no re-encode), when they are all there.
     seg_previews = {it["meta"]["id"]: prev_dir / f"{it['key']}.mp4"
                     for it in items(stream_dir, ["segments"], cfg)}
     for it in sorted(todo, key=lambda it: it["kind"] == "compilation"):
@@ -502,12 +497,12 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         print(f"preview {it['key']}: {it['preview'].stat().st_size / 1e6:.0f} MB "
               f"({time.time() - t:.0f}s)", flush=True)
 
-    gazu = connect(rc)
-    proj, types = ensure_project(gazu, project_name(cfg))
-    wfa = gazu.task.get_task_status_by_short_name("wfa")
-    ep_name = episode_name(stream_dir, rc, cfg["schedule"]["timezone"])
-    ep = gazu.shot.get_episode_by_name(proj, ep_name) or gazu.shot.new_episode(proj, ep_name)
 
+def push_previews(gazu, stream_dir: Path, rc: dict, proj: dict, ep: dict, types: dict,
+                  wfa: dict, todo: list[dict], force: bool) -> tuple[dict, list[str]]:
+    """Each item whose preview changed (or all, with force) as a new revision of its
+    task, with status wfa (waiting for approval); its ids in review_state.json. Returns
+    (that state, the keys published)."""
     seqs: dict[str, dict] = {}
 
     def sequence(name: str, title: str) -> dict:
@@ -540,7 +535,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
                                                preview_file_path=str(it["preview"]),
                                                normalize_movie=rc["normalize"],
                                                set_thumbnail=True)
-        old = state.get(it["key"], {})  # keep what we last proposed, for the columns below
+        old = state.get(it["key"], {})  # keep what we last proposed, for the columns
         state[it["key"]] = {**{k: old[k] for k in ("fields", "thumbnail_text") if k in old},
                             "kind": it["kind"], "id": it["meta"]["id"],
                             "file": str(it["file"].relative_to(stream_dir)),
@@ -552,9 +547,25 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         state = jsonstate.merge(state_path, state, [it["key"]])  # a retake may write it too
         print(f"published {it['seq']}/{it.get('shot', '')} rev {preview.get('revision')} "
               f"({time.time() - t:.0f}s)", flush=True)
+    return state, published
 
-    # Custom columns: fill the empty ones, and update those still showing what we last
-    # proposed (st["fields"]); a value edited in Kitsu or Discord is never overwritten.
+
+def columns_to_fill(values: dict, before: dict, current: dict, tf: str | None,
+                    last_thumb: str | None) -> dict:
+    """The columns (field id -> value) to write: the empty ones, and those still showing
+    what we last proposed (before) when the proposal changed; a value edited in Kitsu or
+    Discord is never overwritten. Thumbnail text (field tf) also follows a re-picked
+    thumbnail while the column still shows what clipper last wrote there (last_thumb)."""
+    missing = {k: v for k, v in values.items()
+               if current.get(k) in (None, "") or current.get(k) == before.get(k) != v}
+    if tf in values and current.get(tf) == last_thumb != values[tf]:
+        missing[tf] = values[tf]
+    return missing
+
+
+def fill_columns(gazu, proj: dict, todo: list[dict], state: dict, state_path: Path) -> dict:
+    """Custom columns of the published items (columns_to_fill); what was proposed is kept
+    in review_state.json (st["fields"]). Returns the state."""
     fmap = column_fields(gazu, proj)
     filled = 0
     for it in todo:
@@ -566,13 +577,8 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         values = {fmap[(etype, n)]: str(v) for n, v in it["fields"].items() if (etype, n) in fmap}
         before = {fmap[(etype, n)]: str(v) for n, v in st.get("fields", {}).items()
                   if (etype, n) in fmap}
-        missing = {k: v for k, v in values.items()
-                   if current.get(k) in (None, "") or current.get(k) == before.get(k) != v}
-        # Thumbnail text also follows a re-picked thumbnail while the column still shows
-        # what clipper last wrote there (st["thumbnail_text"]); a reviewer's edit stays.
         tf = fmap.get((etype, THUMB_COL))
-        if tf in values and current.get(tf) == st.get("thumbnail_text") != values[tf]:
-            missing[tf] = values[tf]
+        missing = columns_to_fill(values, before, current, tf, st.get("thumbnail_text"))
         if tf in missing:
             st["thumbnail_text"] = missing[tf]
         if missing:
@@ -581,8 +587,12 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         st["fields"] = {n: str(v) for n, v in it["fields"].items()}  # what we proposed
     state = jsonstate.merge(state_path, state, [it["key"] for it in todo if it["key"] in state])
     print(f"custom columns filled on {filled} items")
+    return state
 
-    # Playlists: every clip, and each compilation as its segments in stream order.
+
+def make_playlists(gazu, stream_dir: Path, proj: dict, ep: dict, state: dict) -> None:
+    """Playlists: every clip, every Short, and each compilation as its segments in
+    stream order."""
     clips = [(gazu.shot.get_shot(st["entity_id"]), st["preview_id"])
              for key, st in sorted(state.items()) if st["kind"] == "pick"]
     if clips:
@@ -599,6 +609,26 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
                        for s in comp["segments"]]
             ensure_playlist(gazu, proj, ep, f"Compilation: {comp['topic']}", "sequence", entries)
             print(f"playlist Compilation: {comp['topic']} ({len(entries)} segments)")
+
+
+def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = True,
+            only: list[str] | None = None) -> None:
+    """only: publish just these kinds of [review] include (e.g. re-cut Shorts without
+    sending re-cut segments back for review too)."""
+    cfg = for_stream(cfg, stream_dir)
+    rc = cfg["review"]
+    todo = items(stream_dir, [k for k in rc["include"] if not only or k in only], cfg)
+    render_previews(stream_dir, cfg, todo)
+
+    gazu = connect(rc)
+    proj, types = ensure_project(gazu, project_name(cfg))
+    wfa = gazu.task.get_task_status_by_short_name("wfa")
+    ep_name = episode_name(stream_dir, rc, cfg["schedule"]["timezone"])
+    ep = gazu.shot.get_episode_by_name(proj, ep_name) or gazu.shot.new_episode(proj, ep_name)
+    state_path = stream_dir / "review_state.json"
+    state, published = push_previews(gazu, stream_dir, rc, proj, ep, types, wfa, todo, force)
+    state = fill_columns(gazu, proj, todo, state, state_path)
+    make_playlists(gazu, stream_dir, proj, ep, state)
     print(f"{len(todo)} items in Kitsu: {rc['host'].removesuffix('/api')} "
           f"({project_name(cfg)} / {ep_name})")
     if cfg["thumbnail"]["kitsu"]:

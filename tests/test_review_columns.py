@@ -36,3 +36,17 @@ def test_set_columns_by_name():
     assert written == [("Sequence", "q1", {"f_url": "u"})]
     with pytest.raises(ClipperError, match="no Shot column"):
         review.set_columns(gazu, FMAP, "Shot", "s1", {"Rumble URL": "r"}, strict=True)
+
+
+def test_columns_to_fill_keeps_edits():
+    values = {"f_title": "new title", "f_tags": "a, b", "f_hook": "hook", "f_thumb": "NEW WORDS"}
+    before = {"f_title": "old title", "f_tags": "a", "f_hook": "hook"}   # last proposed
+    current = {"f_title": "old title",          # still ours: follows the new proposal
+               "f_tags": "edited, by hand",     # edited in Kitsu: kept
+               "f_hook": "",                    # empty: filled
+               "f_thumb": "OLD WORDS"}
+    assert review.columns_to_fill(values, before, current, "f_thumb", "OLD WORDS") == {
+        "f_title": "new title", "f_hook": "hook", "f_thumb": "NEW WORDS"}
+    # A reviewer's thumbnail text stays.
+    assert "f_thumb" not in review.columns_to_fill(values, before, current, "f_thumb", "CLIPPER'S")
+    assert review.columns_to_fill(values, before, dict(values), "f_thumb", "OLD WORDS") == {}
