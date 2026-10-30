@@ -40,9 +40,14 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 - `third_party_audio = "allow_reactions"`, `audience_knowledge = "fans"`, Victor/blackjack segments stay.
 - Kitsu is the record for review/edits (no separate DB). Discord approvals must keep working.
 - Thumbnails: `[thumbnail] style = "enquirer"` (1990s tabloid: KINO CASINO masthead, no "THE NEW" roundel,
-  no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v3` (face = headline
-  subject; may use `[thumbnail] photos` portraits for people not on screen). Pre-show covers are one
+  no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v4` (face = headline
+  subject; may use `[thumbnail] photos` portraits for people not on screen; v4 names the show's
+  `[meta] cast`, live 2026-10-30). Cast per show: Kino = Andy + PPP, Channel 404 = Don (solo show,
+  user 2026-10-30). Pre-show covers are one
   story, no side boxes (`[preshow] teasers = false`, user 2026-10-28: "single issue for preshows").
+  The main face must never sit under the reaction inset or badge (user 2026-10-29): `face_crop(avoid=)`
+  shifts the head, then shrinks it, until its box clears them (16:9 and Shorts). Library `photos` are
+  whole-image boxes and aren't moved.
 - Never use the word "hosts" in viewer-facing text (was "rarely" until 2026-10-20) → `[scoring] house_style` rules, appended to all viewer-facing prompts.
   Put future style notes there. Co-hosts are **Andy (Warski)** and **PPP**. Never call PPP by any other name (user,
   2026-10-19; Kick bio says "Andy Warski and PPP"). Who-looks-like-what is in [shows.kino.scoring] stream_context.
@@ -75,12 +80,13 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 - Model calls are logged to `logs/costs.jsonl` (`clipper costs`); say what a rerun costs before doing it.
 - The taste layer is the asset (prompts, clipper.toml show tables, house_style, Kitsu): see "Back up".
 
-## State now (2026-10-28)
+## State now (2026-10-30)
 - **Running on this laptop** as scheduled tasks: `clipper-bot` (Discord cards, hourly replan + upload,
   pre-show polls every 5 min, retakes, DM alerts, war room on :8765 and https://thor.taile415cd.ts.net/)
-  and `clipper-worker` (runs each finished NAS recording). Restart the bot after scheduler/war-room Python
-  changes (see Gotchas); stages run as fresh processes, so most other changes need no restart.
-- **NAS** (192.168.0.155): recorder container (`deploy/record`, redeployed 2026-10-28 11:05 at 8060532,
+  and `clipper-worker` (runs each finished NAS recording). Both restarted 2026-10-30 14:59 at 1e4f724.
+  Restart the bot after scheduler/war-room Python changes (see Gotchas); stages run as fresh
+  processes, so most other changes need no restart.
+- **NAS** (192.168.0.155): recorder container (`deploy/record`, redeployed 2026-10-30 15:09 at 1e4f724,
   watching kinocasinogaming + donflurgundy), Kitsu :8090, the streams share, photos share, cut container.
 - **Shows:** kino and c404 live through review → schedule; dsp and blade are config-only tests; `trish` is a
   placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI).
@@ -89,7 +95,7 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   short = 8, compilation = 1 }` per 8 h (`budget_hours`; Don ~7/6/1), `stale_days = 3`, slots a day:
   6 Shorts (09/11/13/15/18/20), 8 segments (08/10/12/14/16/17/19/22), compilation 21:00; `[scoring]
   max_picks` 14 (was 10). The old backlog's unuploaded slots dropped (backup
-  schedule.before_stay_current_2026-10-29.json); the 10-26/27/28 streams fill through 11-01. Items let
+  backups/schedule.before_stay_current_2026-10-29.json); the 10-26/27/28 streams fill through 11-01. Items let
   go stay approved in Kitsu (war room filter "Not going out"); pin with "Publish at" to send one anyway.
   Watch the first week: if good items keep going stale while streams overlap, try `stale_days = 4`.
 - **Archive:** Jer (The Quartering) 11,571 items / 2,732 h transcribed on Modal, FTS index built,
@@ -145,14 +151,15 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 - YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). Publish the Google Cloud OAuth app (Google Auth Platform > Audience > Publish app) or it lapses again 11-06.
 
 ## Open work
-**Maintainability audit 2026-10-28:** `reports/code-audit-2026-10-28.md` (bugs B1-B16, then phases
-0-4: bug fixes, tests/CI, shared modules, stage registry and splits, ease of use). Not filed as
-issues. **Phase 0 done 2026-10-28** (B1-B3, B5, B6, B8-B11, B16, Shorts 15/59 defaults), commit
-2147ac9 (not pushed); bot restarted 17:20, first jobs-loop replan + upload ran clean at 17:21-17:32.
-Left from the B list: B4 (`--show` with a stream), B7 (enum validation), B12-B15, B17 (shorts
-before cut with the fast lane off). **Phase 1 done 2026-10-29:** `tests/` (32 offline pytest tests,
-<1 s), ruff pinned in pyproject (`required-version`, rules = that version's defaults), dev group,
-`.github/workflows/check.yml`, example toml now documents every key (a test checks it). **Phase 2 done 2026-10-29** (PRs #82, #83; in local main as dc0828e and a81d00b, not pushed): `ClipperError` (`errors.py`; only cli.main exits, `status=` for codes like setup's 3), JSON reads via `jsonstate.load/read`, `timefmt`, `media`, `ytdl`, `transcript`/`prompts` (out of scoring), `review.entity_data/write_data/set_columns`, `actions.decide/replan/clipper_cmd` (bot + war room), `states`. Left for later: frame grabs and `draw.py` (thumbs.py is the other session's). **Phase 3 part 1 done 2026-10-29** (PR #85): `stages.py` stage table (worker, `run`; B14, B17, `run --from` in planned order), `clipper -h` grouped (cli `add_<group>` + `COMMAND_GROUPS`), war room `GET_API`/`POST_API` + module-level Handler (B13). **War room layouts** (PR #86, user 2026-10-29): Layout button, drag panels between zones, hidden tray, column widths, named layouts in `[paths] warroom_layouts`; default puts Schedule right. Both merged locally as e6f9cdd (not pushed); bot restarted 16:50. Next in phase 3: record split (NAS redeploy), weekly split, war room HTML split; thumbs after the other session's work lands. Worktree `C:\clipper-p2` can go once nothing more is planned there.
+**Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
+on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
+running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
+`draw.py`, war room split into `web/warroom.css` + `web/js/*.js` (docs/warroom.md), `clipper services
+status|stop|restart`, `deploy/common.ps1` for both task scripts, per-show `[meta] cast`, Kitsu push of
+changed schedule values only (`schedule --kitsu-all` for everything), doctor checks every show's prompts.
+**Held: #101 (weekly split, worktree `C:\clipper-weekly`)**: merge only after Saturday 2026-10-31's
+issue is out (the user runs `clipper weekly` from C:\clipper); it merged cleanly with main on 10-30.
+Then remove that worktree (the other audit worktrees are already gone).
 Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #77 (M12 quota tracking, L6, L10,
 L11, L13, L16-L18, repo hygiene), #72 (provider side-by-side, `clipper edit`), #50 (revenue once
 monetized), #42 (closes after the first check-in). Roadmaps, issues only: NAS hub #14 (#9 war room on
@@ -167,8 +174,9 @@ thumbs: reject a picked frame with no face, `--frame-at <s>`; Discord excerpts f
 start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 
 ## Recipes (how we did it last time; details in the log)
-- **Restart the bot:** `deploy\discord\bot-task.ps1 -Restart` (stopping the task alone leaves the
-  supervisor's process alive). Worker: `deploy\worker\worker-task.ps1 -Status|-Restart`.
+- **Restart the bot:** `clipper services restart bot` (or `deploy\discord\bot-task.ps1 -Restart`; stopping
+  the task alone leaves the supervisor's process alive). Worker: `clipper services status|restart worker`.
+  A restart kills a running upload: wait until no `clipper upload` process is left.
 - **Upload one item now:** approve in Kitsu, `clipper schedule` (back up schedule.json first), then
   `clipper upload --max 1`; asap items go public at once. Logs in `logs/upload_*.log`.
 - **One-off from a YouTube video:** `clipper --show <key> preshow fetch <url> --from H:MM:SS --about "..."`
@@ -194,12 +202,13 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
 like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built).
 - **In git (push it):** `prompts/` (every version, never edit one that produced reviewed output),
-  `clipper.example.toml`, `mockups/`, `research_notes/`, `reports/`, `streamers.json`, this file.
-- **Not in git, copy by hand or script:** `clipper.toml` and the `clipper.before_*.toml` backups
+  `clipper.example.toml`, `mockups/`, `research_notes/` (with `streamers.json`), `reports/`, this file.
+- **Not in git, copy by hand or script:** `clipper.toml` and the `backups/` folder (`clipper.before_*`,
+  `schedule.before_*`; hand-edit backups go there now, not the repo root)
   (show tables, house_style, stream_context, scoring rules), each `streams/<id>/config.toml`
   (per-stream overrides; lost with the stream folder), `secrets/` (YouTube/TikTok tokens are a
   re-consent to recreate), the photos share `//192.168.0.155/docker/clipper/photos`, `layouts/`
-  (Shorts layout references per show), `schedule.json` and its `schedule.before_*.json` backups,
+  (Shorts layout references per show, and per-show `enquirer.toml` cover overrides), `schedule.json`,
   `deploy/*/env.local`, and the Kitsu volumes on the NAS (every review decision and note).
 - Also the project memory `~/.claude/projects/C--clipper/memory/` on the laptop: it holds decisions
   that never made it into HANDOFF.
@@ -229,7 +238,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 - review.py reads every `*.json` beside cut videos as sidecars; metadata lives in `metadata/<folder>/`.
 - Windows: a file open in another process can't be replaced (fork sessions render previews from cuts).
 - `schtasks /End /TN clipper-bot` leaves the supervisor's bot process alive (lock in streams/.bot.lock);
-  to restart the bot, also stop the old bot-supervisor.ps1 powershell and its clipper.exe children.
+  `clipper services` / the task scripts stop the supervisor and its children too.
+- The war room page loads `warroom.css` and `js/*.js` from disk: a pull that changes the page before the
+  bot restarts leaves the old server unable to serve them (bare, unstyled page). Restart the bot.
 - schedule: a compilation approved as its own Kitsu item needs segment_keys (fixed 2026-10-18).
 - The bot runs `schedule.run` in-process (replan after a decision): scheduler changes need a bot restart.
 - Retake planner can't edit cover layout; a note about the cover's boxes comes back "unsupported",
@@ -262,3 +273,5 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 2026-10-26 Cut on the NAS
 2026-10-27 Issue day (jsonstate, llm.py, costs, war room) · TikTok resend · One-off: Just Trish
 2026-10-28 Issue day 2 (analytics, audit follow-ups, cover editor, schedule DnD) · Related videos and Content ID check
+2026-10-29 Face out from under the inset · Audit phases 1-3 · Stay current instead of a backlog · War room layouts
+2026-10-30 YouTube sign-in expired · Audit finished and merged; pull, restart, recorder redeploy, cast
