@@ -39,12 +39,27 @@ from . import actions, jsonstate, review, schedule, worker
 from .config import _root, for_stream
 from .errors import ClipperError
 
-PAGE = Path(__file__).with_name("web") / "warroom.html"
+WEB = Path(__file__).with_name("web")
+PAGE = WEB / "warroom.html"   # markup only: its style is warroom.css, its code web/js/*.js
 STATIC = {"/manifest.webmanifest": "application/manifest+json", "/icon.svg": "image/svg+xml",
           "/icon-192.png": "image/png", "/icon-512.png": "image/png"}  # no secrets: no key needed
+CODE = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}
 LOCK = threading.Lock()  # one Kitsu write / replan at a time
 SYNC = {"running": False, "last": None, "error": ""}
 LIVE_CACHE: dict = {"at": 0.0, "data": []}
+MAX_POST = 1 << 20  # bytes; decisions, bulk edits, covers and layouts are far smaller
+
+
+def static_file(path: str) -> tuple[Path, str, str] | None:
+    """The page's own files, with their type and caching: no secrets, so no key (the phone's
+    home-screen install fetches the icons without the cookie). Its stylesheet and scripts
+    are fetched fresh each load, so a restarted bot's page never runs the old code."""
+    if path in STATIC:
+        return WEB / path.lstrip("/"), STATIC[path], "max-age=86400"
+    f = (WEB / path.lstrip("/")).resolve()
+    if f.suffix in CODE and WEB.resolve() in f.parents and f.is_file():
+        return f, CODE[f.suffix], "no-cache"
+    return None
 
 
 def load(path: Path, default):
@@ -891,12 +906,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         qs = parse_qs(u.query)
-        if u.path in STATIC:  # the phone's home-screen install fetches these without the cookie
-            body = (PAGE.parent / u.path.lstrip("/")).read_bytes()
+        if found := static_file(u.path):
+            path, ctype, cache = found
+            body = path.read_bytes()
             self.send_response(200)
-            self.send_header("Content-Type", STATIC[u.path])
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "max-age=86400")
+            self.send_header("Cache-Control", cache)
             self.end_headers()
             self.wfile.write(body)
             return
@@ -942,6 +958,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        # Read the body before any refusal: closing with it unread resets the connection
+        # (Windows), and the client sees an abort instead of the answer. The page's own
+        # posts are a few KB; a bigger body is read in chunks and thrown away.
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_POST:
+            while n > 0 and (chunk := self.rfile.read(min(n, 1 << 16))):
+                n -= len(chunk)
+            return self.send_json({"error": "request too large"}, 413)
+        raw = self.rfile.read(n)
         if self.foreign_host():
             return self.send_json({"error": "open the war room as localhost"}, 403)
         if not self.authorized(parse_qs(u.query)):
@@ -950,9 +975,8 @@ class Handler(BaseHTTPRequestHandler):
         # without a CORS preflight, which this server never answers) from this origin.
         if self.cross_site() or not self.headers.get("Content-Type", "").startswith("application/json"):
             return self.send_json({"error": "cross-site or non-JSON request refused"}, 403)
-        n = int(self.headers.get("Content-Length") or 0)
         try:
-            body = json.loads(self.rfile.read(n) or b"{}")
+            body = json.loads(raw or b"{}")
         except ValueError:
             return self.send_json({"error": "bad JSON"}, 400)
         if not isinstance(body, dict):

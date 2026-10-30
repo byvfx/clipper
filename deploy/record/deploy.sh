@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Deploy or update the live recorder (`clipper record watch`) on the NAS.
 #
-# Run from the repo root:  bash deploy/record/deploy.sh
+# Run from the repo root:  bash deploy/record/deploy.sh [--force]
+#   Refused while a show is being recorded (`clipper record status`): the restart starts a
+#   new recording part. --force deploys anyway.
 #   RECORD_SSH_HOST  ssh host alias (default: nas)
 #   RECORD_DIR       compose dir on the NAS, relative to the ssh user's home (default: clipper-record)
 #   CLIPPER_TOML     config to install as $CLIPPER_DATA/clipper.toml (default: ./clipper.toml);
@@ -20,6 +22,22 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 TOML=${CLIPPER_TOML:-$ROOT/clipper.toml}
 ENV_LOCAL=$HERE/env.local
+
+if [ "${1:-}" != "--force" ]; then
+    CLIPPER=$ROOT/.venv/Scripts/clipper.exe
+    [ -x "$CLIPPER" ] || CLIPPER=$ROOT/.venv/bin/clipper
+    set +e
+    (cd "$ROOT" && "$CLIPPER" record status)
+    rc=$?
+    set -e
+    if [ $rc -eq 3 ]; then
+        echo "a show is being recorded: deploy after it ends, or: bash deploy/record/deploy.sh --force" >&2
+        exit 1
+    elif [ $rc -ne 0 ]; then
+        echo "couldn't read the recorder's state (exit $rc); to deploy anyway: bash deploy/record/deploy.sh --force" >&2
+        exit 1
+    fi
+fi
 
 if [ ! -f "$ENV_LOCAL" ]; then
     cp "$HERE/env.template" "$ENV_LOCAL"

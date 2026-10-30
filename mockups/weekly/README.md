@@ -45,7 +45,7 @@ mockup copy written from the stream's segment titles.
 | 05 quote | Quote of the week, who and when, two runners-up | Quotes said on stream |
 | 06 numbers | Six stat cards | Hours live, clips, peak chat, running jokes |
 | 07 market | One big parody ad and four small ones, all riffing on the week's bits | Running jokes from the streams |
-| 08 back | Next week's schedule, reader poll ("Who had the worst week?") | `streamers.ics`; three people from the issue |
+| 08 back | Next week's schedule, reader poll ("Who had the worst week?") | `research_notes/streamers.ics`; three people from the issue |
 
 ## Design system
 

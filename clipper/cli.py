@@ -14,6 +14,48 @@ from . import config, jsonstate
 from .config import stream_dir
 from .errors import ClipperError
 
+STREAM_HELP = "stream id under paths.streams, or a stream dir"
+
+
+class Items(argparse.Action):
+    """--items s02,c03 (or repeated, or space-separated where nargs allows): one list."""
+
+    def __call__(self, parser, ns, values, option_string=None):
+        got = getattr(ns, self.dest) or []
+        values = values if isinstance(values, list) else [values]
+        setattr(ns, self.dest, got + [x.strip() for v in values for x in v.split(",") if x.strip()])
+
+
+def add_stream(p, optional: bool = False, help: str = STREAM_HELP) -> None:
+    p.add_argument("stream", nargs="?" if optional else None, help=help)
+
+
+def add_items(p, help: str, old: tuple[str, ...] = (), many: bool = False) -> None:
+    """The one flag that picks items. Spellings it replaced (--ids, --keys, ...) still work,
+    unlisted: scripts, notes and an older NAS image may still pass them."""
+    nargs = "+" if many else None
+    p.add_argument("--items", action=Items, nargs=nargs, metavar="ITEMS", help=help)
+    for flag in old:
+        p.add_argument(flag, dest="items", action=Items, nargs=nargs, help=argparse.SUPPRESS)
+
+
+def time_arg(s: str) -> float:
+    """Every time flag reads the same way: H:MM:SS, H:MM, 4h13m or seconds."""
+    from .timefmt import parse_time
+
+    try:
+        return parse_time(s)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
+def refuse(args: argparse.Namespace, mode: str, *others: str) -> None:
+    """Refuse `others` next to the mode flag `mode`, for combinations argparse's exclusive
+    groups can't express (--photo with --teaser-photo is fine, neither with --shorts)."""
+    given = [o for o in others if getattr(args, o.lstrip("-").replace("-", "_")) not in (None, False)]
+    if given:
+        raise ClipperError(f"{mode} doesn't combine with {', '.join(given)}")
+
 
 def cmd_fetch(cfg: dict, args: argparse.Namespace) -> None:
     from . import kick
@@ -32,6 +74,10 @@ def cmd_fetch(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_record(cfg: dict, args: argparse.Namespace) -> None:
     from . import record
 
+    if args.action == "status":
+        from . import services
+
+        return services.record_status(cfg)
     record.setup_logging()
     if args.action == "finalize":
         record.finalize(stream_dir(cfg, args.stream), cfg)
@@ -128,7 +174,7 @@ def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
         archive.run_transcribe(cfg, args.subject, args.limit, args.oldest, args.gpu or ac["gpu"],
                                args.parallel or ac["parallel"], args.dry_run)
     elif args.action == "check":
-        archive.check_links(cfg, args.subject, args.ids, args.all, args.limit)
+        archive.check_links(cfg, args.subject, args.items, args.all, args.limit)
     elif args.action == "links":
         archive.list_links(cfg, args.subject, args.status)
     elif args.action == "index":
@@ -238,10 +284,11 @@ def cmd_cut(cfg: dict, args: argparse.Namespace) -> None:
         raise ClipperError(f"cut: unknown {sorted(bad)}; use segments, compilations, picks")
     if config.for_stream(cfg, d)["cut"]["backend"] == "nas" and {"segments", "compilations"} & set(what):
         # the copies run beside the source; picks re-encode a few minutes each, so stay here
-        cut.on_nas(d, cfg, [w for w in what if w != "picks"] + (["--ids", args.ids] if args.ids else []))
+        # --ids, not --items: the NAS image may be older than this checkout (both spellings work)
+        cut.on_nas(d, cfg, [w for w in what if w != "picks"] + (["--ids", ",".join(args.items)] if args.items else []))
         what = [w for w in what if w == "picks"]
     if "segments" in what:
-        cut.cut_segments(d, cfg, args.ids.split(",") if args.ids else None)
+        cut.cut_segments(d, cfg, args.items)
     if "compilations" in what:
         cut.cut_compilations(d, cfg)
     if "picks" in what:
@@ -259,18 +306,20 @@ def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
     from . import thumbs
 
     if args.photo is not None or args.teaser_photo is not None:
-        if not args.ids:
-            raise ClipperError("--photo/--teaser-photo need --ids")
-        changed = thumbs.set_photos(stream_dir(cfg, args.stream), cfg, args.ids.split(","),
+        refuse(args, "--photo/--teaser-photo", "--shorts", "--compose-only", "--missing", "--force")
+        if not args.items:
+            raise ClipperError("--photo/--teaser-photo need --items")
+        changed = thumbs.set_photos(stream_dir(cfg, args.stream), cfg, args.items,
                                     photo=args.photo, teaser_photo=args.teaser_photo,
                                     kitsu=not args.no_kitsu)
         print(f"{len(changed)} changed: {', '.join(changed)}" if changed else "nothing to change")
         return
     if args.shorts:
+        refuse(args, "--shorts", "--items", "--compose-only", "--missing", "--force")
         n = thumbs.shorts_only(stream_dir(cfg, args.stream), cfg, kitsu=not args.no_kitsu)
         print(f"{n} Short covers")
         return
-    thumbs.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
+    thumbs.run(stream_dir(cfg, args.stream), cfg, ids=args.items,
                force=args.force, compose_only=args.compose_only, kitsu=not args.no_kitsu,
                missing=args.missing)
 
@@ -292,18 +341,22 @@ def cmd_shorts(cfg: dict, args: argparse.Namespace) -> None:
 
     if args.save_example:
         if args.at is None:
-            raise ClipperError("--save-example needs --at <seconds into the stream>")
+            raise ClipperError("--save-example needs --at <time into the stream>")
         shorts.save_example(stream_dir(cfg, args.stream), cfg, args.save_example, args.at)
         return
-    shorts.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
+    shorts.run(stream_dir(cfg, args.stream), cfg, ids=args.items,
                layout=args.layout, force=args.force, rescene=args.rescene, check=args.check)
 
 
 def cmd_retake(cfg: dict, args: argparse.Namespace) -> None:
     from . import retake
 
-    retake.run(cfg, args.stream, item=args.item, comment=args.comment, dry_run=args.dry_run,
-               sync=not args.no_sync)
+    items = args.items or [None]
+    if args.comment and len(items) != 1:
+        raise ClipperError("--comment needs exactly one item in --items")
+    for n, item in enumerate(items):  # one Kitsu sync is enough
+        retake.run(cfg, args.stream, item=item, comment=args.comment, dry_run=args.dry_run,
+                   sync=not args.no_sync and n == 0)
 
 
 def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
@@ -317,8 +370,7 @@ def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
             review.sync(d, cfg)
         else:
             from . import notify
-            notify.post(d, cfg, keys=args.keys.split(",") if args.keys else None,
-                        force=args.force)
+            notify.post(d, cfg, keys=args.items, force=args.force)
         return
     if args.action == "status":
         print("\n".join(actions.status_lines(actions.status(cfg, sync=args.sync))))
@@ -370,7 +422,7 @@ def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
     if args.related is not None:
         youtube.related(cfg, args.related)
         return
-    youtube.run(cfg, sign_in=args.sign_in, dry_run=args.dry_run, limit=args.max,
+    youtube.run(cfg, sign_in=args.sign_in, dry_run=args.dry_run, limit=args.limit,
                 thumbnails_only=args.thumbnails, playlists_only=args.playlists,
                 links_only=args.links)
 
@@ -378,23 +430,29 @@ def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_rumble(cfg: dict, args: argparse.Namespace) -> None:
     from . import rumble
 
+    if args.url and not args.done:
+        raise ClipperError("--url goes with --done ITEM")
     if args.done or args.undo:
+        refuse(args, "--done/--undo", "--items", "--open", "--dry-run")
         rumble.mark_done(cfg, args.done or args.undo, args.url or "", undo=bool(args.undo))
     elif args.status:
+        refuse(args, "--status", "--items", "--open", "--dry-run")
         rumble.status(cfg, args.stream)
     else:
-        rumble.run(cfg, args.stream, args.items.split(",") if args.items else None,
+        rumble.run(cfg, args.stream, args.items,
                    open_after=args.open, dry_run=args.dry_run)
 
 
 def cmd_tiktok(cfg: dict, args: argparse.Namespace) -> None:
     from . import tiktok
 
+    if args.resend and not args.items:
+        raise ClipperError("--resend goes with --items")
     if args.sign_in:
         tiktok.sign_in(cfg)
         print(f"signed in to TikTok as {tiktok.whoami(cfg)}")
     if args.items:
-        tiktok.send(cfg, args.items.split(","), args.stream, dry_run=args.dry_run, resend=args.resend)
+        tiktok.send(cfg, args.items, args.stream, dry_run=args.dry_run, resend=args.resend)
     elif args.auto:
         tiktok.auto(cfg, dry_run=args.dry_run)
     elif args.caption:
@@ -409,7 +467,7 @@ def cmd_receipts(cfg: dict, args: argparse.Namespace) -> None:
 
     d = stream_dir(cfg, args.stream)
     if args.action == "find":
-        receipts.find(d, cfg, args.segments.split(",") if args.segments else None)
+        receipts.find(d, cfg, args.items)
     elif args.action == "script":
         receipts.script(d, cfg)
     elif args.action == "cut":
@@ -522,6 +580,17 @@ def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
             print("\nqueued; the bot DMs it within a minute")
 
 
+def cmd_config(cfg: dict, args: argparse.Namespace) -> None:
+    sdir = stream_dir(cfg, args.for_stream) if args.for_stream else None
+    e = config.explain(cfg, args.name, sdir)
+    show = f"show {e['show']}" if e["show"] else "base config, no show"
+    where = f"stream {sdir.name}, {show}" if sdir else show
+    print(f"{e['name']} = {json.dumps(e['value'], default=str)}    ({where})")
+    for i, (layer, value) in enumerate(e["layers"]):
+        last = i == len(e["layers"]) - 1
+        print(f"  {'->' if last else '  '} {layer:<28} {json.dumps(value, default=str)}")
+
+
 def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     from . import doctor
 
@@ -535,6 +604,18 @@ def cmd_setup(cfg: dict, args: argparse.Namespace) -> None:
                                 print_sync=args.sync_args, offline=args.offline))
 
 
+def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
+    from . import services
+
+    if args.action == "status" and args.force:
+        raise ClipperError("--force goes with stop/restart recorder")
+    if args.action != "status" and not args.which:
+        raise ClipperError(f"services {args.action}: say which: bot, worker, all (bot and worker) or recorder")
+    status = services.run(cfg, args.action, args.which or "all", force=args.force)
+    if status:
+        raise ClipperError("", status=status)
+
+
 def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
     from . import bot
 
@@ -544,9 +625,9 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'analytics']),
-    ('Services (long-running)', ['record', 'worker', 'bot', 'warroom', 'alert']),
+    ('Services (long-running)', ['services', 'record', 'worker', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
-    ('Setup and checks', ['setup', 'doctor', 'shows']),
+    ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
 
@@ -577,14 +658,14 @@ def add_pipeline(sub) -> None:
     r.add_argument("--about", default="", help="one-off: what the stretch is (the model finds the exact bounds)")
 
     p = sub.add_parser("transcribe", help="WhisperX -> words.jsonl")
-    p.add_argument("stream", nargs="?", help="stream id under paths.streams, or a stream dir")
+    add_stream(p, optional=True)
     p.add_argument("--deploy", action="store_true",
                    help="deploy the Modal app for [transcribe] backend = \"modal\"")
     p.add_argument("--force", action="store_true", help="transcribe again over an existing words.jsonl")
     p.set_defaults(fn=cmd_transcribe)
 
     p = sub.add_parser("speakers", help="name the diarized speakers (enrolled voices), fill words.jsonl speaker")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("--diarize", action="store_true",
                    help="diarize first (a stream transcribed without [transcribe] diarize; one GPU call)")
     p.add_argument("--name", action="append", metavar="SPEAKER_xx=Name",
@@ -594,27 +675,27 @@ def add_pipeline(sub) -> None:
     p.set_defaults(fn=cmd_speakers)
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.set_defaults(fn=cmd_signals)
 
     p = sub.add_parser("score", help="Claude Pass A + Pass B -> candidates.json")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("--dry-run", action="store_true", help="write Pass A requests, no API calls")
     p.set_defaults(fn=cmd_score)
 
     p = sub.add_parser("segments", help="split the stream into topic segments -> segments.json")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("--force", action="store_true", help="re-split instead of reusing segments.json")
     p.set_defaults(fn=cmd_segments)
 
     p = sub.add_parser("cut", help="cut segments, topic compilations and Pass B picks")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("what", nargs="*", help="segments, compilations and/or picks (default: all)")
-    p.add_argument("--ids", help="only these segment ids, e.g. s03,s07")
+    add_items(p, "only these segments, e.g. s03,s07", old=("--ids",))
     p.set_defaults(fn=cmd_cut)
 
     p = sub.add_parser("meta", help="upload metadata (SEO title, description, chapters, tags) + SRT")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("--captions-only", action="store_true",
                    help="rewrite .srt and re-mask metadata text, no model calls")
     p.add_argument("--missing", action="store_true",
@@ -622,8 +703,8 @@ def add_pipeline(sub) -> None:
     p.set_defaults(fn=cmd_meta)
 
     p = sub.add_parser("thumbs", help="thumbnails: pick a frame, write the text -> <video>.jpg")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-    p.add_argument("--ids", help="only these assets, e.g. t20,s02,comp-the-quartering")
+    add_stream(p)
+    add_items(p, "only these videos, e.g. t20,s02,comp-the-quartering", old=("--ids",))
     p.add_argument("--force", action="store_true", help="pick again even if the video is unchanged")
     p.add_argument("--compose-only", action="store_true",
                    help="re-render from thumbnails.json (brand or hand edits), no model calls")
@@ -633,15 +714,15 @@ def add_pipeline(sub) -> None:
     p.add_argument("--shorts", action="store_true",
                    help="only the Shorts' 9:16 covers, from their clips' choices (no model calls)")
     p.add_argument("--photo", metavar="PERSON",
-                   help="enquirer: use [thumbnail] photos/<PERSON> as the --ids covers' face "
+                   help="enquirer: use [thumbnail] photos/<PERSON> as the --items covers' face "
                         "(\"\" = back to the frame); re-renders, no model calls")
     p.add_argument("--teaser-photo", metavar="PERSON",
-                   help="enquirer: show that photo beside the --ids videos' teasers on the other covers")
+                   help="enquirer: show that photo beside the --items videos' teasers on the other covers")
     p.set_defaults(fn=cmd_thumbs)
 
     p = sub.add_parser("shorts", help="vertical Shorts of the picks: layout crop, captions, loudness -> shorts/")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-    p.add_argument("--ids", help="only these picks, e.g. t33,w19 or v01")
+    add_stream(p)
+    add_items(p, "only these picks, e.g. t33,w19 or v01", old=("--ids",))
     p.add_argument("--layout", help="use this layout (from [shorts] layouts) for the chosen picks")
     p.add_argument("--force", action="store_true", help="re-render even if unchanged (keeps layouts)")
     p.add_argument("--rescene", action="store_true",
@@ -650,11 +731,12 @@ def add_pipeline(sub) -> None:
                    help="print each Short's scene layouts (labels frames again), render nothing")
     p.add_argument("--save-example", metavar="LAYOUT",
                    help="save the stream's frame at --at as LAYOUT's reference screenshot (scene matching)")
-    p.add_argument("--at", type=float, help="with --save-example: seconds into the stream")
+    p.add_argument("--at", type=time_arg, metavar="TIME",
+                   help="with --save-example: time into the recording (H:MM:SS, H:MM or seconds)")
     p.set_defaults(fn=cmd_shorts)
 
     p = sub.add_parser("pick", help="Shorts from a stretch you name: find, cut, render, send to review")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("--from", dest="start", metavar="TIME", help="start, e.g. 4:05:00 or 4:05 (H:MM)")
     p.add_argument("--to", dest="end", metavar="TIME", help="end, e.g. 4:25:00")
     p.add_argument("--at", metavar="TIME", help="a [pick] span_s stretch around this time")
@@ -686,18 +768,19 @@ def add_review(sub) -> None:
     rsub = p.add_subparsers(dest="action", required=True)
     p.set_defaults(fn=cmd_review)
     r = rsub.add_parser("publish", help="upload previews to Kitsu (and post to Discord)")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(r)
     r.add_argument("--force", action="store_true", help="publish new revisions even if unchanged")
     r.add_argument("--no-notify", action="store_true", help="don't post to Discord")
     r.add_argument("--only", action="append", choices=["segments", "picks", "shorts", "compilations"],
                    help="publish only these kinds of [review] include (repeatable), e.g. --only shorts")
     r = rsub.add_parser("sync", help="read Kitsu decisions and columns into review.json")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(r)
     r = rsub.add_parser("notify", help="post a stream's review cards to Discord")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-    r.add_argument("--keys", help="only these items, e.g. c01,s02")
+    add_stream(r)
+    add_items(r, "only these items, e.g. c01,s02", old=("--keys",))
     r.add_argument("--force", action="store_true", help="repost items already posted")
     r = rsub.add_parser("status", help="decision counts per stream, and what's scheduled")
+    # Reads review.json unless asked: a sync writes it and can post to Kitsu, not for a status.
     r.add_argument("--sync", action="store_true", help="read Kitsu first")
     r = rsub.add_parser("list", help="items waiting for a decision, with Kitsu links and previews")
     r.add_argument("stream", nargs="?", help="only this stream")
@@ -729,8 +812,8 @@ def add_review(sub) -> None:
 
     p = sub.add_parser("retake", help="act on retake notes: re-cut / re-thumbnail, republish for review")
     p.add_argument("stream", nargs="?", help="only this stream (default: every stream)")
-    p.add_argument("--item", help="only this item, e.g. c03 or kick-131151926/s02")
-    p.add_argument("--comment", help="with --item: use this note instead of the one in Kitsu")
+    add_items(p, "only these items, e.g. c03 or kick-131151926/s02", old=("--item",))
+    p.add_argument("--comment", help="with one --items item: use this note instead of the one in Kitsu")
     p.add_argument("--dry-run", action="store_true", help="show the plan, change nothing")
     p.add_argument("--no-sync", action="store_true", help="use review.json as is")
     p.set_defaults(fn=cmd_retake)
@@ -745,59 +828,63 @@ def add_review(sub) -> None:
                    help="re-place automatic entries not yet uploaded (pinned/uploaded stay)")
     p.add_argument("--list", dest="list_only", action="store_true",
                    help="list upcoming schedule.json entries, no replan")
-    p.add_argument("--show", dest="list_only", action="store_true", help=argparse.SUPPRESS)  # old spelling
     p.add_argument("--days", type=int, default=7, help="with --list: how far ahead (default 7)")
     p.set_defaults(fn=cmd_schedule)
 
     p = sub.add_parser("upload", help="upload due schedule.json entries to YouTube (private + publishAt)")
-    p.add_argument("--sign-in", action="store_true", help="one-time YouTube sign-in in your browser")
     p.add_argument("--dry-run", action="store_true", help="show what would upload, upload nothing")
-    p.add_argument("--max", type=int, help="upload at most this many this run")
-    p.add_argument("--thumbnails", action="store_true",
+    p.add_argument("--limit", type=int, help="upload (or with --playlists, add) at most this many this run")
+    p.add_argument("--max", dest="limit", type=int, help=argparse.SUPPRESS)  # old spelling
+    m = p.add_mutually_exclusive_group()  # one job per run; plain `upload` is the scheduled uploads
+    m.add_argument("--sign-in", action="store_true", help="one-time YouTube sign-in in your browser")
+    m.add_argument("--thumbnails", action="store_true",
                    help="only set thumbnails on uploaded videos that lack one (after channel verification)")
-    p.add_argument("--playlists", action="store_true",
+    m.add_argument("--playlists", action="store_true",
                    help="only add uploaded videos to playlists they're missing from, e.g. their show's "
-                        "([youtube] show_playlist); 50 quota units each, --max N to spread it out")
-    p.add_argument("--links", action="store_true",
+                        "([youtube] show_playlist); 50 quota units each, --limit N to spread it out")
+    m.add_argument("--links", action="store_true",
                    help="only add, fix or drop source links (clip -> segment, segment -> compilation) "
                         "on uploaded videos; every upload run does this too ([youtube] source_links)")
-    p.add_argument("--next", type=int, metavar="N",
+    m.add_argument("--next", type=int, metavar="N",
                    help="list the next N videos to upload, with their files (for uploading in Studio)")
-    p.add_argument("--attach", nargs=2, metavar=("ITEM", "LINK"),
+    m.add_argument("--attach", nargs=2, metavar=("ITEM", "LINK"),
                    help="a video you uploaded in Studio is ITEM (e.g. kick-132380636/s12): set its "
                         "details, thumbnail, captions, playlist, Kitsu link; record it as uploaded")
-    p.add_argument("--related", nargs="*", metavar="ITEM",
+    m.add_argument("--related", nargs="*", metavar="ITEM",
                    help="list uploaded Shorts whose segment is out, to set its related video in Studio "
                         "(the API can't); with ITEMs (keys or Short links), record them as set")
     p.set_defaults(fn=cmd_upload)
 
     p = sub.add_parser("rumble", help="ready-to-upload Rumble folders for scheduled items; mark them done")
     p.add_argument("stream", nargs="?", help="stream id (default: every scheduled item)")
-    p.add_argument("--items", help="only these, e.g. s02,c03 or a full schedule key")
+    add_items(p, "only these, e.g. s02,c03 or a full schedule key")
     p.add_argument("--open", action="store_true", help="open the folder and Rumble's upload page")
     p.add_argument("--dry-run", action="store_true", help="show what would be prepared, write nothing")
-    p.add_argument("--status", action="store_true", help="Rumble status of scheduled items")
-    p.add_argument("--done", metavar="ITEM", help="mark ITEM uploaded to Rumble (with --url)")
+    m = p.add_mutually_exclusive_group()
+    m.add_argument("--status", action="store_true", help="Rumble status of scheduled items")
+    m.add_argument("--done", metavar="ITEM", help="mark ITEM uploaded to Rumble (with --url)")
+    m.add_argument("--undo", metavar="ITEM", help="clear ITEM's uploaded mark")
     p.add_argument("--url", help="with --done: the video's Rumble link")
-    p.add_argument("--undo", metavar="ITEM", help="clear ITEM's uploaded mark")
     p.set_defaults(fn=cmd_rumble)
 
     p = sub.add_parser("tiktok", help="send scheduled Shorts to the TikTok app's drafts; post from the phone")
     p.add_argument("stream", nargs="?", help="stream id, for short --items like s02 (default: any)")
-    p.add_argument("--items", help="send these as drafts, e.g. t20,v01_t20 or a full schedule key")
+    m = p.add_mutually_exclusive_group()  # none of them: the status of sent drafts
+    add_items(m, "send these as drafts, e.g. t20,v01_t20 or a full schedule key")
+    m.add_argument("--auto", action="store_true",
+                   help="send the next unsent Shorts in YouTube-schedule order, up to max_per_24h")
+    m.add_argument("--caption", metavar="ITEM", help="post a sent draft's caption to Discord again")
     p.add_argument("--resend", action="store_true",
                    help="with --items: send again drafts that expired unposted in the app")
-    p.add_argument("--auto", action="store_true",
-                   help="send the next unsent Shorts in YouTube-schedule order, up to max_per_24h")
-    p.add_argument("--sign-in", action="store_true", help="one-time TikTok sign-in in your browser")
-    p.add_argument("--caption", metavar="ITEM", help="post a sent draft's caption to Discord again")
-    p.add_argument("--dry-run", action="store_true", help="show files and captions, send nothing")
+    p.add_argument("--sign-in", action="store_true", help="one-time TikTok sign-in in your browser (then "
+                                                         "carries on with --items/--auto if given)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="show files and captions, send nothing; with no mode, list drafts without asking TikTok")
     p.set_defaults(fn=cmd_tiktok)
 
     p = sub.add_parser("analytics", help="YouTube stats of uploads -> analytics.json (feeds scoring)")
     p.add_argument("--sign-in", action="store_true", help="once: grant read-only YouTube Analytics")
     p.add_argument("--list", dest="list_only", action="store_true", help="print analytics.json, best first")
-    p.add_argument("--show", dest="list_only", action="store_true", help=argparse.SUPPRESS)  # old spelling
     p.add_argument("--report", action="store_true",
                    help="the month's report -> reports/analytics/<month>.md + .csv")
     p.add_argument("--month", help="with --report: YYYY-MM (default: this month)")
@@ -815,8 +902,19 @@ def add_services(sub) -> None:
     r = rsub.add_parser("now", help="record one channel's current (or next) stream, then exit")
     r.add_argument("channel", help="Kick channel slug")
     r.add_argument("--max-s", type=float, help="stop after this many seconds and finalize")
+    rsub.add_parser("status", help="what the recorder is doing, from its heartbeat on the share "
+                                   "(exit 3 while recording)")
     r = rsub.add_parser("finalize", help="join an interrupted recording's parts and write its files")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(r)
+
+    p = sub.add_parser("services", help="status, stop or restart the bot, the worker and the NAS recorder")
+    p.add_argument("action", nargs="?", choices=["status", "stop", "restart"], default="status")
+    p.add_argument("which", nargs="?", choices=["bot", "worker", "recorder", "all"],
+                   help="default for status: everything; stop/restart need one (all = bot and worker; "
+                        "the recorder is only ever named)")
+    p.add_argument("--force", action="store_true",
+                   help="restart or stop the recorder even while it's recording (starts a new part)")
+    p.set_defaults(fn=cmd_services)
 
     p = sub.add_parser("worker", help="GPU machine: `clipper run` each finished recording")
     p.add_argument("--once", action="store_true", help="one pass, then exit")
@@ -857,8 +955,8 @@ def add_extras(sub) -> None:
     p = sub.add_parser("receipts", help="old clips of the archive subject for a stream's stories, "
                                         "one video uploaded private (#48)")
     p.add_argument("action", choices=["find", "list", "script", "cut", "upload"])
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-    p.add_argument("--segments", help="find: only these segments, e.g. s02,s05 (default: by topic/figure)")
+    add_stream(p)
+    add_items(p, "find: only these segments, e.g. s02,s05 (default: by topic/figure)", old=("--segments",))
     p.add_argument("--again", action="store_true", help="upload: a second copy even if one is up")
     p.set_defaults(fn=cmd_receipts)
 
@@ -880,8 +978,8 @@ def add_extras(sub) -> None:
     r.add_argument("subject", nargs="?")
     r = rsub.add_parser("check", help="are the source links still up? (no downloads, no cost)")
     r.add_argument("subject")
-    r.add_argument("--ids", nargs="+", help="just these items (default: not checked in "
-                   "[archive] link_recheck_days)")
+    add_items(r, "just these items (default: not checked in [archive] link_recheck_days)",
+              old=("--ids",), many=True)
     r.add_argument("--all", action="store_true", help="every item, however recently checked")
     r.add_argument("--limit", type=int, help="at most this many items")
     r = rsub.add_parser("links", help="items by link status (default: every link not alive)")
@@ -979,11 +1077,18 @@ def add_setup(sub) -> None:
                    help="only what this machine runs (gpu worker, bot, nas recorder)")
     p.set_defaults(fn=cmd_doctor)
 
+    p = sub.add_parser("config", help="settings: where a value comes from (default, clipper.toml, show, ...)")
+    csub = p.add_subparsers(dest="action", required=True)
+    r = csub.add_parser("get", help="a setting's value and every layer that sets it, e.g. meta.model")
+    r.add_argument("name", help="section.key, e.g. bleep.mode")
+    r.add_argument("--stream", dest="for_stream", help="as this stream sees it (its show, its config.toml)")
+    p.set_defaults(fn=cmd_config)
+
     p = sub.add_parser("shows", help="list the [shows] profiles and which streams belong to each")
     p.set_defaults(fn=cmd_shows)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="clipper", epilog=command_list(),
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", help="path to clipper.toml (default: $CLIPPER_CONFIG or ./clipper.toml)")
@@ -991,8 +1096,11 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for add in (add_pipeline, add_review, add_services, add_extras, add_setup):
         add(sub)
+    return ap
 
-    args = ap.parse_args()
+
+def main() -> None:
+    args = build_parser().parse_args()
     try:
         run_command(args)
     except ClipperError as e:
@@ -1003,8 +1111,8 @@ def main() -> None:
 
 def run_command(args: argparse.Namespace) -> None:
     cfg = config.load(args.config)
-    if args.show:
-        cfg = config.for_show(cfg, args.show)
+    if args.show:  # kept by every stage's for_stream, whatever the stream's channel (B4)
+        cfg = config.pin_show(cfg, args.show)
     elif getattr(args, "stream", None):
         cfg = config.for_stream(cfg, stream_dir(cfg, args.stream))
     from . import costs  # what every model call this command makes is recorded under

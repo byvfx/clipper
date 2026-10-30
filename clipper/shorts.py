@@ -1,7 +1,7 @@
 """Vertical Shorts: each Pass B pick's short window as a 1080x1920 video.
 
 Usage:
-    clipper shorts <stream> [--ids t33,w19] [--layout watch] [--force] [--rescene] [--check]
+    clipper shorts <stream> [--items t33,w19] [--layout watch] [--force] [--rescene] [--check]
 
 For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>.mp4:
   1. the clip's window (in_s..out_s; [shorts] window = "short" uses scoring's 15-60 s
@@ -42,6 +42,7 @@ from .cut import encode_args, ffmpeg_cut, keyframe_before
 from .errors import ClipperError
 from .llm import Claude
 from .media import source_file
+from .prompts import Prompts
 from .segments import slug
 from .transcript import load_words
 
@@ -199,22 +200,23 @@ def sample_frames(src: Path, a: float, dur: float, step: float, out_dir: Path,
     return [(k * step, f) for k, f in enumerate(frames)]
 
 
-def label_frames(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[float, Path]]
-                 ) -> list[str] | None:
+def label_frames(claude: Claude, prompts: Prompts, sc: dict, layouts: dict,
+                 frames: list[tuple[float, Path]]) -> list[str] | None:
     """One layout name per frame, scene_batch frames per vision call (with 25-45 frames in
     one call the labels drifted from run to run), or None if a batch doesn't come back."""
     n = max(1, sc["scene_batch"])
     labels: list[str] = []
     for k in range(0, len(frames), n):
-        got = label_batch(claude, sc, layouts, frames[k:k + n])
+        got = label_batch(claude, prompts, sc, layouts, frames[k:k + n])
         if got is None:
             return None
         labels += got
     return labels
 
 
-def label_batch(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[float, Path]]
-                ) -> list[str] | None:
+def label_batch(claude: Claude, prompts: Prompts, sc: dict, layouts: dict,
+                frames: list[tuple[float, Path]]) -> list[str] | None:
+    """prompts: version set to [shorts] layout_prompt_version (prompts/shorts_layout_<v>.md)."""
     import base64
 
     names = list(layouts)
@@ -222,14 +224,8 @@ def label_batch(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[floa
     # mistakes: a zoomed or busy screen box got called center.
     if all(layouts[n].get("example") for n in names if n != "center") and len(names) > 2:
         names = [n for n in names if n != "center"]
-    system = ("You classify frames from a livestream by which screen layout they show. "
-              "Layouts:\n" + "\n".join(f"- {n}: {layouts[n].get('description', '')}" for n in names)
-              + "\nThe frames are in time order, a few seconds apart; the stream can switch "
-              "layout between any two. Give the layout of every frame, in order. Judge the "
-              "arrangement of the frame (where the boxes and webcams are), not what is playing "
-              "inside them: a screen box showing a tall phone video with black bars, a dark "
-              "page or a paused video is still the same layout. Pick the most specific layout "
-              "that fits; use center only when none of the others does.")
+    prompts.vars["layouts"] = "\n".join(f"- {n}: {layouts[n].get('description', '')}" for n in names)
+    system = prompts.get("shorts_layout").rstrip()
     # A screenshot per layout ("example") anchors the labels: without them the model
     # judged by what played in the screen box (a zoomed-in face read as "center").
     content = []
@@ -304,8 +300,8 @@ def find_cut(src: Path, a: float, t0: float, t1: float, fps: int = 20) -> float:
     return round(min(t1, t0 + k / fps), 3)
 
 
-def detect_scenes(need_claude, sc: dict, layouts: dict, src: Path, a: float, dur: float,
-                  work: Path, stem: str) -> tuple[list[list] | None, str]:
+def detect_scenes(need_claude, prompts: Prompts, sc: dict, layouts: dict, src: Path, a: float,
+                  dur: float, work: Path, stem: str) -> tuple[list[list] | None, str]:
     """([start, end, layout] stretches covering 0..dur, or None if labelling failed; how).
     A vision model labels a frame every scene_step_s, with the show's reference
     screenshots (layouts/<show>/<layout>.jpg) as anchors. Matching frames to those
@@ -314,7 +310,7 @@ def detect_scenes(need_claude, sc: dict, layouts: dict, src: Path, a: float, dur
     step = sc["scene_step_s"]
     frames = sample_frames(src, a, dur, step, work, stem)
     try:
-        labels = label_frames(need_claude(), sc, layouts, frames) if frames else None
+        labels = label_frames(need_claude(), prompts, sc, layouts, frames) if frames else None
     finally:
         for _, f in frames:
             f.unlink(missing_ok=True)
@@ -669,6 +665,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     out_dir, work = stream_dir / "shorts", stream_dir / "shorts" / "work"
     out_dir.mkdir(exist_ok=True)
     layouts = with_examples(layouts, cfg)
+    layout_prompts = Prompts(cfg)
+    layout_prompts.version = sc["layout_prompt_version"]
     claude = None
 
     def need_claude() -> Claude:
@@ -695,7 +693,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         scenes, how = choose_layout(layout, review.get(key, {}), prev, layouts, a, b,
                                     rescene or check)
         if scenes is None:
-            scenes, how = detect_scenes(need_claude, sc, pickable(layouts), src, a, dur, work, key)
+            scenes, how = detect_scenes(need_claude, layout_prompts, sc, pickable(layouts), src, a,
+                                        dur, work, key)
             if scenes is None:
                 print(f"  {key}: frame labels didn't come back whole; using {sc['default_layout']}")
                 scenes = [[0.0, dur, sc["default_layout"]]]

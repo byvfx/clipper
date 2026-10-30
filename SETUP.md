@@ -4,7 +4,7 @@ clipper runs in three roles. A machine can do more than one.
 
 | Role | What runs there | Needs |
 |---|---|---|
-| **GPU worker** | `clipper worker`: transcribe, score, segments, then Shorts (and clips, if `[review] include` has `"picks"`) to review, then long segments to review | NVIDIA GPU (8 GB+), the NAS share, ffmpeg |
+| **GPU worker** | `clipper worker`: transcribe, score, segments, then Shorts (and clips, if `[review] include` has `"picks"`) to review, then long segments to review | an NVIDIA GPU (8 GB+), or none with `[transcribe] backend = "modal"`; the NAS share, ffmpeg |
 | **Bot** | `clipper bot`: Discord review cards, buttons, retakes | always on, the NAS share (or local streams), ffmpeg |
 | **Recorder** | `clipper record watch` in Docker on the NAS | Docker; see `deploy/record/deploy.sh` |
 
@@ -26,7 +26,7 @@ else uv's installer and BtbN's ffmpeg build; Homebrew or apt on macOS/Linux), sy
 packages, then runs `clipper setup`:
 
 1. **Join or start fresh.** Join copies the main machine's `clipper.toml` (and, if you like, the
-   `secrets/` beside it) from a path or the share; new writes one from clipper.example.toml.
+   `secrets/` beside it) from a path or the share; new writes a short starter (only what differs from the defaults; clipper.example.toml lists every setting).
 2. **Roles.** Worker, bot, recorder (the recorder is the NAS's Docker container; setup only
    points at `deploy/record/deploy.sh`). It looks at the GPU and offers WhisperX (NVIDIA), mlx
    (Apple Silicon) or Modal, keeping the shared choice when this machine can run it. If the
@@ -109,23 +109,28 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    Add `ANTHROPIC_WORKSPACE_ID` if the key isn't scoped to a workspace. Open a new terminal.
 
 6. **Fonts**: thumbnails and Short captions use Impact and Bahnschrift, both standard on
-   Windows. On Linux install `ttf-mscorefonts-installer` (Impact) and Roboto Condensed.
+   Windows. On Linux install `ttf-mscorefonts-installer` (Impact)
+   and Roboto Condensed (`fonts-roboto-unhinted`).
 
    **Photos** (optional): tabloid covers can use a portrait of someone the show talks about
    who is never on screen. Make a folder every machine can reach (e.g. `photos` beside
    `streams` on the NAS), add one head-and-shoulders crop per person named `<Person>.jpg`
    (the whole picture is treated as the face, so crop out watermarks and logos), and set
    `[thumbnail] photos` to it. The model may then use one for a cover's face or teaser box;
-   `clipper thumbs <stream> --ids s04 --teaser-photo "Hasan Piker"` sets one by hand.
+   `clipper thumbs <stream> --items s04 --teaser-photo "Hasan Piker"` sets one by hand.
 
-7. **Check**: `uv run clipper doctor --role gpu` (or `--role bot`).
+7. **Check**: `clipper doctor --role gpu` (or `--role bot`).
 
-8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed):
+8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed;
+   both scripts share `deploy\common.ps1`, which lists the user env vars a task copies in,
+   since scheduled tasks don't always see ones set after logon: a new key goes there too):
    ```powershell
    deploy\worker\worker-task.ps1 -Install     # GPU worker
    deploy\discord\bot-task.ps1 -Install       # Discord bot (only one machine runs it)
    ```
    `-Status`, `-Restart`, `-Stop`, `-Uninstall` work on both. Logs go to `logs\`.
+   `clipper services` shows both plus the recorder and any NAS cuts;
+   `clipper services restart bot` (or `worker`, `all`) runs the same scripts.
 
 ## 2. macOS (Apple Silicon)
 
@@ -299,7 +304,11 @@ moves to the NAS (#9), do the same there with the Tailscale container.
 
 `bash deploy/record/deploy.sh` from the repo root (ssh alias `nas`). It copies clipper.toml
 to the NAS; the recorder only reads `[record]` and `[kick]`. Re-run it after changing
-`[record] channels`.
+`[record] channels`. It refuses while a show is being recorded (the restart would start a
+new recording part): `clipper record status` shows what the recorder is doing, from the
+heartbeat it writes to the share, and `deploy.sh --force` deploys anyway.
+`clipper services stop|restart recorder` stops or restarts it over ssh without a new build,
+with the same check.
 
 **Cut on the NAS (#51).** The same image cuts segments and compilations beside the source,
 instead of the laptop pulling and pushing every byte over the share (it writes at ~23 MB/s
@@ -322,7 +331,7 @@ Save a reference screenshot of each one from a recorded stream (`clipper shorts 
 --save-example <layout> --at <seconds>`); `clipper doctor` warns while any is missing.
 A layout that frames an existing scene another way (say, only the webcams of a watch scene)
 gets `pick = false`: scene detection never chooses it and it needs no screenshot; pick it by
-hand with `clipper shorts <stream> --ids <vNN> --layout <name>`, the Kitsu Layout column or a retake.
+hand with `clipper shorts <stream> --items <vNN> --layout <name>`, the Kitsu Layout column or a retake.
 Add the slug to `[record] channels` to record it live. `clipper shows` lists every show and
 its streams; the show's Kitsu production is created on its first publish.
 

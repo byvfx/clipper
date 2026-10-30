@@ -50,7 +50,7 @@ keep README and SETUP true whenever behaviour changes.
 - Kitsu is the record for review decisions. Bot buttons and the war room act through
   `clipper/actions.py`; do not write decisions anywhere else.
 - Uploads are automatic since 2026-10-20: the bot replans and runs `clipper upload` every
-  `[youtube] auto_upload_minutes` (60), private with publishAt, at most `max_per_24h`. Do not run
+  `[youtube] auto_upload_minutes` (60 here; the default 0 means only by hand), private with publishAt, at most `max_per_24h`. Do not run
   `clipper upload` or `clipper review publish` by hand without being asked.
 - Generated titles, descriptions and thumbnail text should avoid the word "hosts"; the
   user finds it reads as machine-written.
@@ -63,11 +63,15 @@ keep README and SETUP true whenever behaviour changes.
   them first, for example in PowerShell:
   `$env:KITSU_TOKEN = [Environment]::GetEnvironmentVariable("KITSU_TOKEN","User")`.
 - The Discord bot and GPU worker run as scheduled tasks (`deploy/discord`, `deploy/worker`).
-  Stopping the task does not stop the supervised process; see the gotchas in HANDOFF.md.
+  `clipper services status|stop|restart bot|worker|all` runs their task scripts, which also
+  stop the supervisor and stage processes (stopping the task alone doesn't).
 - The NAS recorder is deployed with `bash deploy/record/deploy.sh`, only when no show is live:
-  the restart starts a new recording part.
+  the restart starts a new recording part. The script refuses while `clipper record status`
+  shows a recording (exit 3); `--force` overrides it.
 - Model calls cost money. Say what a rerun of `score`, `segments`, `meta` or `thumbs` will
   cost before doing it on a long stream.
+- Before a hand edit of `schedule.json` or `clipper.toml`, copy it to
+  `backups/<file>.before_<what>_<date>` (gitignored), not the repo root.
 
 ## Checks
 

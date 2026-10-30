@@ -336,6 +336,27 @@ def encoders_here(hw: dict) -> list[str]:
 
 # ---------- steps ----------
 
+# A new install's clipper.toml: only what it chooses differently from the built-in defaults.
+# Copying clipper.example.toml instead pinned ~300 defaults (later default changes never
+# reached the install) and brought this install's own show and recorded channel with it.
+NEW_CONFIG = """# clipper.toml: this install's settings. Only what differs from the built-in defaults goes
+# here; clipper.example.toml lists every setting with its default and what it does, and
+# `clipper config get <section>.<key>` shows a value and which file set it.
+# `clipper setup` adds what its steps decide.
+
+[bleep]
+mode = "bleep"                      # cover slurs in the audio and mask them in captions
+
+[meta]
+title_format = "{SHOW} | {title}"   # titles start with the show's name
+
+# One table per show: its Kick channel(s) and what it does differently, for example
+# [shows.myshow]
+# channels = ["kick-channel-slug"]
+# [shows.myshow.meta]
+# show_name = "My Show"
+"""
+
 def step_mode(cfg: dict, st: dict, ask: Ask) -> None:
     root = _root(cfg)
     have = root["_file"] is not None
@@ -348,8 +369,9 @@ def step_mode(cfg: dict, st: dict, ask: Ask) -> None:
     if have:
         say(f"Using {root['_file']}.")
     elif st["mode"] == "new":
-        shutil.copyfile(Path(__file__).resolve().parent.parent / "clipper.example.toml", target)
-        say(f"Wrote {target.name} from clipper.example.toml; the next steps fill in this machine's part.")
+        target.write_text(NEW_CONFIG, encoding="utf-8")
+        say(f"Wrote a starter {target.name} (only what differs from the defaults; clipper.example.toml "
+            "lists every setting). The next steps fill in this machine's part.")
     else:
         say("Copy the main machine's clipper.toml here (it is gitignored, so it isn't in the code).")
         src = Path(ask.text("from", "Path to the main machine's clipper.toml (a share or a copy)",

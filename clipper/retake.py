@@ -2,8 +2,8 @@
 
 Usage:
     clipper retake                     every item set to retake with a note not handled yet
-    clipper retake <stream> [--item c03] [--dry-run]
-    clipper retake <stream> --item c03 --comment "start 5 s earlier" --dry-run   (try a note)
+    clipper retake <stream> [--items c03] [--dry-run]
+    clipper retake <stream> --items c03 --comment "start 5 s earlier" --dry-run   (try a note)
 
 When an item is set to "retake" with a comment (in Kitsu, or with Discord's Changes
 button), a model reads the note with the item's transcript, cut points and thumbnail and
