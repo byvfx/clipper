@@ -382,21 +382,20 @@ def needs_push(value: str, seen: str | None, last: dict | None, eid: str) -> boo
     """Whether an item's Scheduled column has to be read and maybe written. seen: the
     column as the last sync read it into review.json (None: never read); last: what an
     earlier push wrote there ({"entity_id", "value", "over": seen at that time})."""
-    if seen is not None and seen == value:
-        return False
-    # Written by us since that sync, and no sync has seen anything else there since.
-    return not (last and last.get("entity_id") == eid and last.get("value") == value
-                and last.get("over") == seen)
+    known = seen  # what the column shows, as far as we know
+    if last and last.get("entity_id") == eid and last.get("over") == seen:
+        known = last.get("value")  # we wrote it after that sync, and none has run since
+    return known is None or known != value
 
 
 def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo,
                   every: bool = False) -> None:
     """Write each item's slot to its Kitsu "Scheduled" column (blank when unscheduled).
-    Only the slots that changed: an item whose column review.json (the last sync) already
-    shows with its slot, or that the last push wrote and no sync has seen changed since
-    (schedule_kitsu.json, beside schedule.json), needs no Kitsu call. A value someone
-    typed into the column is put right once a sync has read it. every: read every
-    item's column from Kitsu and write the ones that differ."""
+    Only the slots that changed: what the column shows is known from the last sync
+    (review.json) or, when a push wrote it after that sync, from schedule_kitsu.json
+    (beside schedule.json); an item whose column already shows its slot needs no Kitsu
+    call. A value someone typed into the column is put right once a sync has read it.
+    every: read every item's column from Kitsu and write the ones that differ."""
     from . import review
     from .config import for_stream
 

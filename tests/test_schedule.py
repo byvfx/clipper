@@ -100,8 +100,11 @@ def test_needs_push():
     assert not schedule.needs_push("2026-11-03 16:00", "", last, "e1")
     assert schedule.needs_push("2026-11-04 16:00", "", last, "e1")        # the slot moved again
     assert schedule.needs_push("2026-11-03 16:00", "", last, "e2")        # another entity
+    # Back to what the last sync read: review.json says so, but the push changed it since.
+    assert schedule.needs_push("", "", last, "e1")
     # A sync read something else there after that push (typed in Kitsu): put it right.
     assert schedule.needs_push("2026-11-03 16:00", "2026-11-09 10:00", last, "e1")
+    assert not schedule.needs_push("2026-11-03 16:00", "2026-11-03 16:00", last, "e1")
 
 
 def test_push_to_kitsu_writes_only_changed_slots(defaults, tmp_path, monkeypatch):
@@ -139,6 +142,10 @@ def test_push_to_kitsu_writes_only_changed_slots(defaults, tmp_path, monkeypatch
                                            "c": {"fields": {"Scheduled": "x"}}})  # a sync saw it
     schedule.push_to_kitsu(cfg, items, placed, TZ)
     assert calls == [("get", "e3"), ("put", "e3", {"f_sched": ""})]
+    calls.clear()
+    del placed["s/a"]   # unscheduled again before any sync: review.json still shows ""
+    schedule.push_to_kitsu(cfg, items, placed, TZ)
+    assert calls == [("get", "e1"), ("put", "e1", {"f_sched": ""})]
     calls.clear()
     schedule.push_to_kitsu(cfg, items, placed, TZ, every=True)
     assert calls == [("get", "e1"), ("get", "e2"), ("get", "e3")]
