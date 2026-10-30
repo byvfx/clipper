@@ -53,6 +53,16 @@ def test_routes_are_tables():
     assert set(warroom.POST_API) >= {"/api/undo", "/api/bulk", "/api/replan", "/api/retake"}
 
 
+def test_a_refused_post_still_gets_its_answer(serve, monkeypatch):
+    """The body is read before any refusal (an unread body resets the connection on
+    Windows), and one past MAX_POST isn't read at all."""
+    port = serve("")
+    for _ in range(20):
+        assert status(port, "/api/nope", "evil.example", method="POST") == 403
+    monkeypatch.setattr(warroom, "MAX_POST", 1)
+    assert status(port, "/api/nope", "localhost", method="POST") == 413
+
+
 def test_saved_layouts(tmp_path):
     cfg = {"paths": {"warroom_layouts": tmp_path / "logs" / "layouts.json"}}
     assert warroom.layouts(cfg) == {"layouts": {}}
@@ -66,3 +76,4 @@ def test_saved_layouts(tmp_path):
     with pytest.raises(ClipperError, match="name"):
         warroom.save_layout(cfg, {"name": " ", "layout": lay})
     assert warroom.save_layout(cfg, {"name": "Mine", "delete": True}) == {"layouts": {}}
+

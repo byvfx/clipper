@@ -45,6 +45,7 @@ STATIC = {"/manifest.webmanifest": "application/manifest+json", "/icon.svg": "im
 LOCK = threading.Lock()  # one Kitsu write / replan at a time
 SYNC = {"running": False, "last": None, "error": ""}
 LIVE_CACHE: dict = {"at": 0.0, "data": []}
+MAX_POST = 1 << 20  # bytes; decisions, bulk edits, covers and layouts are far smaller
 
 
 def load(path: Path, default):
@@ -942,6 +943,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        # Read the body before any refusal: closing with it unread resets the connection
+        # (Windows), and the client sees an abort instead of the 403. The page's own posts
+        # are a few KB.
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > MAX_POST:
+            self.close_connection = True
+            return self.send_json({"error": "request too large"}, 413)
+        raw = self.rfile.read(n)
         if self.foreign_host():
             return self.send_json({"error": "open the war room as localhost"}, 403)
         if not self.authorized(parse_qs(u.query)):
@@ -950,9 +959,8 @@ class Handler(BaseHTTPRequestHandler):
         # without a CORS preflight, which this server never answers) from this origin.
         if self.cross_site() or not self.headers.get("Content-Type", "").startswith("application/json"):
             return self.send_json({"error": "cross-site or non-JSON request refused"}, 403)
-        n = int(self.headers.get("Content-Length") or 0)
         try:
-            body = json.loads(self.rfile.read(n) or b"{}")
+            body = json.loads(raw or b"{}")
         except ValueError:
             return self.send_json({"error": "bad JSON"}, 400)
         if not isinstance(body, dict):
