@@ -126,6 +126,8 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    deploy\discord\bot-task.ps1 -Install       # Discord bot (only one machine runs it)
    ```
    `-Status`, `-Restart`, `-Stop`, `-Uninstall` work on both. Logs go to `logs\`.
+   `clipper services` shows both plus the recorder and any NAS cuts;
+   `clipper services restart bot` (or `worker`, `all`) runs the same scripts.
 
 ## 2. macOS (Apple Silicon)
 
@@ -299,7 +301,11 @@ moves to the NAS (#9), do the same there with the Tailscale container.
 
 `bash deploy/record/deploy.sh` from the repo root (ssh alias `nas`). It copies clipper.toml
 to the NAS; the recorder only reads `[record]` and `[kick]`. Re-run it after changing
-`[record] channels`.
+`[record] channels`. It refuses while a show is being recorded (the restart would start a
+new recording part): `clipper record status` shows what the recorder is doing, from the
+heartbeat it writes to the share, and `deploy.sh --force` deploys anyway.
+`clipper services stop|restart recorder` stops or restarts it over ssh without a new build,
+with the same check.
 
 **Cut on the NAS (#51).** The same image cuts segments and compilations beside the source,
 instead of the laptop pulling and pushing every byte over the share (it writes at ~23 MB/s

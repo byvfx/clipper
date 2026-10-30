@@ -32,6 +32,10 @@ def cmd_fetch(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_record(cfg: dict, args: argparse.Namespace) -> None:
     from . import record
 
+    if args.action == "status":
+        from . import services
+
+        return services.record_status(cfg)
     record.setup_logging()
     if args.action == "finalize":
         record.finalize(stream_dir(cfg, args.stream), cfg)
@@ -535,6 +539,18 @@ def cmd_setup(cfg: dict, args: argparse.Namespace) -> None:
                                 print_sync=args.sync_args, offline=args.offline))
 
 
+def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
+    from . import services
+
+    if args.action == "status" and args.force:
+        raise ClipperError("--force goes with stop/restart recorder")
+    if args.action != "status" and not args.which:
+        raise ClipperError(f"services {args.action}: say which: bot, worker, all (bot and worker) or recorder")
+    status = services.run(cfg, args.action, args.which or "all", force=args.force)
+    if status:
+        raise ClipperError("", status=status)
+
+
 def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
     from . import bot
 
@@ -544,7 +560,7 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'analytics']),
-    ('Services (long-running)', ['record', 'worker', 'bot', 'warroom', 'alert']),
+    ('Services (long-running)', ['services', 'record', 'worker', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
     ('Setup and checks', ['setup', 'doctor', 'shows']),
 ]
@@ -813,8 +829,19 @@ def add_services(sub) -> None:
     r = rsub.add_parser("now", help="record one channel's current (or next) stream, then exit")
     r.add_argument("channel", help="Kick channel slug")
     r.add_argument("--max-s", type=float, help="stop after this many seconds and finalize")
+    rsub.add_parser("status", help="what the recorder is doing, from its heartbeat on the share "
+                                   "(exit 3 while recording)")
     r = rsub.add_parser("finalize", help="join an interrupted recording's parts and write its files")
     r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+
+    p = sub.add_parser("services", help="status, stop or restart the bot, the worker and the NAS recorder")
+    p.add_argument("action", nargs="?", choices=["status", "stop", "restart"], default="status")
+    p.add_argument("which", nargs="?", choices=["bot", "worker", "recorder", "all"],
+                   help="default for status: everything; stop/restart need one (all = bot and worker; "
+                        "the recorder is only ever named)")
+    p.add_argument("--force", action="store_true",
+                   help="restart or stop the recorder even while it's recording (starts a new part)")
+    p.set_defaults(fn=cmd_services)
 
     p = sub.add_parser("worker", help="GPU machine: `clipper run` each finished recording")
     p.add_argument("--once", action="store_true", help="one pass, then exit")
