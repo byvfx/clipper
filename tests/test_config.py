@@ -178,3 +178,19 @@ def test_setup_starter_config_is_clean(tmp_path):
     cfg = config.load(path, use_local=False)
     assert config.problems(cfg) == [] and cfg["shows"] == {}
     assert cfg["bleep"]["mode"] == "bleep" and cfg["record"]["channels"] == []
+
+
+def test_show_pin_carries_to_children(cfg_path):
+    cfg = config.load(cfg_path)
+    assert config.show_args(cfg) == []
+    assert config.show_args(config.pin_show(cfg, "kino")) == ["--show", "kino"]
+
+
+def test_show_key_typos_warn(tmp_path, capsys, monkeypatch):
+    path = tmp_path / "clipper.toml"
+    path.write_text('[shows.kino]\nchannnels = ["kinocasino"]\n', encoding="utf-8")
+    config.load(path)
+    assert "[shows.kino]: unknown setting channnels" in capsys.readouterr().err
+    monkeypatch.setenv("CLIPPER_DATA", "/volume1/docker/clipper")   # the NAS recorder's own variable
+    path.write_text('[shows.kino]\nchannels = ["kinocasino"]\n', encoding="utf-8")
+    assert config.problems(config.load(path)) == []

@@ -28,7 +28,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from . import jsonstate
-from .config import for_stream
+from .config import for_stream, show_args
 from .errors import ClipperError
 from .media import source_file
 from .segments import slug
@@ -306,7 +306,7 @@ def on_nas(stream_dir: Path, cfg: dict, argv: list[str]) -> None:
               *(["--user", cc["nas_user"]] if cc["nas_user"] else []),
               "-v", f"{cc['nas_data']}:/data",
               *[a for k, v in env.items() for a in ("-e", f"{k}={v}")]]
-    run = [cc["nas_image"], "cut", sid, *argv]
+    run = [cc["nas_image"], *show_args(cfg), "cut", sid, *argv]  # a --show pin carries over
     # One folder per run (two cuts at once must not share code), gone when the run ends.
     remote = ('set -e; d=$(mktemp -d "$HOME/clipper-cut.XXXXXX"); trap \'rm -rf "$d"\' EXIT; '
               'tar -xzf - -C "$d"; chmod -R a+rX "$d"; '

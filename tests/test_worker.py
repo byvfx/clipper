@@ -90,3 +90,17 @@ def test_run_from_follows_the_planned_order():
     assert "cut" not in stages.from_stage("shorts", off)
     assert stages.from_stage("cut", on) == ["cut", "meta", "thumbs", "review"]
     assert stages.from_stage("shorts", on)[0] == "shorts" and "cut" in stages.from_stage("shorts", on)
+
+
+def test_run_passes_a_show_pin_to_its_stages(tmp_path, defaults, monkeypatch):
+    """`clipper --show c404 run <stream>`: each stage child gets --show c404 too."""
+    from clipper import config
+    cfg = {**defaults, "shows": {"c404": {"channels": ["don"], "overrides": {}}}}
+    calls = []
+    monkeypatch.setattr(worker.subprocess, "call", lambda cmd, **kw: calls.append(cmd) or 0)
+    monkeypatch.setattr(worker, "keep_awake", lambda on: None)
+    assert worker.run_stream(config.pin_show(cfg, "c404"), tmp_path, stages=["signals"], force=True)
+    assert calls[0][3:7] == ["--show", "c404", "signals", str(tmp_path)]
+    calls.clear()
+    worker.run_stream(cfg, tmp_path, stages=["signals"], force=True)
+    assert "--show" not in calls[0]

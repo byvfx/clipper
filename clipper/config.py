@@ -696,7 +696,9 @@ CHOICES = {
     ("scoring", "audience_knowledge"): ("strangers", "fans"),
 }
 # CLIPPER_* variables that aren't settings.
-SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "CLIPPER_ALERT_WEBHOOK"}
+SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "CLIPPER_ALERT_WEBHOOK",
+               "CLIPPER_DATA", "CLIPPER_TOML"}  # the last two: the NAS recorder's deploy (deploy/record)
+SHOW_KEYS = ("channel", "channels")  # a [shows.<key>] table's own settings; the rest are sections
 
 
 def check_choices(cfg: dict, where: str = "") -> None:
@@ -787,6 +789,8 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
         for key, show in shows.items():
             unknown += _unknown({s: v for s, v in show.items() if isinstance(v, dict)},
                                 f"{path.name} [shows.{key}]: ")
+            unknown += [f"{path.name} [shows.{key}]: unknown setting {s} (a show has {' and '.join(SHOW_KEYS)})"
+                        for s, v in show.items() if not isinstance(v, dict) and s not in SHOW_KEYS]
         for section, values in data.items():
             cfg.setdefault(section, {}).update(values)
     lpath = local_path(path)
@@ -927,6 +931,11 @@ def explain(cfg: dict, name: str, sdir: Path | None = None) -> dict:
     if env in os.environ:
         layers.append((f"${env}", os.environ[env]))
     return {"name": name, "value": resolved[section][key], "show": show, "layers": layers}
+
+
+def show_args(cfg: dict) -> list[str]:
+    """`--show <key>` for a clipper child process when this config is pinned to a show."""
+    return ["--show", cfg["show"]["key"]] if cfg.get("_pinned") else []
 
 
 def pin_show(cfg: dict, key: str) -> dict:
