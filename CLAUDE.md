@@ -70,6 +70,8 @@ keep README and SETUP true whenever behaviour changes.
   shows a recording (exit 3); `--force` overrides it.
 - Model calls cost money. Say what a rerun of `score`, `segments`, `meta` or `thumbs` will
   cost before doing it on a long stream.
+- Before a hand edit of `schedule.json` or `clipper.toml`, copy it to
+  `backups/<file>.before_<what>_<date>` (gitignored), not the repo root.
 
 ## Checks
 

@@ -207,8 +207,7 @@ def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
 def default_text(data: dict, cfg: dict) -> tuple[str, str]:
     """Title and the description's opening line; `cut` adds the sources and chapters."""
     names = [s["story"] for s in data["stories"] if s["use"]]
-    title = "The Quartering Receipts: " + ", ".join(names) if data["subject"] == "jer" \
-        else f"{data['subject']} receipts: " + ", ".join(names)
+    title = f"{cfg['receipts']['title'] or data['subject'] + ' receipts'}: " + ", ".join(names)
     while len(title) > 100 and len(names) > 1:
         names.pop()
         title = title.rsplit(",", 1)[0]
@@ -553,7 +552,7 @@ def upload(sdir: Path, cfg: dict, again: bool = False) -> None:
     description = desc_file.split("\n\n", 1)[1] if "\n\n" in desc_file else desc_file
     body = {
         "snippet": {"title": clean(mask(data["title"]), 100), "description": clean(mask(description), 5000),
-                    "tags": ["The Quartering", "Jeremy Hambly", "receipts", data["show"]],
+                    "tags": [*cfg["receipts"]["tags"], data["show"]],
                     "categoryId": yc["category_id"], "defaultLanguage": yc["language"],
                     "defaultAudioLanguage": yc["language"]},
         "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": yc["made_for_kids"]},
