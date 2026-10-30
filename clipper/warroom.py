@@ -944,11 +944,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path)
         # Read the body before any refusal: closing with it unread resets the connection
-        # (Windows), and the client sees an abort instead of the 403. The page's own posts
-        # are a few KB.
+        # (Windows), and the client sees an abort instead of the answer. The page's own
+        # posts are a few KB; a bigger body is read in chunks and thrown away.
         n = int(self.headers.get("Content-Length") or 0)
         if n > MAX_POST:
-            self.close_connection = True
+            while n > 0 and (chunk := self.rfile.read(min(n, 1 << 16))):
+                n -= len(chunk)
             return self.send_json({"error": "request too large"}, 413)
         raw = self.rfile.read(n)
         if self.foreign_host():
