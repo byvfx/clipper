@@ -667,6 +667,7 @@ formats = ["tiktok", "youtube"]  # tiktok: 1080x1440 pages | youtube: the same p
 masthead = ["LOLCOW", "CINEMA"]  # red word, chrome word (then "WEEKLY")
 byline = "BY THE LOLCOW DESK"
 price = "$1.39 US"             # on the cover's barcode block
+# Colours, the cover's geometry and the fixed copy: <paths.weekly>/style.toml (SETUP.md).
 # Fonts, first that exists: the cover headline (Impact), a condensed family with named
 # styles (Bahnschrift), a serif italic and bold italic (Georgia), a black and a bold sans
 # for the masthead and barcode.

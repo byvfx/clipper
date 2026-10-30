@@ -413,6 +413,24 @@ cover shows a photo panel instead.
 
 Issue numbers continue from `[weekly] first_issue` across the folders in `weekly/`.
 
+The look is data: the canvas, the palette, the cover's geometry (teaser strip, kicker,
+headline width, inset, starburst, barcode block, subject height) and the fixed copy
+("LOLCOW OF THE WEEK", "READERS' POLL", the barcode digits, ...) have defaults in
+`clipper/weekly/style.py`. To change any of them, put a `style.toml` next to the issues
+(`weekly/style.toml`, i.e. in `[paths] weekly`) with the same tables and keys, only the ones
+you change, and `clipper weekly --render`:
+
+```toml
+[palette]
+red = [200, 20, 30]
+[cover]
+subject_height = 900          # an issue.json cover.subject_height still wins
+[copy]
+lolcow = "COW OF THE WEEK"
+```
+
+A colour is `[r, g, b]` or the name of a `[palette]` colour; an unknown key is refused.
+
 ## TikTok drafts
 
 `clipper tiktok` sends scheduled Shorts to the TikTok app's drafts (Content Posting API,

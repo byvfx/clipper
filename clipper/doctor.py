@@ -230,6 +230,14 @@ def check_fonts(cfg: dict) -> None:
              "install Impact, Bahnschrift (or Roboto Condensed), Georgia and Arial, or set [weekly] *_fonts")
     else:
         ok("fonts", "weekly issue fonts (Impact, condensed, Georgia italic, Arial)")
+    look = Path(cfg["paths"]["weekly"]) / "style.toml"
+    if look.exists():
+        from .weekly import style as weekly_style
+        try:
+            weekly_style.load(cfg)
+            ok("fonts", f"weekly look: {look}")
+        except ClipperError as e:
+            fail("fonts", str(e), "fix or remove it: its tables and keys are clipper/weekly/style.py's (SETUP.md)")
     sc = cfg["shorts"]
     name = sc["caption_font"].lower().replace(" ", "")
     dirs = [Path(sc["caption_fontsdir"])] if sc["caption_fontsdir"] else font_dirs()

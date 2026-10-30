@@ -25,7 +25,11 @@ def read_sections(path: Path, prefix: str, fmt: dict) -> dict[str, str]:
 # Prompts that write text viewers see; [scoring] house_style rules are appended to them.
 VIEWER_FACING = {"score_a", "score_b", "meta", "chapters", "segments", "compilation",
                  "thumbnail", "thumbnail_enquirer", "preshow", "oneoff", "pick", "retake",
-                 "receipts_stories"}
+                 "receipts_stories", "weekly", "weekly_article"}
+HOUSE_STYLE = ("House style for anything viewers see (titles, descriptions, hooks, chapter and "
+               "thumbnail text):")
+# The weekly prompts keep the headers they were written with.
+HOUSE_STYLE_HEADERS = {"weekly": "House style for everything on the page:", "weekly_article": "House style:"}
 
 
 class Prompts:
@@ -58,7 +62,6 @@ class Prompts:
         text = (self.dir / f"{name}_{self.version}.md").read_text(encoding="utf-8")
         text = text.format(**self.vars)
         if name in VIEWER_FACING and self.house_style:
-            text = (text.rstrip() + "\n\nHouse style for anything viewers see (titles, "
-                    "descriptions, hooks, chapter and thumbnail text):\n"
+            text = (text.rstrip() + "\n\n" + HOUSE_STYLE_HEADERS.get(name, HOUSE_STYLE) + "\n"
                     + "\n".join(f"- {rule}" for rule in self.house_style) + "\n")
         return text
