@@ -76,4 +76,3 @@ def test_saved_layouts(tmp_path):
     with pytest.raises(ClipperError, match="name"):
         warroom.save_layout(cfg, {"name": " ", "layout": lay})
     assert warroom.save_layout(cfg, {"name": "Mine", "delete": True}) == {"layouts": {}}
-
