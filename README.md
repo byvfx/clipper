@@ -2,22 +2,22 @@
 
 Turns long Kick streams into YouTube uploads: full-length segments, topic compilations,
 Shorts, titles, descriptions, chapters and thumbnails, with a human review step before
-anything goes out.
+anything goes out. New here: [Start here](#start-here).
 
 One stream in, a reviewed set of videos out:
 
 ```
-fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> thumbs -> shorts
+fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> thumbs -> shorts
                                                                                     |
                         upload <- schedule <- review (Kitsu, Discord, war room) <- review publish
 ```
 
 - **fetch / record**: a finished Kick VOD, or the live stream as it happens (NAS container), with chat.
-- **transcribe**: WhisperX (NVIDIA) or mlx-whisper (Apple Silicon) to word timestamps; with
+- **signals**: chat activity and loudness into a heat curve.
+- **transcribe**: WhisperX (NVIDIA, or on Modal's cloud GPUs) or mlx-whisper (Apple Silicon) to word timestamps; with
   `[transcribe] diarize`, speaker turns too, named per show by `clipper speakers` (enrolled voices).
   Once a stream has names, the transcript the model stages read tags each turn (`[PPP] ...`,
   `[?]` for a voice nobody named, `[music]`), and the weekly credits a quote to whoever said it.
-- **signals**: chat activity and loudness into a heat curve.
 - **score**: Claude reads the transcript and heat curve and proposes moments and picks.
 - **segments**: Claude splits the stream into topic segments and compilations.
 - **cut**: lossless segment cuts on keyframes, re-encoded picks, bleeps; a few segments at once,
@@ -86,6 +86,27 @@ $0.10 each), and renders 1080x1440 pages plus a square 1080x1080 set in `youtube
 Posts, which show images square (`[weekly] formats`). `--headline "..."` tells the draft what the cover story is; edit `issue.json` (copy, or
 `faces` to pin a frame for someone) and `clipper weekly --render`. Posting is by hand
 (`post_text.md` has the captions).
+
+## Start here
+
+1. **Read**: this page for what clipper does, then [SETUP.md](SETUP.md) to install a machine
+   (`deploy\bootstrap.ps1` runs `clipper setup`, then `clipper doctor`). HANDOFF.md is the
+   current state between work sessions: what runs where, what's waiting, known gotchas.
+2. **One stream end to end**: `clipper fetch <kick vod url>`, then `clipper run <stream id>`.
+   Each stage skips what's done; `clipper run <id> --from cut` redoes from a stage on. Review the
+   items in the war room ([docs/warroom.md](docs/warroom.md)) or on the Discord cards; the bot
+   schedules approved ones and uploads every `[youtube] auto_upload_minutes`
+   (`clipper schedule`, `clipper upload` by hand when that's 0).
+3. **Check**: `clipper doctor --role gpu|bot|nas` (this machine), `clipper worker --status`
+   (each recording's stages), `clipper review status` (decisions and what's scheduled),
+   `clipper costs` (the month's spend).
+4. **Stop and restart**: the bot and the GPU worker are Windows scheduled tasks:
+   `deploy\discord\bot-task.ps1 -Status | -Stop | -Restart` and
+   `deploy\worker\worker-task.ps1 -Status | -Stop | -Restart`. The recorder is a container on
+   the NAS: `bash deploy/record/deploy.sh`, only when no show is live (a restart starts a new
+   recording part).
+5. **When something breaks**: the bot DMs you (`[notify]`); logs are in `logs/` (`bot.log`,
+   `worker.log`); `clipper doctor` prints a fix for each problem it finds.
 
 ## Roles
 
@@ -235,50 +256,9 @@ is wanted instead. Setup: SETUP.md, "Narration voice".
 
 Review happens in [Kitsu](https://www.cg-wire.com/kitsu), with one production per show and
 one episode per stream. `deploy/kitsu` runs it in Docker. The Discord bot mirrors each item
-as a card with buttons, and the war room (`clipper warroom`, a local web page) shows what is
-live, where each stream is in the pipeline, the review queue and the upload schedule.
-Click a live show's chip to watch it in a player on the page or on kick.com in a new
-window; the chip also says whether the NAS is recording it. The review queue works from the
-keyboard (J/K to move, A approve, R reject, C retake note, H hold, Space/arrows for the
-video, O to pop it out into its own window); press `?` in the war room for the full list.
-On a desktop the panels can be moved: Layout > Arrange panels, then drag a panel by its
-title into the top, left, middle, right or bottom zone, or into the hidden tray; each side
-column has a width. The browser keeps the arrangement; Layout > Save as names it in
-`[paths] warroom_layouts`, where every machine can pick it. Phones keep their tabs.
-The search box looks through every stream's titles, descriptions, topics and hashtags, and
-what is said in each video (its captions); status, date and show filters combine with it, and
-the view is in the page's URL, so it can be bookmarked. Tick items (shift-click for a range,
-or "Select shown") to approve, hold, release, pin, reopen or send the same retake note to all
-of them, or to find and replace in their titles, descriptions, hashtags, tags or playlists:
-the dry run lists every line that would change before anything is written. Every action, single or
-bulk, can be undone from its toast for 10 s or from "Undo…" (the last 20); undo goes through
-Kitsu too, and an item already on YouTube keeps its live text (change it in Studio).
-"Edit cover" in an item's window opens the cover editor: pick the main frame (shift-click for
-the inset) from the candidate frames, drag and resize the face boxes, choose a photo or teaser
-photo from `[thumbnail] photos`, change the words; Preview renders without saving, Save
-re-renders with no model calls (every cover of the stream when the teaser changes) and
-re-attaches it in Kitsu. The schedule shows the open slots of the next two weeks and the
-approved items with no slot: drag an item or a scheduled slot onto an open slot (or a day) to
-pin it, or onto "unpin"; the page warns before a drop breaks the spacing rules.
-Titles, descriptions, hashtags and cover words are checked as you type ("hosts", unmasked
-swearing, YouTube's length limits with the show prefix), and cards with a problem carry a
-⚠ badge. Above the schedule, the upload panel shows uploads in the last 24 h against the cap,
-the last automatic run and its errors, and what goes next; uploaded slots show views and a
-YouTube link. The Modal panel (under Health) shows the month's Modal bill, the spend rate,
-GPUs up, transcriptions running and failed, and each archive's progress (`clipper modal`
-prints the same). The Costs panel below it adds up the month: every model call (logged as it
-is made, with its stage and stream), Modal runs, and `[costs] monthly` fixed costs, by stage
-and show (`clipper costs` prints the same; revenue joins it once the channel is monetized).
-The Analytics panel (full width, under the queue; the Stats tab on a phone) shows a month of
-YouTube: views, watch time and subscribers against the month before, views per day, where
-views came from (Shorts feed, search, ...), and the first-7-day numbers of that month's
-uploads by show, kind, weekday and hour, with the best and weakest. `clipper analytics
---report` writes the same as reports/analytics/<month>.md plus a .csv of every upload. On a phone it switches to one view at a
-time (Review, Schedule, Pipeline tabs at the bottom), items open full screen with the
-decisions at the bottom and swipe to the next one, and videos play from a 360p copy
-(`lowres/` beside each preview, about a quarter of the data). It can be added to the home
-screen. From the phone away from home it goes through Tailscale: `clipper warroom --tailnet
-on` (SETUP.md, Phone access).
+as a card with buttons, and the war room (a web page the bot serves) shows what is live,
+where each stream is in the pipeline, the review queue and the upload schedule, with bulk
+edits, undo, a cover editor and a drag-and-drop schedule. Its manual is [docs/warroom.md](docs/warroom.md).
 
 The bot also DMs you when something needs you (`[notify]`): a stream ready for review, an
 upload failing, a stage failing after its retries, recorder trouble, the streams share
@@ -296,6 +276,7 @@ clipper.example.toml  every setting, documented (a test checks it against config
 tests/                offline tests (pytest); CI runs them and ruff on every push
 SETUP.md              installing on a new machine
 HANDOFF.md            current state between work sessions (short); docs/log/ has the dated diary
+docs/warroom.md       the war room's manual
 ```
 
 ## Requirements

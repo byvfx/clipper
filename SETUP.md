@@ -4,7 +4,7 @@ clipper runs in three roles. A machine can do more than one.
 
 | Role | What runs there | Needs |
 |---|---|---|
-| **GPU worker** | `clipper worker`: transcribe, score, segments, then Shorts (and clips, if `[review] include` has `"picks"`) to review, then long segments to review | NVIDIA GPU (8 GB+), the NAS share, ffmpeg |
+| **GPU worker** | `clipper worker`: transcribe, score, segments, then Shorts (and clips, if `[review] include` has `"picks"`) to review, then long segments to review | an NVIDIA GPU (8 GB+), or none with `[transcribe] backend = "modal"`; the NAS share, ffmpeg |
 | **Bot** | `clipper bot`: Discord review cards, buttons, retakes | always on, the NAS share (or local streams), ffmpeg |
 | **Recorder** | `clipper record watch` in Docker on the NAS | Docker; see `deploy/record/deploy.sh` |
 
@@ -119,7 +119,7 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    `[thumbnail] photos` to it. The model may then use one for a cover's face or teaser box;
    `clipper thumbs <stream> --items s04 --teaser-photo "Hasan Piker"` sets one by hand.
 
-7. **Check**: `uv run clipper doctor --role gpu` (or `--role bot`).
+7. **Check**: `clipper doctor --role gpu` (or `--role bot`).
 
 8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed):
    ```powershell
