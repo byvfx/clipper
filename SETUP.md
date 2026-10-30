@@ -121,7 +121,9 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
 
 7. **Check**: `clipper doctor --role gpu` (or `--role bot`).
 
-8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed):
+8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed;
+   both scripts share `deploy\common.ps1`, which lists the user env vars a task copies in,
+   since scheduled tasks don't always see ones set after logon: a new key goes there too):
    ```powershell
    deploy\worker\worker-task.ps1 -Install     # GPU worker
    deploy\discord\bot-task.ps1 -Install       # Discord bot (only one machine runs it)
