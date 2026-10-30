@@ -31,6 +31,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import jsonstate
 from .errors import ClipperError
 from .media import source_file
 
@@ -168,8 +169,8 @@ def diarize_local(audio, tc: dict) -> dict:
 
 def write_diarization(stream_dir: Path, diarization: dict, cost: dict | None = None) -> None:
     turns = diarization["turns"]
-    (stream_dir / "diarization.json").write_text(
-        json.dumps({**diarization, **({"modal": cost} if cost else {})}), encoding="utf-8")
+    jsonstate.write(stream_dir / "diarization.json", {**diarization, **({"modal": cost} if cost else {})},
+                    indent=None)
     print(f"diarized: {len(turns)} turns, {len(diarization['embeddings'])} speakers", flush=True)
 
 
