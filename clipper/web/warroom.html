@@ -649,7 +649,15 @@ const TAB_LABEL = { waiting: "Waiting", changes: "Changes", approved: "Approved"
 function renderQueue() {
   const base = filtered();
   const shows = STATE.shows;
-  $("#queueBar").innerHTML = `<span class="tabs">${Object.keys(TABS).map(t => `<button class="tab ${TAB === t ? "on" : ""}" data-tab="${t}">${TAB_LABEL[t]}<span class="n">${base.filter(TABS[t]).length}</span></button>`).join("")}</span>`
+  // B12: the 15 s refresh rebuilt this bar under the cursor: the search box, selects and date
+  // pickers lost focus mid-typing. While focus is in it, only the tabs' counts change.
+  const bar = $("#queueBar");
+  if (bar.firstChild && bar.contains(document.activeElement)) {
+    bar.querySelectorAll("[data-tab]").forEach(t => {
+      t.classList.toggle("on", TAB === t.dataset.tab);
+      t.querySelector(".n").textContent = base.filter(TABS[t.dataset.tab]).length;
+    });
+  } else bar.innerHTML = `<span class="tabs">${Object.keys(TABS).map(t => `<button class="tab ${TAB === t ? "on" : ""}" data-tab="${t}">${TAB_LABEL[t]}<span class="n">${base.filter(TABS[t]).length}</span></button>`).join("")}</span>`
     + `<span class="sep"></span><select id="showSel"><option value="">All shows</option>${shows.map(s => `<option value="${s.key}" ${SHOW === s.key ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
        <select id="kindSel"><option value="">All kinds</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}" ${KINDF === k ? "selected" : ""}>${v}s</option>`).join("")}</select>
        <select id="stSel"><option value="">Any status</option>${Object.keys(STATUS).map(k => `<option value="${k}" ${ST === k ? "selected" : ""}>${STATUS_LABEL[k]}</option>`).join("")}</select>

@@ -28,7 +28,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from . import jsonstate
-from .config import for_stream
+from .config import for_stream, show_args
 from .errors import ClipperError
 from .media import source_file
 from .segments import slug
@@ -232,9 +232,11 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         listing = out_dir / f"{slug(topic)}.txt"
         listing.write_text("".join(lines), encoding="utf-8")
         dst = out_dir / f"{slug(topic)}.mp4"
+        part = dst.with_name(dst.name + ".part")  # B15: a crashed join leaves no half .mp4 behind
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat",
                         "-safe", "0", "-i", str(listing), "-c", "copy",
-                        "-movflags", "+faststart", str(dst)], check=True)
+                        "-movflags", "+faststart", "-f", "mp4", str(part)], check=True)
+        part.replace(dst)
         listing.unlink()
         chapter_text = "\n".join(f"{hms(c['start_s'])} {c['title']}" for c in chapters)
         write_sidecar(dst, {**comp, "duration_s": round(t, 1), "chapters": chapters,
@@ -304,7 +306,7 @@ def on_nas(stream_dir: Path, cfg: dict, argv: list[str]) -> None:
               *(["--user", cc["nas_user"]] if cc["nas_user"] else []),
               "-v", f"{cc['nas_data']}:/data",
               *[a for k, v in env.items() for a in ("-e", f"{k}={v}")]]
-    run = [cc["nas_image"], "cut", sid, *argv]
+    run = [cc["nas_image"], *show_args(cfg), "cut", sid, *argv]  # a --show pin carries over
     # One folder per run (two cuts at once must not share code), gone when the run ends.
     remote = ('set -e; d=$(mktemp -d "$HOME/clipper-cut.XXXXXX"); trap \'rm -rf "$d"\' EXIT; '
               'tar -xzf - -C "$d"; chmod -R a+rX "$d"; '

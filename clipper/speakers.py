@@ -103,9 +103,8 @@ def apply(sdir: Path, cfg: dict) -> dict:
         elif closest and score >= sc["match"]:
             entry.update(name=closest, by="voice")
         speakers[label] = entry
-    (sdir / "speakers.json").write_text(
-        json.dumps({"model": d["model"], "voices": str(voices_path(cfg)), "speakers": speakers}, indent=1),
-        encoding="utf-8")
+    jsonstate.write(sdir / "speakers.json",
+                    {"model": d["model"], "voices": str(voices_path(cfg)), "speakers": speakers}, indent=1)
 
     wpath = sdir / "words.jsonl"
     if wpath.exists():
