@@ -360,6 +360,7 @@ fade_out_s = 0.25              # at most a quarter of the Short
 default_layout = "center"
 layout_model = "claude-haiku-5-5"
 layout_effort = "low"
+layout_prompt_version = "v1"  # prompts/shorts_layout_<v>.md
 scene_step_s = 4               # one frame labelled this often (~$0.002 a Short)
 scene_batch = 8                # frames per call; more per call drifted
 min_scene_s = 6                # shorter runs join a neighbour (one odd frame can't flip it)

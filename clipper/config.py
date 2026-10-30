@@ -456,6 +456,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "default_layout": "center",
         "layout_model": "claude-haiku-5-5",  # labels sampled frames with a layout
         "layout_effort": "low",
+        "layout_prompt_version": "v1",  # prompts/shorts_layout_<v>.md
         # Scene cuts: a frame every scene_step_s gets a layout; a run shorter than
         # min_scene_s joins its neighbour; each change is placed on the first frame that
         # looks more like the new scene than the old, and every stretch uses its own layout.
