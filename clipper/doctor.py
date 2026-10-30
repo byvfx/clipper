@@ -473,6 +473,15 @@ def check_online(cfg: dict, role: str) -> None:
                                        + (v.json().get("name", "?") if v.ok else f"HTTP {v.status_code}"),
                                        "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")
 
+    if role in ("all", "bot") and cfg["paths"]["youtube_token"].exists():
+        try:  # the file can be there long after the sign-in stopped working
+            from . import youtube
+            youtube.credentials(cfg["paths"], force_refresh=True)
+            ok("online", "YouTube sign-in works (token refreshed)")
+        except ClipperError as e:
+            fail("online", str(e).split("; run:")[0], "clipper upload --sign-in; see SETUP.md (A new YouTube channel)")
+        except ImportError as e:
+            warn("online", f"YouTube sign-in not checked: {e}", "uv sync")
     if role != "nas":
         check_llm_online(cfg)
     if role != "nas" and os.environ.get("ANTHROPIC_API_KEY"):

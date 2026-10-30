@@ -84,7 +84,14 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   watching kinocasinogaming + donflurgundy), Kitsu :8090, the streams share, photos share, cut container.
 - **Shows:** kino and c404 live through review → schedule; dsp and blade are config-only tests; `trish` is a
   placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI).
-- **Schedule:** full 14 days out (207/207 slots on 10-28), backlog mostly caught up. Upload cap 15/day.
+- **Schedule: stay current, no backlog (live 2026-10-29 09:51).** 15/day couldn't keep up (~140
+  approved a week vs 105 slots, newest stream 15 days behind). Now `stream_budget = { segment = 10,
+  short = 8, compilation = 1 }` per 8 h (`budget_hours`; Don ~7/6/1), `stale_days = 3`, slots a day:
+  6 Shorts (09/11/13/15/18/20), 8 segments (08/10/12/14/16/17/19/22), compilation 21:00; `[scoring]
+  max_picks` 14 (was 10). The old backlog's unuploaded slots dropped (backup
+  schedule.before_stay_current_2026-10-29.json); the 10-26/27/28 streams fill through 11-01. Items let
+  go stay approved in Kitsu (war room filter "Not going out"); pin with "Publish at" to send one anyway.
+  Watch the first week: if good items keep going stale while streams overlap, try `stale_days = 4`.
 - **Archive:** Jer (The Quartering) 11,571 items / 2,732 h transcribed on Modal, FTS index built,
   `archive ask` works; link checks built but not yet run against the real services. Other archive
   projects (#44 Jerry Banfield, #45 Papa Meat, #47 Ben Avery) wait on the desktop install and permissions.
@@ -122,8 +129,8 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   public, 2026-10-28 (marked `related_video` in schedule.json). `clipper upload --related` lists what's
   due and the 09:00 digest carries the same list; after setting them, `clipper upload --related <keys or
   links>` records them. Still to do as their segments go up:
-  kick-133423456 v01_w10 (10-29) and v04_t28 (10-30), kick-132380636 v01_t29 (11-02), kick-132733064
-  v01_t27 (11-04). kick-133423456 v02_t12 and kick-133940023 v14_t35 fall outside every segment: pick one
+  kick-133423456 v01_w10 (10-29) and v04_t28 (10-30). (kick-132380636 v01_t29 and kick-132733064
+  v01_t27: their segments were let go on 10-29 and won't go up.) kick-133423456 v02_t12 and kick-133940023 v14_t35 fall outside every segment: pick one
   by hand or leave them. Verify whether `thumbnails.set` works on Shorts before turning on
   `[youtube] short_thumbnails`.
 - Old approved Short titles/descriptions that still say "hosts" (Kitsu text; uploads go as written).
@@ -135,6 +142,7 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
   MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
 - Issue 03 of the weekly on Saturday; the monthly check-in report on 11-01.
+- YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). Publish the Google Cloud OAuth app (Google Auth Platform > Audience > Publish app) or it lapses again 11-06.
 
 ## Open work
 **Maintainability audit 2026-10-28:** `reports/code-audit-2026-10-28.md` (bugs B1-B16, then phases
@@ -144,7 +152,7 @@ issues. **Phase 0 done 2026-10-28** (B1-B3, B5, B6, B8-B11, B16, Shorts 15/59 de
 Left from the B list: B4 (`--show` with a stream), B7 (enum validation), B12-B15, B17 (shorts
 before cut with the fast lane off). **Phase 1 done 2026-10-29:** `tests/` (32 offline pytest tests,
 <1 s), ruff pinned in pyproject (`required-version`, rules = that version's defaults), dev group,
-`.github/workflows/check.yml`, example toml now documents every key (a test checks it). Next: phase 2.
+`.github/workflows/check.yml`, example toml now documents every key (a test checks it). **Phase 2 done 2026-10-29** (PRs #82, #83; in local main as dc0828e and a81d00b, not pushed): `ClipperError` (`errors.py`; only cli.main exits, `status=` for codes like setup's 3), JSON reads via `jsonstate.load/read`, `timefmt`, `media`, `ytdl`, `transcript`/`prompts` (out of scoring), `review.entity_data/write_data/set_columns`, `actions.decide/replan/clipper_cmd` (bot + war room), `states`. Left for later: frame grabs and `draw.py` (thumbs.py is the other session's). **Phase 3 part 1 done 2026-10-29** (PR #85): `stages.py` stage table (worker, `run`; B14, B17, `run --from` in planned order), `clipper -h` grouped (cli `add_<group>` + `COMMAND_GROUPS`), war room `GET_API`/`POST_API` + module-level Handler (B13). **War room layouts** (PR #86, user 2026-10-29): Layout button, drag panels between zones, hidden tray, column widths, named layouts in `[paths] warroom_layouts`; default puts Schedule right. Both merged locally as e6f9cdd (not pushed); bot restarted 16:50. Next in phase 3: record split (NAS redeploy), weekly split, war room HTML split; thumbs after the other session's work lands. Worktree `C:\clipper-p2` can go once nothing more is planned there.
 Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #77 (M12 quota tracking, L6, L10,
 L11, L13, L16-L18, repo hygiene), #72 (provider side-by-side, `clipper edit`), #50 (revenue once
 monetized), #42 (closes after the first check-in). Roadmaps, issues only: NAS hub #14 (#9 war room on
@@ -231,6 +239,7 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   `extract_audio` now fills gaps with silence. Check new recorders' gaps against the source length.
 - Discord review cards carry only the first 60 s of a segment; the full preview is in Kitsu. A reject
   from the card can be about the excerpt, not the cut.
+- YouTube upload sign-in lasts 7 days while the OAuth app is in Testing. `clipper doctor` (online) refreshes it to test it; `upload --sign-in` keeps the analytics scope now.
 - YouTube bot-checks this IP for yt-dlp; pre-show/one-off grabs retry signed in with
   secrets/youtube_cookies.txt, which browsers rotate: re-export when "cookies are no longer valid".
 - A cut killed half way can leave `clipper-cut-<id>` running on the NAS: `ssh nas docker rm -f clipper-cut-<id>`.
