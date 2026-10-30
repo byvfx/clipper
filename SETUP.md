@@ -112,6 +112,10 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    Windows. On Linux install `ttf-mscorefonts-installer` (Impact)
    and Roboto Condensed (`fonts-roboto-unhinted`).
 
+   **Cover layout** (optional): a show's tabloid covers can move, resize or recolor any part,
+   or change the fixed words, in `layouts/<show>/enquirer.toml` (`[paths] layouts`), with the
+   tables of `LAYOUT` in `clipper/thumbs/enquirer.py`; leave it out for the default covers.
+
    **Photos** (optional): tabloid covers can use a portrait of someone the show talks about
    who is never on screen. Make a folder every machine can reach (e.g. `photos` beside
    `streams` on the NAS), add one head-and-shoulders crop per person named `<Person>.jpg`

@@ -390,7 +390,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_sharpness": 150.0,   # variance of the Laplacian; blurrier frames are skipped
         "min_crop": 0.4,          # the model may zoom in to a 16:9 box this wide (share of the frame)
         "max_words": 4,
-        "font": "",               # TTF/OTF path; empty = first of fonts that exists
+        # Asking again for unusable text, and a reviewer's note on a retake:
+        # prompts/thumbnail_retry_<v>.md, thumbnail_enquirer_retry_<v>.md, thumbnail_feedback_<v>.md
+        "retry_prompt_version": "v1",
+        "font": "",             # TTF/OTF path; empty = first of fonts that exists
         "fonts": ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
                   "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf",
                   "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"],

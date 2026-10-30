@@ -163,6 +163,9 @@ def prompt_files(cfg: dict) -> list[str]:
               f"preshow_{pc['prompt_version']}", f"oneoff_{pc['oneoff_prompt_version']}",
               f"thumbnail_enquirer_{tc['enquirer_prompt_version']}" if tc["style"] == "enquirer"
               else f"thumbnail_{tc['prompt_version']}",
+              f"thumbnail_enquirer_retry_{tc['retry_prompt_version']}" if tc["style"] == "enquirer"
+              else f"thumbnail_retry_{tc['retry_prompt_version']}",
+              f"thumbnail_feedback_{tc['retry_prompt_version']}",
               f"shorts_layout_{cfg['shorts']['layout_prompt_version']}",
               f"receipts_stories_{rc['prompt_version']}", f"receipts_script_{rc['script_prompt_version']}",
               f"archive_expand_{ac['ask_prompt_version']}", f"archive_judge_{ac['ask_prompt_version']}",
