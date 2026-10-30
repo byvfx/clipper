@@ -39,12 +39,26 @@ from . import actions, jsonstate, review, schedule, worker
 from .config import _root, for_stream
 from .errors import ClipperError
 
-PAGE = Path(__file__).with_name("web") / "warroom.html"
+WEB = Path(__file__).with_name("web")
+PAGE = WEB / "warroom.html"   # markup only: its style is warroom.css, its code web/js/*.js
 STATIC = {"/manifest.webmanifest": "application/manifest+json", "/icon.svg": "image/svg+xml",
           "/icon-192.png": "image/png", "/icon-512.png": "image/png"}  # no secrets: no key needed
+CODE = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}
 LOCK = threading.Lock()  # one Kitsu write / replan at a time
 SYNC = {"running": False, "last": None, "error": ""}
 LIVE_CACHE: dict = {"at": 0.0, "data": []}
+
+
+def static_file(path: str) -> tuple[Path, str, str] | None:
+    """The page's own files, with their type and caching: no secrets, so no key (the phone's
+    home-screen install fetches the icons without the cookie). Its stylesheet and scripts
+    are fetched fresh each load, so a restarted bot's page never runs the old code."""
+    if path in STATIC:
+        return WEB / path.lstrip("/"), STATIC[path], "max-age=86400"
+    f = (WEB / path.lstrip("/")).resolve()
+    if f.suffix in CODE and WEB.resolve() in f.parents and f.is_file():
+        return f, CODE[f.suffix], "no-cache"
+    return None
 
 
 def load(path: Path, default):
@@ -891,12 +905,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         qs = parse_qs(u.query)
-        if u.path in STATIC:  # the phone's home-screen install fetches these without the cookie
-            body = (PAGE.parent / u.path.lstrip("/")).read_bytes()
+        if found := static_file(u.path):
+            path, ctype, cache = found
+            body = path.read_bytes()
             self.send_response(200)
-            self.send_header("Content-Type", STATIC[u.path])
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "max-age=86400")
+            self.send_header("Cache-Control", cache)
             self.end_headers()
             self.wfile.write(body)
             return

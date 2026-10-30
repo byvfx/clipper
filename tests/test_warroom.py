@@ -1,4 +1,5 @@
 import http.client
+import re
 import threading
 from http.server import ThreadingHTTPServer
 
@@ -66,3 +67,25 @@ def test_saved_layouts(tmp_path):
     with pytest.raises(ClipperError, match="name"):
         warroom.save_layout(cfg, {"name": " ", "layout": lay})
     assert warroom.save_layout(cfg, {"name": "Mine", "delete": True}) == {"layouts": {}}
+
+
+def test_page_code_is_served_without_the_key(serve):
+    """The stylesheet and scripts hold no secrets; they're fetched fresh so a restart's
+    page never runs old code. Nothing outside web/ and no other file type is served."""
+    port = serve("t0ken")
+    for path, ctype in (("/warroom.css", "text/css"), ("/js/app.js", "text/javascript")):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        c.request("GET", path)
+        r = c.getresponse()
+        assert r.status == 200 and r.getheader("Content-Type").startswith(ctype)
+        assert r.getheader("Cache-Control") == "no-cache"
+    for path in ("/js/../../warroom.py", "/../config.py", "/js/nope.js", "/warroom.html"):
+        assert status(port, path, "localhost") == 401   # not a page file: the key is still asked
+
+
+def test_the_page_loads_every_script_app_last():
+    html = warroom.PAGE.read_text(encoding="utf-8")
+    scripts = re.findall(r'<script src="js/([\w-]+\.js)"></script>', html)
+    assert sorted(scripts) == sorted(p.name for p in (warroom.WEB / "js").glob("*.js"))
+    assert scripts[-1] == "app.js" and '<link rel="stylesheet" href="warroom.css">' in html
+    assert "<script>" not in html and "<style>" not in html
