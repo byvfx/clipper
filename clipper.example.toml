@@ -315,6 +315,7 @@ teasers = true                 # the three side boxes; false = the photo fills t
 # headline font. condensed_variation: the named instance of a variable font.
 condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf",
                    "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                   "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf",
                    "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"]
 condensed_variation = "Bold Condensed"
 # Folder of head-and-shoulders photos, "<Person>.jpg", for people talked about but not on
@@ -677,8 +678,8 @@ price = "$1.39 US"             # on the cover's barcode block
 # for the masthead and barcode.
 headline_fonts = ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
                   "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf"]
-condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/RobotoCondensed-Bold.ttf",
-                   "/Library/Fonts/RobotoCondensed-Bold.ttf"]
+condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                   "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf", "/Library/Fonts/RobotoCondensed-Bold.ttf"]
 serif_italic_fonts = ["C:/Windows/Fonts/georgiai.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Italic.ttf",
                       "/Library/Fonts/Georgia Italic.ttf", "/System/Library/Fonts/Supplemental/Georgia Italic.ttf"]
 serif_bold_italic_fonts = ["C:/Windows/Fonts/georgiaz.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Bold_Italic.ttf",

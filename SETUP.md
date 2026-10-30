@@ -109,7 +109,8 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    Add `ANTHROPIC_WORKSPACE_ID` if the key isn't scoped to a workspace. Open a new terminal.
 
 6. **Fonts**: thumbnails and Short captions use Impact and Bahnschrift, both standard on
-   Windows. On Linux install `ttf-mscorefonts-installer` (Impact) and Roboto Condensed.
+   Windows. On Linux install `ttf-mscorefonts-installer` (Impact)
+   and Roboto Condensed (`fonts-roboto-unhinted`).
 
    **Photos** (optional): tabloid covers can use a portrait of someone the show talks about
    who is never on screen. Make a folder every machine can reach (e.g. `photos` beside
