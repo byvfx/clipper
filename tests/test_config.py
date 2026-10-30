@@ -137,3 +137,23 @@ def test_unknown_keys_and_env_warn(tmp_path, monkeypatch, capsys):
 def test_env_for_an_unset_default():
     assert config._coerce("false", None) is False and config._coerce("TRUE", None) is True
     assert config._coerce("anything", None) == "anything"
+
+
+def test_show_flag_sticks_for_a_stream(tmp_path):
+    """B4: `clipper --show c404 meta <a kino stream>` used c404's settings nowhere."""
+    path = tmp_path / "clipper.toml"
+    path.write_text('[shows.kino]\nchannels = ["kinocasino"]\n[shows.kino.meta]\nsrt_max_s = 4\n'
+                    '[shows.c404]\nchannels = ["donflurgundy"]\n[shows.c404.meta]\nsrt_max_s = 8\n',
+                    encoding="utf-8")
+    sdir = tmp_path / "kick-9"
+    sdir.mkdir()
+    (sdir / "meta.json").write_text(json.dumps({"channel": "kinocasino"}), encoding="utf-8")
+    cfg = config.load(path)
+    assert config.for_stream(cfg, sdir)["meta"]["srt_max_s"] == 4      # the channel's show
+    pinned = config.for_stream(config.pin_show(cfg, "c404"), sdir)
+    assert pinned["meta"]["srt_max_s"] == 8 and pinned["show"]["key"] == "c404"
+    assert config.for_stream(pinned, sdir)["meta"]["srt_max_s"] == 8   # stages re-resolve
+    (sdir / config.STREAM_CONFIG).write_text("[meta]\nsrt_line_chars = 30\n", encoding="utf-8")
+    both = config.for_stream(config.pin_show(cfg, "c404"), sdir)
+    assert (both["meta"]["srt_max_s"], both["meta"]["srt_line_chars"]) == (8, 30)
+    assert config.for_stream(cfg, sdir)["meta"]["srt_max_s"] == 4      # no leak into the cache

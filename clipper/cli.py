@@ -1001,8 +1001,8 @@ def main() -> None:
 
 def run_command(args: argparse.Namespace) -> None:
     cfg = config.load(args.config)
-    if args.show:
-        cfg = config.for_show(cfg, args.show)
+    if args.show:  # kept by every stage's for_stream, whatever the stream's channel (B4)
+        cfg = config.pin_show(cfg, args.show)
     elif getattr(args, "stream", None):
         cfg = config.for_stream(cfg, stream_dir(cfg, args.stream))
     from . import costs  # what every model call this command makes is recorded under

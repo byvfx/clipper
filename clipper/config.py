@@ -892,17 +892,28 @@ def for_show(cfg: dict, key: str, channel: str = "") -> dict:
 def for_stream(cfg: dict, sdir: Path) -> dict:
     """The config for this stream's show, picked by the Kick channel in its meta.json, then
     the stream's own streams/<id>/config.toml if it has one (a one-off night: more picks, a
-    big story in stream_context, schedule priority). Env vars still win."""
-    sdir = Path(sdir)
+    big story in stream_context, schedule priority). Env vars still win. A config from
+    pin_show (`clipper --show <key>`) keeps that show instead of the channel's (B4)."""
+    res = _for_stream(cfg, Path(sdir))
+    return {**res, "_pinned": True} if cfg.get("_pinned") else res
+
+
+def pin_show(cfg: dict, key: str) -> dict:
+    """Show `key`'s config, kept by for_stream for any stream (`clipper --show <key>`)."""
+    return {**for_show(cfg, key), "_pinned": True}
+
+
+def _for_stream(cfg: dict, sdir: Path) -> dict:
     channel = stream_channel(sdir)
-    out = for_show(cfg, show_of_channel(cfg, channel), channel)
+    key = cfg["show"]["key"] if cfg.get("_pinned") else show_of_channel(cfg, channel)
+    out = for_show(cfg, key, channel)
     path = sdir / STREAM_CONFIG
     try:
         mtime = path.stat().st_mtime
     except OSError:
         return out
     root = _root(cfg)
-    cache_key = ("stream", str(sdir), channel, mtime)
+    cache_key = ("stream", str(sdir), key, channel, mtime)
     if cache_key in root["_resolved"]:
         return root["_resolved"][cache_key]
     overrides = tomllib.loads(path.read_text(encoding="utf-8"))
