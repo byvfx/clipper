@@ -148,7 +148,7 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
   MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
 - Issue 03 of the weekly on Saturday; the monthly check-in report on 11-01.
-- YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). Publish the Google Cloud OAuth app (Google Auth Platform > Audience > Publish app) or it lapses again 11-06.
+- YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The 10:30 token was issued while still in Testing and may still lapse 11-06: one more `clipper upload --sign-in` now gives a token that doesn't expire.
 
 ## Open work
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
@@ -250,7 +250,8 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   `extract_audio` now fills gaps with silence. Check new recorders' gaps against the source length.
 - Discord review cards carry only the first 60 s of a segment; the full preview is in Kitsu. A reject
   from the card can be about the excerpt, not the cut.
-- YouTube upload sign-in lasts 7 days while the OAuth app is in Testing. `clipper doctor` (online) refreshes it to test it; `upload --sign-in` keeps the analytics scope now.
+- YouTube upload sign-in lasts 7 days while the OAuth app is in Testing (published 2026-10-30; tokens
+  from before that keep the 7-day limit). `clipper doctor` (online) refreshes it to test it; `upload --sign-in` keeps the analytics scope now.
 - YouTube bot-checks this IP for yt-dlp; pre-show/one-off grabs retry signed in with
   secrets/youtube_cookies.txt, which browsers rotate: re-export when "cookies are no longer valid".
 - A cut killed half way can leave `clipper-cut-<id>` running on the NAS: `ssh nas docker rm -f clipper-cut-<id>`.
