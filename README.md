@@ -116,6 +116,12 @@ clipper run <stream id>
 (Discord ids, YouTube sign-in, adding a show), the NAS recorder and running the worker and bot
 unattended.
 
+`clipper -h` lists the commands by group; `clipper <command> -h` gives each one's flags. The
+same flag means the same thing everywhere: `--items s02,c03` picks items (the old `--ids`,
+`--keys`, `--item` and `--segments` still work), times are `H:MM:SS`, `H:MM` or seconds,
+`--limit N` caps a run, `--dry-run` changes nothing, and `--no-sync` skips the Kitsu read.
+Flags for different jobs on one command (`upload --links` and `--next`, say) are refused together.
+
 ## Configuration
 
 Settings come in layers: built-in defaults, then `clipper.toml`, then this machine's own
@@ -168,7 +174,7 @@ that fit, strong or maybe, each with a quote, a reason and the link.
 whether each item is alive, restricted (private, embedding off, blocked) or dead, kept in
 `links.json` with when it changed, and reruns report what died since. A dead link with a
 transcript is a receipt whose source is gone; `transcribe` skips dead links.
-`clipper archive check jer --ids yt-<id> ...` checks just the items you are about to link to.
+`clipper archive check jer --items yt-<id> ...` checks just the items you are about to link to.
 
 It needs the Modal backend set up (SETUP.md, "Transcribe on Modal"). YouTube audio is
 downloaded on this machine and uploaded; Odysee is meant to be fetched in the cloud (not

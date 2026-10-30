@@ -1,7 +1,7 @@
 """`clipper receipts`: the night's stories about an archive subject -> his own old clips (#48).
 
 Usage:
-    clipper receipts find <stream> [--segments s02,s05]   stories + archive picks -> receipts.json
+    clipper receipts find <stream> [--items s02,s05]   stories + archive picks -> receipts.json
     clipper receipts list <stream>                        what receipts.json holds
     clipper receipts script <stream>                      Mother Moo's voice-over -> receipts.json
     clipper receipts cut <stream>                         render receipts/receipts.mp4
@@ -145,7 +145,7 @@ def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
     picked = [s for s in segs if (s["id"] in only if only else about_subject(s, rc))]
     if not picked:
         raise ClipperError(f"{sdir.name}: no segments about {subject} (topics {rc['topics']}, "
-                         f"figures {rc['figures']}); name some with --segments")
+                         f"figures {rc['figures']}); name some with --items")
     words = load_words(sdir)
     blocks = []
     for s in picked:

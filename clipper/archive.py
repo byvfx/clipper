@@ -5,7 +5,7 @@ Usage:
     clipper archive transcribe <subject> [--limit N] [--oldest] [--gpu L4] [--parallel N]
                                          [--dry-run]
     clipper archive status [<subject>]
-    clipper archive check <subject> [--ids ID...] [--all] [--limit N]
+    clipper archive check <subject> [--items ID...] [--all] [--limit N]
     clipper archive links <subject> [--status dead|restricted|alive|all]
 
 A subject (e.g. "jer", issue #48) is paths.archive/<subject>/: catalog.json (every item

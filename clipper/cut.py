@@ -1,6 +1,6 @@
 """Cut clips out of the stream source with ffmpeg.
 
-  segments      topic segments from segments.json (cut=true, or --ids) -> segments/
+  segments      topic segments from segments.json (cut=true, or --items) -> segments/
   compilations  one long video per topic with >= compile_min_segments segments,
                 joined in stream order, with YouTube chapters -> compilations/
   picks         Pass B picks from candidates.json, horizontal cut -> clips/
