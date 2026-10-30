@@ -224,10 +224,11 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "fields": {"Topic": d["topic"], "Source audio": d["source_share"]},
                         "meta": d})
     if "picks" in include:
-        for i, side in enumerate(sorted((stream_dir / "clips").glob("*.json")), 1):
+        for side in sorted((stream_dir / "clips").glob("*.json")):
             d = jsonstate.load(side)
             seg = segment_of(d["in_s"])
-            out.append({"kind": "pick", "key": f"c{i:02d}_{d['id']}", "shot": f"c{i:02d}_{d['id']}",
+            n = side.name.split("_", 1)[0]  # clips/03_t12_<slug>.json: the pick's number (#77 L13)
+            out.append({"kind": "pick", "key": f"c{n}_{d['id']}", "shot": f"c{n}_{d['id']}",
                         "seq": sequence_name(seg) if seg else OTHER_SEQUENCE,
                         "seq_title": seg["title"] if seg else "Clips outside a segment",
                         "type": "Horizontal", "file": side.with_suffix(".mp4"),

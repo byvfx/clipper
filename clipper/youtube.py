@@ -45,7 +45,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import jsonstate
+from . import jsonstate, ytquota
 from .bleep import Bleeper
 from .config import for_stream
 from .errors import ClipperError
@@ -98,10 +98,12 @@ def credentials(paths: dict, sign_in: bool = False, force_refresh: bool = False)
     return creds
 
 
-def service(paths: dict, sign_in: bool = False):
+def service(paths: dict, sign_in: bool = False, creds=None):
+    """A Data API client whose every call is counted in [paths] youtube_quota (#77 M12)."""
     from googleapiclient.discovery import build
 
-    return build("youtube", "v3", credentials=credentials(paths, sign_in), cache_discovery=False)
+    return build("youtube", "v3", credentials=creds or credentials(paths, sign_in), cache_discovery=False,
+                 requestBuilder=ytquota.request_class(paths["youtube_quota"]))
 
 
 # ---------- metadata ----------
@@ -340,9 +342,11 @@ def backfill_links(cfg: dict, sched: dict, sched_path: Path, dry_run: bool,
                    limit: int | None, yt=None) -> None:
     """Add, fix or drop the source links on uploaded videos whose longer video went public,
     was re-cut or was deleted since. Checking costs 1 quota unit per 50 videos; each
-    description update 51 (read + write), at most [youtube] link_updates_per_run a run."""
+    description update 51 (read + write), at most [youtube] link_updates_per_run a run
+    and only from the day's spare quota (ytquota.spare)."""
     cache: dict = {}
     up = [(e, ps) for e in sched["entries"] if e.get("status") == "uploaded" and e.get("video_id")
+          and not e.get("gone_at")
           for ps in [source_parents(cfg, e, sched["entries"], cache)] if ps or e.get("source_links")]
     if not up:
         return
@@ -350,16 +354,18 @@ def backfill_links(cfg: dict, sched: dict, sched_path: Path, dry_run: bool,
     status = privacy(yt, [p.get("video_id") for _, ps in up for _, p, _ in ps])
     todo = [(e, want) for e, ps in up for want in [source_links(cfg, e, ps, status)]
             if want != e.get("source_links", "")]
-    cap = limit or cfg["youtube"]["link_updates_per_run"]
+    cap = min(limit or cfg["youtube"]["link_updates_per_run"],
+              ytquota.spare(cfg["youtube"], cfg["paths"]["youtube_quota"]) // 51)
     print(f"{len(todo)} videos need their source links set" + (" (dry run)" if dry_run else "")
-          + (f"; {cap} this run" if len(todo) > cap else ""))
+          + (f"; {cap} this run (link_updates_per_run, spare quota)" if len(todo) > cap else ""))
     for e, want in todo[:cap]:
         print(f"  {e['url']} {e['title'][:60]}\n    " + (want.replace("\n", "\n    ") or "(links removed)"))
         if dry_run:
             continue
         found = yt.videos().list(part="snippet", id=e["video_id"]).execute().get("items", [])
-        if not found:
-            print("    not on YouTube any more; skipped")
+        if not found:  # deleted in Studio: not tried again every hour (#77 M12)
+            print("    not on YouTube any more; skipped from now on")
+            mark(sched_path, e["key"], gone_at=datetime.now(UTC).isoformat(timespec="seconds"))
             continue
         sn = found[0]["snippet"]  # an update replaces the whole snippet: send back what's there
         body = {k: sn[k] for k in ("title", "categoryId", "tags", "defaultLanguage",
@@ -547,6 +553,55 @@ def backfill_thumbnails(cfg: dict, sched: dict, sched_path: Path, dry_run: bool)
         print(f"  {e['url']} thumbnail set")
 
 
+CAPTION_TRIES = 3  # 400 quota units a try
+
+
+def add_captions(yt, yc: dict, e: dict, srt: Path, sched_path: Path) -> bool:
+    """Upload the .srt as e's captions. A failure is noted on the entry (captions_error,
+    captions_tries) for backfill_captions to retry, instead of being lost (#77 L18)."""
+    from googleapiclient.http import MediaFileUpload
+
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    try:
+        execute_with_retry(yt.captions().insert(part="snippet", body={"snippet": {
+            "videoId": e["video_id"], "language": yc["language"], "name": "", "isDraft": False}},
+            media_body=MediaFileUpload(str(srt), mimetype="application/octet-stream")))
+    except Exception as ex:  # noqa: BLE001  # the video is up; captions are retried later
+        text = f"{type(ex).__name__}: {ex}"[:300]
+        print(f"  warning: captions: {text}")
+        e.update(captions_error=text, captions_tries=e.get("captions_tries", 0) + 1)
+        mark(sched_path, e["key"], captions_error=text, captions_tries=e["captions_tries"])
+        return False
+    e["captions_set"] = now
+    e.pop("captions_error", None)
+    with jsonstate.update(sched_path) as sched:
+        for x in sched["entries"]:
+            if x["key"] == e["key"]:
+                x["captions_set"] = now
+                x.pop("captions_error", None)
+    return True
+
+
+def backfill_captions(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, yt=None) -> None:
+    """Retry the captions of uploaded videos whose captions upload failed, up to
+    CAPTION_TRIES each, from the day's spare quota (400 units each)."""
+    todo = [(e, m) for e in sched["entries"] if e.get("status") == "uploaded" and e.get("video_id")
+            and e.get("captions_error") and not e.get("captions_set") and not e.get("gone_at")
+            and e.get("captions_tries", 0) < CAPTION_TRIES
+            for m in [metadata(e, cfg)] if m["srt"]]
+    if not todo:
+        return
+    room = ytquota.spare(cfg["youtube"], cfg["paths"]["youtube_quota"]) // 400
+    print(f"{len(todo)} videos need their captions again" + (" (dry run)" if dry_run else "")
+          + (f"; {room} this run (spare quota)" if len(todo) > room else ""))
+    yt = None if dry_run else yt or service(cfg["paths"])
+    for e, m in todo[:room]:
+        print(f"  {e['url']} {m['srt'].name} (try {e.get('captions_tries', 0) + 1})")
+        if not dry_run:
+            yc = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])["youtube"]
+            add_captions(yt, yc, e, m["srt"], sched_path)
+
+
 def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_path: Path,
            sched_path: Path) -> None:
     """Everything after the video itself: thumbnail, captions, playlist, Kitsu link. None
@@ -563,13 +618,10 @@ def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_pat
             print(f"  warning: {ex}")
         except Exception as ex:  # noqa: BLE001  # the video is up, the thumbnail is optional
             print(f"  warning: thumbnail: {type(ex).__name__}: {ex}")
+    # Its own try too; a failure is retried hourly (#77 L18).
+    if yc["captions"] and m["srt"] and add_captions(yt, yc, e, m["srt"], sched_path):
+        extras.append("captions")
     try:
-        if yc["captions"] and m["srt"]:
-            from googleapiclient.http import MediaFileUpload
-            yt.captions().insert(part="snippet", body={"snippet": {
-                "videoId": vid, "language": yc["language"], "name": "", "isDraft": False}},
-                media_body=MediaFileUpload(str(m["srt"]), mimetype="application/octet-stream")).execute()
-            extras.append("captions")
         for name in m["playlists"] if yc["add_to_playlist"] else []:
             add_to_playlist(yt, name, vid, playlists, cache_path, yc["playlist_privacy"])
             e.setdefault("playlists", []).append(name)
@@ -598,7 +650,7 @@ def kitsu_url(cfg: dict, meta: dict, url: str) -> None:
 
 def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | None = None,
         thumbnails_only: bool = False, playlists_only: bool = False,
-        links_only: bool = False) -> None:
+        links_only: bool = False, captions_only: bool = False) -> None:
     paths = cfg["paths"]
     if sign_in:
         service(paths, sign_in=True)
@@ -617,11 +669,19 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     if links_only:
         backfill_links(cfg, sched, sched_path, dry_run, limit)
         return
+    if captions_only:
+        backfill_captions(cfg, sched, sched_path, dry_run)
+        return
     yt, failed = upload_due(cfg, sched, sched_path, dry_run, limit)
-    try:  # links on videos already up whose longer video went public since
-        backfill_links(cfg, jsonstate.read(sched_path), sched_path, dry_run, None, yt)
-    except Exception as ex:  # noqa: BLE001  # the uploads are done either way
-        print(f"  warning: source links: {type(ex).__name__}: {ex}")
+    # Then, from what's left of the day's quota: links on videos already up whose longer
+    # video went public since, and captions that failed to go up.
+    for name, fill in (("source links", lambda s: backfill_links(cfg, s, sched_path, dry_run, None, yt)),
+                       ("captions", lambda s: backfill_captions(cfg, s, sched_path, dry_run, yt))):
+        try:
+            fill(jsonstate.read(sched_path))
+        except Exception as ex:  # noqa: BLE001  # the uploads are done either way
+            print(f"  warning: {name}: {type(ex).__name__}: {ex}")
+    print(ytquota.summary(cfg["youtube"], cfg["paths"]["youtube_quota"]))
     if failed:  # a non-zero exit is what makes the bot DM it
         raise ClipperError(f"{len(failed)} upload(s) failed: {'; '.join(failed)}"[:900])
 
