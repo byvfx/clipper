@@ -63,9 +63,11 @@ keep README and SETUP true whenever behaviour changes.
   them first, for example in PowerShell:
   `$env:KITSU_TOKEN = [Environment]::GetEnvironmentVariable("KITSU_TOKEN","User")`.
 - The Discord bot and GPU worker run as scheduled tasks (`deploy/discord`, `deploy/worker`).
-  Stopping the task does not stop the supervised process; see the gotchas in HANDOFF.md.
+  `clipper services status|stop|restart bot|worker|all` runs their task scripts, which also
+  stop the supervisor and stage processes (stopping the task alone doesn't).
 - The NAS recorder is deployed with `bash deploy/record/deploy.sh`, only when no show is live:
-  the restart starts a new recording part.
+  the restart starts a new recording part. The script refuses while `clipper record status`
+  shows a recording (exit 3); `--force` overrides it.
 - Model calls cost money. Say what a rerun of `score`, `segments`, `meta` or `thumbs` will
   cost before doing it on a long stream.
 

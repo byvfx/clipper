@@ -117,6 +117,9 @@ Posts, which show images square (`[weekly] formats`). `--headline "..."` tells t
 | Bot | `clipper bot` | any always-on machine: Discord review cards, retakes, the war room, pre-show grabs |
 
 All roles share one streams folder (a NAS share). One machine can do more than one role.
+`clipper services` shows them all (and any cut running on the NAS);
+`clipper services restart bot|worker|all` restarts the bot and worker, `... recorder` the
+recorder, refused while it's recording a show.
 
 ## Quick start
 
