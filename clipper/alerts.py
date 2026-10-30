@@ -34,7 +34,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import requests
+
 from . import jsonstate
+from .errors import ClipperError
 
 log = logging.getLogger("clipper.alerts")
 
@@ -64,6 +67,38 @@ def send(cfg: dict, kind: str, text: str, key: str = "") -> None:
         tmp.replace(d / name)
     except OSError as e:
         log.warning("notification not queued (%s): %s", e, text)
+
+
+class Alerts:
+    """Log every alert; also post to Discord through a webhook URL (env var named by
+    [record] alert_webhook_env) or the review bot's token into alert_channel_id. The recorder,
+    the worker and TikTok captions use it; warnings also go to the bot's outbox (send)."""
+
+    def __init__(self, cfg: dict):
+        rc = cfg["record"]
+        self.webhook = os.environ.get(rc["alert_webhook_env"], "").strip()
+        self.channel = str(rc["alert_channel_id"] or "")
+        self.cfg = cfg
+        self.mention = rc["alert_mention"]
+
+    def __call__(self, text: str, level: int = logging.WARNING, kind: str | None = "auto",
+                 key: str = "") -> None:
+        log.log(level, "ALERT %s", text)
+        if kind == "auto":  # the recorder's: warnings are DMs (#22), news like "is live" isn't
+            kind = "recorder" if level >= logging.WARNING else None
+        if kind:
+            send(self.cfg, kind, text, key)
+        body = f"{self.mention} {text}".strip() if level >= logging.WARNING else text
+        try:
+            if self.webhook:
+                requests.post(self.webhook, json={"content": body[:1900]}, timeout=20)
+            elif self.channel:
+                from . import notify
+
+                notify.Rest(self.cfg)("POST", f"/channels/{self.channel}/messages",
+                                      {"content": body[:1900]})
+        except (requests.RequestException, ClipperError) as e:
+            log.error("alert not delivered: %s", e)
 
 
 # ---------- the bot's side ----------
