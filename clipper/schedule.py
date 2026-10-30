@@ -194,38 +194,70 @@ def previous(out_path: Path) -> tuple[dict, dict]:
     return old, platforms
 
 
+class Placed:
+    """The plan so far: entries by key, and the times taken (for the spacing rules)."""
+
+    def __init__(self, old: dict, platforms: dict):
+        self.old, self.platforms = old, platforms
+        self.taken: list[datetime] = []
+        self.entries: dict[str, dict] = {}
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.entries
+
+    def place(self, it: dict, when: datetime, source: str) -> None:
+        when = when.replace(second=0, microsecond=0)
+        self.taken.append(when)
+        prev = self.old.get(it["key"], {})
+        self.entries[it["key"]] = {
+            "key": it["key"], "stream": it["stream"], "kind": it["kind"],
+            "id": it["id"], "title": it["title"], "file": it["file"],
+            "publish_at": when.isoformat(), "source": source,
+            "status": prev.get("status", "scheduled"),
+            # the last upload failure (youtube.upload_one) until one works
+            **{k: prev[k] for k in ("last_error", "last_error_at") if k in prev},
+            **({"platforms": self.platforms[it["key"]]} if it["key"] in self.platforms else {})}
+
+
 def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc: dict,
          tz: ZoneInfo, now: datetime, start: date, reshuffle: bool) -> tuple[dict, list]:
     """Place items into slots: (entries by key, the ones left out)."""
-    taken: list[datetime] = []
-    placed: dict[str, dict] = {}
+    p = Placed(old, platforms)
+    keep_uploaded(p, items)
+    place_pinned(p, items, skipped, sc, tz, now)
+    place_asap(p, items, now)
+    jump = keep_earlier(p, items, tz, now, reshuffle)
+    queue = queues(p, items, sc)
+    # Freed slots can be today's: refill from today then, or they stay empty.
+    all_slots = slots(sc, tz, min(start, now.date()) if jump else start)
+    fill(p, queue, all_slots, ("clip", "short", "segment"), sc, now)
+    after_segments(p, queue, skipped)
+    fill(p, queue, all_slots, ("compilation",), sc, now)
+    for kind, rest in queue.items():
+        skipped += [{"key": it["key"], "reason": f"no free {kind} slot in {sc['horizon_days']} days"}
+                    for it in rest]
+    keep_platforms(p, platforms, skipped)
+    return p.entries, skipped
 
-    def place(it: dict, when: datetime, source: str) -> None:
-        when = when.replace(second=0, microsecond=0)
-        taken.append(when)
-        placed[it["key"]] = {"key": it["key"], "stream": it["stream"], "kind": it["kind"],
-                             "id": it["id"], "title": it["title"], "file": it["file"],
-                             "publish_at": when.isoformat(), "source": source,
-                             "status": old.get(it["key"], {}).get("status", "scheduled"),
-                             # the last upload failure (youtube.upload_one) until one works
-                             **{k: old[it["key"]][k] for k in ("last_error", "last_error_at")
-                                if k in old.get(it["key"], {})},
-                             **({"platforms": platforms[it["key"]]} if it["key"] in platforms else {})}
 
-    # 0. Already on YouTube: fixed there, so kept exactly as recorded (with its video id),
-    #    even if it has since been held or rejected; that needs a hand in YouTube Studio.
+def keep_uploaded(p: Placed, items: list[dict]) -> None:
+    """0. Already on YouTube: fixed there, so kept exactly as recorded (with its video id),
+    even if it has since been held or rejected; that needs a hand in YouTube Studio."""
     eligible = {it["key"] for it in items}
-    for key, prev in old.items():
+    for key, prev in p.old.items():
         if prev.get("status") == "uploaded":
-            taken.append(datetime.fromisoformat(prev["publish_at"]))
-            placed[key] = dict(prev)
+            p.taken.append(datetime.fromisoformat(prev["publish_at"]))
+            p.entries[key] = dict(prev)
             if key not in eligible:
-                placed[key]["note"] = "uploaded, but no longer approved or now on hold: check YouTube Studio"
+                p.entries[key]["note"] = "uploaded, but no longer approved or now on hold: check YouTube Studio"
                 print(f"  note: {key} is uploaded but no longer approved/held")
 
-    # 1. Pinned by you in Kitsu.
+
+def place_pinned(p: Placed, items: list[dict], skipped: list[dict], sc: dict, tz: ZoneInfo,
+                 now: datetime) -> None:
+    """1. Pinned by you in Kitsu. A Publish at that doesn't parse marks the item bad."""
     for it in items:
-        if it["key"] in placed:
+        if it["key"] in p:
             continue
         first = sc[f"{it['kind']}_times"][0]
         when = parse_when(it["override_text"], tz, first)
@@ -236,71 +268,86 @@ def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc:
             print(f"  note: {it['key']} was pinned for {when:%a %m-%d %H:%M}, which has passed: "
                   "it takes the next free slot (clear or change Publish at in Kitsu)")
         elif when:
-            if not fits(when, taken, sc):
+            if not fits(when, p.taken, sc):
                 print(f"  note: {it['key']} pinned at {when:%a %m-%d %H:%M} breaks the spacing rules")
-            place(it, when, "pinned")
-    # 1b. Pre-shows: out as soon as they are approved (the next upload publishes them).
+            p.place(it, when, "pinned")
+
+
+def place_asap(p: Placed, items: list[dict], now: datetime) -> None:
+    """1b. Pre-shows: out as soon as they are approved (the next upload publishes them)."""
     for it in items:
-        if it["key"] not in placed and it.get("asap") and not it.get("bad"):
-            place(it, max(now, it["earliest"]), "asap")
-    # 2. Keep earlier assignments that are still ahead of us (or already uploaded). A newly
-    #    approved priority item frees the automatic slots of other streams' items of its kind.
-    jump = {it["kind"] for it in items if it["priority"] and it["key"] not in old}
+        if it["key"] not in p and it.get("asap") and not it.get("bad"):
+            p.place(it, max(now, it["earliest"]), "asap")
+
+
+def keep_earlier(p: Placed, items: list[dict], tz: ZoneInfo, now: datetime,
+                 reshuffle: bool) -> set[str]:
+    """2. Keep earlier assignments that are still ahead of us (or already uploaded). A newly
+    approved priority item frees the automatic slots of other streams' items of its kind.
+    Returns those kinds."""
+    jump = {it["kind"] for it in items if it["priority"] and it["key"] not in p.old}
     for it in items:
-        prev = old.get(it["key"])
-        if it["key"] in placed or it.get("bad") or not prev or (prev["source"] == "auto" and (
+        prev = p.old.get(it["key"])
+        if it["key"] in p or it.get("bad") or not prev or (prev["source"] == "auto" and (
                 reshuffle or (it["kind"] in jump and not it["priority"]))):
             continue
         when = datetime.fromisoformat(prev["publish_at"]).astimezone(tz)
         if when > now and when >= it["earliest"]:
-            place(it, when, prev["source"] if prev["source"] != "pinned" else "auto")
-    # 3. Fill open slots in order.
+            p.place(it, when, prev["source"] if prev["source"] != "pinned" else "auto")
+    return jump
+
+
+def queues(p: Placed, items: list[dict], sc: dict) -> dict[str, list[dict]]:
+    """3. What still needs a slot, per kind, in the order it gets one: priority items
+    first, then [schedule] clip_order, the shows taking turns with mix_shows."""
     def order(it: dict):
         if it["kind"] in ("clip", "short") and sc["clip_order"] == "score":
             return (-it["score"], it["stream_start"], it["key"])
         return (it["stream_start"], it["key"])
     queue = {}
     for k in ("clip", "short", "segment", "compilation"):
-        waiting = [it for it in items if it["kind"] == k and it["key"] not in placed and not it.get("bad")]
-        parts = [sorted((it for it in waiting if it["priority"] == p), key=order) for p in (True, False)]
+        waiting = [it for it in items if it["kind"] == k and it["key"] not in p and not it.get("bad")]
+        parts = [sorted((it for it in waiting if it["priority"] == pr), key=order) for pr in (True, False)]
         queue[k] = [it for q in parts for it in (take_turns(q) if sc["mix_shows"] else q)]
-    # Freed slots can be today's: refill from today then, or they stay empty.
-    all_slots = slots(sc, tz, min(start, now.date()) if jump else start)
+    return queue
 
-    def fill(kinds: tuple[str, ...]) -> None:
-        for when, kind in all_slots:
-            if kind not in kinds or when <= now or not queue[kind] or not fits(when, taken, sc):
-                continue
-            pick = next((it for it in queue[kind] if it["earliest"] <= when), None)
-            if pick:
-                queue[kind].remove(pick)
-                place(pick, when, "auto")
 
-    fill(("clip", "short", "segment"))
-    # Compilations go out only after every one of their segments has.
+def fill(p: Placed, queue: dict[str, list[dict]], all_slots: list[tuple[datetime, str]],
+         kinds: tuple[str, ...], sc: dict, now: datetime) -> None:
+    """Open slots of these kinds, in time order, each to the first queued item allowed then."""
+    for when, kind in all_slots:
+        if kind not in kinds or when <= now or not queue[kind] or not fits(when, p.taken, sc):
+            continue
+        pick = next((it for it in queue[kind] if it["earliest"] <= when), None)
+        if pick:
+            queue[kind].remove(pick)
+            p.place(pick, when, "auto")
+
+
+def after_segments(p: Placed, queue: dict[str, list[dict]], skipped: list[dict]) -> None:
+    """Compilations go out only after every one of their segments has."""
     for it in list(queue["compilation"]):
-        parts = [placed.get(k) for k in it["segment_keys"]]
+        parts = [p.entries.get(k) for k in it["segment_keys"]]
         if not all(parts):
             queue["compilation"].remove(it)
             skipped.append({"key": it["key"], "reason": "a segment has no slot yet"})
             continue
-        last = max(datetime.fromisoformat(p["publish_at"]) for p in parts)
+        last = max(datetime.fromisoformat(e["publish_at"]) for e in parts)
         it["earliest"] = max(it["earliest"], last + timedelta(minutes=1))
-    fill(("compilation",))
-    for kind, rest in queue.items():
-        skipped += [{"key": it["key"], "reason": f"no free {kind} slot in {sc['horizon_days']} days"}
-                    for it in rest]
+
+
+def keep_platforms(p: Placed, platforms: dict, skipped: list[dict]) -> None:
+    """Other platforms' records stay on an item that lost its slot (or left review)."""
     for key, plats in platforms.items():
-        if key in placed:
+        if key in p:
             continue
         hit = next((s for s in skipped if s["key"] == key), None)
         if not hit:
             skipped.append(hit := {"key": key, "reason": "no longer in review"})
         hit["platforms"] = plats
-        up = [p for p, r in plats.items() if r.get("status") == "uploaded"]
+        up = [name for name, r in plats.items() if r.get("status") == "uploaded"]
         if up:
             print(f"  note: {key} is on {', '.join(up)} but no longer scheduled ({hit['reason']})")
-    return placed, skipped
 
 
 def upcoming(cfg: dict, days: int = 7) -> list[dict]:
