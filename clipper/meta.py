@@ -221,6 +221,103 @@ def draft_path(stream_dir: Path, asset: dict) -> Path:
     return stream_dir / "metadata" / asset["video"].parent.name / f"{asset['video'].stem}.json"
 
 
+def asset_lines(assets: list[dict], words: list[dict], drafted: dict[str, dict]) -> list[str]:
+    """The metadata call's input: one <asset> per video (a clip with its transcript), then
+    the playlists the already drafted videos use."""
+    lines = []
+    for x in assets:
+        text = ""
+        if x["kind"] == "clip":
+            text = " ".join(transcript_lines(words, *x["parts"][0][:2]))[:1500]
+        lines.append(
+            f"<asset id=\"{x['id']}\" kind=\"{x['kind']}\" minutes=\"{duration(x) / 60:.1f}\">\n"
+            f"title: {x['title']}\n"
+            + (f"topic: {x['topic']}\n" if x["topic"] else "")
+            + (f"people: {', '.join(x['figures'])}\n" if x["figures"] else "")
+            + (f"description: {x['body']}\n" if x["body"] else f"editor note: {x['summary']}\n")
+            + (f"transcript: {text}\n" if text else "") + "</asset>")
+    used = sorted({d["playlist"] for d in drafted.values() if d.get("playlist")})
+    if used:
+        lines.append("Playlists this episode's other videos already use (reuse the name for "
+                     "the same subject): " + "; ".join(used))
+    return lines
+
+
+def generate(stream_dir: Path, mc: dict, assets: list[dict], lines: list[str],
+             long_segs: list[dict], words: list[dict], claude: Claude,
+             prompts: Prompts) -> tuple[dict, dict, Path]:
+    """The metadata call and a chapters call per long segment, in parallel:
+    (metadata, chapters by segment id, the checkpoint file)."""
+    # #75: every call that succeeded is kept here until the drafts are written, so one failed
+    # chapters call doesn't throw away the big metadata call (or the other chapters).
+    ckpt = stream_dir / "metadata" / f".checkpoint_{mc['prompt_version']}.json"
+    ids = sorted(x["id"] for x in assets)
+    saved = jsonstate.read(ckpt) or {}
+    if saved.get("ids") != ids:
+        saved = {"ids": ids, "gen": None, "chapters": {}}
+    errors = []
+    with ThreadPoolExecutor(mc["concurrency"]) as pool:
+        f_meta = None if saved["gen"] else pool.submit(
+            claude.json_call, mc["model"], prompts.get("meta"), "\n\n".join(lines), META_SCHEMA,
+            mc["effort"], True, True)
+        f_ch = {x["id"]: pool.submit(segment_chapters, x, words, mc, claude, prompts)
+                for x in long_segs if x["id"] not in saved["chapters"]}
+        for k, f in f_ch.items():
+            try:
+                saved["chapters"][k] = f.result()
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"chapters {k}: {type(e).__name__}: {e}")
+        if f_meta:
+            try:
+                saved["gen"] = f_meta.result()[0]
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"metadata: {type(e).__name__}: {e}")
+    ckpt.parent.mkdir(parents=True, exist_ok=True)
+    jsonstate.write(ckpt, saved)
+    if errors:
+        raise ClipperError("meta: " + "; ".join(errors)[:600] + f"\n(what worked is kept in {ckpt.name}; "
+                         "rerun clipper meta to finish)")
+    if saved["gen"] is None:
+        raise ClipperError("meta: model refused")
+    return saved["gen"], dict(saved["chapters"]), ckpt
+
+
+def compilation_chapters(assets: list[dict], chapters: dict[str, list],
+                         drafted: dict[str, dict]) -> None:
+    """Compilations: each segment's title at its start, then that segment's own chapters
+    (this run's, else its draft's). Added to chapters."""
+    for x in assets:
+        if x["kind"] == "compilation":
+            ch = []
+            for sid, (_, _, off) in zip(x["segments"], x["parts"]):
+                ch.append({"t": round(off, 1), "title": x["segment_titles"][sid]})
+                seg_ch = chapters.get(sid) or drafted.get(sid, {}).get("chapters", [])
+                ch += [{"t": round(off + c["t"], 1), "title": c["title"]} for c in seg_ch[1:]]
+            chapters[x["id"]] = ch
+
+
+def draft(x: dict, g: dict, ch: list[dict], credit: str, playlist: str, mc: dict,
+          mask=lambda s: s) -> dict:
+    """An asset's upload draft from what the model wrote for it (g); playlist: a fixed one
+    (pre-shows), else the model's. problems: what YouTube would refuse."""
+    tags = [t.strip() for t in g["hashtags"]][:3]
+    desc = mask(description(g["lead"], g["body"] or x["body"], ch, credit, tags))
+    out = {"kind": x["kind"], "id": x["id"], "file": x["video"].name,
+           "title": mask(g["title"].strip()), "title_original": x["title"],
+           "description": desc, "lead": g["lead"].strip(), "body": g["body"] or x["body"],
+           "chapters": ch, "credit": credit, "hashtags": tags, "tags": g["tags"],
+           "playlist": playlist or g["playlist"].strip(), "duration_s": round(duration(x), 1),
+           "srt": x["video"].with_suffix(".srt").name,
+           "model": mc["model"], "prompt_version": mc["prompt_version"]}
+    problems = []
+    if len(out["title"]) > 100:
+        problems.append(f"title {len(out['title'])} chars")
+    if len(desc) > 5000:
+        problems.append(f"description {len(desc)} chars")
+    out["problems"] = problems
+    return out
+
+
 def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
     """missing: only the videos with no draft yet (the worker's second pass, after the
     clips went to review); the model is told which playlists the drafted ones use."""
@@ -251,66 +348,11 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
     claude = Claude(cfg)
     preflight(claude, mc["model"])
 
-    lines = []
-    for x in assets:
-        text = ""
-        if x["kind"] == "clip":
-            text = " ".join(transcript_lines(words, *x["parts"][0][:2]))[:1500]
-        lines.append(
-            f"<asset id=\"{x['id']}\" kind=\"{x['kind']}\" minutes=\"{duration(x) / 60:.1f}\">\n"
-            f"title: {x['title']}\n"
-            + (f"topic: {x['topic']}\n" if x["topic"] else "")
-            + (f"people: {', '.join(x['figures'])}\n" if x["figures"] else "")
-            + (f"description: {x['body']}\n" if x["body"] else f"editor note: {x['summary']}\n")
-            + (f"transcript: {text}\n" if text else "") + "</asset>")
-    used = sorted({d["playlist"] for d in drafted.values() if d.get("playlist")})
-    if used:
-        lines.append("Playlists this episode's other videos already use (reuse the name for "
-                     "the same subject): " + "; ".join(used))
+    lines = asset_lines(assets, words, drafted)
     long_segs = [x for x in assets if x["kind"] == "segment" and duration(x) >= mc["chapters_min_s"]]
-    # #75: every call that succeeded is kept here until the drafts are written, so one failed
-    # chapters call doesn't throw away the big metadata call (or the other chapters).
-    ckpt = stream_dir / "metadata" / f".checkpoint_{mc['prompt_version']}.json"
-    ids = sorted(x["id"] for x in assets)
-    saved = jsonstate.read(ckpt) or {}
-    if saved.get("ids") != ids:
-        saved = {"ids": ids, "gen": None, "chapters": {}}
-    errors = []
-    with ThreadPoolExecutor(mc["concurrency"]) as pool:
-        f_meta = None if saved["gen"] else pool.submit(
-            claude.json_call, mc["model"], prompts.get("meta"), "\n\n".join(lines), META_SCHEMA,
-            mc["effort"], True, True)
-        f_ch = {x["id"]: pool.submit(segment_chapters, x, words, mc, claude, prompts)
-                for x in long_segs if x["id"] not in saved["chapters"]}
-        for k, f in f_ch.items():
-            try:
-                saved["chapters"][k] = f.result()
-            except Exception as e:  # noqa: BLE001
-                errors.append(f"chapters {k}: {type(e).__name__}: {e}")
-        if f_meta:
-            try:
-                saved["gen"] = f_meta.result()[0]
-            except Exception as e:  # noqa: BLE001
-                errors.append(f"metadata: {type(e).__name__}: {e}")
-    ckpt.parent.mkdir(parents=True, exist_ok=True)
-    jsonstate.write(ckpt, saved)
-    if errors:
-        raise ClipperError("meta: " + "; ".join(errors)[:600] + f"\n(what worked is kept in {ckpt.name}; "
-                         "rerun clipper meta to finish)")
-    gen, chapters = saved["gen"], dict(saved["chapters"])
-    if gen is None:
-        raise ClipperError("meta: model refused")
+    gen, chapters, ckpt = generate(stream_dir, mc, assets, lines, long_segs, words, claude, prompts)
     by_id = {g["id"]: g for g in gen["assets"]}
-
-    # Compilations: each segment's title at its start, then that segment's own chapters.
-    for x in assets:
-        if x["kind"] == "compilation":
-            ch = []
-            for sid, (_, _, off) in zip(x["segments"], x["parts"]):
-                ch.append({"t": round(off, 1), "title": x["segment_titles"][sid]})
-                seg_ch = chapters.get(sid) or drafted.get(sid, {}).get("chapters", [])
-                ch += [{"t": round(off + c["t"], 1), "title": c["title"]} for c in seg_ch[1:]]
-            chapters[x["id"]] = ch
+    compilation_chapters(assets, chapters, drafted)
 
     credit = credit_line(meta, mc, cfg)
     playlist = (cfg["preshow"]["playlist"].format(show=mc["show_name"])
@@ -321,22 +363,7 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
         if not g:
             print(f"  warning: no metadata returned for {x['id']}")
             continue
-        tags = [t.strip() for t in g["hashtags"]][:3]
-        ch = chapters.get(x["id"], [])
-        desc = bleeper.mask(description(g["lead"], g["body"] or x["body"], ch, credit, tags))
-        out = {"kind": x["kind"], "id": x["id"], "file": x["video"].name,
-               "title": bleeper.mask(g["title"].strip()), "title_original": x["title"],
-               "description": desc, "lead": g["lead"].strip(), "body": g["body"] or x["body"],
-               "chapters": ch, "credit": credit, "hashtags": tags, "tags": g["tags"],
-               "playlist": playlist or g["playlist"].strip(), "duration_s": round(duration(x), 1),
-               "srt": x["video"].with_suffix(".srt").name,
-               "model": mc["model"], "prompt_version": mc["prompt_version"]}
-        problems = []
-        if len(out["title"]) > 100:
-            problems.append(f"title {len(out['title'])} chars")
-        if len(desc) > 5000:
-            problems.append(f"description {len(desc)} chars")
-        out["problems"] = problems
+        out = draft(x, g, chapters.get(x["id"], []), credit, playlist, mc, bleeper.mask)
         dst = draft_path(stream_dir, x)
         dst.parent.mkdir(parents=True, exist_ok=True)
         jsonstate.write(dst, out)
