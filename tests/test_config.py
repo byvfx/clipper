@@ -99,3 +99,41 @@ def test_example_loads(tmp_path):
     cfg = config.load(ROOT / "clipper.example.toml", use_local=False)
     for key in cfg["shows"]:
         config.for_show(cfg, key)
+
+
+def test_bad_choices_are_refused(tmp_path, monkeypatch):
+    """B7: [bleep] mode = "Bleep" used to mean no bleeping at all."""
+    path = tmp_path / "clipper.toml"
+    path.write_text('[bleep]\nmode = "Bleep"\n', encoding="utf-8")
+    with pytest.raises(ClipperError, match=r"\[bleep\] mode = 'Bleep' \(one of: off, bleep, mute\)"):
+        config.load(path)
+    path.write_text('[shows.kino]\nchannels = ["k"]\n[shows.kino.shorts]\nwindow = "long"\n', encoding="utf-8")
+    cfg = config.load(path)
+    with pytest.raises(ClipperError, match=r"\[shows.kino\]: .*\[shorts\] window"):
+        config.for_show(cfg, "kino")
+    path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("CLIPPER_CUT_BACKEND", "cloud")
+    with pytest.raises(ClipperError, match=r"\[cut\] backend = 'cloud'"):
+        config.load(path)
+
+
+def test_every_choice_default_is_valid():
+    for (section, key), choices in config.CHOICES.items():
+        assert config.DEFAULTS[section][key] in choices, (section, key)
+
+
+def test_unknown_keys_and_env_warn(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "clipper.toml"
+    path.write_text('[meta]\nsrt_max = 1\n[shows.kino]\nchannels = ["k"]\n[shows.kino.metaa]\nx = 1\n',
+                    encoding="utf-8")
+    monkeypatch.setenv("CLIPPER_META_EFORT", "high")
+    cfg = config.load(path)   # warns, doesn't refuse: a typo mustn't stop the bot
+    err = capsys.readouterr().err
+    assert "unknown setting [meta] srt_max" in err and "[shows.kino]: unknown section [metaa]" in err
+    assert "CLIPPER_META_EFORT matches no setting" in err
+    assert len(config.problems(cfg)) == 3
+
+
+def test_env_for_an_unset_default():
+    assert config._coerce("false", None) is False and config._coerce("TRUE", None) is True
+    assert config._coerce("anything", None) == "anything"

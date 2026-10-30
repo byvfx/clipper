@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -662,6 +663,8 @@ def _coerce(raw: str, like: Any, name: str = "") -> Any:
             return json.loads(raw) if raw.startswith("[") else raw.replace(",", " ").split()
         if isinstance(like, dict):
             return json.loads(raw)
+        if like is None and raw.strip().lower() in ("true", "false"):  # e.g. [preshow] teasers (unset = inherit)
+            return raw.strip().lower() == "true"
     except ValueError as e:
         raise ClipperError(f"{name or 'environment variable'}={raw!r}: not a {type(like).__name__} ({e})") from None
     return raw
@@ -671,6 +674,47 @@ def stream_dir(cfg: dict, ref: str) -> Path:
     """A stream id under paths.streams, or a stream directory."""
     p = Path(ref)
     return p if p.is_dir() else cfg["paths"]["streams"] / ref
+
+
+# Settings that take one of a fixed set of values. Anything else would quietly do the wrong
+# thing (B7: [bleep] mode = "Bleep" meant no bleeping), so loading refuses it.
+CHOICES = {
+    ("bleep", "mode"): ("off", "bleep", "mute"),
+    ("cut", "backend"): ("local", "nas"),
+    ("transcribe", "backend"): ("whisperx", "mlx", "modal"),
+    ("transcribe", "modal_audio"): ("flac", "opus"),
+    ("thumbnail", "style"): ("classic", "enquirer"),
+    ("shorts", "window"): ("short", "clip"),
+    ("schedule", "clip_order"): ("score", "stream"),
+    ("preshow", "publish"): ("asap", "slots"),
+    ("record", "container"): ("mkv", "ts"),
+    ("rumble", "visibility"): ("public", "unlisted"),
+    ("rumble", "schedule"): ("youtube", "now"),
+    ("rumble", "link"): ("hardlink", "copy"),
+    ("perform", "lipsync_engine"): ("latentsync", "sync"),
+    ("scoring", "third_party_audio"): ("reject", "allow_reactions"),
+    ("scoring", "audience_knowledge"): ("strangers", "fans"),
+}
+# CLIPPER_* variables that aren't settings.
+SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "CLIPPER_ALERT_WEBHOOK"}
+
+
+def check_choices(cfg: dict, where: str = "") -> None:
+    bad = [f"[{s}] {k} = {cfg[s][k]!r} (one of: {', '.join(c)})"
+           for (s, k), c in CHOICES.items() if s in cfg and cfg[s].get(k) not in c]
+    if bad:
+        raise ClipperError(f"{where}not a valid choice: " + "; ".join(bad))
+
+
+def problems(cfg: dict) -> list[str]:
+    """What load() warns about: settings clipper.toml or [shows.*] name that clipper doesn't
+    have (a typo, or a key since renamed), and CLIPPER_* variables that match no setting."""
+    root = _root(cfg)
+    out = list(root.get("_unknown", []))
+    names = {f"CLIPPER_{s}_{k}".upper() for s, v in _sections(root) for k in v}
+    out += [f"environment variable {n} matches no setting" for n in sorted(os.environ)
+            if n.startswith("CLIPPER_") and n not in names and n not in SPECIAL_ENV]
+    return out
 
 
 # Keys of a loaded config that aren't [section] tables: "shows" (the [shows.<key>]
@@ -730,6 +774,7 @@ def _load_local(path: Path, cfg: dict, base: Path) -> dict:
 
 def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, dict[str, Any]]:
     cfg = copy.deepcopy(DEFAULTS)
+    unknown: list[str] = []
     path = Path(path or os.environ.get("CLIPPER_CONFIG") or "clipper.toml")
     base = Path.cwd()
     shows: dict[str, dict] = {}
@@ -738,6 +783,10 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
         with open(path, "rb") as f:
             data = tomllib.load(f)
         shows = data.pop("shows", {})
+        unknown += _unknown(data, f"{path.name}: ")
+        for key, show in shows.items():
+            unknown += _unknown({s: v for s, v in show.items() if isinstance(v, dict)},
+                                f"{path.name} [shows.{key}]: ")
         for section, values in data.items():
             cfg.setdefault(section, {}).update(values)
     lpath = local_path(path)
@@ -758,7 +807,21 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
     cfg["_local"] = local
     cfg["_local_file"] = lpath if local else None
     cfg["_resolved"] = {}
+    cfg["_unknown"] = unknown
+    for msg in problems(cfg):  # a typo shouldn't stop the bot; `clipper doctor` fails on these
+        print(f"warning: {msg}", file=sys.stderr)
+    check_choices(cfg, f"{path.name}: ")
     return cfg
+
+
+def _unknown(data: dict, where: str) -> list[str]:
+    out = []
+    for section, values in data.items():
+        if section not in DEFAULTS:
+            out.append(f"{where}unknown section [{section}]")
+        elif isinstance(values, dict):
+            out += [f"{where}unknown setting [{section}] {k}" for k in values if k not in DEFAULTS[section]]
+    return out
 
 
 # ---------- shows ----------
@@ -821,6 +884,7 @@ def for_show(cfg: dict, key: str, channel: str = "") -> dict:
     out["kick"]["channel"] = channel or out["kick"]["channel"]
     out["show"] = {"key": key, "channel": out["kick"]["channel"]}
     out["_root"] = root
+    check_choices(out, f"[shows.{key}]: " if key else "")
     root["_resolved"][cache_key] = out
     return out
 
@@ -850,5 +914,6 @@ def for_stream(cfg: dict, sdir: Path) -> dict:
         res[section].update(copy.deepcopy(values))
     _apply_env(res, set(overrides), root["_local"])
     res["_root"] = root
+    check_choices(res, f"{path}: ")
     root["_resolved"][cache_key] = res
     return res
