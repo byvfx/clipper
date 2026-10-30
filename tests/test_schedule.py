@@ -149,3 +149,45 @@ def test_push_to_kitsu_writes_only_changed_slots(defaults, tmp_path, monkeypatch
     calls.clear()
     schedule.push_to_kitsu(cfg, items, placed, TZ, every=True)
     assert calls == [("get", "e1"), ("get", "e2"), ("get", "e3")]
+
+
+def test_budget_scales_with_length(defaults):
+    ssc = {**defaults["schedule"], "stream_budget": {"segment": 10, "short": 8}, "budget_hours": 8}
+    assert schedule.budget_for(ssc, 8.2) == {"segment": 10, "short": 8}
+    assert schedule.budget_for(ssc, 5.5) == {"segment": 7, "short": 6}
+    assert schedule.budget_for(ssc, 0.3) == {"segment": 1, "short": 1}
+    assert schedule.budget_for(defaults["schedule"], 8) == {}
+
+
+def test_budget_keeps_the_best(sc):
+    sc = {**sc, "short_times": ["10:00", "15:00", "20:00"]}
+    old = {"s/up": {"key": "s/up", "stream": "s", "kind": "short", "id": "s/up", "title": "",
+                    "file": "", "publish_at": datetime(2026, 11, 3, 10, 0, tzinfo=TZ).isoformat(),
+                    "source": "auto", "status": "uploaded"}}
+    shorts = [item("s/up", "short", score=1, budget=3), item("s/low", "short", score=2, budget=3),
+              item("s/mid", "short", score=5, budget=3), item("s/top", "short", score=9, budget=3)]
+    placed, skipped, _ = plan(shorts, sc, old)
+    assert set(placed) == {"s/up", "s/top", "s/mid"}       # the uploaded one counts first
+    assert skipped == {"s/low": "over the stream's short budget (3)"}
+
+
+def test_stale_items_drop_out(sc):
+    soon = NOW + timedelta(days=1, hours=8)                  # Tue 17:00
+    old = {"s/far": {"key": "s/far", "stream": "s", "kind": "segment", "id": "s/far", "title": "",
+                     "file": "", "publish_at": datetime(2026, 11, 5, 16, 0, tzinfo=TZ).isoformat(),
+                     "source": "auto", "status": "scheduled"}}
+    items = [item("s/far", expires=soon), item("s/next", expires=soon),
+             item("s/gone", expires=NOW - timedelta(days=1))]
+    _, skipped, when = plan(items, sc, old)
+    assert when == {"s/far": "Tue 16:00"}                  # its Thursday slot was past expiry
+    assert skipped["s/next"].startswith("stale: no free segment slot by 11-03 17:00")
+    assert skipped["s/gone"].startswith("stale:")
+
+
+def test_compilation_skips_segments_that_wont_go(sc):
+    sc = {**sc, "horizon_days": 5, "compilation_days": ["sat"]}
+    items = [item("s/a", score=5, budget=1), item("s/b", score=1, budget=1),
+             item("s/comp", "compilation", segment_keys=["s/a", "s/b"])]
+    _, skipped, when = plan(items, sc)
+    assert when["s/comp"] == "Sat 14:00"
+    assert skipped == {"s/b": "over the stream's segment budget (1)"}

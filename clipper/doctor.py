@@ -455,6 +455,8 @@ def check_narrate(cfg: dict) -> None:
 def check_online(cfg: dict, role: str) -> None:
     """That the services this role uses answer, in this order."""
     online_elevenlabs(cfg)
+    if role in ("all", "bot"):
+        online_youtube(cfg)
     if role != "nas":
         check_llm_online(cfg)
         online_anthropic(cfg)
@@ -492,6 +494,21 @@ def online_elevenlabs(cfg: dict) -> None:
                                    "" if v.ok else "clipper narrate voices --add OWNER:VOICE_ID")
     except requests.RequestException as e:  # unreachable is a finding, not a doctor crash
         fail("online", f"ElevenLabs didn't answer: {type(e).__name__}", "check the network")
+
+
+def online_youtube(cfg: dict) -> None:
+    """The YouTube sign-in still refreshes (the token file can be there long after the
+    sign-in stopped working)."""
+    if not cfg["paths"]["youtube_token"].exists():
+        return
+    try:
+        from . import youtube
+        youtube.credentials(cfg["paths"], force_refresh=True)
+        ok("online", "YouTube sign-in works (token refreshed)")
+    except ClipperError as e:
+        fail("online", str(e).split("; run:")[0], "clipper upload --sign-in; see SETUP.md (A new YouTube channel)")
+    except ImportError as e:
+        warn("online", f"YouTube sign-in not checked: {e}", "uv sync")
 
 
 def online_anthropic(cfg: dict) -> None:
