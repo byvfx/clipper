@@ -346,7 +346,7 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
     else:
         print(f"next: clipper cut {stream_dir.name} picks; clipper meta {stream_dir.name} --missing; "
               f"clipper thumbs {stream_dir.name} --missing; clipper shorts {stream_dir.name} "
-              f"--ids {','.join(ids)}; clipper review publish {stream_dir.name} --only shorts")
+              f"--items {','.join(ids)}; clipper review publish {stream_dir.name} --only shorts")
     return ids
 
 

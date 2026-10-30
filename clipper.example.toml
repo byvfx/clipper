@@ -61,7 +61,7 @@ extract_audio = true       # audio.wav, so `clipper signals` runs before transcr
 backfill_chat = true       # fill chat-socket outages from Kick's chat-history API
 backfill_min_s = 5
 chat_tail_s = 15           # chat kept past a part's end (chat trails the video)
-on_finish = ""             # shell command per finished recording: {stream_id} {stream_dir} {channel}
+on_finish = ""             # command per finished recording, run without a shell: {stream_id} {stream_dir} {channel}
 # Alerts (recording started/finished, video drops, stalls, crashes) always go to the log;
 # also to Discord via a webhook URL in $CLIPPER_ALERT_WEBHOOK, or the review bot's token
 # posting into alert_channel_id.
@@ -250,6 +250,8 @@ effort = "medium"
 prompt_version = "v3"          # prompts/meta_<v>.md and chapters_<v>.md (v2: better hashtag picks, v3: speaker tags)
 concurrency = 4                # model calls at once (the metadata draft and chapters)
 show_name = ""
+cast = []                      # per show: the show's own people by name, e.g. ["Andy", "PPP"]; the
+                               # thumbnail prompts name them where they would say "host"
 title_format = "{SHOW} | {title}"   # KINO CASINO | <title>; {show} keeps its case
 credit = "Clipped from {show}, streamed live on Kick {date}: https://kick.com/{channel}"
 chapters_min_s = 900           # segments at least this long get chapters from the transcript
@@ -266,7 +268,7 @@ srt_max_s = 6
 # a "text" / "highlight" / "position" there, then `clipper thumbs <id> --compose-only`.
 model = "claude-opus-5-5"
 effort = "medium"
-prompt_version = "v1"          # prompts/thumbnail_<version>.md
+prompt_version = "v2"          # prompts/thumbnail_<version>.md (v2: names [meta] cast, not "the hosts")
 concurrency = 4
 clip_frames = 8                # candidates per clip, around its hook and payoff
 even_frames = 5                # segments/compilations: evenly spaced candidates...
@@ -306,7 +308,7 @@ kitsu = true                   # attach to each item's Kitsu revision and set it
 # Thumbnail look: "classic" (frame + big text) or "enquirer" (1990s tabloid cover:
 # masthead, teaser band and boxes plugging the episode's other videos, big face, inset).
 style = "classic"
-enquirer_prompt_version = "v3"   # prompts/thumbnail_enquirer_<v>.md
+enquirer_prompt_version = "v4"   # prompts/thumbnail_enquirer_<v>.md (v4: names [meta] cast, not "a host")
 masthead = ""                  # empty = meta.show_name
 masthead_tagline = "LARGEST CIRCULATION OF ANY STREAM ON KICK"
 masthead_price = "$1.39"
@@ -317,6 +319,7 @@ teasers = true                 # the three side boxes; false = the photo fills t
 # headline font. condensed_variation: the named instance of a variable font.
 condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf",
                    "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                   "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf",
                    "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"]
 condensed_variation = "Bold Condensed"
 # Folder of head-and-shoulders photos, "<Person>.jpg", for people talked about but not on
@@ -498,8 +501,13 @@ short_times = ["10:00"]          # Shorts count toward max_per_day and min_gap_m
 max_per_day = 6                # YouTube upload quota guard, all kinds together
 min_gap_minutes = 90
 kick_first_hours = 24          # nothing goes out until this long after the stream ended
+# Most releases per stream by kind; the best go (Shorts by score, segments and compilations
+# by chat heat), the rest stay approved but unscheduled. {} = everything approved goes.
+stream_budget = {}             # e.g. { segment = 10, short = 8, compilation = 1 }
+budget_hours = 8.0             # a stream this long gets the whole budget; others scale with length
+stale_days = 0                 # an item not out this many days after its first allowed slot never goes; 0 = off
 clip_order = "score"           # score (best first) or stream (oldest stream first)
-mix_shows = true               # shows take turns for slots of each kind; false = one queue, oldest stream first
+mix_shows = true              # shows take turns for slots of each kind; false = one queue, oldest stream first
 # priority = true: set only in a stream's own streams/<id>/config.toml; its items go ahead of
 # every other stream's, freeing their automatic slots that are not uploaded yet.
 priority = false
@@ -605,6 +613,8 @@ ask_candidates = 80            # pooled windows the model reads (~25k tokens)
 subject = "jer"
 topics = ["The Quartering"]
 figures = ["Jeremy Hambly", "Jer", "The Quartering"]  # segments with one of the topics, or one of these figures
+title = "The Quartering Receipts"  # the video title's start; "" = "<subject> receipts"
+tags = ["The Quartering", "Jeremy Hambly", "receipts"]  # YouTube tags; the show's name is added
 per_story = 3
 model = "claude-sonnet-5-5"    # reads the segments, writes the stories and questions
 effort = "medium"
@@ -619,7 +629,7 @@ card_s = 3.5                   # story card before each story's receipts
 # clip, close), voiced at `receipts cut` with [narrate] voice_id and tts_settings.
 script_model = "claude-opus-5-5"
 script_effort = "medium"
-script_prompt_version = "v1"   # prompts/receipts_script_<v>.md
+script_prompt_version = "v2"   # prompts/receipts_script_<v>.md (v2: no "host")
 vo_pad_s = 0.6                 # card time after a read ends
 lufs = -16                     # every card and clip normalized to this
 # yt-dlp format per clip: HLS first, where a section is a few segments (a DASH section
@@ -675,8 +685,8 @@ price = "$1.39 US"             # on the cover's barcode block
 # for the masthead and barcode.
 headline_fonts = ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
                   "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf"]
-condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/RobotoCondensed-Bold.ttf",
-                   "/Library/Fonts/RobotoCondensed-Bold.ttf"]
+condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                   "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf", "/Library/Fonts/RobotoCondensed-Bold.ttf"]
 serif_italic_fonts = ["C:/Windows/Fonts/georgiai.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Italic.ttf",
                       "/Library/Fonts/Georgia Italic.ttf", "/System/Library/Fonts/Supplemental/Georgia Italic.ttf"]
 serif_bold_italic_fonts = ["C:/Windows/Fonts/georgiaz.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Bold_Italic.ttf",
@@ -700,6 +710,7 @@ channels = ["kinocasinogaming"]
 
 [shows.kino.meta]
 show_name = "Kino Casino"
+cast = ["Andy", "PPP"]
 
 [shows.kino.scoring]
 stream_context = """The show is called Kino Casino; "Welcome to the Kino Casino" is its \

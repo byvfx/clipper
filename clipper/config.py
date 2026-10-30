@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "subject": "jer",         # the archive subject (paths.archive/<subject>)
         "topics": ["The Quartering"],  # segments with one of these topics...
         "figures": ["Jeremy Hambly", "Jer", "The Quartering"],  # ...or one of these figures
+        # These two go with the subject: the video title's start ("" = "<subject> receipts")
+        # and its YouTube tags (the show's name is added).
+        "title": "The Quartering Receipts",
+        "tags": ["The Quartering", "Jeremy Hambly", "receipts"],
         "model": "claude-sonnet-5-5",  # reads the segments, writes the stories and questions
         "effort": "medium",
         "prompt_version": "v2",   # prompts/receipts_stories_<v>.md
@@ -112,7 +117,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # clip, close), voiced by `cut` with [narrate] voice_id and tts_settings (ElevenLabs).
         "script_model": "claude-opus-5-5",
         "script_effort": "medium",
-        "script_prompt_version": "v1",  # prompts/receipts_script_<v>.md
+        "script_prompt_version": "v2",  # prompts/receipts_script_<v>.md (v2: no "host")
         "vo_pad_s": 0.6,          # card time after a read ends
         "lufs": -16,              # every card and clip normalized to this (ffmpeg loudnorm)
         "max_stories": 6,
@@ -173,8 +178,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # a bold sans for the masthead and barcode.
         "headline_fonts": ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
                            "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf"],
-        "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/RobotoCondensed-Bold.ttf",
-                            "/Library/Fonts/RobotoCondensed-Bold.ttf"],
+        "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                            "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf", "/Library/Fonts/RobotoCondensed-Bold.ttf"],
         "serif_italic_fonts": ["C:/Windows/Fonts/georgiai.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Italic.ttf",
                                "/Library/Fonts/Georgia Italic.ttf", "/System/Library/Fonts/Supplemental/Georgia Italic.ttf"],
         "serif_bold_italic_fonts": ["C:/Windows/Fonts/georgiaz.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Bold_Italic.ttf",
@@ -222,7 +227,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "part_links": False,      # segments also link the stream's previous and next segment
         "previous_part": "Previous part: {url}",
         "next_part": "Next part: {url}",
-        "link_updates_per_run": 20,  # description updates per run (50 quota units each)
+        "link_updates_per_run": 20,  # description updates per run (~51 quota units each: a read and a write)
     },
     "kick": {
         "channel": "",
@@ -282,8 +287,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "backfill_chat": True,    # fill chat-socket outages from the chat-history API
         "backfill_min_s": 5,      # ignore outages shorter than this
         "chat_tail_s": 15,        # keep chat this long past a part's end (chat trails video)
-        "on_finish": "",          # shell command after a recording is finalized;
-                                  # {stream_id} {stream_dir} {channel}
+        "on_finish": "",          # command after a recording is finalized (no shell;
+                                  # split like one): {stream_id} {stream_dir} {channel}
         "alert_webhook_env": "CLIPPER_ALERT_WEBHOOK",  # env var with a Discord webhook URL
         "alert_channel_id": "",   # or post alerts with the review bot's token here
         "alert_mention": "",      # prepended to warnings, e.g. "<@123456789012345678>"
@@ -358,6 +363,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "prompt_version": "v3",   # prompts/meta_<v>.md, chapters_<v>.md (v3: speaker tags, #52)
         "concurrency": 4,
         "show_name": "",
+        "cast": [],               # per show: its own people by name, e.g. ["Andy", "PPP"]; prompts name them, never "host"
         # Upload titles: {title}, {show} or {SHOW} (upper case). Not applied to a title
         # it would push past 100 characters, or one already starting with the show name.
         "title_format": "{title}",
@@ -374,7 +380,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # <video>.jpg beside each video (uploaded by `clipper upload`, shown in Kitsu).
         "model": "claude-opus-5-5",
         "effort": "medium",
-        "prompt_version": "v1",   # prompts/thumbnail_<v>.md
+        "prompt_version": "v2",   # prompts/thumbnail_<v>.md (v2: names [meta] cast, not "the hosts")
         "concurrency": 4,
         "clip_frames": 8,         # candidates per clip, around its hook and payoff
         "even_frames": 5,         # segments/compilations: evenly spaced candidates...
@@ -412,7 +418,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # style = "enquirer": a 1990s supermarket-tabloid cover (masthead, teaser band and
         # boxes plugging the episode's other videos, big face, yellow headline, inset).
         "style": "classic",       # classic | enquirer
-        "enquirer_prompt_version": "v3",  # prompts/thumbnail_enquirer_<v>.md
+        "enquirer_prompt_version": "v4",  # prompts/thumbnail_enquirer_<v>.md (v4: names [meta] cast, not "a host")
         "masthead": "",           # empty = meta.show_name
         "masthead_tagline": "LARGEST CIRCULATION OF ANY STREAM ON KICK",
         "masthead_price": "$1.39",
@@ -421,6 +427,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "teasers": True,          # the three side boxes; false = the photo fills the left (one big moment)
         "condensed_fonts": ["C:/Windows/Fonts/bahnschrift.ttf",
                             "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                            "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf",
                             "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"],
         "condensed_variation": "Bold Condensed",  # named instance for variable fonts
         # Enquirer covers: a folder of head-and-shoulders photos named "<Person>.jpg" (or
@@ -576,6 +583,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_per_day": 6,         # YouTube upload quota guard, across all kinds
         "min_gap_minutes": 90,    # between any two releases
         "kick_first_hours": 24,   # nothing goes out until this long after the stream ended
+        "stream_budget": {},      # most releases per stream by kind, e.g. {segment = 10, short = 8}:
+                                  # the best go (Shorts by score, segments by chat heat); {} = all
+        "budget_hours": 8.0,      # a stream this long gets the whole budget; others scale with length
+        "stale_days": 0,          # an item not out this many days after its first allowed slot
+                                  # never goes (keeps releases current); 0 = off
         "clip_order": "score",    # score (best first) or stream (oldest stream first)
         "mix_shows": True,        # shows take turns in each kind's queue; false = one queue
         "priority": False,        # set in a stream's config.toml: its items go ahead of every
@@ -666,6 +678,8 @@ def _coerce(raw: str, like: Any, name: str = "") -> Any:
             return json.loads(raw) if raw.startswith("[") else raw.replace(",", " ").split()
         if isinstance(like, dict):
             return json.loads(raw)
+        if like is None and raw.strip().lower() in ("true", "false"):  # e.g. [preshow] teasers (unset = inherit)
+            return raw.strip().lower() == "true"
     except ValueError as e:
         raise ClipperError(f"{name or 'environment variable'}={raw!r}: not a {type(like).__name__} ({e})") from None
     return raw
@@ -675,6 +689,49 @@ def stream_dir(cfg: dict, ref: str) -> Path:
     """A stream id under paths.streams, or a stream directory."""
     p = Path(ref)
     return p if p.is_dir() else cfg["paths"]["streams"] / ref
+
+
+# Settings that take one of a fixed set of values. Anything else would quietly do the wrong
+# thing (B7: [bleep] mode = "Bleep" meant no bleeping), so loading refuses it.
+CHOICES = {
+    ("bleep", "mode"): ("off", "bleep", "mute"),
+    ("cut", "backend"): ("local", "nas"),
+    ("transcribe", "backend"): ("whisperx", "mlx", "modal"),
+    ("transcribe", "modal_audio"): ("flac", "opus"),
+    ("thumbnail", "style"): ("classic", "enquirer"),
+    ("shorts", "window"): ("short", "clip"),
+    ("schedule", "clip_order"): ("score", "stream"),
+    ("preshow", "publish"): ("asap", "slots"),
+    ("record", "container"): ("mkv", "ts"),
+    ("rumble", "visibility"): ("public", "unlisted"),
+    ("rumble", "schedule"): ("youtube", "now"),
+    ("rumble", "link"): ("hardlink", "copy"),
+    ("perform", "lipsync_engine"): ("latentsync", "sync"),
+    ("scoring", "third_party_audio"): ("reject", "allow_reactions"),
+    ("scoring", "audience_knowledge"): ("strangers", "fans"),
+}
+# CLIPPER_* variables that aren't settings.
+SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "CLIPPER_ALERT_WEBHOOK",
+               "CLIPPER_DATA", "CLIPPER_TOML"}  # the last two: the NAS recorder's deploy (deploy/record)
+SHOW_KEYS = ("channel", "channels")  # a [shows.<key>] table's own settings; the rest are sections
+
+
+def check_choices(cfg: dict, where: str = "") -> None:
+    bad = [f"[{s}] {k} = {cfg[s][k]!r} (one of: {', '.join(c)})"
+           for (s, k), c in CHOICES.items() if s in cfg and cfg[s].get(k) not in c]
+    if bad:
+        raise ClipperError(f"{where}not a valid choice: " + "; ".join(bad))
+
+
+def problems(cfg: dict) -> list[str]:
+    """What load() warns about: settings clipper.toml or [shows.*] name that clipper doesn't
+    have (a typo, or a key since renamed), and CLIPPER_* variables that match no setting."""
+    root = _root(cfg)
+    out = list(root.get("_unknown", []))
+    names = {f"CLIPPER_{s}_{k}".upper() for s, v in _sections(root) for k in v}
+    out += [f"environment variable {n} matches no setting" for n in sorted(os.environ)
+            if n.startswith("CLIPPER_") and n not in names and n not in SPECIAL_ENV]
+    return out
 
 
 # Keys of a loaded config that aren't [section] tables: "shows" (the [shows.<key>]
@@ -734,6 +791,7 @@ def _load_local(path: Path, cfg: dict, base: Path) -> dict:
 
 def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, dict[str, Any]]:
     cfg = copy.deepcopy(DEFAULTS)
+    unknown: list[str] = []
     path = Path(path or os.environ.get("CLIPPER_CONFIG") or "clipper.toml")
     base = Path.cwd()
     shows: dict[str, dict] = {}
@@ -742,6 +800,12 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
         with open(path, "rb") as f:
             data = tomllib.load(f)
         shows = data.pop("shows", {})
+        unknown += _unknown(data, f"{path.name}: ")
+        for key, show in shows.items():
+            unknown += _unknown({s: v for s, v in show.items() if isinstance(v, dict)},
+                                f"{path.name} [shows.{key}]: ")
+            unknown += [f"{path.name} [shows.{key}]: unknown setting {s} (a show has {' and '.join(SHOW_KEYS)})"
+                        for s, v in show.items() if not isinstance(v, dict) and s not in SHOW_KEYS]
         for section, values in data.items():
             cfg.setdefault(section, {}).update(values)
     lpath = local_path(path)
@@ -762,7 +826,21 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
     cfg["_local"] = local
     cfg["_local_file"] = lpath if local else None
     cfg["_resolved"] = {}
+    cfg["_unknown"] = unknown
+    for msg in problems(cfg):  # a typo shouldn't stop the bot; `clipper doctor` fails on these
+        print(f"warning: {msg}", file=sys.stderr)
+    check_choices(cfg, f"{path.name}: ")
     return cfg
+
+
+def _unknown(data: dict, where: str) -> list[str]:
+    out = []
+    for section, values in data.items():
+        if section not in DEFAULTS:
+            out.append(f"{where}unknown section [{section}]")
+        elif isinstance(values, dict):
+            out += [f"{where}unknown setting [{section}] {k}" for k in values if k not in DEFAULTS[section]]
+    return out
 
 
 # ---------- shows ----------
@@ -825,6 +903,7 @@ def for_show(cfg: dict, key: str, channel: str = "") -> dict:
     out["kick"]["channel"] = channel or out["kick"]["channel"]
     out["show"] = {"key": key, "channel": out["kick"]["channel"]}
     out["_root"] = root
+    check_choices(out, f"[shows.{key}]: " if key else "")
     root["_resolved"][cache_key] = out
     return out
 
@@ -832,17 +911,64 @@ def for_show(cfg: dict, key: str, channel: str = "") -> dict:
 def for_stream(cfg: dict, sdir: Path) -> dict:
     """The config for this stream's show, picked by the Kick channel in its meta.json, then
     the stream's own streams/<id>/config.toml if it has one (a one-off night: more picks, a
-    big story in stream_context, schedule priority). Env vars still win."""
-    sdir = Path(sdir)
+    big story in stream_context, schedule priority). Env vars still win. A config from
+    pin_show (`clipper --show <key>`) keeps that show instead of the channel's (B4)."""
+    res = _for_stream(cfg, Path(sdir))
+    return {**res, "_pinned": True} if cfg.get("_pinned") else res
+
+
+def explain(cfg: dict, name: str, sdir: Path | None = None) -> dict:
+    """Where "section.key" comes from: every layer that sets it, in the order they apply
+    (default < clipper.toml < show < stream config.toml < clipper.local.toml < env), and the
+    value that wins, for this stream (or the config's show, or the base config)."""
+    section, _, key = name.partition(".")
+    if section not in DEFAULTS or key not in DEFAULTS[section]:
+        import difflib
+        near = difflib.get_close_matches(name, [f"{s}.{k}" for s, v in DEFAULTS.items() for k in v], 4, 0.75)
+        raise ClipperError(f"no setting {name!r}" + (f"; did you mean {', '.join(near)}?" if near else ""))
+    root = _root(cfg)
+    resolved = for_stream(cfg, sdir) if sdir else cfg
+    show = resolved["show"]["key"]
+    layers = [("default", DEFAULTS[section][key])]
+    if root.get("_file"):
+        data = tomllib.loads(Path(root["_file"]).read_text(encoding="utf-8"))
+        if key in data.get(section, {}):
+            layers.append((root["_file"].name, data[section][key]))
+    if show and key in root["shows"][show]["overrides"].get(section, {}):
+        layers.append((f"[shows.{show}]", root["shows"][show]["overrides"][section][key]))
+    if sdir and (Path(sdir) / STREAM_CONFIG).exists():
+        data = tomllib.loads((Path(sdir) / STREAM_CONFIG).read_text(encoding="utf-8"))
+        if key in data.get(section, {}):
+            layers.append((str(Path(sdir) / STREAM_CONFIG), data[section][key]))
+    if key in root["_local"].get(section, {}):
+        layers.append((LOCAL_CONFIG, root["_local"][section][key]))
+    env = f"CLIPPER_{section}_{key}".upper()
+    if env in os.environ:
+        layers.append((f"${env}", os.environ[env]))
+    return {"name": name, "value": resolved[section][key], "show": show, "layers": layers}
+
+
+def show_args(cfg: dict) -> list[str]:
+    """`--show <key>` for a clipper child process when this config is pinned to a show."""
+    return ["--show", cfg["show"]["key"]] if cfg.get("_pinned") else []
+
+
+def pin_show(cfg: dict, key: str) -> dict:
+    """Show `key`'s config, kept by for_stream for any stream (`clipper --show <key>`)."""
+    return {**for_show(cfg, key), "_pinned": True}
+
+
+def _for_stream(cfg: dict, sdir: Path) -> dict:
     channel = stream_channel(sdir)
-    out = for_show(cfg, show_of_channel(cfg, channel), channel)
+    key = cfg["show"]["key"] if cfg.get("_pinned") else show_of_channel(cfg, channel)
+    out = for_show(cfg, key, channel)
     path = sdir / STREAM_CONFIG
     try:
         mtime = path.stat().st_mtime
     except OSError:
         return out
     root = _root(cfg)
-    cache_key = ("stream", str(sdir), channel, mtime)
+    cache_key = ("stream", str(sdir), key, channel, mtime)
     if cache_key in root["_resolved"]:
         return root["_resolved"][cache_key]
     overrides = tomllib.loads(path.read_text(encoding="utf-8"))
@@ -854,5 +980,6 @@ def for_stream(cfg: dict, sdir: Path) -> dict:
         res[section].update(copy.deepcopy(values))
     _apply_env(res, set(overrides), root["_local"])
     res["_root"] = root
+    check_choices(res, f"{path}: ")
     root["_resolved"][cache_key] = res
     return res

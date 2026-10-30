@@ -36,7 +36,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import preshow, stages
-from .config import for_stream, show_of_channel
+from .config import for_stream, show_args, show_of_channel
 
 log = logging.getLogger("clipper.worker")
 
@@ -235,7 +235,7 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
             cmd = [sys.executable, "-m", "clipper.cli"]
             if config_path:
                 cmd += ["--config", str(config_path)]
-            cmd += stage_args(stage, str(stream_dir), wc)
+            cmd += show_args(cfg) + stage_args(stage, str(stream_dir), wc)  # --show carries over
             st = run.data["stages"][stage] = {"status": "running", "started": now_iso(),
                                               "log": log_path.name}
             run.save()
@@ -345,10 +345,9 @@ def ready_text(cfg: dict, d: Path, what: str) -> str:
 
 def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None:
     from . import alerts
-    from .record import Alerts
 
     wc = cfg["worker"]
-    alert = Alerts(cfg)
+    alert = alerts.Alerts(cfg)
     root: Path = cfg["paths"]["streams"]
     log.info("worker on %s: watching %s every %ss", socket.gethostname(), root, wc["poll_s"])
 
