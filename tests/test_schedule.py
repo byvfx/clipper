@@ -89,3 +89,56 @@ def test_uploaded_entries_stay(sc):
     assert placed["s/up"]["video_id"] == "abc"
     assert "no longer approved" in placed["s/up"]["note"]
     assert when["s/new"] == "Wed 16:00"   # Tuesday's slot is the uploaded one's
+
+
+def test_needs_push():
+    last = {"entity_id": "e1", "value": "2026-11-03 16:00", "over": ""}
+    assert not schedule.needs_push("2026-11-03 16:00", "2026-11-03 16:00", None, "e1")  # synced so
+    assert schedule.needs_push("2026-11-03 16:00", "", None, "e1")        # new slot
+    assert schedule.needs_push("", None, None, "e1")                      # never read
+    # Written by the last push, and no sync has seen the column since: no call.
+    assert not schedule.needs_push("2026-11-03 16:00", "", last, "e1")
+    assert schedule.needs_push("2026-11-04 16:00", "", last, "e1")        # the slot moved again
+    assert schedule.needs_push("2026-11-03 16:00", "", last, "e2")        # another entity
+    # A sync read something else there after that push (typed in Kitsu): put it right.
+    assert schedule.needs_push("2026-11-03 16:00", "2026-11-09 10:00", last, "e1")
+
+
+def test_push_to_kitsu_writes_only_changed_slots(defaults, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from clipper import jsonstate, review
+
+    data = {"e1": {"f_sched": ""}, "e2": {"f_sched": "2026-11-03 16:00"}, "e3": {"f_sched": "x"}}
+    calls = []
+    shot = SimpleNamespace(
+        get_shot=lambda eid: calls.append(("get", eid)) or {"data": dict(data[eid])},
+        update_shot_data=lambda eid, d: calls.append(("put", eid, d)) or data[eid].update(d))
+    gazu = SimpleNamespace(shot=shot, project=SimpleNamespace(get_project_by_name=lambda n: {}))
+    monkeypatch.setattr(review, "connect", lambda rc: gazu)
+    monkeypatch.setattr(review, "column_fields", lambda g, p: {("Shot", "Scheduled"): "f_sched"})
+    cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path / "streams",
+                                 "schedule": tmp_path / "schedule.json"}}
+    sdir = tmp_path / "streams" / "s"
+    sdir.mkdir(parents=True)
+    jsonstate.write(sdir / "review_state.json", {
+        k: {"kind": "pick", "entity_id": e} for k, e in (("a", "e1"), ("b", "e2"), ("c", "e3"))})
+    jsonstate.write(sdir / "review.json", {
+        "a": {"fields": {"Scheduled": None}}, "b": {"fields": {"Scheduled": "2026-11-03 16:00"}},
+        "c": {"fields": {"Scheduled": ""}}})   # c was typed into Kitsu after the last sync
+    items = [{"key": f"s/{k}", "entity": ("Shot", e)} for k, e in (("a", "e1"), ("b", "e2"))]
+    placed = {"s/a": {"publish_at": "2026-11-04T16:00:00-08:00"},
+              "s/b": {"publish_at": "2026-11-03T16:00:00-08:00"}}
+
+    schedule.push_to_kitsu(cfg, items, placed, TZ)
+    assert calls == [("get", "e1"), ("put", "e1", {"f_sched": "2026-11-04 16:00"})]
+    calls.clear()
+    schedule.push_to_kitsu(cfg, items, placed, TZ)   # review.json not synced since: no calls
+    assert calls == []
+    jsonstate.write(sdir / "review.json", {**jsonstate.load(sdir / "review.json"),
+                                           "c": {"fields": {"Scheduled": "x"}}})  # a sync saw it
+    schedule.push_to_kitsu(cfg, items, placed, TZ)
+    assert calls == [("get", "e3"), ("put", "e3", {"f_sched": ""})]
+    calls.clear()
+    schedule.push_to_kitsu(cfg, items, placed, TZ, every=True)
+    assert calls == [("get", "e1"), ("get", "e2"), ("get", "e3")]

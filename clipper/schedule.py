@@ -144,9 +144,10 @@ def take_turns(items: list[dict]) -> list[dict]:
 
 
 def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: bool = False,
-        reshuffle: bool = False) -> dict:
+        reshuffle: bool = False, kitsu_all: bool = False) -> dict:
     """reshuffle: place every automatic, not-yet-uploaded entry afresh instead of keeping
-    its slot (pinned, pre-show and uploaded entries stay)."""
+    its slot (pinned, pre-show and uploaded entries stay). kitsu_all: read every item's
+    Scheduled column in Kitsu, not only the ones whose slot changed (push_to_kitsu)."""
     sc = cfg["schedule"]
     tz = ZoneInfo(sc["timezone"])
     streams_dir: Path = cfg["paths"]["streams"]
@@ -173,7 +174,7 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
         if not dry_run:
             jsonstate.write(out_path, result)
     if not dry_run and write_kitsu:
-        push_to_kitsu(cfg, items, placed, tz)
+        push_to_kitsu(cfg, items, placed, tz, every=kitsu_all)
 
     print(f"{len(entries)} scheduled, {len(skipped)} not scheduled -> {out_path}"
           + (" (dry run)" if dry_run else ""))
@@ -377,19 +378,52 @@ def show(cfg: dict, days: int = 7) -> list[dict]:
     return entries
 
 
-def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo) -> None:
-    """Write each item's slot to its Kitsu "Scheduled" column (blank when unscheduled)."""
+def needs_push(value: str, seen: str | None, last: dict | None, eid: str) -> bool:
+    """Whether an item's Scheduled column has to be read and maybe written. seen: the
+    column as the last sync read it into review.json (None: never read); last: what an
+    earlier push wrote there ({"entity_id", "value", "over": seen at that time})."""
+    if seen is not None and seen == value:
+        return False
+    # Written by us since that sync, and no sync has seen anything else there since.
+    return not (last and last.get("entity_id") == eid and last.get("value") == value
+                and last.get("over") == seen)
+
+
+def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo,
+                  every: bool = False) -> None:
+    """Write each item's slot to its Kitsu "Scheduled" column (blank when unscheduled).
+    Only the slots that changed: an item whose column review.json (the last sync) already
+    shows with its slot, or that the last push wrote and no sync has seen changed since
+    (schedule_kitsu.json, beside schedule.json), needs no Kitsu call. A value someone
+    typed into the column is put right once a sync has read it. every: read every
+    item's column from Kitsu and write the ones that differ."""
     from . import review
     from .config import for_stream
 
-    gazu = review.connect(cfg["review"])
     by_entity = {it["entity"]: it for it in items if it["entity"]}
     # Also clear entities that were scheduled before but are no longer eligible.
     streams_dir: Path = cfg["paths"]["streams"]
+    seen: dict[str, str] = {}  # item key -> Scheduled as the last sync read it
     for state_path in streams_dir.glob("*/review_state.json"):
+        sname = state_path.parent.name
         for key, st in jsonstate.load(state_path).items():
             ent = (ENTITY[st["kind"]], st["entity_id"])
-            by_entity.setdefault(ent, {"key": f"{state_path.parent.name}/{key}", "entity": ent})
+            by_entity.setdefault(ent, {"key": f"{sname}/{key}", "entity": ent})
+        for key, r in jsonstate.read(state_path.with_name("review.json"), {}).items():
+            if "Scheduled" in (r.get("fields") or {}):
+                seen[f"{sname}/{key}"] = r["fields"]["Scheduled"] or ""
+    memo_path = cfg["paths"]["schedule"].with_name("schedule_kitsu.json")
+    memo = jsonstate.read(memo_path, {})
+    todo = []
+    for (etype, eid), it in by_entity.items():
+        e = placed.get(it["key"])
+        value = (f"{datetime.fromisoformat(e['publish_at']).astimezone(tz):%Y-%m-%d %H:%M}"
+                 if e else "")
+        if every or needs_push(value, seen.get(it["key"]), memo.get(it["key"]), eid):
+            todo.append((etype, eid, it["key"], value))
+    if not todo:
+        return
+    gazu = review.connect(cfg["review"])
     # Column ids differ per Kitsu production, and each show has its own production.
     fmaps: dict[str, dict] = {}
 
@@ -399,12 +433,23 @@ def push_to_kitsu(cfg: dict, items: list[dict], placed: dict, tz: ZoneInfo) -> N
             fmaps[name] = review.column_fields(gazu, gazu.project.get_project_by_name(name))
         return fmaps[name]
 
-    for (etype, eid), it in by_entity.items():
-        field = fmap_of(split_key(it["key"])[0]).get((etype, "Scheduled"))
-        if not field:
-            continue
-        e = placed.get(it["key"])
-        value = (f"{datetime.fromisoformat(e['publish_at']).astimezone(tz):%Y-%m-%d %H:%M}"
-                 if e else "")
-        if (review.entity_data(gazu, etype, eid).get(field) or "") != value:
-            review.write_data(gazu, etype, eid, {field: value})
+    done: dict[str, dict] = {}  # what the column now shows, for the next run
+    wrote = 0
+    try:
+        for etype, eid, key, value in todo:
+            field = fmap_of(split_key(key)[0]).get((etype, "Scheduled"))
+            if not field:
+                continue
+            if (review.entity_data(gazu, etype, eid).get(field) or "") != value:
+                review.write_data(gazu, etype, eid, {field: value})
+                wrote += 1
+            done[key] = {"entity_id": eid, "value": value, "over": seen.get(key)}
+    finally:
+        if done:  # kept even when a call failed part way, so those aren't read again
+            keys = {it["key"] for it in by_entity.values()}
+            with jsonstate.update(memo_path, {}) as m:
+                m.update(done)
+                for k in [k for k in m if k not in keys]:  # no longer in review
+                    del m[k]
+        print(f"Kitsu Scheduled: {wrote} written, {len(done)} read, "
+              f"{len(by_entity) - len(todo)} unchanged since the last sync or push")
