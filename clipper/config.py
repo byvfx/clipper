@@ -282,8 +282,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "backfill_chat": True,    # fill chat-socket outages from the chat-history API
         "backfill_min_s": 5,      # ignore outages shorter than this
         "chat_tail_s": 15,        # keep chat this long past a part's end (chat trails video)
-        "on_finish": "",          # shell command after a recording is finalized;
-                                  # {stream_id} {stream_dir} {channel}
+        "on_finish": "",          # command after a recording is finalized (no shell;
+                                  # split like one): {stream_id} {stream_dir} {channel}
         "alert_webhook_env": "CLIPPER_ALERT_WEBHOOK",  # env var with a Discord webhook URL
         "alert_channel_id": "",   # or post alerts with the review bot's token here
         "alert_mention": "",      # prepended to warnings, e.g. "<@123456789012345678>"

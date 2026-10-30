@@ -258,7 +258,7 @@ def post_status(paths: dict, publish_id: str) -> dict:
 
 
 def notify_caption(cfg: dict, e: dict, text: str) -> None:
-    from .record import Alerts
+    from .alerts import Alerts
 
     channel = cfg["tiktok"]["caption_channel_id"]
     alerts = Alerts({**cfg, "record": {**cfg["record"], "alert_mention": "",

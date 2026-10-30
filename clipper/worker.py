@@ -345,10 +345,9 @@ def ready_text(cfg: dict, d: Path, what: str) -> str:
 
 def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None:
     from . import alerts
-    from .record import Alerts
 
     wc = cfg["worker"]
-    alert = Alerts(cfg)
+    alert = alerts.Alerts(cfg)
     root: Path = cfg["paths"]["streams"]
     log.info("worker on %s: watching %s every %ss", socket.gethostname(), root, wc["poll_s"])
 

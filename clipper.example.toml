@@ -61,7 +61,7 @@ extract_audio = true       # audio.wav, so `clipper signals` runs before transcr
 backfill_chat = true       # fill chat-socket outages from Kick's chat-history API
 backfill_min_s = 5
 chat_tail_s = 15           # chat kept past a part's end (chat trails the video)
-on_finish = ""             # shell command per finished recording: {stream_id} {stream_dir} {channel}
+on_finish = ""             # command per finished recording, run without a shell: {stream_id} {stream_dir} {channel}
 # Alerts (recording started/finished, video drops, stalls, crashes) always go to the log;
 # also to Discord via a webhook URL in $CLIPPER_ALERT_WEBHOOK, or the review bot's token
 # posting into alert_channel_id.
