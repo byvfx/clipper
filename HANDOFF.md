@@ -123,11 +123,6 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
   the war room's Review queue shows the same). Approved-and-scheduled Shorts that a scene re-render would change (v06_w11, v03_w06, v03_t23) are
   left alone until the user says.
-- Review today's Kino pre-show (yt-hB61VKYaOQ0, 10/28) in Kitsu/Discord, rev 3 (whole video, original
-  text, single-story cover "ANDY STUNNED BY H3!"); it publishes asap once approved. Rev 2 was the
-  retake reading "single issue" as one topic (cut to 63 s); undone by hand with retake.apply.
-  (Stuck 12:53-15:00 on stale cookies; fresh export copied over secrets/youtube_cookies.txt, old one in
-  youtube_cookies.before_2026-10-28.txt. A new export saved under another name isn't read: copy it over.)
 - Content ID: all five pre-show/one-off uploads checked in Studio 2026-10-28, no claims, no region
   blocks. Keep checking new ones (Studio → video → Copyright; the Data API only sees region blocks).
 - Shorts "related video" (Studio only, the API can't): set on all 19 uploaded Shorts whose segment was
@@ -141,7 +136,7 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 - Old approved Short titles/descriptions that still say "hosts" (Kitsu text; uploads go as written).
   A war-room find-and-replace dry run found 14; not applied.
 - Decisions on #66 (transcript-framed edits): which item kinds, replace or sit beside the plain cut,
-  sound effects, order after #67. #27 TikTok content rules. Sloth Beat handle check (@slothbeat).
+  sound effects, order after #67. Sloth Beat handle check (@slothbeat).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
@@ -159,9 +154,11 @@ changed schedule values only (`schedule --kitsu-all` for everything), doctor che
 **Held: #101 (weekly split, worktree `C:\clipper-weekly`)**: merge only after Saturday 2026-10-31's
 issue is out (the user runs `clipper weekly` from C:\clipper); it merged cleanly with main on 10-30.
 Then remove that worktree (the other audit worktrees are already gone).
-Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #77 (M12 quota tracking, L6, L10,
-L11, L13, L16-L18, repo hygiene), #72 (provider side-by-side, `clipper edit`), #50 (revenue once
-monetized), #42 (closes after the first check-in). Roadmaps, issues only: NAS hub #14 (#9 war room on
+Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (provider side-by-side,
+`clipper edit`), #50 (revenue once monetized), #42 (closes after the first check-in). #77 (reopened
+10-30 after bea8641's "fix #77" closed it): M12 (quota tracking, backfill cap), L11 (worker heartbeat thread
+dies silently), L13 (pick keys renumber), L16 (Shorts length bounds), L18 (captions backfill), CRLF renormalize.
+Write "#77 L6" rather than "fix #77" in commit messages, or GitHub closes it again. Roadmaps, issues only: NAS hub #14 (#9 war room on
 the NAS, #12 worker/bot on the NAS, #64 single-owner daemon `clipper serve`, #65 Claude Code on the NAS),
 transcript-framed edits #66 (#67-#71), YouTube Posts magazine #30 (#32-#38), cast library #41,
 lore-order playlists #43, archive fun #63, Udder Truth #58/#59/#60, Modal ideas #53-#56.
@@ -252,7 +249,8 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 - YouTube upload sign-in lasts 7 days while the OAuth app is in Testing (published 2026-10-30; tokens
   from before that keep the 7-day limit). `clipper doctor` (online) refreshes it to test it; `upload --sign-in` keeps the analytics scope now.
 - YouTube bot-checks this IP for yt-dlp; pre-show/one-off grabs retry signed in with
-  secrets/youtube_cookies.txt, which browsers rotate: re-export when "cookies are no longer valid".
+  secrets/youtube_cookies.txt, which browsers rotate: re-export when "cookies are no longer valid", and
+  copy the export over that file (one saved under another name isn't read).
 - A cut killed half way can leave `clipper-cut-<id>` running on the NAS: `ssh nas docker rm -f clipper-cut-<id>`.
 - `uv sync` can't replace the running clipper.exe while the bot is up (`uv pip install` instead, and
   include `--extra modal` later). yt-dlp needs deno for YouTube.
