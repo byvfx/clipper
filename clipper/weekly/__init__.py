@@ -55,7 +55,6 @@ from pathlib import Path
 from ..errors import ClipperError
 from . import draft, gather, render, style
 
-
 # ---------- entry ----------
 
 def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool = False,
