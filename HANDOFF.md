@@ -120,9 +120,8 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 ## Waiting on the user
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
-- Re-approve in Kitsu (re-rendered revisions, pending): several Shorts after the scene-cut and
-  hosts-only re-renders, the kick-132733064 clock-fix republish, kick-131151926's recut items.
-  Approved-and-scheduled Shorts that a scene re-render would change (v06_w11, v03_w06, v03_t23) are
+- Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
+  the war room's Review queue shows the same). Approved-and-scheduled Shorts that a scene re-render would change (v06_w11, v03_w06, v03_t23) are
   left alone until the user says.
 - Review today's Kino pre-show (yt-hB61VKYaOQ0, 10/28) in Kitsu/Discord, rev 3 (whole video, original
   text, single-story cover "ANDY STUNNED BY H3!"); it publishes asap once approved. Rev 2 was the
