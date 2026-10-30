@@ -22,6 +22,14 @@ def read_sections(path: Path, prefix: str, fmt: dict) -> dict[str, str]:
     return out
 
 
+def cast_names(cfg: dict) -> str:
+    """{cast}: the show's own people by name, "Andy or PPP" ([meta] cast; "" when unset), so
+    prompts never have to say "host" (house style bans it in what viewers see, and the model
+    copies it). {cast_note} is the same as an aside, " (Andy or PPP)", or nothing."""
+    cast = [c for c in (cfg.get("meta") or {}).get("cast") or [] if c]
+    return ", ".join(cast[:-1]) + " or " + cast[-1] if len(cast) > 1 else "".join(cast)
+
+
 # Prompts that write text viewers see; [scoring] house_style rules are appended to them.
 VIEWER_FACING = {"score_a", "score_b", "meta", "chapters", "segments", "compilation",
                  "thumbnail", "thumbnail_enquirer", "preshow", "oneoff", "pick", "retake",
@@ -39,7 +47,8 @@ class Prompts:
                      "stream_context": sc["stream_context"],
                      "max_source_audio_s": sc["max_source_audio_s"],
                      "scan_max_per_block": sc["scan_max_per_block"],
-                     "known_figures": sc["known_figures"]}
+                     "known_figures": sc["known_figures"], "cast": cast_names(cfg)}
+        self.vars["cast_note"] = f" ({self.vars['cast']})" if self.vars["cast"] else ""
         # Swappable rule files, <kind>_<mode>_<version>.md, split into "## <section>" parts
         # that fill {<kind>_<section>} placeholders. v3+: third_party; v4+: audience.
         for kind, key, modes in (("third_party", "third_party_audio", ("reject", "allow_reactions")),

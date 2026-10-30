@@ -113,7 +113,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # clip, close), voiced by `cut` with [narrate] voice_id and tts_settings (ElevenLabs).
         "script_model": "claude-opus-5-5",
         "script_effort": "medium",
-        "script_prompt_version": "v1",  # prompts/receipts_script_<v>.md
+        "script_prompt_version": "v2",  # prompts/receipts_script_<v>.md (v2: no "host")
         "vo_pad_s": 0.6,          # card time after a read ends
         "lufs": -16,              # every card and clip normalized to this (ffmpeg loudnorm)
         "max_stories": 6,
@@ -359,6 +359,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "prompt_version": "v3",   # prompts/meta_<v>.md, chapters_<v>.md (v3: speaker tags, #52)
         "concurrency": 4,
         "show_name": "",
+        "cast": [],               # per show: its own people by name, e.g. ["Andy", "PPP"]; prompts name them, never "host"
         # Upload titles: {title}, {show} or {SHOW} (upper case). Not applied to a title
         # it would push past 100 characters, or one already starting with the show name.
         "title_format": "{title}",
@@ -375,7 +376,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # <video>.jpg beside each video (uploaded by `clipper upload`, shown in Kitsu).
         "model": "claude-opus-5-5",
         "effort": "medium",
-        "prompt_version": "v1",   # prompts/thumbnail_<v>.md
+        "prompt_version": "v2",   # prompts/thumbnail_<v>.md (v2: names [meta] cast, not "the hosts")
         "concurrency": 4,
         "clip_frames": 8,         # candidates per clip, around its hook and payoff
         "even_frames": 5,         # segments/compilations: evenly spaced candidates...
@@ -410,7 +411,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # style = "enquirer": a 1990s supermarket-tabloid cover (masthead, teaser band and
         # boxes plugging the episode's other videos, big face, yellow headline, inset).
         "style": "classic",       # classic | enquirer
-        "enquirer_prompt_version": "v3",  # prompts/thumbnail_enquirer_<v>.md
+        "enquirer_prompt_version": "v4",  # prompts/thumbnail_enquirer_<v>.md (v4: names [meta] cast, not "a host")
         "masthead": "",           # empty = meta.show_name
         "masthead_tagline": "LARGEST CIRCULATION OF ANY STREAM ON KICK",
         "masthead_price": "$1.39",
