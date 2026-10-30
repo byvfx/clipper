@@ -147,31 +147,47 @@ def check_config(cfg: dict) -> None:
 
 
 def prompt_files(cfg: dict) -> list[str]:
+    """Every file in prompts/ this (show's) config reads, for the versions it sets."""
     sc, v = cfg["scoring"], cfg["scoring"]["prompt_version"]
-    names = [f"score_a_{v}", f"score_b_{v}", f"summary_{v}", f"scan_{v}",
-             f"third_party_{sc['third_party_audio']}_{v}", f"audience_{sc['audience_knowledge']}_{v}",
-             f"segments_{cfg['segments']['prompt_version']}",
-             f"compilation_{cfg['segments']['prompt_version']}",
-             f"meta_{cfg['meta']['prompt_version']}", f"chapters_{cfg['meta']['prompt_version']}",
-             f"retake_{cfg['retake']['prompt_version']}",
-             f"preshow_{cfg['preshow']['prompt_version']}"]
+    names = [f"score_a_{v}", f"score_b_{v}", f"summary_{v}"]
+    # The scan and rule files came in v3/v4; before v4 they are read only if present.
+    if int(v.lstrip("v") or 0) >= 4:
+        names += [f"scan_{v}", f"third_party_{sc['third_party_audio']}_{v}",
+                  f"audience_{sc['audience_knowledge']}_{v}"]
+    seg, mv = cfg["segments"]["prompt_version"], cfg["meta"]["prompt_version"]
+    pc, rc, ac, wc = cfg["preshow"], cfg["receipts"], cfg["archive"], cfg["weekly"]
     tc = cfg["thumbnail"]
-    names.append(f"thumbnail_enquirer_{tc['enquirer_prompt_version']}" if tc["style"] == "enquirer"
-                 else f"thumbnail_{tc['prompt_version']}")
-    return names
+    names += [f"segments_{seg}", f"compilation_{seg}", f"meta_{mv}", f"chapters_{mv}",
+              f"retake_{cfg['retake']['prompt_version']}",
+              f"pick_{cfg['pick']['prompt_version']}", f"pick_locate_{cfg['pick']['prompt_version']}",
+              f"preshow_{pc['prompt_version']}", f"oneoff_{pc['oneoff_prompt_version']}",
+              f"thumbnail_enquirer_{tc['enquirer_prompt_version']}" if tc["style"] == "enquirer"
+              else f"thumbnail_{tc['prompt_version']}",
+              f"shorts_layout_{cfg['shorts']['layout_prompt_version']}",
+              f"receipts_stories_{rc['prompt_version']}", f"receipts_script_{rc['script_prompt_version']}",
+              f"archive_expand_{ac['ask_prompt_version']}", f"archive_judge_{ac['ask_prompt_version']}",
+              f"weekly_{wc['prompt_version']}", f"weekly_article_{wc['article_prompt_version']}"]
+    return [f"{n}.md" for n in names] + [wc["article_example"]]
 
 
 def check_prompts(cfg: dict) -> None:
+    """Each show can set its own prompt versions, so every show's files are checked."""
     d: Path = cfg["paths"]["prompts"]
-    missing = [n for n in prompt_files(cfg) if not (d / f"{n}.md").exists()]
-    # v3/v4 rule files are optional per version; only the core ones must exist.
-    missing = [n for n in missing if not n.startswith(("third_party_", "audience_", "scan_"))
-               or int(cfg["scoring"]["prompt_version"].lstrip("v") or 0) >= 4]
+    shows = list(_root(cfg)["shows"])
+    users: dict[Path, list[str]] = {}  # file -> the configs that read it
+    for key in ["", *shows]:
+        c = for_show(cfg, key)
+        for name in prompt_files(c):
+            users.setdefault(Path(c["paths"]["prompts"]) / name, []).append(key or "base")
+    missing = [(p, who) for p, who in users.items() if not p.exists()]
     if missing:
-        fail("prompts", f"missing in {d}: " + ", ".join(f"{m}.md" for m in missing),
-             "copy the prompts/ folder from the main machine")
+        fail("prompts", f"missing in {d}: " + ", ".join(
+            p.name if len(who) == len(shows) + 1 else f"{p.name} ({', '.join(who)})"
+            for p, who in missing),
+             "copy the prompts/ folder from the main machine, or fix the prompt version keys")
     else:
-        ok("prompts", f"{len(prompt_files(cfg))} prompt files for the configured versions")
+        ok("prompts", f"{len(users)} prompt files for the configured versions"
+           + (f" (base and {len(shows)} shows)" if shows else ""))
 
 
 def check_ffmpeg(cfg: dict, role: str) -> None:
