@@ -174,9 +174,8 @@ thumbs: reject a picked frame with no face, `--frame-at <s>`; Discord excerpts f
 start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 
 ## Recipes (how we did it last time; details in the log)
-- **Restart the bot:** `powershell -File deploy\discord\bot-task.ps1 -Restart` (stopping the task alone
-  leaves the supervisor's process alive); worker: `deploy\worker\worker-task.ps1 -Restart`. Not
-  `clipper services restart bot|worker` for now: it kills itself (see Gotchas). `services status` is fine.
+- **Restart the bot:** `clipper services restart bot` (or `deploy\discord\bot-task.ps1 -Restart`; stopping
+  the task alone leaves the supervisor's process alive). Worker: `clipper services status|restart worker`.
   A restart kills a running upload: wait until no `clipper upload` process is left.
 - **Upload one item now:** approve in Kitsu, `clipper schedule` (back up schedule.json first), then
   `clipper upload --max 1`; asap items go public at once. Logs in `logs/upload_*.log`.
@@ -240,9 +239,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 - Windows: a file open in another process can't be replaced (fork sessions render previews from cuts).
 - `schtasks /End /TN clipper-bot` leaves the supervisor's bot process alive (lock in streams/.bot.lock);
   `clipper services` / the task scripts stop the supervisor and its children too.
-- `clipper services restart bot` stops the bot, then dies before starting it again (10-30 17:10, bot down
-  ~5 min): `deploy/common.ps1` finds the bot as a clipper.exe command line ending in "bot", and
-  `clipper.exe services restart bot` ends in "bot" too, so it kills itself. Its status also lists itself as a bot pid.
+- `deploy/common.ps1` finds the bot/worker as a clipper.exe command line ending in "bot"/"worker";
+  `clipper.exe services restart bot` ends in "bot" too and killed itself mid-restart (10-30, bot down
+  ~5 min). It now skips its own process chain; keep that if the match changes.
 - The war room page loads `warroom.css` and `js/*.js` from disk: a pull that changes the page before the
   bot restarts leaves the old server unable to serve them (bare, unstyled page). Restart the bot.
 - schedule: a compilation approved as its own Kitsu item needs segment_keys (fixed 2026-10-18).

@@ -95,9 +95,20 @@ function Start-ClipperSupervisor {
 function Get-ClipperProcesses($t) {
     # The supervisor, `clipper.exe <Command>` of this checkout, and everything it started.
     $all = @(Get-CimInstance Win32_Process)
+    # This script and the processes that started it are never the task's: `clipper.exe
+    # services restart bot` also ends in "bot", and stopping it would end the restart before
+    # the task starts again (2026-10-30).
+    $byId = @{}
+    foreach ($p in $all) { $byId[$p.ProcessId] = $p }
+    $mine = @{}
+    # [uint32]: CIM process ids are UInt32, and a hashtable keeps Int32 5 and UInt32 5 apart.
+    for ($id = [uint32]$PID; $id -and $byId[$id] -and -not $mine[$id]; $id = $byId[$id].ParentProcessId) {
+        $mine[$id] = $true
+    }
     $sup = @($all | Where-Object { $_.CommandLine -and $_.CommandLine -like "*$($t.Supervisor)*" })
     $main = @($all | Where-Object { $_.CommandLine -and $_.CommandLine -like "*$ClipperExe*" -and
-                                    $_.CommandLine -match "\b$($t.Command)\s*$" })
+                                    $_.CommandLine -match "\b$($t.Command)\s*$" -and
+                                    -not $mine[$_.ProcessId] })
     $seen = @{}
     foreach ($p in $main) { $seen[$p.ProcessId] = $true }
     $children = @()
