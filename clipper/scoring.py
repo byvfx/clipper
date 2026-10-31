@@ -402,13 +402,13 @@ def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: C
         "pass": "B", "status": "skipped", "picks": [], "rejected": []}
     # A re-score keeps hand picks (`clipper pick`) and the numbers in existing keys (#77 L13).
     old = jsonstate.read(stream_dir / "candidates.json", {})
-    old_picks = (old.get("pass_b") or {}).get("picks", [])
+    old_b = old.get("pass_b") or {}
     scored = {r["id"] for r in results}
     hand = [r for r in old.get("pass_a", []) if r.get("source") == "hand" and r["id"] not in scored]
     hand_ids = {r["id"] for r in hand}
     results = results + hand
-    pass_b["picks"] = carry_numbers(old_picks, pass_b.get("picks", [])
-                                    + [p for p in old_picks if p["id"] in hand_ids])
+    pass_b["picks"], pass_b["numbers"] = carry_numbers(
+        old_b, pass_b.get("picks", []) + [p for p in old_b.get("picks", []) if p["id"] in hand_ids])
     out = {"stream_id": stream_dir.name, "title": meta.get("title"),
            "prompt_version": prompts.version, "cost_usd": round(claude.cost, 4),
            "pass_a": results, "pass_b": pass_b}

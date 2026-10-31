@@ -90,3 +90,18 @@ def test_a_retake_trim_is_grown_to_min_s(tmp_path, defaults):
     assert b - a >= 15 and a < 20 and b > 24
     a, b = retake.snap_trim(cfg, tmp_path, {**st, "kind": "pick"}, {"start_s": 20, "end_s": 25})
     assert b - a < 15  # horizontal clips keep the asked length
+
+
+def test_a_retake_trim_over_min_s_with_little_speech_is_grown(tmp_path, defaults):
+    """Copilot on #106: a 16 s trim holding 4 s of speech snaps to ~4 s; it must still grow."""
+    import json
+
+    from clipper import retake
+    ws = words(*[(t, t + 0.8) for t in (*range(20), *range(30, 34), *range(44, 70))], seg_every=1)
+    (tmp_path / "words.jsonl").write_text("\n".join(json.dumps(w) for w in ws), encoding="utf-8")
+    (tmp_path / "meta.json").write_text(json.dumps({"duration_s": 70}), encoding="utf-8")
+    (tmp_path / "shorts.json").write_text(json.dumps({"v01_t1": {"in_s": 0, "out_s": 30}}), encoding="utf-8")
+    cfg = {**defaults, "shorts": {**defaults["shorts"], "min_s": 15, "max_s": 59, "pad_s": 0.2}}
+    st = {"kind": "short", "id": "t1", "file": "shorts/v01_t1_x.mp4"}
+    a, b = retake.snap_trim(cfg, tmp_path, st, {"start_s": 22, "end_s": 38})
+    assert b - a >= 15

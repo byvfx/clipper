@@ -99,23 +99,29 @@ def test_release_after_a_takeover_leaves_the_new_holder_alone(tmp_path):
     (tmp_path / ".run.lock").write_text("other:1", encoding="utf-8")
     worker.write_json(tmp_path / "run.json", {"worker": "other:1", "stages": {}})
     assert old.beat() is False and old.lost
+    assert old.save() is False  # a stage finishing after the takeover writes nothing either
     old.release()
     assert (tmp_path / ".run.lock").read_text(encoding="utf-8") == "other:1"
     assert worker.read_json(tmp_path / "run.json")["worker"] == "other:1"
 
 
-def test_a_second_taker_is_busy_not_crashed(tmp_path, monkeypatch):
-    """#77 L11: two workers taking over the same stale lock: the loser gets Busy."""
+def test_a_takeover_is_serialized(tmp_path, monkeypatch):
+    """#77 L11 (Copilot on #106): the stale check, takeover and first heartbeat happen under
+    the takeover lock, so a second taker finds a fresh heartbeat and gets Busy."""
     (tmp_path / ".run.lock").write_text("gone:1", encoding="utf-8")
     worker.write_json(tmp_path / "run.json", {"worker": "gone:1", "heartbeat": "2026-01-01T00:00:00+00:00"})
-    real_unlink = worker.Path.unlink
-
-    def unlink_then_lose(self, missing_ok=False):
-        real_unlink(self, missing_ok=missing_ok)
-        self.write_text("winner:2", encoding="utf-8")  # the other taker got in between
-    monkeypatch.setattr(worker.Path, "unlink", unlink_then_lose)
+    seen = []
+    real_read = worker.read_json
+    monkeypatch.setattr(worker, "read_json",
+                        lambda p: seen.append((tmp_path / ".run.lock.lock").exists()) or real_read(p))
+    first = worker.Run(tmp_path, wcfg())
+    seen.clear()
+    first.acquire()
+    first._stop.set()
+    assert seen and all(seen)  # every read of the old heartbeat was under the takeover lock
     with pytest.raises(worker.Busy):
         worker.Run(tmp_path, wcfg()).acquire()
+    assert first.holds() and not (tmp_path / ".run.lock.lock").exists()
 
 
 def test_snapshot_retries_a_dict_changing_size(monkeypatch):

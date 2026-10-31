@@ -199,9 +199,12 @@ def snap_trim(cfg: dict, sdir: Path, st: dict, trim: dict) -> tuple[float, float
     sc = cfg["shorts"]
     if st["kind"] in ("pick", "short"):
         words = load_words(sdir)
-        if st["kind"] == "short" and b - a < sc["min_s"]:  # #77 L16: no Short under min_s
-            a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"], 0.0, end)
         a, b = snap_window(words, a, b, sc["pad_s"])
+        # #77 L16: no Short under min_s. Snapping can drop silence at the ends, so the
+        # check comes after it, and the grown window is snapped again.
+        if st["kind"] == "short" and b - a < sc["min_s"]:
+            a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"], 0.0, end)
+            a, b = snap_window(words, a, b, sc["pad_s"])
     if st["kind"] == "short":
         b = min(b, a + sc["max_s"])
     cur = window(sdir, st)

@@ -21,7 +21,7 @@ KEEP_DAYS = 14
 # https://developers.google.com/youtube/v3/determine_quota_cost; anything not listed is
 # counted as a write (50), or a read (1) if its name ends in .list.
 COST = {
-    "youtube.videos.insert": 0,  # its own bucket, counted in "uploads"
+    "youtube.videos.insert": 0,  # its own bucket; finished uploads are counted by uploaded()
     "youtube.videos.update": 50,
     "youtube.thumbnails.set": 50,
     "youtube.captions.insert": 400,
@@ -42,25 +42,39 @@ def today(now: datetime | None = None) -> str:
     return (now or datetime.now(PACIFIC)).astimezone(PACIFIC).date().isoformat()
 
 
-def spend(path: Path, method: str, now: datetime | None = None) -> None:
-    """Count one call. Never raises: a count lost to a full disk shouldn't stop an upload."""
-    if not method.startswith("youtube."):  # youtubeAnalytics has its own quota
-        return
+def _count(path: Path, now: datetime | None, fn) -> None:
+    """Change today's count under the file's lock. Never raises: a count lost to a full
+    disk shouldn't stop an upload."""
     day = today(now)
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)  # the lock file goes beside it
         with jsonstate.update(path, {}) as data:
-            d = data.setdefault(day, {"units": 0, "uploads": 0, "calls": {}})
-            d["units"] += cost(method)
-            d["uploads"] += method == "youtube.videos.insert"
-            d["calls"][method] = d["calls"].get(method, 0) + 1
+            fn(data.setdefault(day, {"units": 0, "uploads": 0, "calls": {}}))
             for old in sorted(data)[:-KEEP_DAYS]:
                 del data[old]
     except Exception as e:  # noqa: BLE001
         logging.getLogger("clipper.ytquota").warning("quota count not written: %s", e)
 
 
+def spend(path: Path, method: str, now: datetime | None = None) -> None:
+    """Count one call (a videos.insert is an upload attempt, under "calls" only)."""
+    if not method.startswith("youtube."):  # youtubeAnalytics has its own quota
+        return
+
+    def add(d: dict) -> None:
+        d["units"] += cost(method)
+        d["calls"][method] = d["calls"].get(method, 0) + 1
+    _count(path, now, add)
+
+
+def uploaded(path: Path, now: datetime | None = None) -> None:
+    """Count a finished upload (also one made in Studio and attached): spare() keeps
+    back upload_units for each upload still to come, not each attempt."""
+    _count(path, now, lambda d: d.update(uploads=d["uploads"] + 1))
+
+
 def used(path: Path, now: datetime | None = None) -> dict:
-    """Today's (Pacific) count: {"units", "uploads", "calls"}."""
+    """Today's (Pacific) count: {"units", "uploads" (finished), "calls" (per method)}."""
     return jsonstate.read(path, {}).get(today(now)) or {"units": 0, "uploads": 0, "calls": {}}
 
 

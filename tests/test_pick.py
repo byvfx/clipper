@@ -50,10 +50,14 @@ def test_pick_numbers_survive_a_rescore():
     from clipper.states import carry_numbers, numbered_picks
     old = [{"id": "w01"}, {"id": "t04"}, {"id": "w07"}, {"id": "h01", "n": 4}]  # file from before "n"
     assert [n for n, _ in numbered_picks(old)] == [1, 2, 3, 4]
-    new = carry_numbers(old, [{"id": "t04"}, {"id": "t09"}, {"id": "w01"}, {"id": "h01", "n": 4}])
+    new, hist = carry_numbers({"picks": old},
+                              [{"id": "t04"}, {"id": "t09"}, {"id": "w01"}, {"id": "h01", "n": 4}])
     assert [(p["id"], p["n"]) for p in new] == [("t04", 2), ("t09", 5), ("w01", 1), ("h01", 4)]
     assert [(n, p["id"]) for n, p in numbered_picks(new)] == [(2, "t04"), (5, "t09"), (1, "w01"), (4, "h01")]
-    assert [p["n"] for p in carry_numbers([], [{"id": "a"}, {"id": "b"}])] == [1, 2]
+    assert carry_numbers({}, [{"id": "a"}, {"id": "b"}])[1] == {"a": 1, "b": 2}
+    # Copilot on #106: w07 dropped out this time; when it comes back it gets 3 again, not 6.
+    again, _ = carry_numbers({"picks": new, "numbers": hist}, [{"id": "w07"}, {"id": "x"}])
+    assert [(p["id"], p["n"]) for p in again] == [("w07", 3), ("x", 6)]
 
 
 def test_a_rescore_keeps_hand_picks(tmp_path):
@@ -69,12 +73,14 @@ def test_a_rescore_keeps_hand_picks(tmp_path):
                           [], [], [{"id": "w01", "status": "rejected"}], tmp_path / "ckpt.json", 0.0)
     assert [r["id"] for r in out["pass_a"]] == ["w01", "h01"]
     assert out["pass_b"]["picks"] == [{"id": "h01", "title": "b", "n": 2}]
+    assert out["pass_b"]["numbers"] == {"w01": 1, "h01": 2}  # w01 keeps 1 if it comes back
 
 
 def test_save_picks_numbers_after_the_highest(tmp_path):
     cands = {"pass_a": [{"id": "w01"}, {"id": "t02"}],
-             "pass_b": {"picks": [{"id": "t02", "n": 5}, {"id": "w01", "n": 1}]}}
+             "pass_b": {"picks": [{"id": "t02", "n": 5}, {"id": "w01", "n": 1}], "numbers": {"w09": 7}}}
     (tmp_path / "candidates.json").write_text("{}", encoding="utf-8")
     found = [{"in_s": 1.0, "out_s": 20.0, "heat": 0, "title": "x", "hook": "h", "why": "w"}]
     ids = pick.save_picks(tmp_path, cands, found, {"model": "m", "prompt_version": "v1"}, "about")
-    assert cands["pass_b"]["picks"][-1] == {"id": ids[0], "title": "x", "hook": "h", "reason": "w", "n": 6}
+    assert cands["pass_b"]["picks"][-1] == {"id": ids[0], "title": "x", "hook": "h", "reason": "w", "n": 8}
+    assert cands["pass_b"]["numbers"][ids[0]] == 8

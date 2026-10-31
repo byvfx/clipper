@@ -302,8 +302,9 @@ def save_picks(stream_dir: Path, cands: dict, found: list[dict], pc: dict, about
             "request": about, "requested_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "status": "kept", "has_clip": True, "third_party_audio": False,
             "casino_gameplay": False, "needs_context": False, **c})
-        picks.append({"id": pid, "title": c["title"], "hook": c["hook"], "reason": c["why"],
-                      "n": next_number(picks)})
+        n = next_number(cands["pass_b"])
+        picks.append({"id": pid, "title": c["title"], "hook": c["hook"], "reason": c["why"], "n": n})
+        cands["pass_b"].setdefault("numbers", {})[pid] = n
     jsonstate.write(cands_path, cands)
     keys = [f"v{n:02d}_{p['id']}" for n, p in numbered_picks(picks) if p["id"] in ids]
     print(f"added {', '.join(keys)} to candidates.json")

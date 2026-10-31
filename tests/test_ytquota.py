@@ -13,7 +13,10 @@ def test_calls_are_counted_per_pacific_day(tmp_path):
               "youtube.playlistItems.insert", "youtubeAnalytics.reports.query"):
         ytquota.spend(q, m, NOON)
     u = ytquota.used(q, NOON)
-    assert u["units"] == 451 and u["uploads"] == 1
+    # An insert is an attempt; only a finished upload counts against the reserve (#106 review).
+    assert u["units"] == 451 and u["uploads"] == 0 and u["calls"]["youtube.videos.insert"] == 1
+    ytquota.uploaded(q, NOON)
+    assert ytquota.used(q, NOON)["uploads"] == 1
     assert "youtubeAnalytics.reports.query" not in u["calls"]
     late = datetime(2026, 10, 31, 6, 59, tzinfo=UTC)   # 23:59 Pacific: still the 30th
     assert ytquota.used(q, late)["units"] == 451
@@ -27,6 +30,24 @@ def test_spare_keeps_room_for_the_days_uploads(tmp_path):
     assert ytquota.spare(YC, q, NOON) == 10000 - 6000 - 5 * 600
     jsonstate.write(q, {"2026-10-30": {"units": 9800, "uploads": 15, "calls": {}}})
     assert ytquota.spare(YC, q, NOON) == 200
+
+
+def test_a_missing_folder_is_made(tmp_path):
+    """#106 review: the lock file goes beside the count, so its folder must exist first."""
+    q = tmp_path / "logs" / "new" / "quota.json"
+    ytquota.spend(q, "youtube.videos.list", NOON)
+    assert ytquota.used(q, NOON)["units"] == 1
+
+
+def test_link_backfill_waits_for_spare_quota(tmp_path, defaults, monkeypatch):
+    """#106 review: with no spare quota not even the status check is sent."""
+    q = tmp_path / "q.json"
+    jsonstate.write(q, {ytquota.today(): {"units": 9990, "uploads": 15, "calls": {}}})
+    cfg = {**defaults, "paths": {**defaults["paths"], "youtube_quota": q}}
+    monkeypatch.setattr(youtube, "source_parents", lambda *a: [("clip_source", {"video_id": "p"}, 0)])
+    monkeypatch.setattr(youtube, "service", lambda *a, **k: (_ for _ in ()).throw(AssertionError("sent")))
+    sched = {"entries": [{"key": "s/c01_t1", "status": "uploaded", "video_id": "v"}]}
+    youtube.backfill_links(cfg, sched, tmp_path / "schedule.json", False, None)
 
 
 def test_old_days_are_dropped(tmp_path):
@@ -110,3 +131,22 @@ def test_caption_retries_wait_for_spare_quota(tmp_path, defaults, monkeypatch):
     yt = YT(False)
     youtube.backfill_captions(cfg, jsonstate.load(sched_path), sched_path, False, yt)
     assert yt.calls == 0
+
+
+def test_a_failing_caption_try_is_one_request(tmp_path, defaults, monkeypatch):
+    """#106 review: a try is one 400-unit request, not up to six; a show with captions
+    turned off since isn't retried at all."""
+    srt = tmp_path / "v.srt"
+    srt.write_text("x", encoding="utf-8")
+    sched_path = tmp_path / "schedule.json"
+    entry = {"key": "s/v01_t1", "stream": "s", "status": "uploaded", "video_id": "abcdefghijk",
+             "url": "u", "file": "v.mp4", "captions_error": "x", "captions_tries": 1}
+    jsonstate.write(sched_path, {"entries": [entry]})
+    cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path, "youtube_quota": tmp_path / "q.json"}}
+    monkeypatch.setattr(youtube, "metadata", lambda e, cfg: {"srt": srt})
+    yt = YT(True)
+    youtube.backfill_captions(cfg, jsonstate.load(sched_path), sched_path, False, yt)
+    assert yt.calls == 1 and jsonstate.load(sched_path)["entries"][0]["captions_tries"] == 2
+    off = {**cfg, "youtube": {**cfg["youtube"], "captions": False}}
+    youtube.backfill_captions(off, jsonstate.load(sched_path), sched_path, False, yt)
+    assert yt.calls == 1

@@ -32,20 +32,26 @@ def numbered_picks(picks: list[dict]) -> list[tuple[int, dict]]:
     return [(p.get("n") or i, p) for i, p in enumerate(picks, 1)]
 
 
-def next_number(picks: list[dict]) -> int:
-    return max((n for n, _ in numbered_picks(picks)), default=0) + 1
+def number_history(pass_b: dict) -> dict[str, int]:
+    """Every number a pick id has had in this stream: pass_b "numbers" (kept across
+    re-scores, so a pick that drops out once gets its number back) plus the current picks'."""
+    return {**pass_b.get("numbers", {}),
+            **{p["id"]: n for n, p in numbered_picks(pass_b.get("picks", []))}}
 
 
-def carry_numbers(old: list[dict], new: list[dict]) -> list[dict]:
+def next_number(pass_b: dict) -> int:
+    return max(number_history(pass_b).values(), default=0) + 1
+
+
+def carry_numbers(old: dict, new: list[dict]) -> tuple[list[dict], dict[str, int]]:
     """A re-score's picks, numbered so keys already in Kitsu and schedule.json still mean
-    the same pick: an id that was picked before keeps its number, a new one takes the
-    next unused one."""
-    had = {p["id"]: n for n, p in numbered_picks(old)}
+    the same pick: an id that was ever picked keeps its number, a new one takes the next
+    never-used one. Also returns the history to store as pass_b "numbers"."""
+    had = number_history(old)
     nxt = next_number(old)
     out = []
     for p in new:
-        n = had.get(p["id"])
-        if n is None:
-            n, nxt = nxt, nxt + 1
-        out.append({**p, "n": n})
-    return out
+        if p["id"] not in had:
+            had[p["id"]], nxt = nxt, nxt + 1
+        out.append({**p, "n": had[p["id"]]})
+    return out, had
