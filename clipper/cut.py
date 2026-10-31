@@ -32,6 +32,7 @@ from .config import for_stream, show_args
 from .errors import ClipperError
 from .media import source_file
 from .segments import slug
+from .states import numbered_picks
 from .timefmt import hms
 
 
@@ -258,7 +259,7 @@ def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None
     out_dir.mkdir(exist_ok=True)
     cc = cfg["cut"]
     bleep = make_bleep(stream_dir, cfg)
-    for i, p in enumerate(data["pass_b"].get("picks", []), 1):
+    for i, p in numbered_picks(data["pass_b"].get("picks", [])):
         if ids is not None and p["id"] not in ids:
             continue
         c = by_id[p["id"]]

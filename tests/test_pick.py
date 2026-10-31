@@ -43,3 +43,38 @@ def test_keep_new_skips_moments_already_picked(capsys):
     assert "already a pick: v01_t3 (old)" in out and "already a pick: another new one (new)" in out
     assert "45 s of played-video audio" in out
     assert len(pick.keep_new(clips, {"api": {}}, list(old), cfg, CLOCK, allow_overlap=True)) == 3
+
+
+def test_pick_numbers_survive_a_rescore():
+    """#77 L13: a re-score that drops or adds picks doesn't shift the vNN of the others."""
+    from clipper.states import carry_numbers, numbered_picks
+    old = [{"id": "w01"}, {"id": "t04"}, {"id": "w07"}, {"id": "h01", "n": 4}]  # file from before "n"
+    assert [n for n, _ in numbered_picks(old)] == [1, 2, 3, 4]
+    new = carry_numbers(old, [{"id": "t04"}, {"id": "t09"}, {"id": "w01"}, {"id": "h01", "n": 4}])
+    assert [(p["id"], p["n"]) for p in new] == [("t04", 2), ("t09", 5), ("w01", 1), ("h01", 4)]
+    assert [(n, p["id"]) for n, p in numbered_picks(new)] == [(2, "t04"), (5, "t09"), (1, "w01"), (4, "h01")]
+    assert [p["n"] for p in carry_numbers([], [{"id": "a"}, {"id": "b"}])] == [1, 2]
+
+
+def test_a_rescore_keeps_hand_picks(tmp_path):
+    """#77 L13: `clipper score` again doesn't drop what `clipper pick` added."""
+    import json
+    from types import SimpleNamespace
+
+    from clipper import scoring
+    old = {"pass_a": [{"id": "w01", "status": "kept"}, {"id": "h01", "source": "hand", "status": "kept"}],
+           "pass_b": {"picks": [{"id": "w01", "title": "a"}, {"id": "h01", "title": "b", "n": 2}]}}
+    (tmp_path / "candidates.json").write_text(json.dumps(old), encoding="utf-8")
+    out = scoring._finish(tmp_path, {}, {}, SimpleNamespace(version="v5"), SimpleNamespace(cost=0.0),
+                          [], [], [{"id": "w01", "status": "rejected"}], tmp_path / "ckpt.json", 0.0)
+    assert [r["id"] for r in out["pass_a"]] == ["w01", "h01"]
+    assert out["pass_b"]["picks"] == [{"id": "h01", "title": "b", "n": 2}]
+
+
+def test_save_picks_numbers_after_the_highest(tmp_path):
+    cands = {"pass_a": [{"id": "w01"}, {"id": "t02"}],
+             "pass_b": {"picks": [{"id": "t02", "n": 5}, {"id": "w01", "n": 1}]}}
+    (tmp_path / "candidates.json").write_text("{}", encoding="utf-8")
+    found = [{"in_s": 1.0, "out_s": 20.0, "heat": 0, "title": "x", "hook": "h", "why": "w"}]
+    ids = pick.save_picks(tmp_path, cands, found, {"model": "m", "prompt_version": "v1"}, "about")
+    assert cands["pass_b"]["picks"][-1] == {"id": ids[0], "title": "x", "hook": "h", "reason": "w", "n": 6}

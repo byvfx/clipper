@@ -71,3 +71,22 @@ def test_signature_of_one_scene_is_the_old_single_layout_one(sc):
                                  [[0.0, 9.0, "cams"], [9.0, 30.0, "watch"]], layouts)
     assert two not in (one, shorts.short_signature(sc, "hevc", 1.0, 31.0,
                                                    [[0.0, 9.0, "cams"], [9.0, 30.0, "watch"]], layouts))
+
+
+def test_a_retake_trim_is_grown_to_min_s(tmp_path, defaults):
+    """#77 L16: a retake that trims a Short under [shorts] min_s is widened by whole lines."""
+    import json
+
+    from clipper import retake
+    ws = words(*[(t, t + 0.8) for t in range(40)], seg_every=1)
+    (tmp_path / "words.jsonl").write_text("\n".join(json.dumps(w) for w in ws), encoding="utf-8")
+    (tmp_path / "meta.json").write_text(json.dumps({"duration_s": 40}), encoding="utf-8")
+    (tmp_path / "shorts.json").write_text(json.dumps({"v01_t1": {"in_s": 0, "out_s": 30}}), encoding="utf-8")
+    (tmp_path / "candidates.json").write_text(json.dumps({"pass_a": [{"id": "t1", "in_s": 0, "out_s": 30}]}),
+                                              encoding="utf-8")
+    cfg = {**defaults, "shorts": {**defaults["shorts"], "min_s": 15, "max_s": 59, "pad_s": 0.2}}
+    st = {"kind": "short", "id": "t1", "file": "shorts/v01_t1_x.mp4"}
+    a, b = retake.snap_trim(cfg, tmp_path, st, {"start_s": 20, "end_s": 25})
+    assert b - a >= 15 and a < 20 and b > 24
+    a, b = retake.snap_trim(cfg, tmp_path, {**st, "kind": "pick"}, {"start_s": 20, "end_s": 25})
+    assert b - a < 15  # horizontal clips keep the asked length

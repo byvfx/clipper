@@ -28,6 +28,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "schedule": "schedule.json",
         "youtube_client_secret": "secrets/youtube_client_secret.json",  # OAuth Desktop client
         "youtube_token": "secrets/youtube_token.json",                  # written by --sign-in
+        "youtube_quota": "logs/youtube_quota.json",  # Data API units spent per Pacific day
         "discord_token": "secrets/discord_token.txt",  # bot token, if not in [discord] token_env
         "elevenlabs_key": "secrets/elevenlabs_api_key.txt",  # if not in [narrate] key_env
         "sync_key": "secrets/sync_api_key.txt",  # sync.so, if not in [perform] sync_key_env
@@ -228,6 +229,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "previous_part": "Previous part: {url}",
         "next_part": "Next part: {url}",
         "link_updates_per_run": 20,  # description updates per run (~51 quota units each: a read and a write)
+        "daily_quota": 10000,     # the Cloud project's Data API units a day (uploads apart)
+        "upload_units": 600,      # kept back per upload still allowed today (thumbnail 50,
+                                  # captions 400, playlists 50 each); backfills get the rest
     },
     "kick": {
         "channel": "",

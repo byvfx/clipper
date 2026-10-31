@@ -187,18 +187,23 @@ def plan(cfg: dict, sdir: Path, key: str, st: dict, row: dict, note: str) -> tup
 # ---------- applying it ----------
 
 def snap_trim(cfg: dict, sdir: Path, st: dict, trim: dict) -> tuple[float, float] | None:
-    from .shorts import snap_window
+    from .shorts import grow_window, snap_window
     from .transcript import load_words
 
     meta = load(sdir / "meta.json", {})
+    end = float(meta.get("duration_s") or trim["end_s"])
     a = max(0.0, float(trim["start_s"]))
-    b = min(float(trim["end_s"]), float(meta.get("duration_s") or trim["end_s"]))
+    b = min(float(trim["end_s"]), end)
     if b - a < 3:
         raise ValueError(f"trim {a:.1f}-{b:.1f} s is too short")
+    sc = cfg["shorts"]
     if st["kind"] in ("pick", "short"):
-        a, b = snap_window(load_words(sdir), a, b, cfg["shorts"]["pad_s"])
+        words = load_words(sdir)
+        if st["kind"] == "short" and b - a < sc["min_s"]:  # #77 L16: no Short under min_s
+            a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"], 0.0, end)
+        a, b = snap_window(words, a, b, sc["pad_s"])
     if st["kind"] == "short":
-        b = min(b, a + cfg["shorts"]["max_s"])
+        b = min(b, a + sc["max_s"])
     cur = window(sdir, st)
     if cur and abs(cur[0] - a) < 0.3 and abs(cur[1] - b) < 0.3:
         return None  # what it already is
