@@ -34,7 +34,6 @@ from .errors import ClipperError
 from .llm import Claude, preflight
 from .prompts import Prompts
 from .scoring import signal_table
-from .states import next_number, numbered_picks
 from .timefmt import hms, parse_time
 from .transcript import load_words, snap, transcript_lines
 
@@ -302,10 +301,10 @@ def save_picks(stream_dir: Path, cands: dict, found: list[dict], pc: dict, about
             "request": about, "requested_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "status": "kept", "has_clip": True, "third_party_audio": False,
             "casino_gameplay": False, "needs_context": False, **c})
-        picks.append({"id": pid, "title": c["title"], "hook": c["hook"], "reason": c["why"],
-                      "n": next_number(picks)})
+        picks.append({"id": pid, "title": c["title"], "hook": c["hook"], "reason": c["why"]})
     jsonstate.write(cands_path, cands)
-    keys = [f"v{n:02d}_{p['id']}" for n, p in numbered_picks(picks) if p["id"] in ids]
+    n0 = len(picks) - len(ids)
+    keys = [f"v{n0 + i:02d}_{pid}" for i, pid in enumerate(ids, 1)]
     print(f"added {', '.join(keys)} to candidates.json")
     return ids
 
@@ -346,7 +345,7 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
     by_id = {r["id"]: r for r in cands["pass_a"]}
     picks = cands.setdefault("pass_b", {}).setdefault("picks", [])
     picked = [{**by_id[p["id"]], "title": p["title"], "key": f"v{i:02d}_{p['id']}"}
-              for i, p in numbered_picks(picks) if p["id"] in by_id]
+              for i, p in enumerate(picks, 1) if p["id"] in by_id]
     words = load_words(stream_dir)
     sig = None
     if (stream_dir / "signals.parquet").exists():

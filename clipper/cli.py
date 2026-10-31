@@ -424,7 +424,7 @@ def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
         return
     youtube.run(cfg, sign_in=args.sign_in, dry_run=args.dry_run, limit=args.limit,
                 thumbnails_only=args.thumbnails, playlists_only=args.playlists,
-                links_only=args.links, captions_only=args.captions)
+                links_only=args.links)
 
 
 def cmd_rumble(cfg: dict, args: argparse.Namespace) -> None:
@@ -845,9 +845,6 @@ def add_review(sub) -> None:
     m.add_argument("--links", action="store_true",
                    help="only add, fix or drop source links (clip -> segment, segment -> compilation) "
                         "on uploaded videos; every upload run does this too ([youtube] source_links)")
-    m.add_argument("--captions", action="store_true",
-                   help="only retry captions that failed to go up (400 quota units each, 3 tries); "
-                        "every upload run does this too, from the day's spare quota")
     m.add_argument("--next", type=int, metavar="N",
                    help="list the next N videos to upload, with their files (for uploading in Studio)")
     m.add_argument("--attach", nargs=2, metavar=("ITEM", "LINK"),

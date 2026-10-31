@@ -23,29 +23,3 @@ def split_key(key: str) -> tuple[str, str]:
     """A schedule key "kick-133423456/s04_baxter-bulletin" as (stream id, item key)."""
     stream, _, item = key.partition("/")
     return stream, item
-
-
-def numbered_picks(picks: list[dict]) -> list[tuple[int, dict]]:
-    """candidates.json pass_b picks with the number their keys carry (v03_t12, c03_t12,
-    clips/03_t12_*): the "n" stored when the pick was made, else its place in the list
-    (files from before numbers were stored, #77 L13)."""
-    return [(p.get("n") or i, p) for i, p in enumerate(picks, 1)]
-
-
-def next_number(picks: list[dict]) -> int:
-    return max((n for n, _ in numbered_picks(picks)), default=0) + 1
-
-
-def carry_numbers(old: list[dict], new: list[dict]) -> list[dict]:
-    """A re-score's picks, numbered so keys already in Kitsu and schedule.json still mean
-    the same pick: an id that was picked before keeps its number, a new one takes the
-    next unused one."""
-    had = {p["id"]: n for n, p in numbered_picks(old)}
-    nxt = next_number(old)
-    out = []
-    for p in new:
-        n = had.get(p["id"])
-        if n is None:
-            n, nxt = nxt, nxt + 1
-        out.append({**p, "n": n})
-    return out

@@ -10,7 +10,6 @@ prompts = "prompts"
 schedule = "schedule.json"
 youtube_client_secret = "secrets/youtube_client_secret.json"
 youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sign-in
-youtube_quota = "logs/youtube_quota.json"      # YouTube Data API units spent per Pacific day
 youtube_cookies = "secrets/youtube_cookies.txt"  # optional Netscape cookies.txt for yt-dlp: age-restricted
                                                # archive items and receipts, pre-shows stopped by YouTube's bot check
 tiktok_client = "secrets/tiktok_client.json"   # {"client_key": ..., "client_secret": ...}
@@ -544,8 +543,6 @@ part_links = false             # segments also link the stream's previous / next
 previous_part = "Previous part: {url}"  # part_links lines; {url}, {title}: the other segment's
 next_part = "Next part: {url}"
 link_updates_per_run = 20      # description updates per run, ~51 quota units each
-daily_quota = 10000            # the Cloud project's Data API units a day (uploads have their own bucket)
-upload_units = 600             # kept back per upload still allowed today; link and caption retries get the rest
 
 [analytics]
 # `clipper analytics`: YouTube stats of uploads -> analytics.json -> a hint in scoring's Pass B.

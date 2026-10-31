@@ -395,14 +395,6 @@ ways the API reports badly, so do these before the first big upload run.
    descriptions of videos already up (about 51 quota units each).
    `clipper upload --links --dry-run` shows what it would change. Change the wording per show
    with `clip_source` / `segment_source` in `[shows.<key>.youtube]`.
-8. **API quota.** A Cloud project gets 10,000 Data API units a day, reset at midnight
-   Pacific; uploads themselves have their own bucket (100 a day), but each upload's
-   thumbnail (50), captions (400) and playlist adds (50 each) come out of the 10,000.
-   Every call is counted in `logs/youtube_quota.json` and each upload run ends with the
-   day's total. Source-link updates and caption retries (a captions upload that failed is
-   tried again hourly, 3 times; `clipper upload --captions` alone) only spend what's left
-   after `upload_units` (600) for each upload `max_per_24h` still allows that day. If Google
-   raises your project's quota, set `[youtube] daily_quota` to match.
 
 ## Weekly issue
 

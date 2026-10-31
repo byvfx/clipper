@@ -44,7 +44,6 @@ from .llm import Claude
 from .media import source_file
 from .prompts import Prompts
 from .segments import slug
-from .states import numbered_picks
 from .transcript import load_words
 
 CENTER = {"description": "anything else: the middle of the frame",
@@ -676,7 +675,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         return claude
 
     done = []
-    for i, p in numbered_picks(picks):
+    for i, p in enumerate(picks, 1):
         if ids and p["id"] not in ids and f"v{i:02d}" not in ids:
             continue
         c = by_id[p["id"]]
@@ -709,8 +708,6 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         sig = short_signature(sc, codec, a, b, scenes, layouts)
         if not force and dst.exists() and prev.get("sig") == sig:
             continue
-        if dur < sc["min_s"]:  # grow_window found no whole lines to add (#77 L16)
-            print(f"  {key}: {dur:.1f} s is under [shorts] min_s ({sc['min_s']} s)", flush=True)
         n_bleeps, n_caps, loud = cut_and_render(stream_dir, cfg, src, words,
                                                 (audio_bleeper, bleeper), layouts, scenes,
                                                 a, b, work, key, dst, codec)

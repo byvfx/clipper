@@ -39,9 +39,6 @@ fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> t
   Descriptions link to the longer video each one comes from (a clip to its segment at the clip's
   offset, a segment to its compilation) once that video is public; every upload run adds the link
   to videos already up when their longer video goes public (`[youtube] source_links`).
-  Every YouTube API call is counted per Pacific day in `logs/youtube_quota.json`; the link updates
-  and retries of captions that failed to go up (`clipper upload --captions`) only spend what is left
-  after room for the day's remaining uploads (`[youtube] daily_quota`, `upload_units`).
   A Short's "related video" (the link under it to its segment) can only be set in Studio:
   `clipper upload --related` lists the uploaded Shorts whose segment is out, with the Studio link
   and the segment id to search for, and `clipper upload --related <keys or links>` records the

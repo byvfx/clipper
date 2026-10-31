@@ -24,7 +24,6 @@ so nothing is copied. It also runs pre-shows the bot grabbed from YouTube
 
 from __future__ import annotations
 
-import copy
 import ctypes
 import logging
 import os
@@ -88,17 +87,6 @@ def write_json(path: Path, data: dict) -> None:
     jsonstate.write(path, data)
 
 
-def snapshot(data: dict) -> dict:
-    """A copy of run.data to write. The heartbeat thread saves while the main thread
-    edits run.data without the lock, so a copy can meet a dict changing size: retry."""
-    for _ in range(4):
-        try:
-            return copy.deepcopy(data)
-        except RuntimeError:
-            time.sleep(0.01)
-    return copy.deepcopy(data)
-
-
 def stage_args(stage: str, stream: str, wc: dict) -> list[str]:
     return stages.argv(stage, stream, wc)
 
@@ -129,27 +117,14 @@ class Run:
         self._stop = threading.Event()
         self._mu = threading.Lock()
         self._beat: threading.Thread | None = None
-        self.me = f"{socket.gethostname()}:{os.getpid()}"
-        self.lost = False
 
-    def save(self, beat: bool = False) -> None:
+    def save(self) -> None:
         with self._mu:
-            if beat:
-                self.data["heartbeat"] = now_iso()
             self.data["updated"] = now_iso()
-            write_json(self.path, snapshot(self.data))
-
-    def holds(self) -> bool:
-        """Whether the lock is still this run's. A worker that finds our heartbeat stale
-        takes the lock over; a read error (NAS blip) isn't taken for that."""
-        try:
-            return self.lock.read_text(encoding="utf-8").strip() == self.me
-        except FileNotFoundError:
-            return False
-        except OSError:
-            return True
+            write_json(self.path, self.data)
 
     def acquire(self) -> None:
+        me = f"{socket.gethostname()}:{os.getpid()}"
         try:
             fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
@@ -157,18 +132,15 @@ class Run:
             held = read_json(self.path)
             stale = age_s(held.get("heartbeat")) > self.wc["stale_minutes"] * 60
             if not stale:
-                raise Busy(f"{self.d.name}: running on {held.get('worker', '?')}") from None
+                raise Busy(f"{self.d.name}: running on {held.get('worker', '?')}")
             log.warning("%s: taking over a stale lock from %s", self.d.name, held.get("worker"))
             self.lock.unlink(missing_ok=True)
-            try:
-                fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:  # another worker took it over first
-                raise Busy(f"{self.d.name}: taken over by another worker") from None
-        os.write(fd, self.me.encode())
+            fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, me.encode())
         os.close(fd)
         self.data = read_json(self.path) or self.data
         self.data.setdefault("stages", {})
-        self.data.update(worker=self.me, status="running", heartbeat=now_iso(), error="")
+        self.data.update(worker=me, status="running", heartbeat=now_iso(), error="")
         self.data["attempts"] = self.data.get("attempts", 0) + 1
         self.save()
         self._beat = threading.Thread(target=self._heartbeat, daemon=True)
@@ -176,30 +148,16 @@ class Run:
 
     def _heartbeat(self) -> None:
         while not self._stop.wait(60):
-            self.beat()
-
-    def beat(self) -> bool:
-        """Write one heartbeat; False once the lock is someone else's. Never raises: a
-        dead heartbeat thread looks stale and hands the stream to a second worker."""
-        try:
-            if not self.holds():
-                log.error("%s: another worker took the lock over; heartbeat stopped", self.d.name)
-                self.lost = True
-                self._stop.set()
-                return False
-            self.save(beat=True)
-        except Exception as e:  # noqa: BLE001  # NAS blip or anything else; the next beat retries
-            log.warning("%s: heartbeat not written: %s", self.d.name, e)
-        return True
+            self.data["heartbeat"] = now_iso()
+            try:
+                self.save()
+            except OSError as e:  # NAS blip; the next beat retries
+                log.warning("%s: heartbeat not written: %s", self.d.name, e)
 
     def release(self) -> None:
         self._stop.set()
         if self._beat:
             self._beat.join(timeout=5)
-        if not self.holds():  # taken over: run.json and the lock are the new holder's now
-            log.warning("%s: lock was taken over; leaving run.json to %s", self.d.name,
-                        read_json(self.path).get("worker", "?"))
-            return
         self.data.pop("worker", None)
         self.save()
         self.lock.unlink(missing_ok=True)
@@ -260,8 +218,6 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
     ok = False
     try:
         for stage in order:
-            if run.lost:  # the heartbeat found the lock taken over
-                raise Busy(f"{name}: another worker took the stream over")
             if not force and run.done(stage):
                 run.data["stages"].setdefault(stage, {"status": "done", "note": "output found"})
                 continue
