@@ -83,7 +83,8 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
 ## State now (2026-10-30)
 - **Running on this laptop** as scheduled tasks: `clipper-bot` (Discord cards, hourly replan + upload,
   pre-show polls every 5 min, retakes, DM alerts, war room on :8765 and https://thor.taile415cd.ts.net/)
-  and `clipper-worker` (runs each finished NAS recording). Both restarted 2026-10-30 14:59 at 1e4f724.
+  and `clipper-worker` (runs each finished NAS recording). Both restarted 2026-10-30 17:15 at dbee129
+  (#106) through the task scripts.
   Restart the bot after scheduler/war-room Python changes (see Gotchas); stages run as fresh
   processes, so most other changes need no restart.
 - **NAS** (192.168.0.155): recorder container (`deploy/record`, redeployed 2026-10-30 15:09 at 1e4f724,
@@ -155,10 +156,13 @@ changed schedule values only (`schedule --kitsu-all` for everything), doctor che
 issue is out (the user runs `clipper weekly` from C:\clipper); it merged cleanly with main on 10-30.
 Then remove that worktree (the other audit worktrees are already gone).
 Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (provider side-by-side,
-`clipper edit`), #50 (revenue once monetized), #42 (closes after the first check-in). #77 (reopened
-10-30 after bea8641's "fix #77" closed it): M12 (quota tracking, backfill cap), L11 (worker heartbeat thread
-dies silently), L13 (pick keys renumber), L16 (Shorts length bounds), L18 (captions backfill), CRLF renormalize.
-Write "#77 L6" rather than "fix #77" in commit messages, or GitHub closes it again. Roadmaps, issues only: NAS hub #14 (#9 war room on
+`clipper edit`), #50 (revenue once monetized), #42 (closes after the first check-in). #77 is done
+(#106, 10-30): YouTube quota counted per Pacific day in `logs/youtube_quota.json` (each upload run
+ends with the total; link updates and caption retries only spend what's left after `upload_units`
+per upload still allowed today), worker takeover under a lock, pick numbers kept across re-scores
+(pass_b `numbers`), Short retakes grown to min_s, failed captions retried hourly (3 tries,
+`upload --captions`). Write "#77 L6" rather than "fix #77" in commit messages: GitHub closes
+the issue on "fix". Roadmaps, issues only: NAS hub #14 (#9 war room on
 the NAS, #12 worker/bot on the NAS, #64 single-owner daemon `clipper serve`, #65 Claude Code on the NAS),
 transcript-framed edits #66 (#67-#71), YouTube Posts magazine #30 (#32-#38), cast library #41,
 lore-order playlists #43, archive fun #63, Udder Truth #58/#59/#60, Modal ideas #53-#56.
@@ -170,8 +174,9 @@ thumbs: reject a picked frame with no face, `--frame-at <s>`; Discord excerpts f
 start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 
 ## Recipes (how we did it last time; details in the log)
-- **Restart the bot:** `clipper services restart bot` (or `deploy\discord\bot-task.ps1 -Restart`; stopping
-  the task alone leaves the supervisor's process alive). Worker: `clipper services status|restart worker`.
+- **Restart the bot:** `powershell -File deploy\discord\bot-task.ps1 -Restart` (stopping the task alone
+  leaves the supervisor's process alive); worker: `deploy\worker\worker-task.ps1 -Restart`. Not
+  `clipper services restart bot|worker` for now: it kills itself (see Gotchas). `services status` is fine.
   A restart kills a running upload: wait until no `clipper upload` process is left.
 - **Upload one item now:** approve in Kitsu, `clipper schedule` (back up schedule.json first), then
   `clipper upload --max 1`; asap items go public at once. Logs in `logs/upload_*.log`.
@@ -235,6 +240,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 - Windows: a file open in another process can't be replaced (fork sessions render previews from cuts).
 - `schtasks /End /TN clipper-bot` leaves the supervisor's bot process alive (lock in streams/.bot.lock);
   `clipper services` / the task scripts stop the supervisor and its children too.
+- `clipper services restart bot` stops the bot, then dies before starting it again (10-30 17:10, bot down
+  ~5 min): `deploy/common.ps1` finds the bot as a clipper.exe command line ending in "bot", and
+  `clipper.exe services restart bot` ends in "bot" too, so it kills itself. Its status also lists itself as a bot pid.
 - The war room page loads `warroom.css` and `js/*.js` from disk: a pull that changes the page before the
   bot restarts leaves the old server unable to serve them (bare, unstyled page). Restart the bot.
 - schedule: a compilation approved as its own Kitsu item needs segment_keys (fixed 2026-10-18).
@@ -272,4 +280,5 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 2026-10-27 Issue day (jsonstate, llm.py, costs, war room) · TikTok resend · One-off: Just Trish
 2026-10-28 Issue day 2 (analytics, audit follow-ups, cover editor, schedule DnD) · Related videos and Content ID check
 2026-10-29 Face out from under the inset · Audit phases 1-3 · Stay current instead of a backlog · War room layouts
-2026-10-30 YouTube sign-in expired · Audit finished and merged; pull, restart, recorder redeploy, cast
+2026-10-30 YouTube sign-in expired · Audit finished and merged; pull, restart, recorder redeploy, cast ·
+           #77 finished (#105 reverted, #106 after Copilot's review)

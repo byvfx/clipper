@@ -81,5 +81,7 @@ keep README and SETUP true whenever behaviour changes.
   The rules are ruff's defaults for the version pinned in pyproject (`required-version`); bump
   the pin there and in the dev group together. Tests are offline and take under a second; new
   pure logic gets a test in `tests/`. CI runs both on every push (`.github/workflows/check.yml`).
+  Merging a PR: wait for Copilot's automatic review (a few minutes after the PR opens), handle
+  each comment and show the user, then merge. Green CI alone isn't enough.
   Avoid `uv run`/`uv sync` while the bot is up: they re-sync and cannot replace the running
   clipper.exe (`uv pip install --python .venv/Scripts/python.exe pytest` installs pytest alone).
