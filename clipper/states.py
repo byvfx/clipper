@@ -23,3 +23,35 @@ def split_key(key: str) -> tuple[str, str]:
     """A schedule key "kick-133423456/s04_baxter-bulletin" as (stream id, item key)."""
     stream, _, item = key.partition("/")
     return stream, item
+
+
+def numbered_picks(picks: list[dict]) -> list[tuple[int, dict]]:
+    """candidates.json pass_b picks with the number their keys carry (v03_t12, c03_t12,
+    clips/03_t12_*): the "n" stored when the pick was made, else its place in the list
+    (files from before numbers were stored, #77 L13)."""
+    return [(p.get("n") or i, p) for i, p in enumerate(picks, 1)]
+
+
+def number_history(pass_b: dict) -> dict[str, int]:
+    """Every number a pick id has had in this stream: pass_b "numbers" (kept across
+    re-scores, so a pick that drops out once gets its number back) plus the current picks'."""
+    return {**pass_b.get("numbers", {}),
+            **{p["id"]: n for n, p in numbered_picks(pass_b.get("picks", []))}}
+
+
+def next_number(pass_b: dict) -> int:
+    return max(number_history(pass_b).values(), default=0) + 1
+
+
+def carry_numbers(old: dict, new: list[dict]) -> tuple[list[dict], dict[str, int]]:
+    """A re-score's picks, numbered so keys already in Kitsu and schedule.json still mean
+    the same pick: an id that was ever picked keeps its number, a new one takes the next
+    never-used one. Also returns the history to store as pass_b "numbers"."""
+    had = number_history(old)
+    nxt = next_number(old)
+    out = []
+    for p in new:
+        if p["id"] not in had:
+            had[p["id"]], nxt = nxt, nxt + 1
+        out.append({**p, "n": had[p["id"]]})
+    return out, had
