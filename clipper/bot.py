@@ -22,8 +22,8 @@ shows' YouTube channels are grabbed and put through the pipeline (clipper/presho
 
 Background jobs (`jobs_loop`, their own loop, independent of the card refresh): every
 [youtube] auto_upload_minutes `clipper schedule` then `clipper upload`; every [tiktok]
-auto_send_minutes `clipper tiktok --auto`; every [analytics] auto_hours `clipper analytics`;
-with [retake] auto, `clipper retake` when Kitsu has new retake notes. Each runs as a child
+auto_send_minutes `clipper tiktok --auto`; every [x] auto_post_minutes `clipper x --auto`;
+every [analytics] auto_hours `clipper analytics`; with [retake] auto, `clipper retake` when Kitsu has new retake notes. Each runs as a child
 process and a non-zero exit is DMed.
 
 There is no bulk approve: every release needs its own Approve. Slash commands are
@@ -172,6 +172,7 @@ class Bot(discord.Client):
         self.analytics_proc: asyncio.subprocess.Process | None = None
         self.preshow_proc: asyncio.subprocess.Process | None = None
         self.tiktok_proc: asyncio.subprocess.Process | None = None
+        self.x_proc: asyncio.subprocess.Process | None = None
         register_commands(self)
 
     async def setup_hook(self) -> None:
@@ -226,6 +227,9 @@ class Bot(discord.Client):
             ("tiktok", cfg["tiktok"]["auto_send_minutes"] * 60,
              lambda: paths["tiktok_token"].exists() and not self.running("tiktok"),
              lambda: self.loop.create_task(self._clipper_bg("tiktok", ["tiktok", "--auto"]))),
+            ("x", cfg["x"]["auto_post_minutes"] * 60,
+             lambda: paths["x_token"].exists() and not self.running("x"),
+             lambda: self.loop.create_task(self._clipper_bg("x", ["x", "--auto"]))),
             ("analytics", cfg["analytics"]["auto_hours"] * 3600,
              lambda: paths["youtube_token"].exists() and has_upload(),
              lambda: self.loop.create_task(self._clipper_bg("analytics", ["analytics"]))),
@@ -327,7 +331,7 @@ class Bot(discord.Client):
             if proc.returncode:  # #22: a background job failing is worth a DM (once per cooldown)
                 last = next((x.strip() for x in reversed(out.decode("utf-8", "replace").splitlines())
                              if x.strip() and not x.startswith("[")), "")
-                alerts.send(self.cfg, "upload" if name in ("upload", "tiktok") else "failure",
+                alerts.send(self.cfg, "upload" if name in ("upload", "tiktok", "x") else "failure",
                             f"`clipper {' '.join(args)}` failed (exit {proc.returncode}): {last[:400]}",
                             key=f"bg:{' '.join(args)}")
             return proc.returncode

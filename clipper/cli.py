@@ -462,6 +462,20 @@ def cmd_tiktok(cfg: dict, args: argparse.Namespace) -> None:
         tiktok.status(cfg, args.stream, check=not args.dry_run)
 
 
+def cmd_x(cfg: dict, args: argparse.Namespace) -> None:
+    from . import xpost
+
+    if args.sign_in:
+        xpost.sign_in(cfg)
+        print(f"signed in to X as @{xpost.whoami(cfg)}")
+    if args.items:
+        xpost.post(cfg, args.items, args.stream, dry_run=args.dry_run)
+    elif args.auto:
+        xpost.auto(cfg, dry_run=args.dry_run)
+    elif not args.sign_in:
+        xpost.status(cfg, args.stream)
+
+
 def cmd_receipts(cfg: dict, args: argparse.Namespace) -> None:
     from . import receipts
 
@@ -624,7 +638,7 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
 
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
-    ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'analytics']),
+    ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
@@ -884,6 +898,17 @@ def add_review(sub) -> None:
     p.add_argument("--dry-run", action="store_true",
                    help="show files and captions, send nothing; with no mode, list drafts without asking TikTok")
     p.set_defaults(fn=cmd_tiktok)
+
+    p = sub.add_parser("x", help="post scheduled Shorts to X as native video")
+    p.add_argument("stream", nargs="?", help="stream id, for short --items like s02 (default: any)")
+    m = p.add_mutually_exclusive_group()  # none of them: what was posted
+    add_items(m, "post these, e.g. t20,v01_t20 or a full schedule key")
+    m.add_argument("--auto", action="store_true",
+                   help="post the Shorts live on YouTube and not on X yet, up to max_per_24h")
+    p.add_argument("--sign-in", action="store_true", help="one-time X sign-in in your browser (then "
+                                                         "carries on with --items/--auto if given)")
+    p.add_argument("--dry-run", action="store_true", help="show files and text, post nothing")
+    p.set_defaults(fn=cmd_x)
 
     p = sub.add_parser("analytics", help="YouTube stats of uploads -> analytics.json (feeds scoring)")
     p.add_argument("--sign-in", action="store_true", help="once: grant read-only YouTube Analytics")

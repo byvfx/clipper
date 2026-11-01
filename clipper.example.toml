@@ -15,6 +15,8 @@ youtube_cookies = "secrets/youtube_cookies.txt"  # optional Netscape cookies.txt
                                                # archive items and receipts, pre-shows stopped by YouTube's bot check
 tiktok_client = "secrets/tiktok_client.json"   # {"client_key": ..., "client_secret": ...}
 tiktok_token = "secrets/tiktok_token.json"     # written by clipper tiktok --sign-in
+x_client = "secrets/x_client.json"             # {"client_id": ...} (+ "client_secret" for a Web App)
+x_token = "secrets/x_token.json"               # written by clipper x --sign-in
 warroom_token = "secrets/warroom_token.txt"    # made by clipper warroom --tailnet on, if [warroom] token is ""
 discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 elevenlabs_key = "secrets/elevenlabs_api_key.txt"  # if $ELEVENLABS_API_KEY ([narrate] key_env) is unset
@@ -590,6 +592,24 @@ hashtags = []                  # added to every caption, e.g. ["lolcowcinema"]
 max_caption_chars = 2200
 redirect_port = 3455
 caption_channel_id = ""        # Discord channel for captions; empty = [record] alert channel/webhook
+
+[x]
+# `clipper x --items s02,t20`: Shorts posted to X as native video (API v2, pay-per-use credits).
+# The text is the title plus hashtags, never a link (X bills a post with a URL at $0.20, $0.015
+# without). One-time: clipper x --sign-in (app at console.x.com, callback URL
+# http://127.0.0.1:<redirect_port>/callback, scopes tweet.read tweet.write users.read media.write
+# offline.access). See SETUP.md (X).
+kinds = ["short"]
+max_per_24h = 6
+auto_post_minutes = 0          # the bot runs `clipper x --auto` this often; 0 = only by hand
+after_youtube = true           # --auto posts a Short only once it is public on YouTube
+max_age_hours = 48             # ...and skips ones whose slot is older (--items still posts them)
+hashtags = []                  # added after the Short's own, e.g. ["lolcowcinema"]
+max_hashtags = 2
+max_chars = 280
+max_height = 1280              # taller Shorts are re-encoded to 720x1280 first; 0 = send as is
+post_usd = 0.015               # logged to paths.costs per post (`clipper costs`)
+redirect_port = 3456
 
 [archive]
 # `clipper archive`: other channels' back catalogs, transcribed on Modal, never uploaded.

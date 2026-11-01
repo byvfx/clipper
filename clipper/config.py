@@ -34,6 +34,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "sync_key": "secrets/sync_api_key.txt",  # sync.so, if not in [perform] sync_key_env
         "tiktok_client": "secrets/tiktok_client.json",  # {"client_key", "client_secret"}
         "tiktok_token": "secrets/tiktok_token.json",    # written by `clipper tiktok --sign-in`
+        "x_client": "secrets/x_client.json",            # {"client_id"} (+ "client_secret" for a Web App)
+        "x_token": "secrets/x_token.json",              # written by `clipper x --sign-in`
         "warroom_token": "secrets/warroom_token.txt",   # war room token, if not [warroom] token
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
@@ -199,6 +201,20 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_caption_chars": 2200,
         "redirect_port": 3455,    # sign-in redirect http://localhost:<port>/callback/
         "caption_channel_id": "", # Discord channel for captions; empty = [record] alert channel
+    },
+    "x": {
+        # `clipper x`: Shorts posted to X as native video (API v2, pay-per-use).
+        "kinds": ["short"],       # schedule.json kinds allowed
+        "max_per_24h": 6,         # posts in any 24 h
+        "auto_post_minutes": 0,   # `clipper bot` runs `clipper x --auto` this often; 0 = only by hand
+        "after_youtube": True,    # --auto posts a Short only once it is public on YouTube
+        "max_age_hours": 48,      # ...and not if its slot is older than this (--items still can); 0 = any
+        "hashtags": [],           # added after the Short's own
+        "max_hashtags": 2,
+        "max_chars": 280,         # X Premium accounts may post longer
+        "max_height": 1280,       # taller videos are re-encoded to this (X recommends 720x1280); 0 = as is
+        "post_usd": 0.015,        # X's price per post without a link, logged to paths.costs
+        "redirect_port": 3456,    # sign-in callback http://127.0.0.1:<port>/callback
     },
     "youtube": {
         "auto_upload_minutes": 0, # `clipper bot` runs `clipper upload` this often; 0 = only by hand

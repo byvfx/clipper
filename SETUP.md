@@ -472,3 +472,32 @@ else the `[record]` alert webhook or channel) and keeps it in schedule.json.
 Limits: TikTok allows at most 5 pending drafts in 24 h; `[tiktok] max_per_24h` (default 3,
 at most 5) stays under it. Most accounts can post up to 3 minutes. Direct posting without the phone step needs
 TikTok's app audit (issue #29).
+
+## X posts
+
+`clipper x` posts scheduled Shorts to X as native video through the X API v2 (pay-per-use:
+credits bought in the developer console, about $0.015 a post; a post with a link costs $0.20,
+so clipper never puts one in). The text is the Short's title and up to `[x] max_hashtags`
+hashtags. Shorts taller than `[x] max_height` (1280) are re-encoded to 720x1280 first, X's
+recommended portrait size.
+
+1. **Developer app** at console.x.com, signed in as the X account the posts go out from.
+   Buy a few dollars of credits and set a spending limit. Create an app; under **User
+   authentication settings** turn on OAuth 2.0, permissions **Read and write**, type of app
+   **Native App**, callback URI `http://127.0.0.1:3456/callback` (the port is
+   `[x] redirect_port`) and a website URL.
+2. **Keys**: copy the **OAuth 2.0 Client ID** (Keys and tokens) and save
+   `{"client_id": "..."}` as `secrets/x_client.json`. A **Web App** (confidential client)
+   works too: add `"client_secret": "..."`.
+3. **Sign in** once: `clipper x --sign-in`, with the browser signed in to X as that account.
+   The token lands in `secrets/x_token.json`; it lasts 2 h and refreshes itself (scope
+   `offline.access`). `clipper doctor` checks the scopes.
+4. **Post**: `clipper x --items kick-131151926/v04_t21 --dry-run` shows the file and text;
+   without `--dry-run` it posts. `clipper x` lists what was posted, with links. A failed post
+   is recorded (`clipper x` shows the error) and `--items` tries it again.
+5. **Automatic** (optional): `clipper x --auto` posts the Shorts that went public on YouTube in
+   the last `[x] max_age_hours` (48) and aren't on X yet, earliest first, up to `max_per_24h`
+   (6); titles saying "host(s)" are skipped. Set `[x] auto_post_minutes` (e.g. 60) and restart
+   the bot to have it run that for you.
+
+Each post's cost is logged like a model call (`clipper costs`, kind `x`).

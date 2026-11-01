@@ -33,24 +33,19 @@ http://localhost:<redirect_port>/callback/, products Login Kit + Content Posting
 from __future__ import annotations
 
 import hashlib
-import http.server
 import json
 import re
 import secrets as pysecrets
-import select
-import socket
 import time
 import urllib.parse
-import webbrowser
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import requests
 
-from . import jsonstate, media, rumble, youtube
+from . import jsonstate, media, oauth, rumble
 from .config import for_stream
 from .errors import ClipperError
-from .review import draft_fields, hashtag_line
 from .states import split_key
 
 AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
@@ -103,48 +98,8 @@ def sign_in(cfg: dict) -> dict:
         "client_key": c["client_key"], "scope": SCOPES, "redirect_uri": redirect,
         "state": state, "response_type": "code", "code_challenge_method": "S256",
         "code_challenge": hashlib.sha256(verifier.encode()).hexdigest()})
-    got: dict = {}
-
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            q = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(self.path).query))
-            if "code" in q or "error" in q:
-                got.update(q)
-            ok = q.get("state") == state and "code" in q
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(("TikTok approved; clipper is finishing the sign-in. You can close this tab." if ok else
-                              f"TikTok sign-in failed: {q.get('error_description') or q.get('error') or 'no code'}"
-                              ).encode())
-
-        def log_message(self, *a):
-            pass
-
-    class Server6(http.server.HTTPServer):
-        address_family = socket.AF_INET6
-
-    # The browser may resolve localhost to ::1 or to 127.0.0.1; listen on both.
-    servers = [http.server.HTTPServer(("127.0.0.1", port), Handler)]
-    try:
-        servers.append(Server6(("::1", port), Handler))
-    except OSError:
-        pass
-    print(f"Opening your browser to sign in to TikTok: {url}")
-    webbrowser.open(url)
-    deadline = time.time() + 600
-    while not got and time.time() < deadline:
-        ready, _, _ = select.select(servers, [], [], 5)
-        for s in ready:
-            s.handle_request()
-    for s in servers:
-        s.server_close()
-    if not got:
-        raise ClipperError("TikTok sign-in timed out (10 min); run: clipper tiktok --sign-in")
-    if got.get("state") != state or "code" not in got:
-        raise ClipperError("TikTok sign-in failed: "
-                         f"{got.get('error_description') or got.get('error') or 'state did not match'}")
-    tok = save_token(paths, token_request(c, code=got["code"], grant_type="authorization_code",
+    code = oauth.browser_code(url, port, state, "TikTok", "clipper tiktok --sign-in")
+    tok = save_token(paths, token_request(c, code=code, grant_type="authorization_code",
                                           redirect_uri=redirect, code_verifier=verifier))
     if "video.upload" not in tok.get("scope", ""):
         print(f"  warning: granted scopes are {tok.get('scope')!r}; video.upload is missing")
@@ -189,27 +144,13 @@ def whoami(cfg: dict) -> str:
 def caption(e: dict, cfg: dict) -> str:
     """Title + hashtags (Kitsu's Hashtags column, else the draft's, then [tiktok]
     hashtags), banned words masked like the rest of the show's text."""
-    from .bleep import Bleeper
-
-    sdir = cfg["paths"]["streams"] / e["stream"]
-    scfg = for_stream(cfg, sdir)
-    tc = scfg["tiktok"]
-    m = youtube.metadata(e, cfg)
-    video = Path(e["file"])
-    draft_path = sdir / "metadata" / video.parent.name / f"{video.stem}.json"
-    draft = jsonstate.read(draft_path, {})
-    review_path = sdir / "review.json"
-    fields = (jsonstate.load(review_path).get(m["review_key"], {})
-              .get("fields", {}) if review_path.exists() else {})
-    tags = (fields.get("Hashtags") or (draft_fields(draft).get("Hashtags") if draft else "") or "")
-    tags = [t for t in dict.fromkeys(hashtag_line(tags).split() + hashtag_line(list(tc["hashtags"])).split())
-            if t.lower() != "#shorts"]  # YouTube's tag
-    title = Bleeper(scfg["bleep"]).mask(m["title"])
+    limit = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])["tiktok"]["max_caption_chars"]
+    title, tags = rumble.title_and_tags(e, cfg, "tiktok")
     text = f"{title}\n\n{' '.join(tags)}".strip()
-    while len(text) > tc["max_caption_chars"] and tags:
+    while len(text) > limit and tags:
         tags.pop()
         text = f"{title}\n\n{' '.join(tags)}".strip()
-    return text[:tc["max_caption_chars"]]
+    return text[:limit]
 
 
 # ---------- sending ----------

@@ -55,6 +55,7 @@ def test_flags_mean_the_same_everywhere():
 @pytest.mark.parametrize("argv", [
     ("upload", "--links", "--next", "2"), ("upload", "--sign-in", "--thumbnails"),
     ("rumble", "--status", "--done", "s02"), ("tiktok", "--auto", "--items", "t20"),
+    ("x", "--auto", "--items", "t20"),
     ("schedule", "--show"), ("analytics", "--show"),   # clashed with the global --show KEY
     ("shorts", "kick-1", "--at", "soon")])
 def test_refused_on_the_command_line(argv, capsys):
