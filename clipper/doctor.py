@@ -427,7 +427,7 @@ def check_keys(cfg: dict, role: str) -> None:
 
 
 def check_tiktok(cfg: dict) -> None:
-    """Optional: only `clipper tiktok` needs it."""
+    """Optional: only `clipper tiktok` needs it (parked since 2026-11-01, so a stale sign-in warns)."""
     p = cfg["paths"]
     if not p["tiktok_client"].exists():
         warn("keys", "no TikTok client key: `clipper tiktok` won't work here (optional)",
@@ -446,9 +446,9 @@ def check_tiktok(cfg: dict) -> None:
     tok = jsonstate.load(p["tiktok_token"])
     days = (tok.get("refresh_expires_at", 0) - time.time()) / 86400
     if days <= 0:
-        fail("keys", "TikTok sign-in expired", "clipper tiktok --sign-in")
+        warn("keys", "TikTok sign-in expired (optional)", "clipper tiktok --sign-in")
     elif "video.upload" not in tok.get("scope", ""):
-        fail("keys", f"TikTok token lacks video.upload (has {tok.get('scope')!r})",
+        warn("keys", f"TikTok token lacks video.upload (has {tok.get('scope')!r})",
              "add the scope to the app, then clipper tiktok --sign-in")
     else:
         (warn if days < 14 else ok)("keys", f"TikTok sign-in token {p['tiktok_token'].name} "

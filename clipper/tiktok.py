@@ -17,8 +17,12 @@
 Uses the Content Posting API's Upload route (scope video.upload): the video lands in the
 app's inbox and you open the notification, add a sound if you like, paste the caption and
 post. The API takes no caption for drafts, so clipper posts it to Discord ([tiktok]
-caption_channel_id, else the [record] alert webhook/channel) and prints it. Direct posting
-(video.publish) needs TikTok's app audit and is private only until then (issue #29).
+caption_channel_id, else the [record] alert webhook/channel) and prints it.
+
+Parked (user, 2026-11-01): auto-send has been off since 2026-10-28 (TikTok flagged the drafts
+as bot activity) and the user posts by hand. Direct posting (video.publish) is dropped: it
+needs TikTok's app audit, which refuses tools that only post to your own accounts (#62, #116).
+This module still works for hand sends; picking it up again starts from SETUP.md (TikTok).
 
 TikTok allows at most 5 pending drafts in any 24 hours; [tiktok] max_per_24h (default 3)
 keeps under that. --auto (user, 2026-10-22) sends every scheduled Short in the order YouTube

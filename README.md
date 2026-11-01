@@ -53,7 +53,8 @@ fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> t
   cut, meta, thumbs, Shorts and review like scored ones; `--dry-run` shows them without saving.
 - **tiktok / rumble**: `clipper tiktok --items ...` sends Shorts to the TikTok app's drafts (you post from the
   phone; the caption comes to Discord); `--auto`, which the bot runs every `[tiktok] auto_send_minutes`,
-  sends the next ones in YouTube-schedule order up to `max_per_24h`. `clipper rumble` prepares folders
+  sends the next ones in YouTube-schedule order up to `max_per_24h` (TikTok is parked: we post by hand,
+  auto-send off, no direct posting; SETUP.md says why). `clipper rumble` prepares folders
   for Rumble's upload form.
 - **x**: `clipper x --items ...` posts Shorts to X as native video (hook-first title + one hashtag, no
   link: X bills a link post at $0.20 against $0.015); `--auto`, which the bot runs every

@@ -71,8 +71,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   https://x.com/lolcowcinema/status/2116800759941767587 (720x1280 re-encode accepted).
   Profile set 11-01 (bio, youtube.com/@lolcowcinema, YouTube avatar + banner crop in
   ~/Pictures/lolcow-x); the app browser pane is signed in to X.
-- TikTok: **auto-send off since 2026-10-28** (TikTok flagged bot activity); the user posts by hand. Don't
-  send drafts unless asked (`clipper tiktok --items ... [--resend]`).
+- TikTok: **parked (2026-11-01)**. Auto-send off since 2026-10-28 (TikTok flagged bot activity); the user
+  posts by hand. No direct posting: the app audit refuses own-account tools and the user won't release
+  clipper to others (#62, #116 closed). Don't send drafts unless asked (`clipper tiktok --items ... [--resend]`).
 - Transcription on Modal (L40S, ~$0.34 per 8 h) since 2026-10-23; Kino streams are diarized
   (`[shows.kino.transcribe] diarize = true`, ~$0.30 more) and the scoring v5 / segments v3 / meta v3
   prompts read the speaker tags. Cut runs on the NAS (`[cut] backend = "nas"`) since 2026-10-26.
