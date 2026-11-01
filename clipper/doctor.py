@@ -423,6 +423,7 @@ def check_keys(cfg: dict, role: str) -> None:
             warn("keys", "no YouTube client secret: `clipper upload` won't work here",
                  f"copy {p['youtube_client_secret'].name} and {p['youtube_token'].name} into secrets/")
         check_tiktok(cfg)
+        check_x(cfg)
 
 
 def check_tiktok(cfg: dict) -> None:
@@ -452,6 +453,34 @@ def check_tiktok(cfg: dict) -> None:
     else:
         (warn if days < 14 else ok)("keys", f"TikTok sign-in token {p['tiktok_token'].name} "
                                     f"(renew within {days:.0f} days)", "clipper tiktok --sign-in")
+
+
+def check_x(cfg: dict) -> None:
+    """Optional: only `clipper x` needs it."""
+    from .xpost import SCOPES
+
+    p = cfg["paths"]
+    if not p["x_client"].exists():
+        warn("keys", "no X client id: `clipper x` won't work here (optional)",
+             f"see SETUP.md (X); save the app's client id in {p['x_client']}")
+        return
+    try:
+        c = json.loads(p["x_client"].read_text(encoding="utf-8-sig"))
+        assert c.get("client_id")
+    except (ValueError, AssertionError, AttributeError):
+        fail("keys", f"{p['x_client'].name} is not JSON with client_id", '{"client_id": "..."}')
+        return
+    if not p["x_token"].exists():
+        warn("keys", "X client id present but not signed in", "clipper x --sign-in")
+        return
+    tok = jsonstate.load(p["x_token"])
+    missing = set(SCOPES.split()) - set(tok.get("scope", "").split())
+    if missing:
+        fail("keys", f"X token lacks {' '.join(sorted(missing))}", "clipper x --sign-in")
+    elif not tok.get("refresh_token"):
+        warn("keys", "X token has no refresh token: it lapses in 2 h", "clipper x --sign-in")
+    else:
+        ok("keys", f"X sign-in token {p['x_token'].name}")
 
 
 def check_narrate(cfg: dict) -> None:

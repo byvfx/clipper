@@ -3,7 +3,7 @@
 This file is the **current state** between sessions: what runs where, what the user decided,
 what is waiting on them, open work, recipes, gotchas. Keep it short (under ~300 lines): update
 the sections in place, don't append diaries here. The session-by-session diary is
-**`docs/log/2026-10.md`** (one file per month; grep it, don't read it whole). At the end of a
+**`docs/log/2026-11.md`** (one file per month, October in 2026-10.md; grep it, don't read it whole). At the end of a
 session: fix what changed here, then add a dated entry at the end of the log.
 
 Stream clipper for Kino Casino (Kick channel `kinocasinogaming`) and Channel 404 News → YouTube
@@ -32,7 +32,7 @@ pre-show whole; also one-offs with `--from/--to/--about`), `pick` (Shorts from a
 `weekly` (ten-page tabloid issue, Saturdays), `receipts` (old clips of an archive subject for a
 stream's stories, Mother Moo voice-over), `archive` (back catalogs on Modal: Jer complete, FTS index,
 `ask`), `speakers` (diarization names), `narrate` / `perform` (Mother Moo: ElevenLabs read, lip-sync
-pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `warroom`, `doctor`.
+pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `warroom`, `doctor`.
 
 ## User decisions (keep)
 - Titles/descriptions/cut points approved as-is; fun descriptions are liked.
@@ -61,6 +61,10 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   shows take turns (`mix_shows`). `manual_publish = false`: **"asap" items (pre-shows, one-offs) publish
   public the moment they upload.** Every upload also joins its show's playlist. Source links are added
   at upload (clip → segment `?t=`, segment → compilation) and backfilled hourly.
+- X (@lolcowcinema, 2026-10-31): `clipper x` posts Shorts as native video, title + 2 hashtags, never a
+  link (X bills $0.20 a link post vs $0.015). `--auto` (off until the user says) only posts Shorts that went
+  public on YouTube in the last 48 h, so X stays current. Signed in 2026-11-01; first post
+  https://x.com/lolcowcinema/status/2116800759941767587 (720x1280 re-encode accepted).
 - TikTok: **auto-send off since 2026-10-28** (TikTok flagged bot activity); the user posts by hand. Don't
   send drafts unless asked (`clipper tiktok --items ... [--resend]`).
 - Transcription on Modal (L40S, ~$0.34 per 8 h) since 2026-10-23; Kino streams are diarized
@@ -119,6 +123,8 @@ pieces, stitch), `tiktok`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `wa
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
+- X: whether to turn on `[x] auto_post_minutes` (bot restart needed; 10 Shorts due on 11-01), and whether
+  to try `max_height = 0` (1080x1920 as is). The `clipper x` code is uncommitted on main.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
