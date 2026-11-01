@@ -126,7 +126,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 
 ## Waiting on the user
 - X: whether to turn on `[x] auto_post_minutes` (bot restart needed; 10 Shorts due on 11-01), and whether
-  to try `max_height = 0` (1080x1920 as is). The `clipper x` code is uncommitted on main.
+  to try `max_height = 0` (1080x1920 as is). Merged as #113 (2b6cca2); turning auto on needs a bot restart.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
