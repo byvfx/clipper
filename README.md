@@ -58,7 +58,9 @@ fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> t
 - **x**: `clipper x --items ...` posts Shorts to X as native video (hook-first title + one hashtag, no
   link: X bills a link post at $0.20 against $0.015); `--auto`, which the bot runs every
   `[x] auto_post_minutes` (off by default), posts approved Shorts from streams of the last
-  `max_age_hours`, newest stream first, without waiting for YouTube.
+  `max_age_hours`, newest stream first, without waiting for YouTube. `clipper x --issue [DAY]`
+  posts a weekly issue's ten pages as a thread of 4 + 4 + 2 images (text from issue.json `post`,
+  or `post.x` for a hand edit; `x.json` in the issue folder records it).
 
 Everything is a `clipper <stage>` subcommand. `clipper run` does every stage a stream still
 needs, and `clipper worker` does that for each recording as it finishes. Clips and Shorts come first
