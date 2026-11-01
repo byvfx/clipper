@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from clipper import cli, jsonstate, xpost
+from clipper.errors import ClipperError
 
 NOW = datetime(2026, 11, 1, 20, 0, tzinfo=UTC)
 
@@ -156,3 +159,35 @@ def test_issue_folder_finds_the_saturday_or_the_newest_issue(tmp_path):
     assert xpost.issue_folder(cfg, None).name == "2026-10-31"
     assert xpost.issue_folder(cfg, "2026-10-19").name == "2026-10-24"   # a Monday
     assert xpost.issue_folder(cfg, "2026-10-31").name == "2026-10-31"   # the Saturday itself
+
+
+def test_an_issue_needs_all_ten_pages_once(tmp_path):
+    for n in range(1, 10):                       # a render that stopped after page 09
+        (tmp_path / f"{n:02d}_p.jpg").write_bytes(b"")
+    with pytest.raises(ClipperError, match=r"missing \['10'\]"):
+        xpost.issue_pages(tmp_path)
+    (tmp_path / "10_back.jpg").write_bytes(b"")
+    assert len(xpost.issue_pages(tmp_path)) == 10
+    (tmp_path / "10_other.jpg").write_bytes(b"")
+    with pytest.raises(ClipperError, match=r"extra \['10'\]"):
+        xpost.issue_pages(tmp_path)
+
+
+def test_x_len_counts_emoji_double():
+    assert xpost.x_len("Issue 03 — out") == 14
+    assert xpost.x_len("📰 x") == 4
+
+
+def test_an_issue_claim_stops_a_second_run_and_counts_against_the_allowance(tmp_path):
+    sched, weekly = tmp_path / "schedule.json", tmp_path / "weekly"
+    here = weekly / "2026-10-31"
+    here.mkdir(parents=True)
+    jsonstate.write(sched, {"entries": [entry("v01_t01"), entry(
+        "v03_t03", x={"status": "posted", "url": "u", "posted_at": datetime.now(UTC).isoformat()})]})
+    cfg = {"paths": {"schedule": sched, "weekly": weekly}, "x": {"max_per_24h": 4}}
+    assert xpost.claim_issue(cfg, here, 3) == ""
+    assert xpost.claim_issue(cfg, here, 3) == "being posted by another run"
+    assert xpost.used_last_24h(cfg, jsonstate.load(sched)) == 4         # 1 Short + 3 reserved
+    assert "max_per_24h" in xpost.claim(cfg, "kick-1/v01_t01")
+    jsonstate.write(here / "x.json", {"posts": [{"posted_at": datetime.now(UTC).isoformat()}] * 2})
+    assert "3 posts needed, 1 of 4 left" in xpost.claim_issue(cfg, here, 3)

@@ -61,6 +61,7 @@ MB = 1024 * 1024
 CHUNK = 4 * MB       # X: keep each appended segment at or below 5 MB (the server takes 8)
 CLAIM_S = 1800       # a run's claim on an entry older than this was left by a run that died
 MAX_TRIES = 3        # --auto tries a failed post again until it has failed this often
+ISSUE_PAGES = 10     # a weekly issue's pages, all posted or none
 
 
 class XError(ClipperError):
@@ -357,7 +358,7 @@ def claim(cfg: dict, key: str) -> str:
             return f"already on X ({x['url']})"
         if active(x, now):
             return "being posted by another run"
-        if posted_last_24h(sched, now) >= cfg["x"]["max_per_24h"]:
+        if used_last_24h(cfg, sched, now) >= cfg["x"]["max_per_24h"]:
             return f"not posted, {cfg['x']['max_per_24h']} posts in the last 24 h ([x] max_per_24h)"
         e.setdefault("platforms", {})["x"] = {**x, "status": "posting", "claimed_at": now.isoformat(timespec="seconds")}
     return ""
@@ -370,7 +371,7 @@ def post(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
                                        for r in items)}.values())
     if not dry_run:
         user = whoami(cfg)
-        print(f"X account: @{user}; {max(limit - posted_last_24h(sched), 0)} of {limit} posts left in 24 h")
+        print(f"X account: @{user}; {max(limit - used_last_24h(cfg, sched), 0)} of {limit} posts left in 24 h")
 
     failed = []
     for e in todo:
@@ -470,25 +471,88 @@ def issue_thread(issue: dict, pages: list[Path], limit: int) -> list[tuple[str, 
     return [(texts[i] if i < len(texts) else "", g) for i, g in enumerate(groups)]
 
 
+def x_len(text: str) -> int:
+    """Length as X counts it: most Latin and punctuation code points weigh 1, the rest
+    (emoji, CJK) 2."""
+    light = ((0, 4351), (8192, 8205), (8208, 8223), (8242, 8247))
+    return sum(1 if any(a <= ord(c) <= b for a, b in light) else 2 for c in text)
+
+
+def issue_pages(here: Path) -> list[Path]:
+    """Pages 01-10 of an issue, each exactly once: a half-finished render would otherwise go
+    out as a complete thread and the missing page could never follow."""
+    pages = sorted(here.glob("[0-9][0-9]_*.jpg"))
+    nums = [p.name[:2] for p in pages]
+    want = [f"{n:02d}" for n in range(1, ISSUE_PAGES + 1)]
+    if nums != want:
+        missing = sorted(set(want) - set(nums))
+        extra = sorted(n for n in set(nums) if nums.count(n) > 1 or n not in want)
+        raise ClipperError(f"{here} needs pages 01-{ISSUE_PAGES:02d} once each (missing {missing or '-'}, "
+                           f"extra {extra or '-'}); run: clipper weekly --render")
+    return pages
+
+
+def issue_posts_last_24h(cfg: dict, now: datetime | None = None) -> int:
+    """Weekly-issue posts in the 24 h allowance: posted ones, and the places a run still
+    posting has reserved (claims older than CLAIM_S were left by a run that died)."""
+    now = now or datetime.now(UTC)
+    since, n = now - timedelta(hours=24), 0
+    if not cfg["paths"].get("weekly"):
+        return 0
+    for f in Path(cfg["paths"]["weekly"]).glob("*/x.json"):
+        rec = jsonstate.read(f, {})
+        n += sum(1 for p in rec.get("posts") or [] if datetime.fromisoformat(p["posted_at"]) > since)
+        c = rec.get("claim") or {}
+        if c and (now - datetime.fromisoformat(c["claimed_at"])).total_seconds() < CLAIM_S:
+            n += int(c.get("left", 0))
+    return n
+
+
+def used_last_24h(cfg: dict, sched: dict, now: datetime | None = None) -> int:
+    """The account's posts in the last 24 h: Shorts (schedule.json) and weekly issues."""
+    return posted_last_24h(sched, now) + issue_posts_last_24h(cfg, now)
+
+
+def claim_issue(cfg: dict, here: Path, posts: int) -> str:
+    """Take the issue for this run, reserving `posts` places in the allowance, under the
+    schedule's lock (as Short claims are) and then the issue's x.json lock, so two runs can't
+    post the same thread twice or go past max_per_24h. "" when claimed, else why not."""
+    now = datetime.now(UTC)
+    limit = cfg["x"]["max_per_24h"]
+    with jsonstate.update(cfg["paths"]["schedule"]) as sched:
+        room = limit - used_last_24h(cfg, sched, now)
+        with jsonstate.update(here / "x.json", {}) as rec:
+            c = rec.get("claim") or {}
+            if c and (now - datetime.fromisoformat(c["claimed_at"])).total_seconds() < CLAIM_S:
+                return "being posted by another run"
+            if posts > room:
+                return (f"not posted: {posts} posts needed, {max(room, 0)} of {limit} left in 24 h "
+                        f"([x] max_per_24h)")
+            rec["claim"] = {"claimed_at": now.isoformat(timespec="seconds"), "left": posts}
+    return ""
+
+
 def post_issue(cfg: dict, day: str | None = None, dry_run: bool = False) -> None:
     """Post a weekly issue's 3:4 pages as a thread. weekly/<Saturday>/x.json keeps each post as
-    it goes, so a run that failed halfway carries on as replies to the last one posted."""
+    it goes, so a run that failed halfway carries on as replies to the last one posted. Every
+    caption is checked against [x] max_chars before anything goes up."""
     from .bleep import Bleeper
 
     paths, xc = cfg["paths"], cfg["x"]
     here = issue_folder(cfg, day)
     issue = jsonstate.load(here / "issue.json")
-    pages = sorted(here.glob("[0-9][0-9]_*.jpg"))
-    if not pages:
-        raise ClipperError(f"no pages in {here}; run: clipper weekly --render")
+    pages = issue_pages(here)
     mask = Bleeper(cfg["bleep"]).mask
     thread = [(mask(t), g) for t, g in issue_thread(issue, pages, xc["max_chars"])]
-    rec = jsonstate.read(here / "x.json", {})
-    done = rec.get("posts") or []
+    done = jsonstate.read(here / "x.json", {}).get("posts") or []
     print(f"issue {int(issue.get('issue') or 0):02d} ({here.name}): {len(thread)} posts, {len(pages)} pages")
     if len(done) >= len(thread):
         print(f"  already on X: {done[0]['url']}")
         return
+    long = [f"post {i + 1} ({x_len(t)})" for i, (t, _) in enumerate(thread) if x_len(t) > xc["max_chars"]]
+    if long:
+        raise ClipperError(f"over [x] max_chars {xc['max_chars']}: {', '.join(long)}; "
+                           f"shorten it in issue.json post.x")
     for i, (text, group) in enumerate(thread):
         if re.search(r"\bhosts?\b", text, re.IGNORECASE):
             print(f"  warning: post {i + 1} says host(s); set issue.json post.x by hand")
@@ -497,22 +561,31 @@ def post_issue(cfg: dict, day: str | None = None, dry_run: bool = False) -> None
     if dry_run:
         return
     user = whoami(cfg)
-    for i, (text, group) in enumerate(thread[len(done):], len(done)):
-        body = {"text": text, "media": {"media_ids": [upload_video(paths, p, "image/jpeg", "tweet_image")
-                                                      for p in group]}}
-        if done:
-            body["reply"] = {"in_reply_to_tweet_id": done[-1]["id"]}
-        try:
-            pid = call(paths, "POST", "/tweets", json=body)["data"]["id"]
-        except (ClipperError, requests.RequestException) as ex:
-            raise ClipperError(f"X post {i + 1} of issue {here.name} failed: {ex}; run it again to carry on")
-        done.append({"id": pid, "url": f"https://x.com/{user}/status/{pid}", "text": text,
-                     "posted_at": costs.now_iso()})
-        jsonstate.write(here / "x.json", {"posts": done})
-        costs.record(paths.get("costs"), {"ts": costs.now_iso(), "kind": "x", "provider": "x",
-                                          "model": "post", "stage": "x", "stream": f"weekly/{here.name}",
-                                          "usd": xc["post_usd"]})
-        print(f"  {i + 1}/{len(thread)}: posted {done[-1]['url']}")
+    why = claim_issue(cfg, here, len(thread) - len(done))
+    if why:
+        raise ClipperError(f"issue {here.name}: {why}")
+    try:
+        for i, (text, group) in enumerate(thread[len(done):], len(done)):
+            body = {"text": text, "media": {"media_ids": [upload_video(paths, p, "image/jpeg", "tweet_image")
+                                                          for p in group]}}
+            if done:
+                body["reply"] = {"in_reply_to_tweet_id": done[-1]["id"]}
+            try:
+                pid = call(paths, "POST", "/tweets", json=body)["data"]["id"]
+            except (ClipperError, requests.RequestException) as ex:
+                raise ClipperError(f"X post {i + 1} of issue {here.name} failed: {ex}; run it again to carry on")
+            done.append({"id": pid, "url": f"https://x.com/{user}/status/{pid}", "text": text,
+                         "posted_at": costs.now_iso()})
+            with jsonstate.update(here / "x.json", {}) as rec:
+                rec["posts"] = done
+                rec["claim"]["left"] = max(rec["claim"].get("left", 1) - 1, 0)
+            costs.record(paths.get("costs"), {"ts": costs.now_iso(), "kind": "x", "provider": "x",
+                                              "model": "post", "stage": "x", "stream": f"weekly/{here.name}",
+                                              "usd": xc["post_usd"]})
+            print(f"  {i + 1}/{len(thread)}: posted {done[-1]['url']}")
+    finally:
+        with jsonstate.update(here / "x.json", {}) as rec:
+            rec.pop("claim", None)
 
 
 def public_on_youtube(cfg: dict, entries: list[dict]) -> list[dict]:
@@ -529,7 +602,7 @@ def public_on_youtube(cfg: dict, entries: list[dict]) -> list[dict]:
 def auto(cfg: dict, dry_run: bool = False) -> None:
     limit, xc_for = cfg["x"]["max_per_24h"], xc_of(cfg)
     sched = rumble.load_schedule(cfg)
-    room = max(limit - posted_last_24h(sched), 0)
+    room = max(limit - used_last_24h(cfg, sched), 0)
     queue = [e for e in due(sched, xc_for, aired=aired_of(cfg), approved=approved_of(cfg))
              if Path(e["file"]).exists()]
     checked = [e for e in queue if xc_for(e)["after_youtube"]]
@@ -560,7 +633,7 @@ def status(cfg: dict, stream: str | None = None) -> None:
         x = x_of(e)
         when = (x.get("posted_at") or x.get("failed_at") or "")[:16]
         print(f"  {when}  {x['status']:<6} {e['key']:<34} {x.get('url') or x.get('error', '')[:80]}")
-    print(f"{len(rows)} on X; {posted_last_24h(sched)} posted in the last 24 h (max {cfg['x']['max_per_24h']})")
+    print(f"{len(rows)} on X; {used_last_24h(cfg, sched)} posted in the last 24 h (max {cfg['x']['max_per_24h']})")
     if not stream:
         n = len(due(sched, xc_of(cfg), aired=aired_of(cfg), approved=approved_of(cfg)))
         print(f"{n} Shorts due and not posted; post with: clipper x --items <key>,... "

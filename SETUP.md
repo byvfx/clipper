@@ -505,6 +505,8 @@ recommended portrait size.
 6. **Weekly issue**: `clipper x --issue --dry-run` shows the newest issue as a thread (X takes four
    images a post: pages 01-04, 05-08, 09-10) with its text; without `--dry-run` it posts. To change
    the text, put a list of three strings in the issue's `issue.json` under `post.x`. A run that
-   failed halfway carries on as replies to the last post (`weekly/<Saturday>/x.json`).
+   failed halfway carries on as replies to the last post (`weekly/<Saturday>/x.json`). It needs all ten
+   pages, every caption within `[x] max_chars`, and room for the whole thread in `max_per_24h`, which
+   issue posts share with Shorts; a second run at the same time is refused.
 
 Each post's cost is logged like a model call (`clipper costs`, kind `x`).
