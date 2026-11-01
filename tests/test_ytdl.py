@@ -54,3 +54,29 @@ def test_json_cookie_export_becomes_netscape(tmp_path):
     txt = tmp_path / "plain.txt"
     txt.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
     assert ytdl.netscape_cookies(txt) == txt
+
+
+def test_newest_browser_export_beside_the_cookies_file_wins(tmp_path):
+    import os
+
+    p = tmp_path / "youtube_cookies.txt"
+    cfg = {"paths": {"youtube_cookies": p}}
+    assert ytdl.cookies_file(cfg) == p  # nothing there yet
+    p.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    old = tmp_path / "www.youtube.com_28-10-2026.json"
+    new = tmp_path / "www.youtube.com_31-10-2026.json"
+    old.write_text("[]", encoding="utf-8")
+    new.write_text("[]", encoding="utf-8")
+    for f, t in ((old, 1_000), (p, 2_000), (new, 3_000)):
+        os.utime(f, (t, t))
+    assert ytdl.cookies_file(cfg) == new
+    os.utime(p, (4_000, 4_000))  # copied over youtube_cookies.txt after that
+    assert ytdl.cookies_file(cfg) == p
+
+
+def test_signed_in_retry_converts_an_export_to_one_fixed_file(monkeypatch, tmp_path):
+    calls = fake_run(monkeypatch, "ERROR: Sign in to confirm you're not a bot")
+    (tmp_path / "www.youtube.com_31-10-2026.json").write_text("[]", encoding="utf-8")
+    cfg = {"paths": {"youtube_cookies": tmp_path / "youtube_cookies.txt"}}
+    _, signed_in = ytdl.run_retrying(cfg, "URL", retry_on=ytdl.BOT)
+    assert signed_in and calls[1][1] == str(tmp_path / "youtube_cookies.netscape.txt")

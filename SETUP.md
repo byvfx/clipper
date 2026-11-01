@@ -195,9 +195,14 @@ cookies.txt or as JSON (Cookie-Editor's default; converted to `youtube_cookies.n
 beside it) with a browser extension (e.g. "Get cookies.txt LOCALLY") from a private
 window signed in to an adult Google account (not the upload channel's, if you can avoid it),
 then close the window so the session isn't rotated. Rerun `transcribe` to pick up the failures.
+A JSON export left in the same folder under the extension's own name (`www.youtube.com_<date>.json`)
+is used without renaming when it is newer than `youtube_cookies.txt`.
 Pre-shows use the same file more freely: when YouTube's bot check ("Sign in to confirm you're
 not a bot") stops a pre-show grab, `clipper preshow` retries it signed in. The archive never
-does that, so a bulk run doesn't put the account on a blocked IP.
+does that, so a bulk run doesn't put the account on a blocked IP. Browsers rotate these
+cookies within days; when a signed-in retry still hits the bot check, the bot DMs ([notify]
+kind `failure`, once per video per `cooldown_hours`) to export fresh ones. The block is on the
+IP: a PO-token provider (bgutil-ytdlp-pot-provider, tried 2026-10-31) doesn't get past it.
 On a new install, `clipper modal --backfill` adds the runs from before the log, once.
 
 **Costs (#50).** Every model call appends its cost to `[paths] costs` (`logs/costs.jsonl`)

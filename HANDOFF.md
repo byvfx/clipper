@@ -257,7 +257,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   from before that keep the 7-day limit). `clipper doctor` (online) refreshes it to test it; `upload --sign-in` keeps the analytics scope now.
 - YouTube bot-checks this IP for yt-dlp; pre-show/one-off grabs retry signed in with
   secrets/youtube_cookies.txt, which browsers rotate: re-export when "cookies are no longer valid", and
-  copy the export over that file (one saved under another name isn't read).
+  leave the export in secrets/ (the newest `www.youtube.com_*.json` there is used, or copy it over
+  that file). A pre-show stuck on the bot check after the signed-in retry DMs once per video. The
+  block is on the IP: a PO-token provider (bgutil, tried 10-31) doesn't get past it.
 - A cut killed half way can leave `clipper-cut-<id>` running on the NAS: `ssh nas docker rm -f clipper-cut-<id>`.
 - `uv sync` can't replace the running clipper.exe while the bot is up (`uv pip install` instead, and
   include `--extra modal` later). yt-dlp needs deno for YouTube.
@@ -281,3 +283,4 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 2026-10-29 Face out from under the inset · Audit phases 1-3 · Stay current instead of a backlog · War room layouts
 2026-10-30 YouTube sign-in expired · Audit finished and merged; pull, restart, recorder redeploy, cast ·
            #77 finished (#105 reverted, #106 after Copilot's review)
+2026-10-31 Halloween pre-show (stale cookies)
