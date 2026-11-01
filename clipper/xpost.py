@@ -207,21 +207,27 @@ def upload_video(paths: dict, video: Path) -> str:
 # ---------- text ----------
 
 def post_text(title: str, tags: list[str], limit: int, max_tags: int, mentions: list[str] = ()) -> str:
-    """Title, then up to max_tags hashtags and the mentions, inside X's limit (tags go
-    first, then the title is shortened). Links are taken out: X bills a post with a URL at
+    """Title, then up to max_tags hashtags and the mentions, inside X's limit: tags go
+    first, then the title is shortened to leave room for the mentions (dropped only if they
+    can't fit beside a readable title). Links are taken out: X bills a post with a URL at
     $0.20."""
     title = re.sub(r"\s+", " ", re.sub(r"(https?://|www\.)\S+", "", title)).strip()
     tags = list(dict.fromkeys(tags))[:max_tags]
     ats = [m if m.startswith("@") else f"@{m}" for m in mentions]
 
-    def join() -> str:
-        return f"{title}\n\n{' '.join(tags + ats)}".strip()
+    def join(head: str) -> str:
+        return f"{head}\n\n{' '.join(tags + ats)}".strip()
 
-    text = join()
+    text = join(title)
     while len(text) > limit and tags:
         tags.pop()
-        text = join()
-    return text if len(text) <= limit else title[:limit - 1].rstrip() + "…"
+        text = join(title)
+    if len(text) <= limit:
+        return text
+    room = limit - (len(" ".join(ats)) + 2 if ats else 0)
+    if room < 20:  # the mentions alone fill the post
+        ats, room = [], limit
+    return join(title[:room - 1].rstrip() + "…")
 
 
 def text_for(e: dict, cfg: dict) -> str:
@@ -285,11 +291,28 @@ def aired_of(cfg: dict):
     return get
 
 
-def due(sched: dict, xc_for, now: datetime | None = None, aired=lambda e: None) -> list[dict]:
+def approved_of(cfg: dict):
+    """Entry -> approved in Kitsu (review.json) and not on Hold right now. schedule.json
+    keeps an uploaded entry even after it's rejected or held, so its status alone isn't
+    approval."""
+    from .schedule import truthy
+
+    cache: dict = {}
+
+    def get(e: dict) -> bool:
+        if e["stream"] not in cache:
+            cache[e["stream"]] = jsonstate.read(cfg["paths"]["streams"] / e["stream"] / "review.json", {})
+        r = cache[e["stream"]].get(split_key(e["key"])[1]) or {}
+        return r.get("decision") == "approved" and not truthy((r.get("fields") or {}).get("Hold"))
+    return get
+
+
+def due(sched: dict, xc_for, now: datetime | None = None, aired=lambda e: None,
+        approved=lambda e: True) -> list[dict]:
     """Entries --auto would post: the right kind and not on X (or failed fewer than
-    MAX_TRIES times). By default, as soon as they are approved and scheduled, from a stream
-    that aired no more than max_age_hours ago, newest stream first: on X a clip is worth
-    most while the topic is hot. With after_youtube, only once uploaded with the slot passed
+    MAX_TRIES times) and still `approved`. By default, as soon as they are scheduled, from
+    a stream that aired no more than max_age_hours ago, newest stream first: on X a clip is
+    worth most while the topic is hot. With after_youtube, only once uploaded with the slot passed
     and that slot within max_age_hours, earliest first (`auto` then asks YouTube that each
     is really public)."""
     now = now or datetime.now(UTC)
@@ -299,6 +322,8 @@ def due(sched: dict, xc_for, now: datetime | None = None, aired=lambda e: None) 
         if e["kind"] not in xc["kinds"]:
             return False
         if x and not (x.get("status") == "failed" and x.get("tries", 1) < MAX_TRIES):
+            return False
+        if not approved(e):
             return False
         at = datetime.fromisoformat(e["publish_at"]) if e.get("publish_at") else None
         oldest = now - timedelta(hours=xc["max_age_hours"]) if xc["max_age_hours"] else None
@@ -410,7 +435,8 @@ def auto(cfg: dict, dry_run: bool = False) -> None:
     limit, xc_for = cfg["x"]["max_per_24h"], xc_of(cfg)
     sched = rumble.load_schedule(cfg)
     room = max(limit - posted_last_24h(sched), 0)
-    queue = [e for e in due(sched, xc_for, aired=aired_of(cfg)) if Path(e["file"]).exists()]
+    queue = [e for e in due(sched, xc_for, aired=aired_of(cfg), approved=approved_of(cfg))
+             if Path(e["file"]).exists()]
     checked = [e for e in queue if xc_for(e)["after_youtube"]]
     if room and checked:
         public = {e["key"] for e in public_on_youtube(cfg, checked)}
@@ -441,5 +467,6 @@ def status(cfg: dict, stream: str | None = None) -> None:
         print(f"  {when}  {x['status']:<6} {e['key']:<34} {x.get('url') or x.get('error', '')[:80]}")
     print(f"{len(rows)} on X; {posted_last_24h(sched)} posted in the last 24 h (max {cfg['x']['max_per_24h']})")
     if not stream:
-        print(f"{len(due(sched, xc_of(cfg), aired=aired_of(cfg)))} Shorts due and not posted; post with: clipper x --items <key>,... "
+        n = len(due(sched, xc_of(cfg), aired=aired_of(cfg), approved=approved_of(cfg)))
+        print(f"{n} Shorts due and not posted; post with: clipper x --items <key>,... "
               "or clipper x --auto")

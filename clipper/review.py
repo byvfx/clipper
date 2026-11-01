@@ -191,7 +191,7 @@ def bare_title(cfg: dict | None, title: str) -> str:
     show, fmt = mc.get("show_name") or "", mc.get("title_format") or "{title}"
     prefix = fmt.split("{title}")[0].format(show=show, SHOW=show.upper()).strip()
     if show and prefix and title.lower().startswith(prefix.lower()):
-        return title[len(prefix):].lstrip(" |:-–—") or title
+        return title[len(prefix):].strip() or title
     return title
 
 

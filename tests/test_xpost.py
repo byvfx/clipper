@@ -77,8 +77,34 @@ def test_hook_first_text_and_mentions():
     assert bare_title(cfg, "KINO CASINO | Joe turned down $1,000") == "Joe turned down $1,000"
     assert bare_title(cfg, "Joe turned down $1,000") == "Joe turned down $1,000"
     assert bare_title({"meta": {}}, "KINO CASINO | x") == "KINO CASINO | x"
+    assert bare_title(cfg, "KINO CASINO | -$1,000 in donations") == "-$1,000 in donations"   # hook kept whole
     assert xpost.post_text("Hook", ["#Kino", "#B"], 280, 1, ["Andywarski", "@PoweroftheTruth"]) == \
         "Hook\n\n#Kino @Andywarski @PoweroftheTruth"
+
+
+def test_a_long_title_is_shortened_around_the_mentions():
+    ats = ["@Andywarski", "@PoweroftheTruth"]
+    text = xpost.post_text("x" * 80, ["#Kino"], 100, 1, ats)
+    assert len(text) <= 100 and text.endswith("\n\n@Andywarski @PoweroftheTruth") and "…" in text
+    assert xpost.post_text("x" * 80, [], 30, 1, ats) == "x" * 29 + "…"   # mentions alone would fill it
+
+
+def test_auto_skips_uploads_no_longer_approved():
+    xc = {"kinds": ["short"], "after_youtube": False, "max_age_hours": 0}
+    sched = {"entries": [entry("v01_t01"), entry("v02_t02", status="scheduled")]}
+    got = xpost.due(sched, lambda e: xc, NOW, approved=lambda e: e["key"].endswith("t02"))
+    assert [e["key"] for e in got] == ["kick-1/v02_t02"]
+
+
+def test_approval_reads_the_kitsu_decision_and_hold(tmp_path):
+    sdir = tmp_path / "kick-1"
+    sdir.mkdir()
+    jsonstate.write(sdir / "review.json", {
+        "v01_t01": {"decision": "approved", "fields": {}},
+        "v02_t02": {"decision": "approved", "fields": {"Hold": "true"}},
+        "v03_t03": {"decision": "rejected", "fields": {}}})
+    ok = xpost.approved_of({"paths": {"streams": tmp_path}})
+    assert [ok(entry(k)) for k in ("v01_t01", "v02_t02", "v03_t03", "v04_t04")] == [True, False, False, False]
 
 
 def test_a_claim_stops_a_second_run_and_the_allowance(tmp_path):
