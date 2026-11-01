@@ -183,6 +183,18 @@ def full_title(cfg: dict | None, title: str) -> str:
     return out if len(out) <= 100 else title
 
 
+def bare_title(cfg: dict | None, title: str) -> str:
+    """The title without [meta] title_format's show prefix ("KINO CASINO | "), for feeds
+    that show only the first few words."""
+    title = " ".join((title or "").split())
+    mc = (cfg or {}).get("meta", {})
+    show, fmt = mc.get("show_name") or "", mc.get("title_format") or "{title}"
+    prefix = fmt.split("{title}")[0].format(show=show, SHOW=show.upper()).strip()
+    if show and prefix and title.lower().startswith(prefix.lower()):
+        return title[len(prefix):].strip() or title
+    return title
+
+
 def hashtag_line(text: str | list[str]) -> str:
     """'#A #B' from a list, or from text with or without the #s (commas allowed)."""
     words = text if isinstance(text, list) else (text or "").replace(",", " ").split()

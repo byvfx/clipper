@@ -3,16 +3,16 @@
   clipper x --sign-in          one-time sign-in in your browser (OAuth 2.0 with PKCE); token
                                saved in paths.x_token and refreshed automatically
   clipper x --items s02,t20    post these now (a failed one is tried again)
-  clipper x --auto             post the Shorts that went live on YouTube in the last
-                               max_age_hours and aren't on X yet, earliest slot first, up to
-                               max_per_24h (the bot runs this every
+  clipper x --auto             post approved, scheduled Shorts from streams that aired in
+                               the last max_age_hours and aren't on X yet, newest stream
+                               first, up to max_per_24h (the bot runs this every
                                [x] auto_post_minutes; 0, the default, means only by hand)
   clipper x [stream]           what was posted, with links
 
 The video goes up through the v2 chunked media upload (initialize / append / finalize, then
 STATUS until X has processed it) and the post is POST /2/tweets with its media id. The text
-is the Short's title and up to [x] max_hashtags hashtags, banned words masked as everywhere
-else. No link goes in the text: X bills a post with a URL at $0.20 against $0.015 (pay-per-use
+is the Short's title, hook first (no "KINO CASINO | " prefix, [x] hook_first), then up to
+[x] max_hashtags hashtags and any [x] mentions, banned words masked as everywhere else. No link goes in the text: X bills a post with a URL at $0.20 against $0.015 (pay-per-use
 pricing, 2026). Each post's cost is logged to paths.costs like a model call (`clipper costs`).
 
 X's recommended portrait size is 720x1280 and its docs cap dimensions near that, so a Short
@@ -21,8 +21,9 @@ taller than [x] max_height is re-encoded to fit first (into streams/<id>/x/, del
 Each post is recorded in schedule.json under "platforms": {"x": {...}} (as `clipper tiktok`
 does), so nothing goes twice. A run first claims the entry there under the schedule's lock
 (status "posting"), so the bot's --auto and a hand --items can't both post it or go past
-max_per_24h. --auto asks YouTube that each Short is really public (an upload can stay
-private), tries a failed post again up to MAX_TRIES times, and skips titles that say
+max_per_24h. X doesn't wait for YouTube (a clip is worth most on X while the topic is
+hot); with [x] after_youtube it does, and asks YouTube that each Short is really public
+(an upload can stay private). --auto tries a failed post again up to MAX_TRIES times, and skips titles that say
 "host(s)". Settings are the Short's show's ([shows.<key>.x]); the allowance is the account's.
 A failed post makes the command exit non-zero, so the bot DMs it.
 
@@ -205,22 +206,41 @@ def upload_video(paths: dict, video: Path) -> str:
 
 # ---------- text ----------
 
-def post_text(title: str, tags: list[str], limit: int, max_tags: int) -> str:
-    """Title, then up to max_tags hashtags, inside X's limit (tags go first, then the title
-    is shortened). Links are taken out: X bills a post with a URL at $0.20."""
+def post_text(title: str, tags: list[str], limit: int, max_tags: int, mentions: list[str] = ()) -> str:
+    """Title, then up to max_tags hashtags and the mentions, inside X's limit: tags go
+    first, then the title is shortened to leave room for the mentions (dropped only if they
+    can't fit beside a readable title). Links are taken out: X bills a post with a URL at
+    $0.20."""
     title = re.sub(r"\s+", " ", re.sub(r"(https?://|www\.)\S+", "", title)).strip()
     tags = list(dict.fromkeys(tags))[:max_tags]
-    text = f"{title}\n\n{' '.join(tags)}".strip()
+    ats = [m if m.startswith("@") else f"@{m}" for m in mentions]
+
+    def join(head: str) -> str:
+        return f"{head}\n\n{' '.join(tags + ats)}".strip()
+
+    text = join(title)
     while len(text) > limit and tags:
         tags.pop()
-        text = f"{title}\n\n{' '.join(tags)}".strip()
-    return text if len(text) <= limit else title[:limit - 1].rstrip() + "…"
+        text = join(title)
+    if len(text) <= limit:
+        return text
+    room = limit - (len(" ".join(ats)) + 2 if ats else 0)
+    if room < 20:  # the mentions alone fill the post
+        ats, room = [], limit
+    return join(title[:room - 1].rstrip() + "…")
 
 
 def text_for(e: dict, cfg: dict) -> str:
-    xc = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])["x"]
+    """The post's text. With hook_first the show prefix ("KINO CASINO | ") comes off the
+    title, so the feed's first words are the hook; the hashtag or a mention names the show."""
+    from .review import bare_title
+
+    scfg = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])
+    xc = scfg["x"]
     title, tags = rumble.title_and_tags(e, cfg, "x")
-    return post_text(title, tags, xc["max_chars"], xc["max_hashtags"])
+    if xc["hook_first"]:
+        title = bare_title(scfg, title)
+    return post_text(title, tags, xc["max_chars"], xc["max_hashtags"], xc["mentions"])
 
 
 # ---------- posting ----------
@@ -259,11 +279,42 @@ def posted_last_24h(sched: dict, now: datetime | None = None) -> int:
                if (at := active(x_of(e), now)) and at > since)
 
 
-def due(sched: dict, xc_for, now: datetime | None = None) -> list[dict]:
-    """Entries --auto would post, earliest slot first: the right kind, not on X (or failed
-    fewer than MAX_TRIES times), (with after_youtube) uploaded with their slot passed, and
-    that slot no more than max_age_hours ago, so X stays current instead of working off a
-    backlog. `auto` then asks YouTube that each is really public."""
+def aired_of(cfg: dict):
+    """Entry -> when its stream started (meta.json), or None."""
+    cache: dict = {}
+
+    def get(e: dict) -> datetime | None:
+        if e["stream"] not in cache:
+            meta = jsonstate.read(cfg["paths"]["streams"] / e["stream"] / "meta.json", {})
+            cache[e["stream"]] = datetime.fromisoformat(meta["started_at"]) if meta.get("started_at") else None
+        return cache[e["stream"]]
+    return get
+
+
+def approved_of(cfg: dict):
+    """Entry -> approved in Kitsu (review.json) and not on Hold right now. schedule.json
+    keeps an uploaded entry even after it's rejected or held, so its status alone isn't
+    approval."""
+    from .schedule import truthy
+
+    cache: dict = {}
+
+    def get(e: dict) -> bool:
+        if e["stream"] not in cache:
+            cache[e["stream"]] = jsonstate.read(cfg["paths"]["streams"] / e["stream"] / "review.json", {})
+        r = cache[e["stream"]].get(split_key(e["key"])[1]) or {}
+        return r.get("decision") == "approved" and not truthy((r.get("fields") or {}).get("Hold"))
+    return get
+
+
+def due(sched: dict, xc_for, now: datetime | None = None, aired=lambda e: None,
+        approved=lambda e: True) -> list[dict]:
+    """Entries --auto would post: the right kind and not on X (or failed fewer than
+    MAX_TRIES times) and still `approved`. By default, as soon as they are scheduled, from
+    a stream that aired no more than max_age_hours ago, newest stream first: on X a clip is
+    worth most while the topic is hot. With after_youtube, only once uploaded with the slot passed
+    and that slot within max_age_hours, earliest first (`auto` then asks YouTube that each
+    is really public)."""
     now = now or datetime.now(UTC)
 
     def ready(e: dict) -> bool:
@@ -272,14 +323,21 @@ def due(sched: dict, xc_for, now: datetime | None = None) -> list[dict]:
             return False
         if x and not (x.get("status") == "failed" and x.get("tries", 1) < MAX_TRIES):
             return False
-        at = datetime.fromisoformat(e["publish_at"]) if e.get("publish_at") else None
-        if xc["max_age_hours"] and at and at < now - timedelta(hours=xc["max_age_hours"]):
+        if not approved(e):
             return False
-        if not xc["after_youtube"]:
-            return e.get("status") in ("scheduled", "uploaded")
-        return e.get("status") == "uploaded" and (not at or at <= now)
+        at = datetime.fromisoformat(e["publish_at"]) if e.get("publish_at") else None
+        oldest = now - timedelta(hours=xc["max_age_hours"]) if xc["max_age_hours"] else None
+        if xc["after_youtube"]:
+            return (e.get("status") == "uploaded" and (not at or at <= now)
+                    and not (oldest and at and at < oldest))
+        when = aired(e) or at
+        return e.get("status") in ("scheduled", "uploaded") and not (oldest and when and when < oldest)
 
-    return sorted((e for e in sched["entries"] if ready(e)), key=lambda e: e.get("publish_at") or "")
+    def order(e: dict) -> tuple:
+        started = None if xc_for(e)["after_youtube"] else aired(e)
+        return (-started.timestamp() if started else 0, e.get("publish_at") or "")
+
+    return sorted((e for e in sched["entries"] if ready(e)), key=order)
 
 
 def claim(cfg: dict, key: str) -> str:
@@ -377,7 +435,8 @@ def auto(cfg: dict, dry_run: bool = False) -> None:
     limit, xc_for = cfg["x"]["max_per_24h"], xc_of(cfg)
     sched = rumble.load_schedule(cfg)
     room = max(limit - posted_last_24h(sched), 0)
-    queue = [e for e in due(sched, xc_for) if Path(e["file"]).exists()]
+    queue = [e for e in due(sched, xc_for, aired=aired_of(cfg), approved=approved_of(cfg))
+             if Path(e["file"]).exists()]
     checked = [e for e in queue if xc_for(e)["after_youtube"]]
     if room and checked:
         public = {e["key"] for e in public_on_youtube(cfg, checked)}
@@ -408,5 +467,6 @@ def status(cfg: dict, stream: str | None = None) -> None:
         print(f"  {when}  {x['status']:<6} {e['key']:<34} {x.get('url') or x.get('error', '')[:80]}")
     print(f"{len(rows)} on X; {posted_last_24h(sched)} posted in the last 24 h (max {cfg['x']['max_per_24h']})")
     if not stream:
-        print(f"{len(due(sched, xc_of(cfg)))} Shorts due and not posted; post with: clipper x --items <key>,... "
+        n = len(due(sched, xc_of(cfg), aired=aired_of(cfg), approved=approved_of(cfg)))
+        print(f"{n} Shorts due and not posted; post with: clipper x --items <key>,... "
               "or clipper x --auto")
