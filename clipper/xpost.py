@@ -19,7 +19,12 @@ X's recommended portrait size is 720x1280 and its docs cap dimensions near that,
 taller than [x] max_height is re-encoded to fit first (into streams/<id>/x/, deleted after).
 
 Each post is recorded in schedule.json under "platforms": {"x": {...}} (as `clipper tiktok`
-does), so nothing goes twice. --auto skips titles that say "host(s)".
+does), so nothing goes twice. A run first claims the entry there under the schedule's lock
+(status "posting"), so the bot's --auto and a hand --items can't both post it or go past
+max_per_24h. --auto asks YouTube that each Short is really public (an upload can stay
+private), tries a failed post again up to MAX_TRIES times, and skips titles that say
+"host(s)". Settings are the Short's show's ([shows.<key>.x]); the allowance is the account's.
+A failed post makes the command exit non-zero, so the bot DMs it.
 
 Keys: paths.x_client, JSON {"client_id": ...} for a Native App (public client), plus
 "client_secret" for a Web App (confidential client), from the app's "Keys and tokens" page
@@ -51,6 +56,8 @@ API = "https://api.x.com/2"
 SCOPES = "tweet.read tweet.write users.read media.write offline.access"
 MB = 1024 * 1024
 CHUNK = 4 * MB       # X: keep each appended segment at or below 5 MB (the server takes 8)
+CLAIM_S = 1800       # a run's claim on an entry older than this was left by a run that died
+MAX_TRIES = 3        # --auto tries a failed post again until it has failed this often
 
 
 class XError(ClipperError):
@@ -200,7 +207,8 @@ def upload_video(paths: dict, video: Path) -> str:
 
 def post_text(title: str, tags: list[str], limit: int, max_tags: int) -> str:
     """Title, then up to max_tags hashtags, inside X's limit (tags go first, then the title
-    is shortened)."""
+    is shortened). Links are taken out: X bills a post with a URL at $0.20."""
+    title = re.sub(r"\s+", " ", re.sub(r"(https?://|www\.)\S+", "", title)).strip()
     tags = list(dict.fromkeys(tags))[:max_tags]
     text = f"{title}\n\n{' '.join(tags)}".strip()
     while len(text) > limit and tags:
@@ -221,43 +229,91 @@ def x_of(e: dict) -> dict:
     return (e.get("platforms") or {}).get("x") or {}
 
 
+def xc_of(cfg: dict):
+    """Entry -> its show's [x] settings (kinds, max_height, after_youtube, ...); the 24 h
+    allowance is the account's, from the base config."""
+    cache: dict = {}
+
+    def get(e: dict) -> dict:
+        if e["stream"] not in cache:
+            cache[e["stream"]] = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])["x"]
+        return cache[e["stream"]]
+    return get
+
+
+def active(x: dict, now: datetime) -> datetime | None:
+    """When a record took a place in the 24 h allowance: a post, or a claim by a run that is
+    still uploading (claims older than CLAIM_S were left by a run that died)."""
+    if x.get("status") == "posted":
+        return datetime.fromisoformat(x["posted_at"])
+    if x.get("status") == "posting":
+        at = datetime.fromisoformat(x["claimed_at"])
+        return at if (now - at).total_seconds() < CLAIM_S else None
+    return None
+
+
 def posted_last_24h(sched: dict, now: datetime | None = None) -> int:
-    since = (now or datetime.now(UTC)) - timedelta(hours=24)
-    return sum(1 for e in sched["entries"] + sched.get("unscheduled", [])
-               if x_of(e).get("status") == "posted"
-               and datetime.fromisoformat(x_of(e)["posted_at"]) > since)
-
-
-def due(sched: dict, xc: dict, now: datetime | None = None) -> list[dict]:
-    """Entries --auto would post, earliest slot first: the right kind, never tried on X,
-    (with after_youtube) uploaded with their slot passed, i.e. public on YouTube, and that
-    slot no more than max_age_hours ago, so X stays current instead of working off a backlog."""
     now = now or datetime.now(UTC)
-    oldest = now - timedelta(hours=xc["max_age_hours"]) if xc["max_age_hours"] else None
+    since = now - timedelta(hours=24)
+    return sum(1 for e in sched["entries"] + sched.get("unscheduled", [])
+               if (at := active(x_of(e), now)) and at > since)
+
+
+def due(sched: dict, xc_for, now: datetime | None = None) -> list[dict]:
+    """Entries --auto would post, earliest slot first: the right kind, not on X (or failed
+    fewer than MAX_TRIES times), (with after_youtube) uploaded with their slot passed, and
+    that slot no more than max_age_hours ago, so X stays current instead of working off a
+    backlog. `auto` then asks YouTube that each is really public."""
+    now = now or datetime.now(UTC)
 
     def ready(e: dict) -> bool:
+        xc, x = xc_for(e), x_of(e)
+        if e["kind"] not in xc["kinds"]:
+            return False
+        if x and not (x.get("status") == "failed" and x.get("tries", 1) < MAX_TRIES):
+            return False
         at = datetime.fromisoformat(e["publish_at"]) if e.get("publish_at") else None
-        if oldest and at and at < oldest:
+        if xc["max_age_hours"] and at and at < now - timedelta(hours=xc["max_age_hours"]):
             return False
         if not xc["after_youtube"]:
             return e.get("status") in ("scheduled", "uploaded")
         return e.get("status") == "uploaded" and (not at or at <= now)
 
-    return sorted((e for e in sched["entries"] if e["kind"] in xc["kinds"] and not x_of(e) and ready(e)),
-                  key=lambda e: e.get("publish_at") or "")
+    return sorted((e for e in sched["entries"] if ready(e)), key=lambda e: e.get("publish_at") or "")
+
+
+def claim(cfg: dict, key: str) -> str:
+    """Take `key` for this run under the schedule's lock, so an overlapping run (the bot's
+    --auto and a hand --items) can't post it twice or past max_per_24h. "" when claimed,
+    else why not."""
+    now = datetime.now(UTC)
+    with jsonstate.update(cfg["paths"]["schedule"]) as sched:
+        e = next((e for e in sched["entries"] + sched.get("unscheduled", []) if e["key"] == key), None)
+        if e is None:
+            return "gone from schedule.json"
+        x = x_of(e)
+        if x.get("status") == "posted":
+            return f"already on X ({x['url']})"
+        if active(x, now):
+            return "being posted by another run"
+        if posted_last_24h(sched, now) >= cfg["x"]["max_per_24h"]:
+            return f"not posted, {cfg['x']['max_per_24h']} posts in the last 24 h ([x] max_per_24h)"
+        e.setdefault("platforms", {})["x"] = {**x, "status": "posting", "claimed_at": now.isoformat(timespec="seconds")}
+    return ""
 
 
 def post(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool = False) -> None:
-    xc, paths = cfg["x"], cfg["paths"]
+    paths, xc_for, limit = cfg["paths"], xc_of(cfg), cfg["x"]["max_per_24h"]
     sched = rumble.load_schedule(cfg)
-    todo = [rumble.resolve(sched, r if "/" in r or not stream else f"{stream}/{r}") for r in items]
-    room = xc["max_per_24h"] - posted_last_24h(sched)
+    todo = list({e["key"]: e for e in (rumble.resolve(sched, r if "/" in r or not stream else f"{stream}/{r}")
+                                       for r in items)}.values())
     if not dry_run:
         user = whoami(cfg)
-        print(f"X account: @{user}; {max(room, 0)} of {xc['max_per_24h']} posts left in 24 h")
+        print(f"X account: @{user}; {max(limit - posted_last_24h(sched), 0)} of {limit} posts left in 24 h")
 
+    failed = []
     for e in todo:
-        x = x_of(e)
+        xc, x = xc_for(e), x_of(e)
         if x.get("status") == "posted":
             print(f"  {e['key']}: already on X ({x['url']})")
             continue
@@ -275,37 +331,61 @@ def post(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
             print(f"  {e['key']}: would post {video.name} ({video.stat().st_size / MB:.0f} MB, "
                   f"{media.duration(video):.0f} s)\n    text: {text!r}")
             continue
-        if room <= 0:
-            print(f"  {e['key']}: not posted, {xc['max_per_24h']} posts in the last 24 h ([x] max_per_24h)")
+        why = claim(cfg, e["key"])
+        if why:
+            print(f"  {e['key']}: {why}")
             continue
-        sdir = paths["streams"] / e["stream"]
+        sendable = video
         try:
-            sendable = fit(video, sdir, xc["max_height"])
+            sendable = fit(video, paths["streams"] / e["stream"], xc["max_height"])
             mid = upload_video(paths, sendable)
             pid = call(paths, "POST", "/tweets", json={"text": text, "media": {"media_ids": [mid]}})["data"]["id"]
         except (ClipperError, requests.RequestException, subprocess.CalledProcessError) as ex:
             rumble.save_platform(cfg, {e["key"]: {"status": "failed", "error": str(ex)[:300], "text": text,
-                                                  "failed_at": costs.now_iso()}}, "x")
+                                                  "tries": x.get("tries", 0) + 1, "failed_at": costs.now_iso()}}, "x")
             print(f"  {e['key']}: FAILED: {ex}")
+            failed.append(f"{e['key']}: {ex}")
             continue
-        if sendable != video:
-            sendable.unlink(missing_ok=True)
         url = f"https://x.com/{user}/status/{pid}"
         rumble.save_platform(cfg, {e["key"]: {"status": "posted", "post_id": pid, "media_id": mid,
                                               "url": url, "text": text, "posted_at": costs.now_iso()}}, "x")
         costs.record(paths.get("costs"), {"ts": costs.now_iso(), "kind": "x", "provider": "x",
                                           "model": "post", "stage": "x", "stream": e["stream"],
                                           "usd": xc["post_usd"]})
-        room -= 1
         print(f"  {e['key']}: posted {url}\n    text: {text}")
+        if sendable != video:
+            try:
+                sendable.unlink(missing_ok=True)
+            except OSError as ex:
+                print(f"  warning: couldn't delete {sendable}: {ex}")
+    if failed:
+        raise ClipperError(f"{len(failed)} X post(s) failed: {'; '.join(failed)[:400]}")
+
+
+def public_on_youtube(cfg: dict, entries: list[dict]) -> list[dict]:
+    """The entries YouTube says are public (an upload may stay private: manual_publish, or
+    made private in Studio)."""
+    from . import youtube
+
+    if not entries:
+        return []
+    status = youtube.privacy(youtube.service(cfg["paths"]), [e.get("video_id") for e in entries])
+    return [e for e in entries if status.get(e.get("video_id"), {}).get("privacyStatus") == "public"]
 
 
 def auto(cfg: dict, dry_run: bool = False) -> None:
-    xc = cfg["x"]
+    limit, xc_for = cfg["x"]["max_per_24h"], xc_of(cfg)
     sched = rumble.load_schedule(cfg)
-    room = max(xc["max_per_24h"] - posted_last_24h(sched), 0)
-    queue = [e for e in due(sched, xc) if Path(e["file"]).exists()]
-    print(f"X: {len(queue)} Shorts due and not posted; {room} of {xc['max_per_24h']} posts left in 24 h")
+    room = max(limit - posted_last_24h(sched), 0)
+    queue = [e for e in due(sched, xc_for) if Path(e["file"]).exists()]
+    checked = [e for e in queue if xc_for(e)["after_youtube"]]
+    if room and checked:
+        public = {e["key"] for e in public_on_youtube(cfg, checked)}
+        for e in checked:
+            if e["key"] not in public:
+                print(f"  {e['key']}: skipped, not public on YouTube")
+        queue = [e for e in queue if e["key"] in public or not xc_for(e)["after_youtube"]]
+    print(f"X: {len(queue)} Shorts due and not posted; {room} of {limit} posts left in 24 h")
     picked = []
     for e in queue:
         if len(picked) >= room:
@@ -328,5 +408,5 @@ def status(cfg: dict, stream: str | None = None) -> None:
         print(f"  {when}  {x['status']:<6} {e['key']:<34} {x.get('url') or x.get('error', '')[:80]}")
     print(f"{len(rows)} on X; {posted_last_24h(sched)} posted in the last 24 h (max {cfg['x']['max_per_24h']})")
     if not stream:
-        print(f"{len(due(sched, cfg['x']))} Shorts due and not posted; post with: clipper x --items <key>,... "
+        print(f"{len(due(sched, xc_of(cfg)))} Shorts due and not posted; post with: clipper x --items <key>,... "
               "or clipper x --auto")
