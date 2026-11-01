@@ -7,6 +7,8 @@
                                the last max_age_hours and aren't on X yet, newest stream
                                first, up to max_per_24h (the bot runs this every
                                [x] auto_post_minutes; 0, the default, means only by hand)
+  clipper x --issue [DAY]      post a weekly issue's ten pages as a thread of 4 + 4 + 2
+                               images (the newest issue, or the week holding DAY)
   clipper x [stream]           what was posted, with links
 
 The video goes up through the v2 chunked media upload (initialize / append / finalize, then
@@ -174,10 +176,11 @@ def fit(video: Path, sdir: Path, max_height: int) -> Path:
     return out
 
 
-def upload_video(paths: dict, video: Path) -> str:
+def upload_video(paths: dict, video: Path, media_type: str = "video/mp4",
+                 category: str = "tweet_video") -> str:
     size = video.stat().st_size
     mid = call(paths, "POST", "/media/upload/initialize", json={
-        "media_type": "video/mp4", "total_bytes": size, "media_category": "tweet_video"})["data"]["id"]
+        "media_type": media_type, "total_bytes": size, "media_category": category})["data"]["id"]
     with open(video, "rb") as f:
         for i, start in enumerate(range(0, size, CHUNK)):
             f.seek(start)
@@ -418,6 +421,98 @@ def post(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
                 print(f"  warning: couldn't delete {sendable}: {ex}")
     if failed:
         raise ClipperError(f"{len(failed)} X post(s) failed: {'; '.join(failed)[:400]}")
+
+
+# ---------- weekly issue ----------
+
+def issue_folder(cfg: dict, day: str | None) -> Path:
+    """weekly/<Saturday>/ of the week holding `day`, or the newest issue drafted."""
+    root = Path(cfg["paths"]["weekly"])
+    if day:
+        d = datetime.strptime(day, "%Y-%m-%d")
+        here = root / (d + timedelta(days=(5 - d.weekday()) % 7)).strftime("%Y-%m-%d")
+    else:
+        drafted = sorted(p.parent for p in root.glob("*/issue.json"))
+        if not drafted:
+            raise ClipperError(f"no weekly issue in {root}; run: clipper weekly")
+        here = drafted[-1]
+    if not (here / "issue.json").exists():
+        raise ClipperError(f"no issue.json in {here}; run: clipper weekly --week {day}")
+    return here
+
+
+def caption_body(text: str) -> str:
+    """A post caption without its hashtag lines and a leading "Pages 6-10:"."""
+    lines = [s for s in text.splitlines() if not re.fullmatch(r"(\s*#\w+)+\s*", s)]
+    return re.sub(r"^Pages \d+-\d+:\s*", "", " ".join(lines).strip())
+
+
+def issue_thread(issue: dict, pages: list[Path], limit: int) -> list[tuple[str, list[Path]]]:
+    """The issue as a thread: X takes four images a post, so ten pages go 4 + 4 + 2. The text is
+    issue.json's post.x (a list, one per post: the place for a hand edit), else the two post
+    captions without their hashtags, one hashtag naming the cover subject, and the readers' poll
+    on the last post."""
+    groups = [pages[i:i + 4] for i in range(0, len(pages), 4)]
+    post = issue.get("post") or {}
+    texts = post.get("x")
+    if not texts:
+        subject = re.sub(r"\W", "", (issue.get("cover") or {}).get("person", ""))
+        back = issue.get("back") or {}
+        names = [o.get("name") or o.get("person") for o in back.get("options") or []]
+        poll = ""
+        if back.get("poll") and names:
+            q = back["poll"].strip()
+            poll = (f"{q[0]}{q[1:].lower()} {', '.join(names[:-1])} or {names[-1]}. Reply with your pick."
+                    if len(names) > 1 else f"{q[0]}{q[1:].lower()}")
+        texts = [post_text(caption_body(post.get("part1", "")), [f"#{subject}"] if subject else [], limit, 1),
+                 post_text(caption_body(post.get("part2", "")), [], limit, 0),
+                 poll]
+    return [(texts[i] if i < len(texts) else "", g) for i, g in enumerate(groups)]
+
+
+def post_issue(cfg: dict, day: str | None = None, dry_run: bool = False) -> None:
+    """Post a weekly issue's 3:4 pages as a thread. weekly/<Saturday>/x.json keeps each post as
+    it goes, so a run that failed halfway carries on as replies to the last one posted."""
+    from .bleep import Bleeper
+
+    paths, xc = cfg["paths"], cfg["x"]
+    here = issue_folder(cfg, day)
+    issue = jsonstate.load(here / "issue.json")
+    pages = sorted(here.glob("[0-9][0-9]_*.jpg"))
+    if not pages:
+        raise ClipperError(f"no pages in {here}; run: clipper weekly --render")
+    mask = Bleeper(cfg["bleep"]).mask
+    thread = [(mask(t), g) for t, g in issue_thread(issue, pages, xc["max_chars"])]
+    rec = jsonstate.read(here / "x.json", {})
+    done = rec.get("posts") or []
+    print(f"issue {int(issue.get('issue') or 0):02d} ({here.name}): {len(thread)} posts, {len(pages)} pages")
+    if len(done) >= len(thread):
+        print(f"  already on X: {done[0]['url']}")
+        return
+    for i, (text, group) in enumerate(thread):
+        if re.search(r"\bhosts?\b", text, re.IGNORECASE):
+            print(f"  warning: post {i + 1} says host(s); set issue.json post.x by hand")
+        print(f"  {i + 1}/{len(thread)}{' (posted)' if i < len(done) else ''}: "
+              f"{', '.join(p.name for p in group)}\n    text: {text!r}")
+    if dry_run:
+        return
+    user = whoami(cfg)
+    for i, (text, group) in enumerate(thread[len(done):], len(done)):
+        body = {"text": text, "media": {"media_ids": [upload_video(paths, p, "image/jpeg", "tweet_image")
+                                                      for p in group]}}
+        if done:
+            body["reply"] = {"in_reply_to_tweet_id": done[-1]["id"]}
+        try:
+            pid = call(paths, "POST", "/tweets", json=body)["data"]["id"]
+        except (ClipperError, requests.RequestException) as ex:
+            raise ClipperError(f"X post {i + 1} of issue {here.name} failed: {ex}; run it again to carry on")
+        done.append({"id": pid, "url": f"https://x.com/{user}/status/{pid}", "text": text,
+                     "posted_at": costs.now_iso()})
+        jsonstate.write(here / "x.json", {"posts": done})
+        costs.record(paths.get("costs"), {"ts": costs.now_iso(), "kind": "x", "provider": "x",
+                                          "model": "post", "stage": "x", "stream": f"weekly/{here.name}",
+                                          "usd": xc["post_usd"]})
+        print(f"  {i + 1}/{len(thread)}: posted {done[-1]['url']}")
 
 
 def public_on_youtube(cfg: dict, entries: list[dict]) -> list[dict]:

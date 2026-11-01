@@ -129,3 +129,30 @@ def test_a_refresh_keeps_the_refresh_token_if_none_comes_back():
 def test_command_line():
     a = cli.build_parser().parse_args(["x", "--items", "t20", "kick-1"])
     assert a.items == ["t20"] and a.stream == "kick-1" and a.fn is cli.cmd_x
+
+
+def test_issue_thread_goes_four_pages_a_post_with_the_poll_last(tmp_path):
+    pages = [tmp_path / f"{n:02d}_p.jpg" for n in range(1, 11)]
+    issue = {"cover": {"person": "The Quartering"},
+             "post": {"part1": "Issue 03 is out. Huck needed an MRI.\n#Kick #KinoCasino",
+                      "part2": "Pages 6-10: AB's cousin hands out career advice.\n#Kick #DSP"},
+             "back": {"poll": "WHO HAD THE WORST WEEK?",
+                      "options": [{"name": "Jer"}, {"name": "Ethan Klein"}, {"person": "AB"}]}}
+    thread = xpost.issue_thread(issue, pages, 280)
+    assert [len(g) for _, g in thread] == [4, 4, 2]
+    assert [t for t, _ in thread] == [
+        "Issue 03 is out. Huck needed an MRI.\n\n#TheQuartering",
+        "AB's cousin hands out career advice.",
+        "Who had the worst week? Jer, Ethan Klein or AB. Reply with your pick."]
+    issue["post"]["x"] = ["one", "two"]  # a hand edit wins; a post without text goes bare
+    assert [t for t, _ in xpost.issue_thread(issue, pages, 280)] == ["one", "two", ""]
+
+
+def test_issue_folder_finds_the_saturday_or_the_newest_issue(tmp_path):
+    for d in ("2026-10-24", "2026-10-31"):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "issue.json").write_text("{}")
+    cfg = {"paths": {"weekly": tmp_path}}
+    assert xpost.issue_folder(cfg, None).name == "2026-10-31"
+    assert xpost.issue_folder(cfg, "2026-10-19").name == "2026-10-24"   # a Monday
+    assert xpost.issue_folder(cfg, "2026-10-31").name == "2026-10-31"   # the Saturday itself

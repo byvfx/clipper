@@ -470,6 +470,8 @@ def cmd_x(cfg: dict, args: argparse.Namespace) -> None:
         print(f"signed in to X as @{xpost.whoami(cfg)}")
     if args.items:
         xpost.post(cfg, args.items, args.stream, dry_run=args.dry_run)
+    elif args.issue:
+        xpost.post_issue(cfg, None if args.issue == "latest" else args.issue, dry_run=args.dry_run)
     elif args.auto:
         xpost.auto(cfg, dry_run=args.dry_run)
     elif not args.sign_in:
@@ -905,8 +907,11 @@ def add_review(sub) -> None:
     add_items(m, "post these, e.g. t20,v01_t20 or a full schedule key")
     m.add_argument("--auto", action="store_true",
                    help="post the Shorts live on YouTube and not on X yet, up to max_per_24h")
+    m.add_argument("--issue", nargs="?", const="latest", metavar="DAY",
+                   help="post a weekly issue's pages as a thread (any day of its week, YYYY-MM-DD; "
+                        "default the newest issue)")
     p.add_argument("--sign-in", action="store_true", help="one-time X sign-in in your browser (then "
-                                                         "carries on with --items/--auto if given)")
+                                                         "carries on with --items/--auto/--issue if given)")
     p.add_argument("--dry-run", action="store_true", help="show files and text, post nothing")
     p.set_defaults(fn=cmd_x)
 

@@ -112,7 +112,11 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   projects (#44 Jerry Banfield, #45 Papa Meat, #47 Ben Avery) wait on the desktop install and permissions.
 - **Receipts for Don:** first video private at https://youtu.be/q6gemx2kKMs (2026-10-26); sending it is the
   user's call. On-screen source links would need a re-cut.
-- **Weekly:** issue 02 posted 2026-10-24; issue 03 is Saturday 2026-10-31 (`clipper weekly --headline "..."`).
+- **Weekly:** issue 03 (Oct 25-31, Jer's Huck MRI grift cover) built 2026-11-01 in `weekly/2026-10-31/`,
+  posting page https://claude.ai/artifact/TnP9uXjpyGVpJC2KPipM6o; the user posts TikTok/YouTube by hand.
+  On X since 11-01 as a thread (`clipper x --issue`, after the user OKs the text):
+  https://x.com/lolcowcinema/status/2116852491925254298. Issue 04 is
+  Saturday 2026-11-07 (`clipper weekly --headline "..."`; on a Sunday add `--week <Saturday>`).
 - **The Udder Truth:** storyboard complete, voice and pipeline chosen; next is the newsroom set (Brass Eye
   refs in mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
   (~1,550 credits; 18,457 Runway credits left on 10-24).
@@ -152,7 +156,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
   MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
-- Issue 03 of the weekly on Saturday; the monthly check-in report on 11-01.
+- Weekly issue 03: post it by hand (TikTok carousel + two YouTube Posts) from the artifact page (X done). The
+  monthly check-in report on 11-01.
 - YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The 10:30 token was issued while still in Testing and may still lapse 11-06: one more `clipper upload --sign-in` now gives a token that doesn't expire.
 
 ## Open work
@@ -162,8 +167,8 @@ running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/th
 `draw.py`, war room split into `web/warroom.css` + `web/js/*.js` (docs/warroom.md), `clipper services
 status|stop|restart`, `deploy/common.ps1` for both task scripts, per-show `[meta] cast`, Kitsu push of
 changed schedule values only (`schedule --kitsu-all` for everything), doctor checks every show's prompts.
-**Held: #101 (weekly split, worktree `C:\clipper-weekly`)**: merge only after Saturday 2026-10-31's
-issue is out (the user runs `clipper weekly` from C:\clipper); it merged cleanly with main on 10-30.
+**Held: #101 (weekly split, worktree `C:\clipper-weekly`)**: issue 03 was built 2026-11-01, so it can
+merge now (wait for Copilot as usual); it merged cleanly with main on 10-30.
 Then remove that worktree (the other audit worktrees are already gone).
 Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (provider side-by-side,
 `clipper edit`), #50 (revenue once monetized), #42 (closes after the first check-in). #77 is done
