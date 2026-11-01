@@ -65,6 +65,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   link (X bills $0.20 a link post vs $0.015). `--auto` (off until the user says) only posts Shorts that went
   public on YouTube in the last 48 h, so X stays current. Signed in 2026-11-01; first post
   https://x.com/lolcowcinema/status/2116800759941767587 (720x1280 re-encode accepted).
+  Profile set 11-01 (bio, youtube.com/@lolcowcinema, YouTube avatar + banner crop in
+  ~/Pictures/lolcow-x); the app browser pane is signed in to X.
 - TikTok: **auto-send off since 2026-10-28** (TikTok flagged bot activity); the user posts by hand. Don't
   send drafts unless asked (`clipper tiktok --items ... [--resend]`).
 - Transcription on Modal (L40S, ~$0.34 per 8 h) since 2026-10-23; Kino streams are diarized
