@@ -57,6 +57,30 @@ def test_auto_waits_for_youtube_and_retries_failures():
     assert xpost.due(sched, lambda e: {**xc, "kinds": []}, NOW) == []   # a show that posts nothing
 
 
+def test_by_default_x_takes_the_newest_stream_first_without_waiting_for_youtube():
+    xc = {"kinds": ["short"], "after_youtube": False, "max_age_hours": 48}
+    aired = {"kick-1": NOW - timedelta(hours=60), "kick-2": NOW - timedelta(hours=20),
+             "kick-3": NOW - timedelta(hours=5)}
+    sched = {"entries": [
+        entry("v01_t01", status="scheduled", at="2026-11-02T09:00:00-08:00"),
+        {**entry("v02_t02", status="scheduled", at="2026-11-03T09:00:00-08:00"), "stream": "kick-3"},
+        {**entry("v03_t03", status="scheduled", at="2026-11-02T10:00:00-08:00"), "stream": "kick-2"},
+        {**entry("v04_t04", status="scheduled", at="2026-11-02T11:00:00-08:00"), "stream": "kick-3"}]}
+    got = xpost.due(sched, lambda e: xc, NOW, aired=lambda e: aired[e["stream"]])
+    assert [e["key"].split("/")[1] for e in got] == ["v04_t04", "v02_t02", "v03_t03"]   # kick-1 aired 60 h ago
+
+
+def test_hook_first_text_and_mentions():
+    from clipper.review import bare_title
+
+    cfg = {"meta": {"show_name": "Kino Casino", "title_format": "{SHOW} | {title}"}}
+    assert bare_title(cfg, "KINO CASINO | Joe turned down $1,000") == "Joe turned down $1,000"
+    assert bare_title(cfg, "Joe turned down $1,000") == "Joe turned down $1,000"
+    assert bare_title({"meta": {}}, "KINO CASINO | x") == "KINO CASINO | x"
+    assert xpost.post_text("Hook", ["#Kino", "#B"], 280, 1, ["Andywarski", "@PoweroftheTruth"]) == \
+        "Hook\n\n#Kino @Andywarski @PoweroftheTruth"
+
+
 def test_a_claim_stops_a_second_run_and_the_allowance(tmp_path):
     path = tmp_path / "schedule.json"
     jsonstate.write(path, {"entries": [entry("v01_t01"), entry("v02_t02"),

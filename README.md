@@ -55,9 +55,10 @@ fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> t
   phone; the caption comes to Discord); `--auto`, which the bot runs every `[tiktok] auto_send_minutes`,
   sends the next ones in YouTube-schedule order up to `max_per_24h`. `clipper rumble` prepares folders
   for Rumble's upload form.
-- **x**: `clipper x --items ...` posts Shorts to X as native video (title + hashtags, no link: X bills a
-  link post at $0.20 against $0.015); `--auto`, which the bot runs every `[x] auto_post_minutes` (off by
-  default), posts the ones that went public on YouTube in the last `max_age_hours`.
+- **x**: `clipper x --items ...` posts Shorts to X as native video (hook-first title + one hashtag, no
+  link: X bills a link post at $0.20 against $0.015); `--auto`, which the bot runs every
+  `[x] auto_post_minutes` (off by default), posts approved Shorts from streams of the last
+  `max_age_hours`, newest stream first, without waiting for YouTube.
 
 Everything is a `clipper <stage>` subcommand. `clipper run` does every stage a stream still
 needs, and `clipper worker` does that for each recording as it finishes. Clips and Shorts come first

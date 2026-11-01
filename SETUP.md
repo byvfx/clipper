@@ -477,8 +477,9 @@ TikTok's app audit (issue #29).
 
 `clipper x` posts scheduled Shorts to X as native video through the X API v2 (pay-per-use:
 credits bought in the developer console, about $0.015 a post; a post with a link costs $0.20,
-so clipper never puts one in). The text is the Short's title and up to `[x] max_hashtags`
-hashtags. Shorts taller than `[x] max_height` (1280) are re-encoded to 720x1280 first, X's
+so clipper never puts one in). The text is the Short's title without the "KINO CASINO | "
+prefix (`[x] hook_first`: the feed shows only the first words), then `[x] max_hashtags` (1)
+hashtag and any `[x] mentions` (per show in `[shows.<key>.x]`; each one gets notified). Shorts taller than `[x] max_height` (1280) are re-encoded to 720x1280 first, X's
 recommended portrait size.
 
 1. **Developer app** at console.x.com, signed in as the X account the posts go out from.
@@ -495,9 +496,11 @@ recommended portrait size.
 4. **Post**: `clipper x --items kick-131151926/v04_t21 --dry-run` shows the file and text;
    without `--dry-run` it posts. `clipper x` lists what was posted, with links. A failed post
    is recorded (`clipper x` shows the error) and `--items` tries it again.
-5. **Automatic** (optional): `clipper x --auto` posts the Shorts that went public on YouTube in
-   the last `[x] max_age_hours` (48) and aren't on X yet, earliest first, up to `max_per_24h`
-   (6); titles saying "host(s)" are skipped. Set `[x] auto_post_minutes` (e.g. 60) and restart
+5. **Automatic** (optional): `clipper x --auto` posts approved, scheduled Shorts from streams
+   that aired in the last `[x] max_age_hours` (72) and aren't on X yet, newest stream first, up
+   to `max_per_24h` (6); titles saying "host(s)" are skipped. It doesn't wait for YouTube: on X a
+   clip is worth most while the topic is hot. `[x] after_youtube = true` waits until each Short
+   is public on YouTube (checked with YouTube) instead. Set `[x] auto_post_minutes` (e.g. 60) and restart
    the bot to have it run that for you.
 
 Each post's cost is logged like a model call (`clipper costs`, kind `x`).

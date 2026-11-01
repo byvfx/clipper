@@ -61,9 +61,11 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   shows take turns (`mix_shows`). `manual_publish = false`: **"asap" items (pre-shows, one-offs) publish
   public the moment they upload.** Every upload also joins its show's playlist. Source links are added
   at upload (clip → segment `?t=`, segment → compilation) and backfilled hourly.
-- X (@lolcowcinema, 2026-10-31): `clipper x` posts Shorts as native video, title + 2 hashtags, never a
-  link (X bills $0.20 a link post vs $0.015). `--auto` (off until the user says) only posts Shorts that went
-  public on YouTube in the last 48 h, so X stays current. Signed in 2026-11-01; first post
+- X (@lolcowcinema, 2026-10-31): `clipper x` posts Shorts as native video, never a link (X bills $0.20 a
+  link post vs $0.015). Since 11-01 (user: "make both"): text is hook first (no "KINO CASINO |" prefix) +
+  one hashtag, and `--auto` (off until the user says) posts approved Shorts from the last 72 h of streams,
+  newest stream first, without waiting for YouTube. Traction plan given the user: reposts from Kino/Don,
+  hand replies under big accounts, posting while hot. Signed in 2026-11-01; first post
   https://x.com/lolcowcinema/status/2116800759941767587 (720x1280 re-encode accepted).
   Profile set 11-01 (bio, youtube.com/@lolcowcinema, YouTube avatar + banner crop in
   ~/Pictures/lolcow-x); the app browser pane is signed in to X.
