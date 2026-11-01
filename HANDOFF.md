@@ -63,8 +63,10 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   at upload (clip → segment `?t=`, segment → compilation) and backfilled hourly.
 - X (@lolcowcinema, 2026-10-31): `clipper x` posts Shorts as native video, never a link (X bills $0.20 a
   link post vs $0.015). Since 11-01 (user: "make both"): text is hook first (no "KINO CASINO |" prefix) +
-  one hashtag, and `--auto` (off until the user says) posts approved Shorts from the last 72 h of streams,
-  newest stream first, without waiting for YouTube. Traction plan given the user: reposts from Kino/Don,
+  one hashtag, and `--auto` posts approved Shorts from the last 72 h of streams, newest stream first,
+  without waiting for YouTube. **Auto on since 2026-11-01 12:21** (user): `[x] auto_post_minutes = 60`,
+  `max_per_24h` 6 (weekly thread posts count too), `max_height` 1280 kept, no "Automated" label (user
+  skipped it). `clipper x --issue` posts the weekly as a thread (#115); #88 closed. Traction plan given the user: reposts from Kino/Don,
   hand replies under big accounts, posting while hot. Signed in 2026-11-01; first post
   https://x.com/lolcowcinema/status/2116800759941767587 (720x1280 re-encode accepted).
   Profile set 11-01 (bio, youtube.com/@lolcowcinema, YouTube avatar + banner crop in
@@ -131,8 +133,6 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
-- X: whether to turn on `[x] auto_post_minutes` (bot restart needed; 10 Shorts due on 11-01), and whether
-  to try `max_height = 0` (1080x1920 as is). Merged as #113 (2b6cca2); turning auto on needs a bot restart.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
