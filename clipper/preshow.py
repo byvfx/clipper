@@ -36,7 +36,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import jsonstate, media, ytdl
+from . import alerts, jsonstate, media, ytdl
 from .config import for_show, for_stream
 
 log = logging.getLogger("clipper.preshow")
@@ -199,7 +199,18 @@ def check(cfg: dict) -> list[Path]:
             got.append(fetch(cfg, e["url"], key))
         except Exception as ex:  # noqa: BLE001 - one bad video must not stop the rest
             log.warning("pre-show %s (%s): not grabbed yet: %s", e["video_id"], e["title"], ex)
+            if any(s in str(ex).lower() for s in ytdl.BOT):
+                bot_check_alert(cfg, e)
     return got
+
+
+def bot_check_alert(cfg: dict, e: dict) -> None:
+    """DM that a pre-show is stuck on YouTube's bot check even signed in: the cookies have
+    rotated (10-31: an hour went by with only a log line). Once per video per cooldown_hours."""
+    where = cfg["paths"]["youtube_cookies"].parent
+    alerts.send(cfg, "failure", f"Pre-show \"{e['title']}\" is stuck on YouTube's bot check: export fresh "
+                f"YouTube cookies (JSON) into {where}. The next check picks them up.",
+                key=f"preshow-bot:{e['video_id']}")
 
 
 def run_pending(cfg: dict, config_path: str | None = None) -> None:
