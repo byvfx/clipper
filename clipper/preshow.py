@@ -207,9 +207,10 @@ def check(cfg: dict) -> list[Path]:
 def bot_check_alert(cfg: dict, e: dict) -> None:
     """DM that a pre-show is stuck on YouTube's bot check even signed in: the cookies have
     rotated (10-31: an hour went by with only a log line). Once per video per cooldown_hours."""
-    where = cfg["paths"]["youtube_cookies"].parent
+    p = cfg["paths"]["youtube_cookies"]
     alerts.send(cfg, "failure", f"Pre-show \"{e['title']}\" is stuck on YouTube's bot check: export fresh "
-                f"YouTube cookies (JSON) into {where}. The next check picks them up.",
+                f"YouTube cookies into {p.parent} as {ytdl.EXPORT_GLOB.replace('*', '<date>')} (the "
+                f"extension's own name) or over {p.name}. The next check picks them up.",
                 key=f"preshow-bot:{e['video_id']}")
 
 
