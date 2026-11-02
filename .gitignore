@@ -9,6 +9,7 @@ layouts/
 /weekly/
 mockups/weekly/youtube_post/
 voices/
+faces/
 archive/
 lt/
 rumble/
@@ -37,3 +38,9 @@ mockups/udder_truth/mother_moo/*.png
 mockups/udder_truth/voice/
 mockups/udder_truth/storyboards/**/*.png
 mockups/udder_truth/storyboards/**/*.mp4
+
+# hand-made copies before an edit (schedule.json, clipper.toml): backups/<file>.before_<what>_<date>
+backups/
+
+# video never goes in git (demo clips, renders)
+*.mp4

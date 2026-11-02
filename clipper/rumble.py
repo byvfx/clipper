@@ -117,6 +117,29 @@ def text_for(e: dict, cfg: dict) -> dict:
             "tags": tags, "review_key": m["review_key"], "stream_dir": m["stream_dir"]}
 
 
+def title_and_tags(e: dict, cfg: dict, section: str) -> tuple[str, list[str]]:
+    """A Short's title for another platform (banned words masked like the rest of the show's
+    text) and its hashtags: Kitsu's Hashtags column, else the draft's, then [<section>]
+    hashtags, without YouTube's #shorts."""
+    from .bleep import Bleeper
+    from .config import for_stream
+    from .review import draft_fields, hashtag_line
+
+    sdir = cfg["paths"]["streams"] / e["stream"]
+    scfg = for_stream(cfg, sdir)
+    m = youtube.metadata(e, cfg)
+    video = Path(e["file"])
+    draft = jsonstate.read(sdir / "metadata" / video.parent.name / f"{video.stem}.json", {})
+    review_path = sdir / "review.json"
+    fields = (jsonstate.load(review_path).get(m["review_key"], {})
+              .get("fields", {}) if review_path.exists() else {})
+    tags = (fields.get("Hashtags") or (draft_fields(draft).get("Hashtags") if draft else "") or "")
+    tags = [t for t in dict.fromkeys(hashtag_line(tags).split()
+                                     + hashtag_line(list(scfg[section]["hashtags"])).split())
+            if t.lower() != "#shorts"]
+    return Bleeper(scfg["bleep"]).mask(m["title"]), tags
+
+
 def release_time(e: dict, cfg: dict) -> str:
     rc, tz = cfg["rumble"], ZoneInfo(cfg["schedule"]["timezone"])
     if rc["schedule"] != "youtube":

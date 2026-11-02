@@ -34,6 +34,7 @@ from .errors import ClipperError
 from .llm import Claude, preflight
 from .prompts import Prompts
 from .scoring import signal_table
+from .states import next_number, numbered_picks
 from .timefmt import hms, parse_time
 from .transcript import load_words, snap, transcript_lines
 
@@ -237,23 +238,10 @@ def pick_stretch(sdir: Path, cfg: dict, a: float, b: float, about: str, picked: 
 
 # ---------- stage ----------
 
-def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
-        end: str | None = None, at: str | None = None, clock_use: str = "stream",
-        dry_run: bool = False, make: bool = True, notify: bool = True,
-        allow_overlap: bool = False) -> list[str]:
-    """Returns the new pick ids."""
-    cfg = for_stream(cfg, stream_dir)
-    pc = cfg["pick"]
-    cands_path = stream_dir / "candidates.json"
-    if not cands_path.exists():
-        raise ClipperError("no candidates.json: run `clipper score` first")
-    if not dry_run and (who := worker_busy(stream_dir, cfg)):
-        raise ClipperError(f"{stream_dir.name} is being processed by {who}; try again when it's done")
-    meta = load(stream_dir / "meta.json", {})
-    clock = Clock(meta, clock_use)
-    print(f"{stream_dir.name}: {clock.describe()}")
-    duration = float(meta.get("duration_s") or 0) or float("inf")
-
+def stretches_asked(pc: dict, clock: Clock, duration: float, about: str, start: str | None,
+                    end: str | None, at: str | None) -> list[tuple[float, float]]:
+    """The stretches (video clock) the command names: --at with [pick] span_s around it, or
+    --from/--to. None with only --about: locate() finds them."""
     stretches: list[tuple[float, float]] = []
     if at:
         t = clock.to_video(parse_time(at))
@@ -272,6 +260,74 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
         if b - a > pc["max_span_s"]:
             raise ClipperError(f"{hms(b - a)} is longer than [pick] max_span_s ({hms(pc['max_span_s'])}); "
                              "narrow it or raise the key")
+    return stretches
+
+
+def keep_new(clips: list[dict], info: dict, others: list[dict], cfg: dict, clock: Clock,
+             allow_overlap: bool) -> list[dict]:
+    """The moments that aren't already picks (more than [pick] max_overlap of their Short
+    window), each printed; others: the picks so far, the kept ones are added to it."""
+    kept = []
+    for c in clips:
+        win = short_window(c)
+        dup = next((p for p in others if overlap(win, short_window(p)) > cfg["pick"]["max_overlap"]), None)
+        line = (f"{hms(clock.to_stream(win[0]))}  {c['short_duration_s']:4.0f}s  "
+                f"[{c['category']}, {c['score']}]  {c['title']}")
+        if dup and not allow_overlap:
+            print(f"  - {line}\n      already a pick: {dup.get('key', 'another new one')} "
+                  f"({dup['title']}); --allow-overlap keeps it")
+            continue
+        if c["source_audio_s"] > cfg["scoring"]["max_source_audio_s"]:
+            line += f"  ({c['source_audio_s']:.0f} s of played-video audio)"
+        print(f"  + {line}")
+        kept.append({**c, "api": info["api"]})
+        others.append(kept[-1])
+    return kept
+
+
+def save_picks(stream_dir: Path, cands: dict, found: list[dict], pc: dict, about: str) -> list[str]:
+    """Append the new moments to candidates.json as Pass A records and Pass B picks (a copy
+    of the file as it was is kept); their new ids."""
+    cands_path = stream_dir / "candidates.json"
+    picks = cands["pass_b"]["picks"]
+    ids = next_ids(cands["pass_a"], len(found))
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    (stream_dir / f"candidates.before_pick_{stamp}.json").write_text(
+        cands_path.read_text(encoding="utf-8"), encoding="utf-8")
+    for pid, c in zip(ids, found):
+        cands["pass_a"].append({
+            "id": pid, "source": "hand", "window_rank": None,
+            "window": [c["in_s"], c["out_s"]], "heat": c.pop("heat"), "pass": "A",
+            "model": pc["model"], "prompt_version": f"pick_{pc['prompt_version']}",
+            "request": about, "requested_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "status": "kept", "has_clip": True, "third_party_audio": False,
+            "casino_gameplay": False, "needs_context": False, **c})
+        n = next_number(cands["pass_b"])
+        picks.append({"id": pid, "title": c["title"], "hook": c["hook"], "reason": c["why"], "n": n})
+        cands["pass_b"].setdefault("numbers", {})[pid] = n
+    jsonstate.write(cands_path, cands)
+    keys = [f"v{n:02d}_{p['id']}" for n, p in numbered_picks(picks) if p["id"] in ids]
+    print(f"added {', '.join(keys)} to candidates.json")
+    return ids
+
+
+def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
+        end: str | None = None, at: str | None = None, clock_use: str = "stream",
+        dry_run: bool = False, make: bool = True, notify: bool = True,
+        allow_overlap: bool = False) -> list[str]:
+    """Returns the new pick ids."""
+    cfg = for_stream(cfg, stream_dir)
+    pc = cfg["pick"]
+    cands_path = stream_dir / "candidates.json"
+    if not cands_path.exists():
+        raise ClipperError("no candidates.json: run `clipper score` first")
+    if not dry_run and (who := worker_busy(stream_dir, cfg)):
+        raise ClipperError(f"{stream_dir.name} is being processed by {who}; try again when it's done")
+    meta = load(stream_dir / "meta.json", {})
+    clock = Clock(meta, clock_use)
+    print(f"{stream_dir.name}: {clock.describe()}")
+    duration = float(meta.get("duration_s") or 0) or float("inf")
+    stretches = stretches_asked(pc, clock, duration, about, start, end, at)
 
     prompts = Prompts(cfg)
     prompts.version = pc["prompt_version"]
@@ -291,7 +347,7 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
     by_id = {r["id"]: r for r in cands["pass_a"]}
     picks = cands.setdefault("pass_b", {}).setdefault("picks", [])
     picked = [{**by_id[p["id"]], "title": p["title"], "key": f"v{i:02d}_{p['id']}"}
-              for i, p in enumerate(picks, 1) if p["id"] in by_id]
+              for i, p in numbered_picks(picks) if p["id"] in by_id]
     words = load_words(stream_dir)
     sig = None
     if (stream_dir / "signals.parquet").exists():
@@ -305,48 +361,20 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
         clips, info = pick_stretch(stream_dir, cfg, a, b, about, picked + found, words, sig,
                                    claude, prompts, clock)
         print(f"  {info['note']}")
-        for c in clips:
-            win = short_window(c)
-            dup = next((p for p in picked + found if overlap(win, short_window(p)) > pc["max_overlap"]), None)
-            line = (f"{hms(clock.to_stream(win[0]))}  {c['short_duration_s']:4.0f}s  "
-                    f"[{c['category']}, {c['score']}]  {c['title']}")
-            if dup and not allow_overlap:
-                print(f"  - {line}\n      already a pick: {dup.get('key', 'another new one')} "
-                      f"({dup['title']}); --allow-overlap keeps it")
-                continue
-            if c["source_audio_s"] > cfg["scoring"]["max_source_audio_s"]:
-                line += f"  ({c['source_audio_s']:.0f} s of played-video audio)"
-            print(f"  + {line}")
-            found.append({**c, "api": info["api"]})
+        found += keep_new(clips, info, picked + found, cfg, clock, allow_overlap)
     print(f"model cost ${claude.cost:.3f}")
     if not found or dry_run:
         if found:
             print(f"--dry-run: {len(found)} new picks not saved")
         return []
 
-    ids = next_ids(cands["pass_a"], len(found))
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    (stream_dir / f"candidates.before_pick_{stamp}.json").write_text(
-        cands_path.read_text(encoding="utf-8"), encoding="utf-8")
-    for pid, c in zip(ids, found):
-        cands["pass_a"].append({
-            "id": pid, "source": "hand", "window_rank": None,
-            "window": [c["in_s"], c["out_s"]], "heat": c.pop("heat"), "pass": "A",
-            "model": pc["model"], "prompt_version": f"pick_{pc['prompt_version']}",
-            "request": about, "requested_at": datetime.now(UTC).isoformat(timespec="seconds"),
-            "status": "kept", "has_clip": True, "third_party_audio": False,
-            "casino_gameplay": False, "needs_context": False, **c})
-        picks.append({"id": pid, "title": c["title"], "hook": c["hook"], "reason": c["why"]})
-    jsonstate.write(cands_path, cands)
-    n0 = len(picks) - len(ids)
-    keys = [f"v{n0 + i:02d}_{pid}" for i, pid in enumerate(ids, 1)]
-    print(f"added {', '.join(keys)} to candidates.json")
+    ids = save_picks(stream_dir, cands, found, pc, about)
     if make:
         make_picks(stream_dir, cfg, ids, notify)
     else:
         print(f"next: clipper cut {stream_dir.name} picks; clipper meta {stream_dir.name} --missing; "
               f"clipper thumbs {stream_dir.name} --missing; clipper shorts {stream_dir.name} "
-              f"--ids {','.join(ids)}; clipper review publish {stream_dir.name} --only shorts")
+              f"--items {','.join(ids)}; clipper review publish {stream_dir.name} --only shorts")
     return ids
 
 

@@ -24,6 +24,7 @@ so nothing is copied. It also runs pre-shows the bot grabbed from YouTube
 
 from __future__ import annotations
 
+import copy
 import ctypes
 import logging
 import os
@@ -35,8 +36,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import preshow, stages
-from .config import for_stream, show_of_channel
+from . import jsonstate, preshow, stages
+from .config import for_stream, show_args, show_of_channel
 
 log = logging.getLogger("clipper.worker")
 
@@ -87,6 +88,17 @@ def write_json(path: Path, data: dict) -> None:
     jsonstate.write(path, data)
 
 
+def snapshot(data: dict) -> dict:
+    """A copy of run.data to write. The heartbeat thread saves while the main thread
+    edits run.data without the lock, so a copy can meet a dict changing size: retry."""
+    for _ in range(4):
+        try:
+            return copy.deepcopy(data)
+        except RuntimeError:
+            time.sleep(0.01)
+    return copy.deepcopy(data)
+
+
 def stage_args(stage: str, stream: str, wc: dict) -> list[str]:
     return stages.argv(stage, stream, wc)
 
@@ -117,50 +129,86 @@ class Run:
         self._stop = threading.Event()
         self._mu = threading.Lock()
         self._beat: threading.Thread | None = None
+        self.me = f"{socket.gethostname()}:{os.getpid()}"
+        self.lost = False
 
-    def save(self) -> None:
-        with self._mu:
+    def save(self, beat: bool = False) -> bool:
+        """Write run.json, unless the lock was taken over (then False and lost is set).
+        The ownership check and the write happen under the takeover lock, so a worker that
+        lost the stream can't write over its new holder's run.json."""
+        with self._mu, jsonstate.locked(self.lock):
+            if not self.holds():
+                self.lost = True
+                return False
+            if beat:
+                self.data["heartbeat"] = now_iso()
             self.data["updated"] = now_iso()
-            write_json(self.path, self.data)
+            write_json(self.path, snapshot(self.data))
+            return True
+
+    def holds(self) -> bool:
+        """Whether the lock is still this run's. A worker that finds our heartbeat stale
+        takes the lock over; a read error (NAS blip) isn't taken for that."""
+        try:
+            return self.lock.read_text(encoding="utf-8").strip() == self.me
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
 
     def acquire(self) -> None:
-        me = f"{socket.gethostname()}:{os.getpid()}"
-        try:
-            fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            # Taken over only when its holder stopped writing heartbeats.
-            held = read_json(self.path)
-            stale = age_s(held.get("heartbeat")) > self.wc["stale_minutes"] * 60
-            if not stale:
-                raise Busy(f"{self.d.name}: running on {held.get('worker', '?')}")
-            log.warning("%s: taking over a stale lock from %s", self.d.name, held.get("worker"))
-            self.lock.unlink(missing_ok=True)
-            fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(fd, me.encode())
-        os.close(fd)
-        self.data = read_json(self.path) or self.data
-        self.data.setdefault("stages", {})
-        self.data.update(worker=me, status="running", heartbeat=now_iso(), error="")
-        self.data["attempts"] = self.data.get("attempts", 0) + 1
-        self.save()
+        # The stale check, the takeover and the first heartbeat all happen under the
+        # takeover lock (<lock>.lock): a second taker waits, then finds a fresh heartbeat.
+        with jsonstate.locked(self.lock):
+            try:
+                fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                # Taken over only when its holder stopped writing heartbeats.
+                held = read_json(self.path)
+                stale = age_s(held.get("heartbeat")) > self.wc["stale_minutes"] * 60
+                if not stale:
+                    raise Busy(f"{self.d.name}: running on {held.get('worker', '?')}") from None
+                log.warning("%s: taking over a stale lock from %s", self.d.name, held.get("worker"))
+                self.lock.unlink(missing_ok=True)
+                fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, self.me.encode())
+            os.close(fd)
+            self.data = read_json(self.path) or self.data
+            self.data.setdefault("stages", {})
+            self.data.update(worker=self.me, status="running", heartbeat=now_iso(), error="")
+            self.data["attempts"] = self.data.get("attempts", 0) + 1
+            self.save()
         self._beat = threading.Thread(target=self._heartbeat, daemon=True)
         self._beat.start()
 
     def _heartbeat(self) -> None:
         while not self._stop.wait(60):
-            self.data["heartbeat"] = now_iso()
-            try:
-                self.save()
-            except OSError as e:  # NAS blip; the next beat retries
-                log.warning("%s: heartbeat not written: %s", self.d.name, e)
+            self.beat()
+
+    def beat(self) -> bool:
+        """Write one heartbeat; False once the lock is someone else's. Never raises: a
+        dead heartbeat thread looks stale and hands the stream to a second worker."""
+        try:
+            if not self.save(beat=True):
+                log.error("%s: another worker took the lock over; heartbeat stopped", self.d.name)
+                self._stop.set()
+                return False
+        except Exception as e:  # noqa: BLE001  # NAS blip or anything else; the next beat retries
+            log.warning("%s: heartbeat not written: %s", self.d.name, e)
+        return True
 
     def release(self) -> None:
         self._stop.set()
         if self._beat:
             self._beat.join(timeout=5)
         self.data.pop("worker", None)
-        self.save()
-        self.lock.unlink(missing_ok=True)
+        with jsonstate.locked(self.lock):
+            if self.save():
+                self.lock.unlink(missing_ok=True)
+                return
+        # Taken over: run.json and the lock are the new holder's now.
+        log.warning("%s: lock was taken over; leaving run.json to %s", self.d.name,
+                    read_json(self.path).get("worker", "?"))
 
     def done(self, stage: str) -> bool:
         status = self.data["stages"].get(stage, {}).get("status")
@@ -218,6 +266,8 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
     ok = False
     try:
         for stage in order:
+            if run.lost:  # the heartbeat found the lock taken over
+                raise Busy(f"{name}: another worker took the stream over")
             if not force and run.done(stage):
                 run.data["stages"].setdefault(stage, {"status": "done", "note": "output found"})
                 continue
@@ -235,7 +285,7 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
             cmd = [sys.executable, "-m", "clipper.cli"]
             if config_path:
                 cmd += ["--config", str(config_path)]
-            cmd += stage_args(stage, str(stream_dir), wc)
+            cmd += show_args(cfg) + stage_args(stage, str(stream_dir), wc)  # --show carries over
             st = run.data["stages"][stage] = {"status": "running", "started": now_iso(),
                                               "log": log_path.name}
             run.save()
@@ -345,10 +395,9 @@ def ready_text(cfg: dict, d: Path, what: str) -> str:
 
 def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None:
     from . import alerts
-    from .record import Alerts
 
     wc = cfg["worker"]
-    alert = Alerts(cfg)
+    alert = alerts.Alerts(cfg)
     root: Path = cfg["paths"]["streams"]
     log.info("worker on %s: watching %s every %ss", socket.gethostname(), root, wc["poll_s"])
 

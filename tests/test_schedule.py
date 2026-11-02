@@ -89,3 +89,105 @@ def test_uploaded_entries_stay(sc):
     assert placed["s/up"]["video_id"] == "abc"
     assert "no longer approved" in placed["s/up"]["note"]
     assert when["s/new"] == "Wed 16:00"   # Tuesday's slot is the uploaded one's
+
+
+def test_needs_push():
+    last = {"entity_id": "e1", "value": "2026-11-03 16:00", "over": ""}
+    assert not schedule.needs_push("2026-11-03 16:00", "2026-11-03 16:00", None, "e1")  # synced so
+    assert schedule.needs_push("2026-11-03 16:00", "", None, "e1")        # new slot
+    assert schedule.needs_push("", None, None, "e1")                      # never read
+    # Written by the last push, and no sync has seen the column since: no call.
+    assert not schedule.needs_push("2026-11-03 16:00", "", last, "e1")
+    assert schedule.needs_push("2026-11-04 16:00", "", last, "e1")        # the slot moved again
+    assert schedule.needs_push("2026-11-03 16:00", "", last, "e2")        # another entity
+    # Back to what the last sync read: review.json says so, but the push changed it since.
+    assert schedule.needs_push("", "", last, "e1")
+    # A sync read something else there after that push (typed in Kitsu): put it right.
+    assert schedule.needs_push("2026-11-03 16:00", "2026-11-09 10:00", last, "e1")
+    assert not schedule.needs_push("2026-11-03 16:00", "2026-11-03 16:00", last, "e1")
+
+
+def test_push_to_kitsu_writes_only_changed_slots(defaults, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from clipper import jsonstate, review
+
+    data = {"e1": {"f_sched": ""}, "e2": {"f_sched": "2026-11-03 16:00"}, "e3": {"f_sched": "x"}}
+    calls = []
+    shot = SimpleNamespace(
+        get_shot=lambda eid: calls.append(("get", eid)) or {"data": dict(data[eid])},
+        update_shot_data=lambda eid, d: calls.append(("put", eid, d)) or data[eid].update(d))
+    gazu = SimpleNamespace(shot=shot, project=SimpleNamespace(get_project_by_name=lambda n: {}))
+    monkeypatch.setattr(review, "connect", lambda rc: gazu)
+    monkeypatch.setattr(review, "column_fields", lambda g, p: {("Shot", "Scheduled"): "f_sched"})
+    cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path / "streams",
+                                 "schedule": tmp_path / "schedule.json"}}
+    sdir = tmp_path / "streams" / "s"
+    sdir.mkdir(parents=True)
+    jsonstate.write(sdir / "review_state.json", {
+        k: {"kind": "pick", "entity_id": e} for k, e in (("a", "e1"), ("b", "e2"), ("c", "e3"))})
+    jsonstate.write(sdir / "review.json", {
+        "a": {"fields": {"Scheduled": None}}, "b": {"fields": {"Scheduled": "2026-11-03 16:00"}},
+        "c": {"fields": {"Scheduled": ""}}})   # c was typed into Kitsu after the last sync
+    items = [{"key": f"s/{k}", "entity": ("Shot", e)} for k, e in (("a", "e1"), ("b", "e2"))]
+    placed = {"s/a": {"publish_at": "2026-11-04T16:00:00-08:00"},
+              "s/b": {"publish_at": "2026-11-03T16:00:00-08:00"}}
+
+    schedule.push_to_kitsu(cfg, items, placed, TZ)
+    assert calls == [("get", "e1"), ("put", "e1", {"f_sched": "2026-11-04 16:00"})]
+    calls.clear()
+    schedule.push_to_kitsu(cfg, items, placed, TZ)   # review.json not synced since: no calls
+    assert calls == []
+    jsonstate.write(sdir / "review.json", {**jsonstate.load(sdir / "review.json"),
+                                           "c": {"fields": {"Scheduled": "x"}}})  # a sync saw it
+    schedule.push_to_kitsu(cfg, items, placed, TZ)
+    assert calls == [("get", "e3"), ("put", "e3", {"f_sched": ""})]
+    calls.clear()
+    del placed["s/a"]   # unscheduled again before any sync: review.json still shows ""
+    schedule.push_to_kitsu(cfg, items, placed, TZ)
+    assert calls == [("get", "e1"), ("put", "e1", {"f_sched": ""})]
+    calls.clear()
+    schedule.push_to_kitsu(cfg, items, placed, TZ, every=True)
+    assert calls == [("get", "e1"), ("get", "e2"), ("get", "e3")]
+
+
+def test_budget_scales_with_length(defaults):
+    ssc = {**defaults["schedule"], "stream_budget": {"segment": 10, "short": 8}, "budget_hours": 8}
+    assert schedule.budget_for(ssc, 8.2) == {"segment": 10, "short": 8}
+    assert schedule.budget_for(ssc, 5.5) == {"segment": 7, "short": 6}
+    assert schedule.budget_for(ssc, 0.3) == {"segment": 1, "short": 1}
+    assert schedule.budget_for(defaults["schedule"], 8) == {}
+
+
+def test_budget_keeps_the_best(sc):
+    sc = {**sc, "short_times": ["10:00", "15:00", "20:00"]}
+    old = {"s/up": {"key": "s/up", "stream": "s", "kind": "short", "id": "s/up", "title": "",
+                    "file": "", "publish_at": datetime(2026, 11, 3, 10, 0, tzinfo=TZ).isoformat(),
+                    "source": "auto", "status": "uploaded"}}
+    shorts = [item("s/up", "short", score=1, budget=3), item("s/low", "short", score=2, budget=3),
+              item("s/mid", "short", score=5, budget=3), item("s/top", "short", score=9, budget=3)]
+    placed, skipped, _ = plan(shorts, sc, old)
+    assert set(placed) == {"s/up", "s/top", "s/mid"}       # the uploaded one counts first
+    assert skipped == {"s/low": "over the stream's short budget (3)"}
+
+
+def test_stale_items_drop_out(sc):
+    soon = NOW + timedelta(days=1, hours=8)                  # Tue 17:00
+    old = {"s/far": {"key": "s/far", "stream": "s", "kind": "segment", "id": "s/far", "title": "",
+                     "file": "", "publish_at": datetime(2026, 11, 5, 16, 0, tzinfo=TZ).isoformat(),
+                     "source": "auto", "status": "scheduled"}}
+    items = [item("s/far", expires=soon), item("s/next", expires=soon),
+             item("s/gone", expires=NOW - timedelta(days=1))]
+    _, skipped, when = plan(items, sc, old)
+    assert when == {"s/far": "Tue 16:00"}                  # its Thursday slot was past expiry
+    assert skipped["s/next"].startswith("stale: no free segment slot by 11-03 17:00")
+    assert skipped["s/gone"].startswith("stale:")
+
+
+def test_compilation_skips_segments_that_wont_go(sc):
+    sc = {**sc, "horizon_days": 5, "compilation_days": ["sat"]}
+    items = [item("s/a", score=5, budget=1), item("s/b", score=1, budget=1),
+             item("s/comp", "compilation", segment_keys=["s/a", "s/b"])]
+    _, skipped, when = plan(items, sc)
+    assert when["s/comp"] == "Sat 14:00"
+    assert skipped == {"s/b": "over the stream's segment budget (1)"}

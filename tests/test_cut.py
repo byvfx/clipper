@@ -26,3 +26,9 @@ def test_parts_out_of_stream_order_keep_their_own_ends():
     assert spans == [(497, 600), (100, 200)]
     assert [c["start_s"] for c in chapters] == [0, 103]
     assert total == approx(203)
+
+
+def test_part_offsets_are_exact():
+    from clipper.cut import part_offsets
+    spans = [(98.0, 195.04), (195.04, 300.0), (497.0, 600.0)]
+    assert part_offsets(spans) == [[98.0, 195.04, 0.0], [195.04, 300.0, 97.04], [497.0, 600.0, 202.0]]

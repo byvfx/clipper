@@ -84,7 +84,9 @@ def run(cfg: dict, sign_in: bool = False) -> dict:
     if not up:
         print("no uploaded videos yet")
         return data
-    yt = build("youtube", "v3", credentials=creds, cache_discovery=False)
+    from .youtube import service
+
+    yt = service(cfg["paths"], creds=creds)  # counted against the day's Data API quota
     ya = build("youtubeAnalytics", "v2", credentials=creds, cache_discovery=False) if has_analytics else None
     now = datetime.now(UTC)
     by_id = {e["video_id"]: e for e in up}

@@ -1,7 +1,7 @@
 """Vertical Shorts: each Pass B pick's short window as a 1080x1920 video.
 
 Usage:
-    clipper shorts <stream> [--ids t33,w19] [--layout watch] [--force] [--rescene] [--check]
+    clipper shorts <stream> [--items t33,w19] [--layout watch] [--force] [--rescene] [--check]
 
 For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>.mp4:
   1. the clip's window (in_s..out_s; [shorts] window = "short" uses scoring's 15-60 s
@@ -42,7 +42,9 @@ from .cut import encode_args, ffmpeg_cut, keyframe_before
 from .errors import ClipperError
 from .llm import Claude
 from .media import source_file
+from .prompts import Prompts
 from .segments import slug
+from .states import numbered_picks
 from .transcript import load_words
 
 CENTER = {"description": "anything else: the middle of the frame",
@@ -123,6 +125,25 @@ def end_on_sentence(words: list[dict], a: float, b: float, min_s: float, max_s: 
     return b
 
 
+def short_window(c: dict, sc: dict, words: list[dict], segs: list[dict],
+                 end_of_stream: float) -> tuple[float, float]:
+    """A pick's Short window (step 1 above): its clip or short window, grown inside its
+    topic segment, ended on a sentence, snapped to word gaps, at most max_s."""
+    if sc["window"] == "short":
+        a, b = c.get("short_in_s", c["in_s"]), c.get("short_out_s", c["out_s"])
+    else:
+        a, b = c["in_s"], c["out_s"]
+    topic = next((s for s in segs if s["start_s"] <= c["in_s"] < s["end_s"]), None)
+    lo, hi = (topic["start_s"], topic["end_s"]) if topic else (0.0, end_of_stream)
+    a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
+                       min(lo, a), max(hi, b))
+    if sc["window"] == "short" and sc["end_pause_s"] > 0:  # don't stop mid-sentence
+        b = end_on_sentence(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
+                            max(hi, b), sc["end_pause_s"])
+    a, b = snap_window(words, a, b, sc["pad_s"])
+    return a, min(b, a + sc["max_s"])
+
+
 # ---------- layout ----------
 
 def layouts_of(sc: dict) -> dict[str, dict]:
@@ -180,22 +201,23 @@ def sample_frames(src: Path, a: float, dur: float, step: float, out_dir: Path,
     return [(k * step, f) for k, f in enumerate(frames)]
 
 
-def label_frames(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[float, Path]]
-                 ) -> list[str] | None:
+def label_frames(claude: Claude, prompts: Prompts, sc: dict, layouts: dict,
+                 frames: list[tuple[float, Path]]) -> list[str] | None:
     """One layout name per frame, scene_batch frames per vision call (with 25-45 frames in
     one call the labels drifted from run to run), or None if a batch doesn't come back."""
     n = max(1, sc["scene_batch"])
     labels: list[str] = []
     for k in range(0, len(frames), n):
-        got = label_batch(claude, sc, layouts, frames[k:k + n])
+        got = label_batch(claude, prompts, sc, layouts, frames[k:k + n])
         if got is None:
             return None
         labels += got
     return labels
 
 
-def label_batch(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[float, Path]]
-                ) -> list[str] | None:
+def label_batch(claude: Claude, prompts: Prompts, sc: dict, layouts: dict,
+                frames: list[tuple[float, Path]]) -> list[str] | None:
+    """prompts: version set to [shorts] layout_prompt_version (prompts/shorts_layout_<v>.md)."""
     import base64
 
     names = list(layouts)
@@ -203,14 +225,8 @@ def label_batch(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[floa
     # mistakes: a zoomed or busy screen box got called center.
     if all(layouts[n].get("example") for n in names if n != "center") and len(names) > 2:
         names = [n for n in names if n != "center"]
-    system = ("You classify frames from a livestream by which screen layout they show. "
-              "Layouts:\n" + "\n".join(f"- {n}: {layouts[n].get('description', '')}" for n in names)
-              + "\nThe frames are in time order, a few seconds apart; the stream can switch "
-              "layout between any two. Give the layout of every frame, in order. Judge the "
-              "arrangement of the frame (where the boxes and webcams are), not what is playing "
-              "inside them: a screen box showing a tall phone video with black bars, a dark "
-              "page or a paused video is still the same layout. Pick the most specific layout "
-              "that fits; use center only when none of the others does.")
+    prompts.vars["layouts"] = "\n".join(f"- {n}: {layouts[n].get('description', '')}" for n in names)
+    system = prompts.get("shorts_layout").rstrip()
     # A screenshot per layout ("example") anchors the labels: without them the model
     # judged by what played in the screen box (a zoomed-in face read as "center").
     content = []
@@ -285,8 +301,8 @@ def find_cut(src: Path, a: float, t0: float, t1: float, fps: int = 20) -> float:
     return round(min(t1, t0 + k / fps), 3)
 
 
-def detect_scenes(need_claude, sc: dict, layouts: dict, src: Path, a: float, dur: float,
-                  work: Path, stem: str) -> tuple[list[list] | None, str]:
+def detect_scenes(need_claude, prompts: Prompts, sc: dict, layouts: dict, src: Path, a: float,
+                  dur: float, work: Path, stem: str) -> tuple[list[list] | None, str]:
     """([start, end, layout] stretches covering 0..dur, or None if labelling failed; how).
     A vision model labels a frame every scene_step_s, with the show's reference
     screenshots (layouts/<show>/<layout>.jpg) as anchors. Matching frames to those
@@ -295,7 +311,7 @@ def detect_scenes(need_claude, sc: dict, layouts: dict, src: Path, a: float, dur
     step = sc["scene_step_s"]
     frames = sample_frames(src, a, dur, step, work, stem)
     try:
-        labels = label_frames(need_claude(), sc, layouts, frames) if frames else None
+        labels = label_frames(need_claude(), prompts, sc, layouts, frames) if frames else None
     finally:
         for _, f in frames:
             f.unlink(missing_ok=True)
@@ -344,6 +360,46 @@ def scenes_label(scenes: list[list]) -> str:
     if len(scenes) == 1:
         return scenes[0][2]
     return " > ".join(f"{n} {int(s) // 60}:{int(s) % 60:02d}" for s, _, n in scenes)
+
+
+def choose_layout(layout: str | None, rv: dict, prev: dict, layouts: dict, a: float, b: float,
+                  again: bool) -> tuple[list[list] | None, str]:
+    """(scenes, how) for the window a..b, or (None, "") when the frames have to be
+    labelled (detect_scenes). Layout: --layout, then a changed Kitsu "Layout" column, then
+    one set earlier by hand (shorts.json "layout", a retake): one layout for the whole
+    Short. Otherwise each scene keeps the layout it got (shorts.json "scenes") while the
+    window is the same. again (--rescene, --check): label what the model chose again.
+    rv: the item in review.json; prev: its shorts.json entry."""
+    dur = round(b - a, 3)
+    # The column only counts once someone changed it from what clipper last proposed.
+    kitsu_layout = ((rv.get("fields") or {}).get("Layout") or ""
+                    if "Layout" in rv.get("edited", []) else "")
+    by_model = prev.get("layout_by", "model") in ("model", "only")
+    same_window = [prev.get("in_s"), prev.get("out_s")] == [a, b]
+    if layout:
+        return [[0.0, dur, layout]], "cli"
+    if kitsu_layout in layouts and kitsu_layout != prev.get("layout"):
+        return [[0.0, dur, kitsu_layout]], "kitsu"
+    if prev.get("layout") in layouts and not (by_model and again):
+        return [[0.0, dur, prev["layout"]]], prev.get("layout_by", "model")
+    if prev.get("scenes") and same_window and not again:
+        return prev["scenes"], prev.get("layout_by", "model")
+    if len(pickable(layouts)) == 1:
+        return [[0.0, dur, next(iter(pickable(layouts)))]], "only"
+    return None, ""
+
+
+def short_signature(sc: dict, codec: str, a: float, b: float, scenes: list[list],
+                    layouts: dict) -> str:
+    """What a Short is made from; the file is rendered again when it changes."""
+    sig_base = {"a": a, "b": b, "captions": sc["captions"], "codec": codec,
+                "style": {k: v for k, v in sc.items() if k.startswith("caption_")},
+                "lufs": sc["lufs"], "w": sc["width"], "h": sc["height"]}
+    # One scene keeps the signature it always had, so Shorts made before scene
+    # detection aren't re-rendered when it finds the same single layout.
+    return signature({**sig_base, "layout": layouts[scenes[0][2]], "name": scenes[0][2]}
+                     if len(scenes) == 1 else
+                     {**sig_base, "scenes": [[s, e, n, layouts[n]] for s, e, n in scenes]})
 
 
 # ---------- captions ----------
@@ -502,6 +558,33 @@ def render(src_cut: Path, dst: Path, parts: list[tuple], ass: Path | None, dur: 
     return {"input_lufs": float(loud["input_i"]), "lufs": sc["lufs"]}
 
 
+def cut_and_render(stream_dir: Path, cfg: dict, src: Path, words: list[dict], bleepers: tuple,
+                   layouts: dict, scenes: list[list], a: float, b: float, work: Path,
+                   key: str, dst: Path, codec: str) -> tuple[int, int, dict]:
+    """Cut a..b from the source (audio bleeped), crop each scene to its layout, burn in
+    the captions and render dst. bleepers: (audio, captions). Returns (bleeps, captions,
+    loudness)."""
+    sc = cfg["shorts"]
+    audio_bleeper, bleeper = bleepers
+    dur = round(b - a, 3)
+    work.mkdir(parents=True, exist_ok=True)
+    cut = work / f"{key}.cut.mp4"
+    n_bleeps = ffmpeg_cut(src, cut, a, b, sc["cut_codec"] or cfg["cut"]["clip_codec"], sc["cut_crf"],
+                          keyframe=keyframe_before(stream_dir, src, a),
+                          bleep=(audio_bleeper, words))
+    W, H = media.size(cut)
+    parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"])) for s, e, n in scenes]
+    ass = work / f"{key}.ass" if sc["captions"] else None
+    n_caps = write_ass(words, a, dur, sc, [(s, e, layouts[n]) for s, e, n in scenes],
+                       bleeper, ass) if ass else 0
+    loud = render(cut, dst, parts, ass, dur, sc, codec)
+    if not sc["keep_work"]:
+        cut.unlink(missing_ok=True)
+        if ass:
+            ass.unlink(missing_ok=True)
+    return n_bleeps, n_caps, loud
+
+
 # ---------- metadata ----------
 
 def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dict,
@@ -524,6 +607,27 @@ def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dic
     out = stream_dir / "metadata" / "shorts" / f"{short_video.stem}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     jsonstate.write(out, draft)
+
+
+def save_short(stream_dir: Path, state_path: Path, dst: Path, side: dict, clip_video: Path,
+               pick: dict, sc: dict, sig: str) -> None:
+    """A rendered Short's sidecar, upload draft and shorts.json entry; the files of an
+    earlier title go."""
+    key = side["key"]
+    for old in dst.parent.glob(f"{key}_*.mp4"):  # a retitled pick leaves its old file
+        if old != dst:
+            old.unlink(missing_ok=True)
+            old.with_suffix(".json").unlink(missing_ok=True)
+            old.with_suffix(".jpg").unlink(missing_ok=True)
+    jsonstate.write(dst.with_suffix(".json"), side)
+    write_draft(stream_dir, clip_video, dst, pick, sc)
+    multi = {"scenes": side["scenes"]} if "scenes" in side else {}
+    with jsonstate.update(state_path, {}) as state:
+        override = (state.get(key) or {}).get("window_override")  # as the file has it now
+        state[key] = {"file": f"shorts/{dst.name}", "layout": side["layout"], **multi,
+                      "layout_by": side["layout_by"], "in_s": side["in_s"], "out_s": side["out_s"],
+                      **({"window_override": override} if override else {}),
+                      "sig": sig}
 
 
 # ---------- stage ----------
@@ -562,6 +666,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     out_dir, work = stream_dir / "shorts", stream_dir / "shorts" / "work"
     out_dir.mkdir(exist_ok=True)
     layouts = with_examples(layouts, cfg)
+    layout_prompts = Prompts(cfg)
+    layout_prompts.version = sc["layout_prompt_version"]
     claude = None
 
     def need_claude() -> Claude:
@@ -570,54 +676,26 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         return claude
 
     done = []
-    for i, p in enumerate(picks, 1):
+    for i, p in numbered_picks(picks):
         if ids and p["id"] not in ids and f"v{i:02d}" not in ids:
             continue
         c = by_id[p["id"]]
         key = f"v{i:02d}_{p['id']}"
         if f"{stream_dir.name}/{key}" in uploaded and not force:
             continue
-        if sc["window"] == "short":
-            a, b = c.get("short_in_s", c["in_s"]), c.get("short_out_s", c["out_s"])
-        else:
-            a, b = c["in_s"], c["out_s"]
-        topic = next((s for s in segs if s["start_s"] <= c["in_s"] < s["end_s"]), None)
-        lo, hi = (topic["start_s"], topic["end_s"]) if topic else (0.0, end_of_stream)
-        a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
-                           min(lo, a), max(hi, b))
-        if sc["window"] == "short" and sc["end_pause_s"] > 0:  # don't stop mid-sentence
-            b = end_on_sentence(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
-                                max(hi, b), sc["end_pause_s"])
-        a, b = snap_window(words, a, b, sc["pad_s"])
-        b = min(b, a + sc["max_s"])
-        dur = round(b - a, 3)
+        a, b = short_window(c, sc, words, segs, end_of_stream)
         dst = out_dir / f"{key}_{slug(p['title'])}.mp4"
         prev = jsonstate.read(state_path, {}).get(key, {})
         if prev.get("window_override"):  # set by a retake: used as it is
             a, b = prev["window_override"]
-            dur = round(b - a, 3)
-        # Layout: --layout, then a changed Kitsu "Layout" column, then one set earlier by
-        # hand (shorts.json "layout", a retake): one layout for the whole Short. Otherwise
-        # frames through the window are labelled (detect_scenes) and each scene gets its
-        # own layout (kept in shorts.json "scenes"; --rescene labels again). --force keeps them.
-        # The column only counts once someone changed it from what clipper last proposed.
-        kitsu_layout = ((review.get(key, {}).get("fields") or {}).get("Layout") or ""
-                        if "Layout" in review.get(key, {}).get("edited", []) else "")
-        by_model = prev.get("layout_by", "model") in ("model", "only")
-        same_window = [prev.get("in_s"), prev.get("out_s")] == [a, b]
-        scenes = None
-        if layout:
-            scenes, how = [[0.0, dur, layout]], "cli"
-        elif kitsu_layout in layouts and kitsu_layout != prev.get("layout"):
-            scenes, how = [[0.0, dur, kitsu_layout]], "kitsu"
-        elif prev.get("layout") in layouts and not (by_model and (rescene or check)):
-            scenes, how = [[0.0, dur, prev["layout"]]], prev.get("layout_by", "model")
-        elif prev.get("scenes") and same_window and not (rescene or check):
-            scenes, how = prev["scenes"], prev.get("layout_by", "model")
-        elif len(pickable(layouts)) == 1:
-            scenes, how = [[0.0, dur, next(iter(pickable(layouts)))]], "only"
+        dur = round(b - a, 3)
+        # One layout for the whole Short, or else frames through the window are labelled
+        # (detect_scenes) and each scene gets its own layout. --force keeps them.
+        scenes, how = choose_layout(layout, review.get(key, {}), prev, layouts, a, b,
+                                    rescene or check)
         if scenes is None:
-            scenes, how = detect_scenes(need_claude, sc, pickable(layouts), src, a, dur, work, key)
+            scenes, how = detect_scenes(need_claude, layout_prompts, sc, pickable(layouts), src, a,
+                                        dur, work, key)
             if scenes is None:
                 print(f"  {key}: frame labels didn't come back whole; using {sc['default_layout']}")
                 scenes = [[0.0, dur, sc["default_layout"]]]
@@ -628,51 +706,22 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
                   flush=True)
             continue
         t = time.time()
-        clips = sorted((stream_dir / "clips").glob(f"{i:02d}_{p['id']}_*.mp4"))
-        clip_video = clips[0] if clips else dst
-        sig_base = {"a": a, "b": b, "captions": sc["captions"], "codec": codec,
-                    "style": {k: v for k, v in sc.items() if k.startswith("caption_")},
-                    "lufs": sc["lufs"], "w": sc["width"], "h": sc["height"]}
-        # One scene keeps the signature it always had, so Shorts made before scene
-        # detection aren't re-rendered when it finds the same single layout.
-        sig = signature({**sig_base, "layout": layouts[scenes[0][2]], "name": scenes[0][2]}
-                        if len(scenes) == 1 else
-                        {**sig_base, "scenes": [[s, e, n, layouts[n]] for s, e, n in scenes]})
+        sig = short_signature(sc, codec, a, b, scenes, layouts)
         if not force and dst.exists() and prev.get("sig") == sig:
             continue
-        work.mkdir(parents=True, exist_ok=True)
-        cut = work / f"{key}.cut.mp4"
-        n_bleeps = ffmpeg_cut(src, cut, a, b, sc["cut_codec"] or cfg["cut"]["clip_codec"], sc["cut_crf"],
-                              keyframe=keyframe_before(stream_dir, src, a),
-                              bleep=(audio_bleeper, words))
-        W, H = media.size(cut)
-        parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"])) for s, e, n in scenes]
-        ass = work / f"{key}.ass" if sc["captions"] else None
-        n_caps = write_ass(words, a, dur, sc, [(s, e, layouts[n]) for s, e, n in scenes],
-                           bleeper, ass) if ass else 0
-        loud = render(cut, dst, parts, ass, dur, sc, codec)
-        if not sc["keep_work"]:
-            cut.unlink(missing_ok=True)
-            if ass:
-                ass.unlink(missing_ok=True)
-        for old in out_dir.glob(f"{key}_*.mp4"):  # a retitled pick leaves its old file
-            if old != dst:
-                old.unlink(missing_ok=True)
-                old.with_suffix(".json").unlink(missing_ok=True)
-                old.with_suffix(".jpg").unlink(missing_ok=True)
+        if dur < sc["min_s"]:  # grow_window found no whole lines to add (#77 L16)
+            print(f"  {key}: {dur:.1f} s is under [shorts] min_s ({sc['min_s']} s)", flush=True)
+        n_bleeps, n_caps, loud = cut_and_render(stream_dir, cfg, src, words,
+                                                (audio_bleeper, bleeper), layouts, scenes,
+                                                a, b, work, key, dst, codec)
+        clips = sorted((stream_dir / "clips").glob(f"{i:02d}_{p['id']}_*.mp4"))
+        clip_video = clips[0] if clips else dst
         multi = {"scenes": scenes} if len(scenes) > 1 else {}
         side = {**p, "key": key, "in_s": a, "out_s": b, "duration_s": dur, "layout": label,
                 **multi, "layout_by": how, "bleeps": n_bleeps, "captions": n_caps, **loud,
                 "category": c.get("category"), "score_a": c.get("score"),
                 "clip": clip_video.name if clip_video != dst else ""}
-        jsonstate.write(dst.with_suffix(".json"), side)
-        write_draft(stream_dir, clip_video, dst, p, sc)
-        with jsonstate.update(state_path, {}) as state:
-            override = (state.get(key) or {}).get("window_override")  # as the file has it now
-            state[key] = {"file": f"shorts/{dst.name}", "layout": label, **multi, "layout_by": how,
-                          "in_s": a, "out_s": b,
-                          **({"window_override": override} if override else {}),
-                          "sig": sig}
+        save_short(stream_dir, state_path, dst, side, clip_video, p, sc, sig)
         done.append(side)
         print(f"{key}  {dur:5.1f}s  {label:<8} ({how})  {n_caps} captions, {n_bleeps} bleeps, "
               f"{loud['input_lufs']:.1f} -> {sc['lufs']} LUFS  -> {dst.name} ({time.time() - t:.0f}s)",

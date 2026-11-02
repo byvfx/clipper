@@ -29,12 +29,26 @@ def run_retrying(cfg: dict, *args: str, retry_on: tuple[str, ...]) -> tuple[subp
     """yt-dlp, then once more with [paths] youtube_cookies when it fails with one of
     `retry_on` (AGE or BOT) in its error. Returns the result and whether it went signed in."""
     r = run(*args)
-    cookies = cfg["paths"]["youtube_cookies"]
+    cookies = cookies_file(cfg)
     err = r.stderr.lower()
     if r.returncode and any(s in err for s in retry_on) and cookies.is_file():
-        log.info("YouTube: %s, retrying signed in", "age-restricted" if retry_on == AGE else "bot check")
-        return run("--cookies", str(netscape_cookies(cookies)), *args), True
+        log.info("YouTube: %s, retrying signed in (%s)", "age-restricted" if retry_on == AGE else "bot check",
+                 cookies.name)
+        out = cfg["paths"]["youtube_cookies"]
+        return run("--cookies", str(netscape_cookies(cookies, out.with_name(f"{out.stem}.netscape.txt"))),
+                   *args), True
     return r, False
+
+
+EXPORT_GLOB = "www.youtube.com_*.json"  # Cookie-Editor's own name for a JSON export
+
+
+def cookies_file(cfg: dict) -> Path:
+    """[paths] youtube_cookies, or a newer browser export saved beside it under the extension's
+    own name (www.youtube.com_<date>.json), so a fresh export works without a rename (10-31)."""
+    p = cfg["paths"]["youtube_cookies"]
+    found = [f for f in p.parent.glob(EXPORT_GLOB) if f.is_file()] + ([p] if p.is_file() else [])
+    return max(found, key=lambda f: f.stat().st_mtime) if found else p
 
 
 def last_error(r: subprocess.CompletedProcess) -> str:
@@ -43,10 +57,10 @@ def last_error(r: subprocess.CompletedProcess) -> str:
     return lines[-1] if lines else f"exit {r.returncode}"
 
 
-def netscape_cookies(path: Path) -> Path:
+def netscape_cookies(path: Path, out: Path | None = None) -> Path:
     """yt-dlp reads only Netscape cookies.txt; a browser extension's JSON export (a list of
     {domain, path, secure, expirationDate, name, value}, or an object holding that list
-    under "cookies") is converted beside it."""
+    under "cookies") is converted to `out` (default: beside it)."""
     text = path.read_text(encoding="utf-8-sig").lstrip()
     if not text.startswith(("[", "{")):
         return path
@@ -59,6 +73,6 @@ def netscape_cookies(path: Path) -> Path:
         lines.append("\t".join([dom, "TRUE" if dom.startswith(".") else "FALSE", c.get("path") or "/",
                                 "TRUE" if c.get("secure") else "FALSE",
                                 str(int(c.get("expirationDate") or 0)), c["name"], c["value"]]))
-    out = path.with_name(f"{path.stem}.netscape.txt")
+    out = out or path.with_name(f"{path.stem}.netscape.txt")
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return out

@@ -369,7 +369,9 @@ def replan(cfg: dict, item: Item, action: str, row: dict) -> tuple[dict, str]:
     if row["scheduled"]:
         return row, f"scheduled {row['scheduled'][:16].replace('T', ' ')}"
     if row["decision"] == "approved":
-        return row, "held, not scheduled" if row["hold"] else "no free slot yet"
+        if row["hold"]:
+            return row, "held, not scheduled"
+        return row, f"not going out: {row['dropped']}" if row.get("dropped") else "no free slot yet"
     return row, ""
 
 
@@ -388,6 +390,15 @@ def schedule_entries(cfg: dict) -> dict[str, dict]:
     return {e["key"]: e for e in data.get("entries", [])}
 
 
+def schedule_dropped(cfg: dict) -> dict[str, str]:
+    """Approved items the scheduler let go (stale, over the stream's budget): key -> reason."""
+    from .schedule import DROPPED
+
+    data = load_json(cfg["paths"]["schedule"], {}) or {}
+    return {u["key"]: u["reason"] for u in data.get("unscheduled", [])
+            if u["reason"].startswith(DROPPED)}
+
+
 def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
     """Everything a card or list row shows, per item, from local files (review.json is
     as of the last sync). Kitsu is only asked for links older publishes didn't save."""
@@ -395,6 +406,7 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
     state = review.ensure_links(sdir, cfg, gazu)
     decisions = load_json(sdir / "review.json", {})
     sched = schedule_entries(cfg)
+    dropped = schedule_dropped(cfg)
     try:
         outputs = {it["key"]: it for it in review.items(sdir, cfg["review"]["include"], cfg)}
     except FileNotFoundError:
@@ -426,6 +438,7 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
             "publish_at": fields.get("Publish at") or "",
             "scheduled": entry["publish_at"] if entry else "",
             "uploaded": bool(entry and entry.get("status") == "uploaded"),
+            "dropped": "" if entry else dropped.get(f"{sdir.name}/{key}", ""),
             "youtube_url": fields.get("YouTube URL") or "",
             "kitsu_url": st["kitsu_url"], "episode_url": st["episode_url"],
             "thumb_text": fields.get(review.THUMB_COL) or proposed.get(review.THUMB_COL) or "",

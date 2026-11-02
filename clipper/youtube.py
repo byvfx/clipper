@@ -1,8 +1,7 @@
 """YouTube upload: schedule.json entries -> private videos with publishAt.
 
   clipper upload --sign-in   one-time OAuth in your browser; token saved beside the
-                             client secret and refreshed automatically after that (keeps
-                             the scopes the saved token has, so analytics survives it)
+                             client secret and refreshed automatically after that
   clipper upload             upload every scheduled entry due within upload_ahead_hours
 
 Per video: title, description, hashtags, tags and playlist from Kitsu's columns (read
@@ -46,7 +45,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import jsonstate
+from . import jsonstate, ytquota
 from .bleep import Bleeper
 from .config import for_stream
 from .errors import ClipperError
@@ -60,38 +59,37 @@ RETRY_STATUS = {500, 502, 503, 504}
 
 # ---------- auth ----------
 
-TESTING_EXPIRY = ("Google ends sign-ins after 7 days while the Cloud project's OAuth consent "
-                  "screen is in Testing; publish the app (APIs & Services > OAuth consent screen) "
-                  "to stop that")
+def scopes(token_path: Path, wanted: list[str]) -> list[str]:
+    """wanted plus the scopes the saved token holds beyond them (analytics --sign-in adds
+    yt-analytics): loading, or signing in again, with ours alone would drop those."""
+    saved = (jsonstate.load(token_path).get("scopes") or []) if token_path.exists() else []
+    return [*wanted, *(s for s in saved if s not in wanted)]
 
 
-def scopes(token_path: Path) -> list[str]:
-    """SCOPES plus any other scope the saved token holds (analytics --sign-in adds
-    yt-analytics). Refreshing or signing in again with SCOPES alone would drop them."""
-    saved = jsonstate.read(token_path, {}).get("scopes") or []
-    return [*SCOPES, *(s for s in saved if s not in SCOPES)]
-
-
-def credentials(paths: dict, sign_in: bool = False):
+def credentials(paths: dict, sign_in: bool = False, force_refresh: bool = False):
+    """force_refresh: refresh even while the access token is good, since only a refresh
+    shows a sign-in that was revoked or expired (doctor)."""
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
 
     token_path: Path = paths["youtube_token"]
+    want = scopes(token_path, SCOPES)
     creds = None
     if token_path.exists() and not sign_in:
-        creds = Credentials.from_authorized_user_file(str(token_path), scopes(token_path))
-    if creds and creds.expired and creds.refresh_token:
+        creds = Credentials.from_authorized_user_file(str(token_path), want)
+    if creds and creds.refresh_token and (creds.expired or force_refresh):
         try:
             creds.refresh(Request())
         except Exception as e:  # noqa: BLE001  # revoked, or a 7-day Testing-mode token that expired
-            raise ClipperError(f"YouTube token refresh failed ({e}); run: clipper upload --sign-in. "
-                               + TESTING_EXPIRY)
+            why = e.args[0] if e.args else e
+            raise ClipperError(f"YouTube sign-in no longer works ({why}); run: clipper upload --sign-in. "
+                               "If it lapses every 7 days, the Google OAuth app is still in Testing: "
+                               "publish it (Google Cloud > Google Auth Platform > Audience)")
     if not creds or not creds.valid:
         if not sign_in:
             raise ClipperError("not signed in to YouTube; run: clipper upload --sign-in")
-        flow = InstalledAppFlow.from_client_secrets_file(str(paths["youtube_client_secret"]),
-                                                         scopes(token_path))
+        flow = InstalledAppFlow.from_client_secrets_file(str(paths["youtube_client_secret"]), want)
         # select_account: always show the account chooser, which is also where a Brand
         # Account channel is picked; plain "consent" silently reuses the browser's account.
         creds = flow.run_local_server(port=0, prompt="select_account consent",
@@ -100,10 +98,12 @@ def credentials(paths: dict, sign_in: bool = False):
     return creds
 
 
-def service(paths: dict, sign_in: bool = False):
+def service(paths: dict, sign_in: bool = False, creds=None):
+    """A Data API client whose every call is counted in [paths] youtube_quota (#77 M12)."""
     from googleapiclient.discovery import build
 
-    return build("youtube", "v3", credentials=credentials(paths, sign_in), cache_discovery=False)
+    return build("youtube", "v3", credentials=creds or credentials(paths, sign_in), cache_discovery=False,
+                 requestBuilder=ytquota.request_class(paths["youtube_quota"]))
 
 
 # ---------- metadata ----------
@@ -338,38 +338,53 @@ def note_links(sched_path: Path, key: str, links: str) -> None:
     mark(sched_path, key, source_links=links)
 
 
+def spare(cfg: dict) -> int:
+    """Data API units the backfills may still spend today (ytquota.spare)."""
+    return ytquota.spare(cfg["youtube"], cfg["paths"]["youtube_quota"])
+
+
 def backfill_links(cfg: dict, sched: dict, sched_path: Path, dry_run: bool,
                    limit: int | None, yt=None) -> None:
     """Add, fix or drop the source links on uploaded videos whose longer video went public,
     was re-cut or was deleted since. Checking costs 1 quota unit per 50 videos; each
-    description update 51 (read + write), at most [youtube] link_updates_per_run a run."""
+    description update 51 (read + write), at most [youtube] link_updates_per_run a run
+    and only from the day's spare quota (ytquota.spare)."""
     cache: dict = {}
     up = [(e, ps) for e in sched["entries"] if e.get("status") == "uploaded" and e.get("video_id")
+          and not e.get("gone_at")
           for ps in [source_parents(cfg, e, sched["entries"], cache)] if ps or e.get("source_links")]
     if not up:
         return
+    ids = [p.get("video_id") for _, ps in up for _, p, _ in ps]
+    if spare(cfg) < -(-len(set(ids)) // 50) + 51:  # the status check plus one update
+        print("source links: no spare quota today; next run")
+        return
     yt = yt or service(cfg["paths"])
-    status = privacy(yt, [p.get("video_id") for _, ps in up for _, p, _ in ps])
+    status = privacy(yt, ids)
     todo = [(e, want) for e, ps in up for want in [source_links(cfg, e, ps, status)]
             if want != e.get("source_links", "")]
     cap = limit or cfg["youtube"]["link_updates_per_run"]
     print(f"{len(todo)} videos need their source links set" + (" (dry run)" if dry_run else "")
           + (f"; {cap} this run" if len(todo) > cap else ""))
     for e, want in todo[:cap]:
+        if not dry_run and spare(cfg) < 51:  # checked before each update, not once (#106 review)
+            print("  no spare quota left today; the rest next run")
+            break
         print(f"  {e['url']} {e['title'][:60]}\n    " + (want.replace("\n", "\n    ") or "(links removed)"))
         if dry_run:
             continue
         found = yt.videos().list(part="snippet", id=e["video_id"]).execute().get("items", [])
-        if not found:
-            print("    not on YouTube any more; skipped")
+        if not found:  # deleted in Studio: not tried again every hour (#77 M12)
+            print("    not on YouTube any more; skipped from now on")
+            mark(sched_path, e["key"], gone_at=datetime.now(UTC).isoformat(timespec="seconds"))
             continue
         sn = found[0]["snippet"]  # an update replaces the whole snippet: send back what's there
         body = {k: sn[k] for k in ("title", "categoryId", "tags", "defaultLanguage",
                                    "defaultAudioLanguage") if k in sn}
         body["description"] = clean(with_links(sn.get("description", ""),
                                                e.get("source_links", ""), want), 5000)
-        execute_with_retry(yt.videos().update(part="snippet",
-                                              body={"id": e["video_id"], "snippet": body}))
+        # One try: a failure is retried by the next hourly run, within that day's quota.
+        yt.videos().update(part="snippet", body={"id": e["video_id"], "snippet": body}).execute()
         note_links(sched_path, e["key"], want)
 
 
@@ -549,6 +564,58 @@ def backfill_thumbnails(cfg: dict, sched: dict, sched_path: Path, dry_run: bool)
         print(f"  {e['url']} thumbnail set")
 
 
+CAPTION_TRIES = 3  # 400 quota units a try
+
+
+def add_captions(yt, yc: dict, e: dict, srt: Path, sched_path: Path) -> bool:
+    """Upload the .srt as e's captions, one request (400 units) per call. A failure is
+    noted on the entry (captions_error, captions_tries) for backfill_captions to retry in a
+    later run, instead of being lost (#77 L18)."""
+    from googleapiclient.http import MediaFileUpload
+
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    try:
+        yt.captions().insert(part="snippet", body={"snippet": {
+            "videoId": e["video_id"], "language": yc["language"], "name": "", "isDraft": False}},
+            media_body=MediaFileUpload(str(srt), mimetype="application/octet-stream")).execute()
+    except Exception as ex:  # noqa: BLE001  # the video is up; captions are retried later
+        text = f"{type(ex).__name__}: {ex}"[:300]
+        print(f"  warning: captions: {text}")
+        e.update(captions_error=text, captions_tries=e.get("captions_tries", 0) + 1)
+        mark(sched_path, e["key"], captions_error=text, captions_tries=e["captions_tries"])
+        return False
+    e["captions_set"] = now
+    e.pop("captions_error", None)
+    with jsonstate.update(sched_path) as sched:
+        for x in sched["entries"]:
+            if x["key"] == e["key"]:
+                x["captions_set"] = now
+                x.pop("captions_error", None)
+    return True
+
+
+def backfill_captions(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, yt=None) -> None:
+    """Retry the captions of uploaded videos whose captions upload failed, up to
+    CAPTION_TRIES each, from the day's spare quota (400 units each)."""
+    todo = [(e, m, yc) for e in sched["entries"] if e.get("status") == "uploaded" and e.get("video_id")
+            and e.get("captions_error") and not e.get("captions_set") and not e.get("gone_at")
+            and e.get("captions_tries", 0) < CAPTION_TRIES
+            for yc in [for_stream(cfg, cfg["paths"]["streams"] / e["stream"])["youtube"]]
+            if yc["captions"]  # the show's captions turned off since: not retried (#106 review)
+            for m in [metadata(e, cfg)] if m["srt"]]
+    if not todo:
+        return
+    print(f"{len(todo)} videos need their captions again" + (" (dry run)" if dry_run else ""))
+    yt = None if dry_run else yt or service(cfg["paths"])
+    for e, m, yc in todo:
+        if spare(cfg) < 400:  # checked before each try
+            print("  no spare quota left today; the rest next run")
+            break
+        print(f"  {e['url']} {m['srt'].name} (try {e.get('captions_tries', 0) + 1})")
+        if not dry_run:
+            add_captions(yt, yc, e, m["srt"], sched_path)
+
+
 def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_path: Path,
            sched_path: Path) -> None:
     """Everything after the video itself: thumbnail, captions, playlist, Kitsu link. None
@@ -565,13 +632,10 @@ def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_pat
             print(f"  warning: {ex}")
         except Exception as ex:  # noqa: BLE001  # the video is up, the thumbnail is optional
             print(f"  warning: thumbnail: {type(ex).__name__}: {ex}")
+    # Its own try too; a failure is retried hourly (#77 L18).
+    if yc["captions"] and m["srt"] and add_captions(yt, yc, e, m["srt"], sched_path):
+        extras.append("captions")
     try:
-        if yc["captions"] and m["srt"]:
-            from googleapiclient.http import MediaFileUpload
-            yt.captions().insert(part="snippet", body={"snippet": {
-                "videoId": vid, "language": yc["language"], "name": "", "isDraft": False}},
-                media_body=MediaFileUpload(str(m["srt"]), mimetype="application/octet-stream")).execute()
-            extras.append("captions")
         for name in m["playlists"] if yc["add_to_playlist"] else []:
             add_to_playlist(yt, name, vid, playlists, cache_path, yc["playlist_privacy"])
             e.setdefault("playlists", []).append(name)
@@ -600,7 +664,7 @@ def kitsu_url(cfg: dict, meta: dict, url: str) -> None:
 
 def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | None = None,
         thumbnails_only: bool = False, playlists_only: bool = False,
-        links_only: bool = False) -> None:
+        links_only: bool = False, captions_only: bool = False) -> None:
     paths = cfg["paths"]
     if sign_in:
         service(paths, sign_in=True)
@@ -619,11 +683,19 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
     if links_only:
         backfill_links(cfg, sched, sched_path, dry_run, limit)
         return
+    if captions_only:
+        backfill_captions(cfg, sched, sched_path, dry_run)
+        return
     yt, failed = upload_due(cfg, sched, sched_path, dry_run, limit)
-    try:  # links on videos already up whose longer video went public since
-        backfill_links(cfg, jsonstate.read(sched_path), sched_path, dry_run, None, yt)
-    except Exception as ex:  # noqa: BLE001  # the uploads are done either way
-        print(f"  warning: source links: {type(ex).__name__}: {ex}")
+    # Then, from what's left of the day's quota: links on videos already up whose longer
+    # video went public since, and captions that failed to go up.
+    for name, fill in (("source links", lambda s: backfill_links(cfg, s, sched_path, dry_run, None, yt)),
+                       ("captions", lambda s: backfill_captions(cfg, s, sched_path, dry_run, yt))):
+        try:
+            fill(jsonstate.read(sched_path))
+        except Exception as ex:  # noqa: BLE001  # the uploads are done either way
+            print(f"  warning: {name}: {type(ex).__name__}: {ex}")
+    print(ytquota.summary(cfg["youtube"], cfg["paths"]["youtube_quota"]))
     if failed:  # a non-zero exit is what makes the bot DM it
         raise ClipperError(f"{len(failed)} upload(s) failed: {'; '.join(failed)}"[:900])
 
@@ -756,6 +828,7 @@ def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: d
                 x.pop("last_error", None)
                 x.pop("last_error_at", None)
     print(f"  {url} ({time.time() - t:.0f}s)" + (f", links {links!r}" if links else ""), flush=True)
+    ytquota.uploaded(cfg["paths"]["youtube_quota"])
     finish(yt, cfg, e, m, vid, playlists, cache_path, sched_path)
 
 
@@ -857,6 +930,7 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
         fresh["entries"] = [x for x in fresh["entries"] if x["key"] != key] + [e]
         fresh["unscheduled"] = [x for x in fresh.get("unscheduled", []) if x["key"] != key]
     print("  details set; recorded as uploaded")
+    ytquota.uploaded(paths["youtube_quota"])
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
     playlists = jsonstate.read(cache_path, {})
     finish(yt, cfg, e, m, vid, playlists, cache_path, sched_path)

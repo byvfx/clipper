@@ -4,7 +4,7 @@ clipper runs in three roles. A machine can do more than one.
 
 | Role | What runs there | Needs |
 |---|---|---|
-| **GPU worker** | `clipper worker`: transcribe, score, segments, then Shorts (and clips, if `[review] include` has `"picks"`) to review, then long segments to review | NVIDIA GPU (8 GB+), the NAS share, ffmpeg |
+| **GPU worker** | `clipper worker`: transcribe, score, segments, then Shorts (and clips, if `[review] include` has `"picks"`) to review, then long segments to review | an NVIDIA GPU (8 GB+), or none with `[transcribe] backend = "modal"`; the NAS share, ffmpeg |
 | **Bot** | `clipper bot`: Discord review cards, buttons, retakes | always on, the NAS share (or local streams), ffmpeg |
 | **Recorder** | `clipper record watch` in Docker on the NAS | Docker; see `deploy/record/deploy.sh` |
 
@@ -26,7 +26,7 @@ else uv's installer and BtbN's ffmpeg build; Homebrew or apt on macOS/Linux), sy
 packages, then runs `clipper setup`:
 
 1. **Join or start fresh.** Join copies the main machine's `clipper.toml` (and, if you like, the
-   `secrets/` beside it) from a path or the share; new writes one from clipper.example.toml.
+   `secrets/` beside it) from a path or the share; new writes a short starter (only what differs from the defaults; clipper.example.toml lists every setting).
 2. **Roles.** Worker, bot, recorder (the recorder is the NAS's Docker container; setup only
    points at `deploy/record/deploy.sh`). It looks at the GPU and offers WhisperX (NVIDIA), mlx
    (Apple Silicon) or Modal, keeping the shared choice when this machine can run it. If the
@@ -109,23 +109,32 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    Add `ANTHROPIC_WORKSPACE_ID` if the key isn't scoped to a workspace. Open a new terminal.
 
 6. **Fonts**: thumbnails and Short captions use Impact and Bahnschrift, both standard on
-   Windows. On Linux install `ttf-mscorefonts-installer` (Impact) and Roboto Condensed.
+   Windows. On Linux install `ttf-mscorefonts-installer` (Impact)
+   and Roboto Condensed (`fonts-roboto-unhinted`).
+
+   **Cover layout** (optional): a show's tabloid covers can move, resize or recolor any part,
+   or change the fixed words, in `layouts/<show>/enquirer.toml` (`[paths] layouts`), with the
+   tables of `LAYOUT` in `clipper/thumbs/enquirer.py`; leave it out for the default covers.
 
    **Photos** (optional): tabloid covers can use a portrait of someone the show talks about
    who is never on screen. Make a folder every machine can reach (e.g. `photos` beside
    `streams` on the NAS), add one head-and-shoulders crop per person named `<Person>.jpg`
    (the whole picture is treated as the face, so crop out watermarks and logos), and set
    `[thumbnail] photos` to it. The model may then use one for a cover's face or teaser box;
-   `clipper thumbs <stream> --ids s04 --teaser-photo "Hasan Piker"` sets one by hand.
+   `clipper thumbs <stream> --items s04 --teaser-photo "Hasan Piker"` sets one by hand.
 
-7. **Check**: `uv run clipper doctor --role gpu` (or `--role bot`).
+7. **Check**: `clipper doctor --role gpu` (or `--role bot`).
 
-8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed):
+8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed;
+   both scripts share `deploy\common.ps1`, which lists the user env vars a task copies in,
+   since scheduled tasks don't always see ones set after logon: a new key goes there too):
    ```powershell
    deploy\worker\worker-task.ps1 -Install     # GPU worker
    deploy\discord\bot-task.ps1 -Install       # Discord bot (only one machine runs it)
    ```
    `-Status`, `-Restart`, `-Stop`, `-Uninstall` work on both. Logs go to `logs\`.
+   `clipper services` shows both plus the recorder and any NAS cuts;
+   `clipper services restart bot` (or `worker`, `all`) runs the same scripts.
 
 ## 2. macOS (Apple Silicon)
 
@@ -186,9 +195,14 @@ cookies.txt or as JSON (Cookie-Editor's default; converted to `youtube_cookies.n
 beside it) with a browser extension (e.g. "Get cookies.txt LOCALLY") from a private
 window signed in to an adult Google account (not the upload channel's, if you can avoid it),
 then close the window so the session isn't rotated. Rerun `transcribe` to pick up the failures.
+A JSON export left in the same folder under the extension's own name (`www.youtube.com_<date>.json`)
+is used without renaming when it is newer than `youtube_cookies.txt`.
 Pre-shows use the same file more freely: when YouTube's bot check ("Sign in to confirm you're
 not a bot") stops a pre-show grab, `clipper preshow` retries it signed in. The archive never
-does that, so a bulk run doesn't put the account on a blocked IP.
+does that, so a bulk run doesn't put the account on a blocked IP. Browsers rotate these
+cookies within days; when a signed-in retry still hits the bot check, the bot DMs ([notify]
+kind `failure`, once per video per `cooldown_hours`) to export fresh ones. The block is on the
+IP: a PO-token provider (bgutil-ytdlp-pot-provider, tried 2026-10-31) doesn't get past it.
 On a new install, `clipper modal --backfill` adds the runs from before the log, once.
 
 **Costs (#50).** Every model call appends its cost to `[paths] costs` (`logs/costs.jsonl`)
@@ -222,6 +236,31 @@ The model is gated on Hugging Face:
    speaker tags in the transcript (the v5 scoring and v3 segments/meta prompts explain them;
    a `clipper.toml` that pins older `prompt_version`s gets tags the prompt doesn't expect, so
    keep the pins current). Streams without names give the same text as before.
+
+**Faces on screen (#54).** `clipper faces <stream>` finds who is on screen: every keyframe
+(one every ~4 s on Kick) through two small face models OpenCV runs on the CPU, no GPU or
+Modal. An 8 h stream takes ~15 min on a 16-core laptop, most of it reading the video off the
+NAS share. It isn't a pipeline stage yet: run it by hand before `clipper thumbs`. Enquirer covers
+(prompt v5) then get each named person's best frames as candidates, labelled with who is in them,
+and use the found head box when the main face is one (`face_found` in thumbnails.json). The weekly
+doesn't read faces.json yet.
+
+1. `uv sync --extra faces` (add it to the other extras you use). The models (YuNet and SFace,
+   from OpenCV's model zoo, MIT and Apache-2.0) download on the first scan into `[paths]
+   faces/models`, checked against pinned hashes.
+2. `clipper faces <stream>` writes `faces.json` and `faces/F01.jpg`... one contact sheet per
+   group of faces, biggest first. Groups that aren't people (game characters, puppets, a
+   poster on the wall) are fine to leave unnamed.
+3. Name the regulars once from the sheets: `clipper faces <stream> --name F01=Andy --name
+   F03=Jer --enroll` keeps them in `[paths] faces/known.json`, one file for every show. Later
+   streams are named by face (`[faces] match`). Enroll from an ordinary stream, not a costume
+   one; a second stream's `--enroll` adds another sample. `clipper faces --enroll-photos` adds
+   the `[thumbnail] photos` portraits under their file names.
+4. Or do it in the war room (docs/warroom.md, Faces): name and enroll groups from their
+   sheets, or draw a box round a face on a paused video ("Who's this?", B) to keep one that
+   never made a group. `clipper faces <stream> --at 1:23:45 --box x,y,w,h --person Name` is the
+   same from the command line; `clipper faces --forget Name` drops someone.
+5. `clipper doctor --role gpu` lists the known faces.
 
 ## 2b-2. Other model providers (optional)
 
@@ -299,7 +338,11 @@ moves to the NAS (#9), do the same there with the Tailscale container.
 
 `bash deploy/record/deploy.sh` from the repo root (ssh alias `nas`). It copies clipper.toml
 to the NAS; the recorder only reads `[record]` and `[kick]`. Re-run it after changing
-`[record] channels`.
+`[record] channels`. It refuses while a show is being recorded (the restart would start a
+new recording part): `clipper record status` shows what the recorder is doing, from the
+heartbeat it writes to the share, and `deploy.sh --force` deploys anyway.
+`clipper services stop|restart recorder` stops or restarts it over ssh without a new build,
+with the same check.
 
 **Cut on the NAS (#51).** The same image cuts segments and compilations beside the source,
 instead of the laptop pulling and pushing every byte over the share (it writes at ~23 MB/s
@@ -322,7 +365,7 @@ Save a reference screenshot of each one from a recorded stream (`clipper shorts 
 --save-example <layout> --at <seconds>`); `clipper doctor` warns while any is missing.
 A layout that frames an existing scene another way (say, only the webcams of a watch scene)
 gets `pick = false`: scene detection never chooses it and it needs no screenshot; pick it by
-hand with `clipper shorts <stream> --ids <vNN> --layout <name>`, the Kitsu Layout column or a retake.
+hand with `clipper shorts <stream> --items <vNN> --layout <name>`, the Kitsu Layout column or a retake.
 Add the slug to `[record] channels` to record it live. `clipper shows` lists every show and
 its streams; the show's Kitsu production is created on its first publish.
 
@@ -341,12 +384,11 @@ What we learned bringing up Lolcow Cinema (October 2026). A new channel is held 
 ways the API reports badly, so do these before the first big upload run.
 
 1. **Sign in**: `clipper upload --sign-in` once, on the machine that uploads. The token
-   lands in `secrets/youtube_token.json`. First publish the Google Cloud project's app
-   (APIs & Services > OAuth consent screen > Publish app): while it is in Testing, Google
-   ends every sign-in after 7 days and uploads stop with `invalid_grant: Token has been
-   expired or revoked`. A published app you haven't had verified shows an "unverified app"
-   warning at sign-in; that's fine for your own channel. Signing in again keeps the
-   analytics scope if the saved token had it.
+   lands in `secrets/youtube_token.json`. First set the Google Cloud project's OAuth app to
+   **In production** (Google Auth Platform > Audience > Publish app; no verification
+   needed, you click past the "unverified app" warning): while it is in **Testing**, Google
+   expires the sign-in after 7 days and uploads stop with `invalid_grant`. Signing in again
+   keeps the analytics scope, and `clipper doctor` (online) tests the sign-in by refreshing it.
 2. **Verify the channel** at https://www.youtube.com/verify (phone). Without it custom
    thumbnails are refused (403); videos still go up, and `clipper upload --thumbnails` sets
    the covers afterwards. Verification can take more than one round: if Studio later
@@ -383,6 +425,14 @@ ways the API reports badly, so do these before the first big upload run.
    descriptions of videos already up (about 51 quota units each).
    `clipper upload --links --dry-run` shows what it would change. Change the wording per show
    with `clip_source` / `segment_source` in `[shows.<key>.youtube]`.
+8. **API quota.** A Cloud project gets 10,000 Data API units a day, reset at midnight
+   Pacific; uploads themselves have their own bucket (100 a day), but each upload's
+   thumbnail (50), captions (400) and playlist adds (50 each) come out of the 10,000.
+   Every call is counted in `logs/youtube_quota.json` and each upload run ends with the
+   day's total. Source-link updates and caption retries (a captions upload that failed is
+   tried again hourly, 3 times; `clipper upload --captions` alone) only spend what's left
+   after `upload_units` (600) for each upload `max_per_24h` still allows that day. If Google
+   raises your project's quota, set `[youtube] daily_quota` to match.
 
 ## Weekly issue
 
@@ -433,6 +483,10 @@ A colour is `[r, g, b]` or the name of a `[palette]` colour; an unknown key is r
 
 ## TikTok drafts
 
+**Parked (2026-11-01).** We post to TikTok by hand. Auto-send is off (TikTok flagged the drafts as
+bot activity), and direct posting is dropped: TikTok's app audit refuses tools that only post to
+your own accounts (issues #62, #116). The steps below still work if this is ever picked up again.
+
 `clipper tiktok` sends scheduled Shorts to the TikTok app's drafts (Content Posting API,
 Upload route). You open the notification on the phone, paste the caption and post. TikTok's
 API takes no caption for drafts, so clipper posts it to Discord (`[tiktok] caption_channel_id`,
@@ -464,4 +518,42 @@ else the `[record]` alert webhook or channel) and keeps it in schedule.json.
 
 Limits: TikTok allows at most 5 pending drafts in 24 h; `[tiktok] max_per_24h` (default 3,
 at most 5) stays under it. Most accounts can post up to 3 minutes. Direct posting without the phone step needs
-TikTok's app audit (issue #29).
+TikTok's app audit, which requires an app meant for other creators, not your own accounts (#62).
+
+## X posts
+
+`clipper x` posts scheduled Shorts to X as native video through the X API v2 (pay-per-use:
+credits bought in the developer console, about $0.015 a post; a post with a link costs $0.20,
+so clipper never puts one in). The text is the Short's title without the "KINO CASINO | "
+prefix (`[x] hook_first`: the feed shows only the first words), then `[x] max_hashtags` (1)
+hashtag and any `[x] mentions` (per show in `[shows.<key>.x]`; each one gets notified). Shorts taller than `[x] max_height` (1280) are re-encoded to 720x1280 first, X's
+recommended portrait size.
+
+1. **Developer app** at console.x.com, signed in as the X account the posts go out from.
+   Buy a few dollars of credits and set a spending limit. Create an app; under **User
+   authentication settings** turn on OAuth 2.0, permissions **Read and write**, type of app
+   **Native App**, callback URI `http://127.0.0.1:3456/callback` (the port is
+   `[x] redirect_port`) and a website URL.
+2. **Keys**: copy the **OAuth 2.0 Client ID** (Keys and tokens) and save
+   `{"client_id": "..."}` as `secrets/x_client.json`. A **Web App** (confidential client)
+   works too: add `"client_secret": "..."`.
+3. **Sign in** once: `clipper x --sign-in`, with the browser signed in to X as that account.
+   The token lands in `secrets/x_token.json`; it lasts 2 h and refreshes itself (scope
+   `offline.access`). `clipper doctor` checks the scopes.
+4. **Post**: `clipper x --items kick-131151926/v04_t21 --dry-run` shows the file and text;
+   without `--dry-run` it posts. `clipper x` lists what was posted, with links. A failed post
+   is recorded (`clipper x` shows the error) and `--items` tries it again.
+5. **Automatic** (optional): `clipper x --auto` posts approved, scheduled Shorts from streams
+   that aired in the last `[x] max_age_hours` (72) and aren't on X yet, newest stream first, up
+   to `max_per_24h` (6); titles saying "host(s)" are skipped. It doesn't wait for YouTube: on X a
+   clip is worth most while the topic is hot. `[x] after_youtube = true` waits until each Short
+   is public on YouTube (checked with YouTube) instead. Set `[x] auto_post_minutes` (e.g. 60) and restart
+   the bot to have it run that for you.
+6. **Weekly issue**: `clipper x --issue --dry-run` shows the newest issue as a thread (X takes four
+   images a post: pages 01-04, 05-08, 09-10) with its text; without `--dry-run` it posts. To change
+   the text, put a list of three strings in the issue's `issue.json` under `post.x`. A run that
+   failed halfway carries on as replies to the last post (`weekly/<Saturday>/x.json`). It needs all ten
+   pages, every caption within `[x] max_chars`, and room for the whole thread in `max_per_24h`, which
+   issue posts share with Shorts; a second run at the same time is refused.
+
+Each post's cost is logged like a model call (`clipper costs`, kind `x`).

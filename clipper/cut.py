@@ -1,6 +1,6 @@
 """Cut clips out of the stream source with ffmpeg.
 
-  segments      topic segments from segments.json (cut=true, or --ids) -> segments/
+  segments      topic segments from segments.json (cut=true, or --items) -> segments/
   compilations  one long video per topic with >= compile_min_segments segments,
                 joined in stream order, with YouTube chapters -> compilations/
   picks         Pass B picks from candidates.json, horizontal cut -> clips/
@@ -28,10 +28,11 @@ from itertools import pairwise
 from pathlib import Path
 
 from . import jsonstate
-from .config import for_stream
+from .config import for_stream, show_args
 from .errors import ClipperError
 from .media import source_file
 from .segments import slug
+from .states import numbered_picks
 from .timefmt import hms
 
 
@@ -205,6 +206,16 @@ def compilation_parts(segs: list[dict]) -> tuple[list[tuple[float, float]], list
     return list(zip(begin, ends)), chapters, t
 
 
+def part_offsets(spans: list[tuple[float, float]]) -> list[list[float]]:
+    """[src_start, src_end, offset in the compilation] per part, unrounded (chapters are
+    rounded to 0.1 s for display; a frame needs better)."""
+    out, t = [], 0.0
+    for b, end in spans:
+        out.append([round(b, 3), round(end, 3), round(t, 3)])
+        t += end - b
+    return out
+
+
 def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = None) -> None:
     """One video per topic with several segments, e.g. every Quartering segment in order."""
     cfg = for_stream(cfg, stream_dir)
@@ -232,12 +243,15 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         listing = out_dir / f"{slug(topic)}.txt"
         listing.write_text("".join(lines), encoding="utf-8")
         dst = out_dir / f"{slug(topic)}.mp4"
+        part = dst.with_name(dst.name + ".part")  # B15: a crashed join leaves no half .mp4 behind
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat",
                         "-safe", "0", "-i", str(listing), "-c", "copy",
-                        "-movflags", "+faststart", str(dst)], check=True)
+                        "-movflags", "+faststart", "-f", "mp4", str(part)], check=True)
+        part.replace(dst)
         listing.unlink()
         chapter_text = "\n".join(f"{hms(c['start_s'])} {c['title']}" for c in chapters)
         write_sidecar(dst, {**comp, "duration_s": round(t, 1), "chapters": chapters,
+                            "parts": part_offsets(spans),
                             "chapter_text": chapter_text,
                             "youtube_description": f"{comp['description']}\n\n{chapter_text}"})
         print(f"{topic}: {len(segs)} segments, {t / 60:.0f} min -> {dst.name}")
@@ -256,7 +270,7 @@ def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None
     out_dir.mkdir(exist_ok=True)
     cc = cfg["cut"]
     bleep = make_bleep(stream_dir, cfg)
-    for i, p in enumerate(data["pass_b"].get("picks", []), 1):
+    for i, p in numbered_picks(data["pass_b"].get("picks", [])):
         if ids is not None and p["id"] not in ids:
             continue
         c = by_id[p["id"]]
@@ -304,7 +318,7 @@ def on_nas(stream_dir: Path, cfg: dict, argv: list[str]) -> None:
               *(["--user", cc["nas_user"]] if cc["nas_user"] else []),
               "-v", f"{cc['nas_data']}:/data",
               *[a for k, v in env.items() for a in ("-e", f"{k}={v}")]]
-    run = [cc["nas_image"], "cut", sid, *argv]
+    run = [cc["nas_image"], *show_args(cfg), "cut", sid, *argv]  # a --show pin carries over
     # One folder per run (two cuts at once must not share code), gone when the run ends.
     remote = ('set -e; d=$(mktemp -d "$HOME/clipper-cut.XXXXXX"); trap \'rm -rf "$d"\' EXIT; '
               'tar -xzf - -C "$d"; chmod -R a+rX "$d"; '

@@ -23,6 +23,7 @@ from .config import for_stream
 from .errors import ClipperError
 from .llm import Claude, preflight
 from .prompts import Prompts
+from .states import carry_numbers, numbered_picks
 from .transcript import load_words, snap, transcript_lines
 
 CATEGORIES = ["fail", "win", "joke", "insight", "reaction", "hot_take"]
@@ -399,6 +400,15 @@ def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: C
 
     pass_b = run_pass_b(kept, summary, words, cfg, claude, prompts) if kept else {
         "pass": "B", "status": "skipped", "picks": [], "rejected": []}
+    # A re-score keeps hand picks (`clipper pick`) and the numbers in existing keys (#77 L13).
+    old = jsonstate.read(stream_dir / "candidates.json", {})
+    old_b = old.get("pass_b") or {}
+    scored = {r["id"] for r in results}
+    hand = [r for r in old.get("pass_a", []) if r.get("source") == "hand" and r["id"] not in scored]
+    hand_ids = {r["id"] for r in hand}
+    results = results + hand
+    pass_b["picks"], pass_b["numbers"] = carry_numbers(
+        old_b, pass_b.get("picks", []) + [p for p in old_b.get("picks", []) if p["id"] in hand_ids])
     out = {"stream_id": stream_dir.name, "title": meta.get("title"),
            "prompt_version": prompts.version, "cost_usd": round(claude.cost, 4),
            "pass_a": results, "pass_b": pass_b}
@@ -406,8 +416,9 @@ def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: C
     ckpt.unlink(missing_ok=True)
 
     by_id = {r["id"]: r for r in results}
-    print(f"Pass B: {len(pass_b.get('picks', []))} picks; cost ${claude.cost:.3f}")
-    for i, p in enumerate(pass_b.get("picks", []), 1):
+    print(f"Pass B: {len(pass_b.get('picks', []))} picks"
+          + (f" ({len(hand)} kept hand picks)" if hand else "") + f"; cost ${claude.cost:.3f}")
+    for i, p in numbered_picks(pass_b["picks"]):
         c = by_id.get(p["id"], {})
         print(f"{i:>2}. {p['id']} {c.get('in_s', 0):8.1f}-{c.get('out_s', 0):8.1f}s "
               f"[{c.get('category')}, A={c.get('score')}] {p['title']}")

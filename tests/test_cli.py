@@ -1,6 +1,9 @@
 import argparse
 
+import pytest
+
 from clipper import cli, stages
+from clipper.errors import ClipperError
 
 
 def commands() -> dict[str, argparse.ArgumentParser]:
@@ -24,3 +27,47 @@ def test_every_stage_runs_a_real_command():
         argv = stages.argv(st.name, "kick-1", wc)
         parser = cmds[argv[0]]
         parser.parse_args(argv[1:])   # the worker's argv parses (exits on an unknown flag)
+
+
+def parse(*argv: str) -> argparse.Namespace:
+    return cli.build_parser().parse_args(argv)
+
+
+def test_one_items_flag_old_spellings_still_work():
+    assert parse("cut", "kick-1", "--items", "s03,s07").items == ["s03", "s07"]
+    assert parse("cut", "kick-1", "--ids", "s03", "--items", "s07").items == ["s03", "s07"]
+    assert parse("review", "notify", "kick-1", "--keys", "c01").items == ["c01"]
+    assert parse("retake", "--item", "c03").items == ["c03"]
+    assert parse("receipts", "find", "kick-1", "--segments", "s02,s05").items == ["s02", "s05"]
+    assert parse("archive", "check", "jer", "--ids", "yt-a", "yt-b,yt-c").items == ["yt-a", "yt-b", "yt-c"]
+    a = parse("tiktok", "--items", "t20", "kick-1")   # one value: the stream positional survives
+    assert a.items == ["t20"] and a.stream == "kick-1"
+    assert parse("thumbs", "kick-1").items is None
+
+
+def test_flags_mean_the_same_everywhere():
+    assert parse("shorts", "kick-1", "--save-example", "cams", "--at", "1:02:03").at == 3723
+    assert parse("shorts", "kick-1", "--save-example", "cams", "--at", "90.5").at == 90.5
+    assert parse("upload", "--max", "3").limit == 3 == parse("upload", "--limit", "3").limit
+    assert parse("review", "status").sync is False   # a status never writes (a sync can post to Kitsu)
+
+
+@pytest.mark.parametrize("argv", [
+    ("upload", "--links", "--next", "2"), ("upload", "--sign-in", "--thumbnails"),
+    ("rumble", "--status", "--done", "s02"), ("tiktok", "--auto", "--items", "t20"),
+    ("x", "--auto", "--items", "t20"),
+    ("schedule", "--show"), ("analytics", "--show"),   # clashed with the global --show KEY
+    ("shorts", "kick-1", "--at", "soon")])
+def test_refused_on_the_command_line(argv, capsys):
+    with pytest.raises(SystemExit):
+        parse(*argv)
+
+
+def test_mode_flags_that_dont_combine():
+    a = parse("thumbs", "kick-1", "--shorts", "--items", "s02")
+    with pytest.raises(ClipperError, match="--shorts doesn't combine with --items"):
+        cli.refuse(a, "--shorts", "--items", "--compose-only", "--missing", "--force")
+    cli.refuse(parse("thumbs", "kick-1", "--shorts"), "--shorts", "--items", "--missing")
+    a = parse("thumbs", "kick-1", "--photo", "", "--items", "s02", "--force")
+    with pytest.raises(ClipperError, match="--force"):
+        cli.refuse(a, "--photo", "--force")

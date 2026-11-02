@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from clipper import worker
 
 SLOW = ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts", "review"]
@@ -72,6 +74,69 @@ def test_an_empty_cut_folder_is_not_done(tmp_path):
     assert run.done("cut") and run.done("clips")
 
 
+def wcfg():
+    return {**cfg()["worker"], "stale_minutes": 10}
+
+
+def test_heartbeat_survives_any_error(tmp_path, monkeypatch):
+    """#77 L11: a failed beat is logged and the next one retries; the thread never dies."""
+    run = worker.Run(tmp_path, wcfg())
+    run.acquire()
+    run._stop.set()  # no background beats: drive them by hand
+    monkeypatch.setattr(worker, "write_json", lambda p, d: (_ for _ in ()).throw(RuntimeError("x")))
+    assert run.beat() is True
+    monkeypatch.undo()
+    assert run.beat() is True
+    run.release()
+    assert not (tmp_path / ".run.lock").exists()
+
+
+def test_release_after_a_takeover_leaves_the_new_holder_alone(tmp_path):
+    """#77 L11: the old holder neither deletes the new lock nor saves over run.json."""
+    old = worker.Run(tmp_path, wcfg())
+    old.acquire()
+    old._stop.set()
+    (tmp_path / ".run.lock").write_text("other:1", encoding="utf-8")
+    worker.write_json(tmp_path / "run.json", {"worker": "other:1", "stages": {}})
+    assert old.beat() is False and old.lost
+    assert old.save() is False  # a stage finishing after the takeover writes nothing either
+    old.release()
+    assert (tmp_path / ".run.lock").read_text(encoding="utf-8") == "other:1"
+    assert worker.read_json(tmp_path / "run.json")["worker"] == "other:1"
+
+
+def test_a_takeover_is_serialized(tmp_path, monkeypatch):
+    """#77 L11 (Copilot on #106): the stale check, takeover and first heartbeat happen under
+    the takeover lock, so a second taker finds a fresh heartbeat and gets Busy."""
+    (tmp_path / ".run.lock").write_text("gone:1", encoding="utf-8")
+    worker.write_json(tmp_path / "run.json", {"worker": "gone:1", "heartbeat": "2026-01-01T00:00:00+00:00"})
+    seen = []
+    real_read = worker.read_json
+    monkeypatch.setattr(worker, "read_json",
+                        lambda p: seen.append((tmp_path / ".run.lock.lock").exists()) or real_read(p))
+    first = worker.Run(tmp_path, wcfg())
+    seen.clear()
+    first.acquire()
+    first._stop.set()
+    assert seen and all(seen)  # every read of the old heartbeat was under the takeover lock
+    with pytest.raises(worker.Busy):
+        worker.Run(tmp_path, wcfg()).acquire()
+    assert first.holds() and not (tmp_path / ".run.lock.lock").exists()
+
+
+def test_snapshot_retries_a_dict_changing_size(monkeypatch):
+    calls = []
+    real = worker.copy.deepcopy
+
+    def flaky(d):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("dictionary changed size during iteration")
+        return real(d)
+    monkeypatch.setattr(worker.copy, "deepcopy", flaky)
+    assert worker.snapshot({"a": 1}) == {"a": 1} and len(calls) == 2
+
+
 def test_every_stage_has_a_cli_command():
     from clipper import stages
     for st in stages.STAGES:
@@ -90,3 +155,17 @@ def test_run_from_follows_the_planned_order():
     assert "cut" not in stages.from_stage("shorts", off)
     assert stages.from_stage("cut", on) == ["cut", "meta", "thumbs", "review"]
     assert stages.from_stage("shorts", on)[0] == "shorts" and "cut" in stages.from_stage("shorts", on)
+
+
+def test_run_passes_a_show_pin_to_its_stages(tmp_path, defaults, monkeypatch):
+    """`clipper --show c404 run <stream>`: each stage child gets --show c404 too."""
+    from clipper import config
+    cfg = {**defaults, "shows": {"c404": {"channels": ["don"], "overrides": {}}}}
+    calls = []
+    monkeypatch.setattr(worker.subprocess, "call", lambda cmd, **kw: calls.append(cmd) or 0)
+    monkeypatch.setattr(worker, "keep_awake", lambda on: None)
+    assert worker.run_stream(config.pin_show(cfg, "c404"), tmp_path, stages=["signals"], force=True)
+    assert calls[0][3:7] == ["--show", "c404", "signals", str(tmp_path)]
+    calls.clear()
+    worker.run_stream(cfg, tmp_path, stages=["signals"], force=True)
+    assert "--show" not in calls[0]
