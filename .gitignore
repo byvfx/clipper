@@ -6,7 +6,8 @@ __pycache__/
 # data: streams live on the NAS share or a local folder, never in git
 streams/
 layouts/
-weekly/
+/weekly/
+mockups/weekly/youtube_post/
 voices/
 faces/
 archive/

@@ -102,7 +102,8 @@ has the `[weekly]` model draft the copy into `issue.json` (about $0.35), writes 
 again one call each with a writer prompt and the owner's own piece as the voice to match (about
 $0.10 each), and renders 1080x1440 pages plus a square 1080x1080 set in `youtube/` for YouTube
 Posts, which show images square (`[weekly] formats`). `--headline "..."` tells the draft what the cover story is; edit `issue.json` (copy, or
-`faces` to pin a frame for someone) and `clipper weekly --render`. Posting is by hand
+`faces` to pin a frame for someone) and `clipper weekly --render`. Colours, the cover's
+geometry and the fixed copy can be changed in `weekly/style.toml` (SETUP.md). Posting is by hand
 (`post_text.md` has the captions).
 
 ## Start here
