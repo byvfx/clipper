@@ -171,23 +171,22 @@ def found_faces(sdir: Path, here: Path, n: int) -> list[dict]:
     if not data:
         return []
     people = sorted({g["name"] for g in data["groups"].values() if g.get("name")})
-    try:
-        src = source_file(sdir)
-    except ClipperError:
-        return []
+    src: Path | None = None
     out = []
     for person in people:
         for f in best_faces(data, person, n=n):
-            dst = here / "faces" / f"{sdir.name}_{f['t']:.1f}.jpg"
+            dst = here / "faces" / f"{sdir.name}_{f['t']}.jpg"  # the stored time as is: keyframes can be 0.03 s apart
             if not dst.exists():
-                dst.parent.mkdir(parents=True, exist_ok=True)
                 try:
+                    src = src or source_file(sdir)  # only when a frame isn't kept yet: the source may be gone
+                    dst.parent.mkdir(parents=True, exist_ok=True)
                     grab(src, f["t"], dst)
                 except ClipperError as e:
                     print(f"  {sdir.name}: {e}")
                     continue
             face = head_box(f["box"])  # the whole frame is kept, so no 16:9 crop to allow for
-            out.append({"person": person, "key": f"faces@{f['t']:.1f}", "frame": str(dst), "face": face,
+            # Two people can share a frame: the key names the group too, so a pin finds the right face.
+            out.append({"person": person, "key": f"faces-{f['group']}@{f['t']}", "frame": str(dst), "face": face,
                         "size": round(face["height"], 3), "photo": "", "found": True})
     return out
 
