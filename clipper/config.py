@@ -452,7 +452,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # style = "enquirer": a 1990s supermarket-tabloid cover (masthead, teaser band and
         # boxes plugging the episode's other videos, big face, yellow headline, inset).
         "style": "classic",       # classic | enquirer
-        "enquirer_prompt_version": "v4",  # prompts/thumbnail_enquirer_<v>.md (v4: names [meta] cast, not "a host")
+        "enquirer_prompt_version": "v5",  # prompts/thumbnail_enquirer_<v>.md (v5: frames say whose face
+                                          # `clipper faces` found; v4: names [meta] cast, not "a host")
+        "face_frames": 2,         # enquirer: with faces.json, each named person's best frames added...
+        "face_people": 4,         # ...for this many people, the ones seen most in the video
         "masthead": "",           # empty = meta.show_name
         "masthead_tagline": "LARGEST CIRCULATION OF ANY STREAM ON KICK",
         "masthead_price": "$1.39",

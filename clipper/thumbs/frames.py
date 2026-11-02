@@ -1,7 +1,7 @@
 """Where a cover's pictures come from: candidate frames grabbed from the cut video (clips
 around their hook and payoff plus chat-heat peaks; segments and compilations evenly spaced
 plus their hottest chat moments; black or blurry frames nudged a little, then skipped),
-and the [thumbnail] photos portraits."""
+named people's best faces from faces.json (`clipper faces`), and the [thumbnail] photos portraits."""
 
 from __future__ import annotations
 
@@ -104,6 +104,25 @@ def frames(x: dict, sig: dict | None, tc: dict, out_dir: Path) -> list[dict]:
             grab(x["video"], f["t"], f["path"])
             kept.append(f)
     return kept
+
+
+def face_frames(x: dict, data: dict, tc: dict, out_dir: Path, start: int) -> list[dict]:
+    """faces.json (`clipper faces`): frames where a named person's face was found in this
+    video, [thumbnail] face_frames of them for each of the face_people people seen most,
+    each with "faces": every named face in it ({"person", "face"}). Numbered on from start."""
+    from ..faces import local_time, video_faces
+
+    out = []
+    for t_src, found in video_faces(data, x["parts"], tc["face_people"], tc["face_frames"]):
+        t = round(local_time(x["parts"], t_src), 2)
+        dst = out_dir / f"{start + len(out):02d}_{t:.1f}_faces.jpg"
+        img = grab(x["video"], t, dst)
+        if img is None:
+            continue
+        luma, sharp = frame_stats(img)
+        out.append({"t": t, "path": dst, "brightness": round(luma, 1), "sharpness": round(sharp, 1),
+                    "faces": found})
+    return out
 
 
 # ---------- [thumbnail] photos ----------

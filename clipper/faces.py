@@ -297,6 +297,49 @@ def best_faces(data: dict, person: str, a: float = 0.0, b: float = math.inf, n: 
     return out
 
 
+def head_box(box: list[float], size: tuple[int, int] | None = None) -> dict:
+    """A detected face box [x, y, w, h] (0-1 of the source frame) as the cover's face box:
+    the whole head (hair, a hat) as thumbnails frames.grab crops the frame to 16:9."""
+    x, y, w, h = box
+    x, y, w, h = x - 0.2 * w, y - 0.55 * h, 1.4 * w, 1.75 * h  # face -> head (hair, a hat)
+    if size:  # grab keeps the middle 16:9 of a frame that isn't
+        sw, sh = size
+        cw, ch = min(sw, sh * 16 / 9) / sw, min(sh, sw * 9 / 16) / sh
+        x, y, w, h = (x - (1 - cw) / 2) / cw, (y - (1 - ch) / 2) / ch, w / cw, h / ch
+    x0, y0 = min(max(x, 0.0), 1.0), min(max(y, 0.0), 1.0)
+    x1, y1 = min(max(x + w, 0.0), 1.0), min(max(y + h, 0.0), 1.0)
+    return {"x": round(x0, 4), "y": round(y0, 4), "width": round(x1 - x0, 4), "height": round(y1 - y0, 4)}
+
+
+def local_time(parts: list[tuple], t: float) -> float | None:
+    """Stream time t in a cut video with these parts [(src_start, src_end, offset)]; None if cut out."""
+    return next((t - a + off for a, b, off in parts if a <= t < b), None)
+
+
+def video_faces(data: dict, parts: list[tuple], people: int, per: int) -> list[tuple[float, list[dict]]]:
+    """Frames of a cut video worth offering for its cover: for the `people` named people seen
+    most in it, their `per` best faces. Each: (stream time, every named face in that frame
+    as {"person", "face" (head box)}), best first."""
+    groups = data["groups"]
+    named = {k: g["name"] for k, g in groups.items() if g.get("name")}
+    inside = [f for f in data["faces"] if f["group"] in named and local_time(parts, f["t"]) is not None]
+    seen = Counter(named[f["group"]] for f in inside)
+    picks: list[dict] = []
+    for person, _ in seen.most_common(people):
+        best = [f for a, b, _ in parts for f in best_faces(data, person, a, b, per)]
+        picks += sorted(best, key=quality, reverse=True)[:per]
+    at: dict[float, list[dict]] = {}
+    for f in inside:
+        at.setdefault(f["t"], []).append({"person": named[f["group"]],
+                                          "face": head_box(f["box"], data.get("size"))})
+    out, done = [], set()
+    for f in sorted(picks, key=quality, reverse=True):
+        if f["t"] not in done:
+            done.add(f["t"])
+            out.append((f["t"], at[f["t"]]))
+    return out
+
+
 def group_faces(data: dict, key: str) -> dict:
     """faces.json-shaped data with key's group as the person "#key", for best_faces()."""
     return {"groups": {key: {**data["groups"][key], "name": f"#{key}"}}, "faces": data["faces"]}
@@ -335,6 +378,8 @@ def sheet_faces(data: dict, key: str, n: int = 8) -> list[dict]:
 
 def scan(sdir: Path, cfg: dict) -> dict:
     """Scan the stream's keyframes, group the faces, draw sheets, write faces.json, name the groups."""
+    from PIL import Image
+
     from .media import source_file
 
     fc = cfg["faces"]
@@ -350,7 +395,8 @@ def scan(sdir: Path, cfg: dict) -> dict:
         times, rows, emb = scan_frames(src, frames, fc, models)
         groups, faces = build_groups(rows, emb, fc)
         carry_names(groups, old)
-        data = {"model": MODEL, "source": src.name, "frames": len(times),
+        size = Image.open(frames / "00001.jpg").size if (frames / "00001.jpg").exists() else None
+        data = {"model": MODEL, "source": src.name, "frames": len(times), "size": size,
                 "every_s": round(float(np.median(np.diff(times))), 2) if len(times) > 1 else 0,
                 "groups": groups, "faces": faces}
         out = sdir / "faces"

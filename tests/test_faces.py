@@ -91,3 +91,30 @@ def test_set_names_and_enroll(tmp_path, defaults):
     assert faces.load_known(cfg)["people"]["Jer"] == [groups["F01"]["centroid"]]
     faces.set_names(tmp_path, {"F01": ""})  # cleared: now named by the enrolled face
     assert faces.apply(tmp_path, cfg)["F01"]["by"] == "face"
+
+
+def test_head_box_grows_to_the_head_and_follows_the_16_9_crop():
+    assert faces.head_box([0.4, 0.4, 0.1, 0.2]) == {"x": 0.38, "y": 0.29, "width": 0.14, "height": 0.35}
+    assert faces.head_box([0.0, 0.0, 0.1, 0.1])["x"] == 0.0  # clamped into the frame
+    # 4:3 source: grab keeps the middle 16:9 band (rows 1/8 to 7/8)
+    b = faces.head_box([0.4, 0.5, 0.1, 0.1], size=(1440, 1080))
+    assert b["y"] == pytest.approx((0.5 - 0.055 - 0.125) / 0.75, abs=1e-3)
+
+
+def test_local_time_and_video_faces():
+    parts = [(100.0, 200.0, 0.0), (500.0, 600.0, 100.0)]
+    assert faces.local_time(parts, 150) == 50 and faces.local_time(parts, 550) == 150
+    assert faces.local_time(parts, 300) is None
+    data = {"groups": {"F01": {"name": "Jer", "floor": 0.0}, "F02": {"name": "Andy", "floor": 0.0},
+                       "F03": {"floor": 0.0}},
+            "faces": [
+                {"t": 120, "group": "F01", "sim": 0.9, "sharp": 50, "frontal": 1, "px": 200, "box": [0.1, 0.1, 0.1, 0.1]},
+                {"t": 120, "group": "F02", "sim": 0.9, "sharp": 10, "frontal": 1, "px": 200, "box": [0.6, 0.1, 0.1, 0.1]},
+                {"t": 520, "group": "F01", "sim": 0.9, "sharp": 90, "frontal": 1, "px": 200, "box": [0.1, 0.1, 0.1, 0.1]},
+                {"t": 300, "group": "F01", "sim": 0.9, "sharp": 999, "frontal": 1, "px": 200, "box": [0.1, 0.1, 0.1, 0.1]},
+                {"t": 130, "group": "F03", "sim": 0.9, "sharp": 999, "frontal": 1, "px": 200, "box": [0.1, 0.1, 0.1, 0.1]},
+            ]}
+    got = faces.video_faces(data, parts, people=4, per=2)
+    assert [t for t, _ in got] == [520, 120]  # 300 is cut out, F03 has no name
+    assert sorted(x["person"] for x in got[1][1]) == ["Andy", "Jer"]
+    assert [t for t, _ in faces.video_faces(data, parts, people=1, per=1)] == [520]

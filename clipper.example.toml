@@ -322,7 +322,9 @@ kitsu = true                   # attach to each item's Kitsu revision and set it
 # Thumbnail look: "classic" (frame + big text) or "enquirer" (1990s tabloid cover:
 # masthead, teaser band and boxes plugging the episode's other videos, big face, inset).
 style = "classic"
-enquirer_prompt_version = "v4"   # prompts/thumbnail_enquirer_<v>.md (v4: names [meta] cast, not "a host")
+enquirer_prompt_version = "v5"   # prompts/thumbnail_enquirer_<v>.md (v5: frames say whose face `clipper faces` found)
+face_frames = 2                # with faces.json: each named person's best frames offered for the cover...
+face_people = 4                # ...for this many people, the ones seen most in the video
 masthead = ""                  # empty = meta.show_name
 masthead_tagline = "LARGEST CIRCULATION OF ANY STREAM ON KICK"
 masthead_price = "$1.39"

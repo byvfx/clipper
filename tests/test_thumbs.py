@@ -95,6 +95,25 @@ def test_enquirer_pick_falls_back_when_the_model_refuses(defaults, tmp_path):
     assert out["why"] == "fallback (refused)" and out["t"] == 1.0 and "photo" not in out
 
 
+def test_enquirer_uses_the_found_face_of_main_person(defaults, tmp_path):
+    tc = {**defaults["thumbnail"], "_photos": {}}
+    fr = frames(tmp_path)
+    jer = {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.4}
+    fr[1]["faces"] = [{"person": "Andy", "face": {"x": 0.0, "y": 0.0, "width": 0.1, "height": 0.2}},
+                      {"person": "Jer", "face": jer}]
+    def answer(who):
+        return {**pick.fallback_enquirer(X, INFO, "w"), "main_person": who, "frame": 2,
+                "headline": ["JER'S", "BAD DAY!"]}
+    fake = Fake(answer("jer"))
+    out = pick.pick(X, fr, INFO, tc, fake, "SYSTEM", Words(), retry(defaults), style="enquirer")
+    labels = [c["text"] for c in fake.contents[0] if c["type"] == "text"][:2]
+    assert labels == ["Frame 1 (0:01.0)", "Frame 2 (0:02.5), faces found: Andy, Jer"]
+    assert out["face"] == jer and out["face_found"]
+    fake = Fake(answer("Mel"))  # not found in that frame: the model's box stays
+    out = pick.pick(X, fr, INFO, tc, fake, "SYSTEM", Words(), retry(defaults), style="enquirer")
+    assert out["face"] == pick.fallback_enquirer(X, INFO, "w")["face"] and "face_found" not in out
+
+
 # ---------- the cover layout ----------
 
 def test_no_layout_file_is_the_default(defaults, tmp_path):

@@ -17,7 +17,7 @@ from ..prompts import Prompts
 from ..scoring import load_signals
 from .classic import compose
 from .enquirer import compose_enquirer, compose_vertical, cover_context, enquirer_setup
-from .frames import asset_key, frames, grab, photo_name, photos
+from .frames import asset_key, face_frames, frames, grab, photo_name, photos
 from .pick import clean_text, pick, unsafe
 
 
@@ -229,6 +229,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         retry = Prompts(cfg)  # the retry and reviewer-feedback wording
         retry.version = tc["retry_prompt_version"]
         sig = load_signals(stream_dir) if (stream_dir / "signals.parquet").exists() else None
+        faces = jsonstate.read(stream_dir / "faces.json", None) if style == "enquirer" else None
 
         def one(x: dict) -> tuple[str, dict]:
             t = time.time()
@@ -237,6 +238,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
             ftc = {**tc, "even_frames": tc["even_frames"] * 3, "heat_frames": tc["heat_frames"] * 2,
                    "clip_frames": tc["clip_frames"] * 2} if note else tc
             fr = frames(x, sig, ftc, stream_dir / "thumbs" / asset_key(x))
+            if faces:
+                fr += face_frames(x, faces, tc, stream_dir / "thumbs" / asset_key(x), len(fr))
             info = asset_info(stream_dir, x, review)
             choice = pick(x, fr, info, tc, claude, system, bleeper, retry, style, note)
             print(f"{x['id']:<22} {len(fr)} frames -> #{choice['frame']} at {choice['t']:.1f}s: "

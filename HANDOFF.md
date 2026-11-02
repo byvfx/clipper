@@ -186,8 +186,10 @@ lore-order playlists #43, archive fun #63, Udder Truth #58/#59/#60, Modal ideas 
 the cost is reading the video, not compute; YuNet + SFace via OpenCV 5, `--extra faces`). Groups each
 stream's keyframe faces into faces.json + faces/F01.jpg sheets, names them against `faces/known.json`
 (every show), `--name F03=Jer --enroll`. kick-131151926 scanned (191 groups, nobody named yet: the user
-names from the sheets; enroll Andy/PPP from a non-costume stream). Left: covers (thumbs reads
-best_faces, prompt v5) and the weekly, a `faces` stage row, then close #54.
+names from the sheets; enroll Andy/PPP from a non-costume stream). Covers done on the branch: thumbs adds
+named people's best frames (labelled) and uses the found head box (`face_found`); needs
+`enquirer_prompt_version = "v5"` in clipper.toml (still v4 there). Left: a spot check once names exist,
+the weekly, a `faces` stage row, then close #54.
 Older notes not on an issue: republish the 2026-10-19 re-cut streams to Kitsu (user said not yet);
 Blade compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`);
 a daily "post kit" folder; `clipper setup` walkthrough #78 (phase 1 done 2026-10-28: bootstrap,

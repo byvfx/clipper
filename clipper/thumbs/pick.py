@@ -1,7 +1,8 @@
 """The model's pick: one vision call per asset over its candidate frames. Classic: the
 frame with the strongest readable expression or moment, 2-4 words of text, the word to
 highlight, top/bottom placement and a crop. Enquirer: the main face and a reaction inset,
-the headline and the cover's other lines, and maybe a [thumbnail] photos portrait.
+the headline and the cover's other lines, and maybe a [thumbnail] photos portrait. Frames
+from faces.json say whose face was found; when the main face is one, its found box is used.
 Text that comes back empty or with a word the channel never prints is asked for once more
 (prompts/thumbnail_retry_<v>.md); a reviewer's note on a retake goes in with the request
 (prompts/thumbnail_feedback_<v>.md)."""
@@ -149,7 +150,10 @@ def request(x: dict, fr: list[dict], info: dict, tc: dict, style: str, feedback:
     and for enquirer covers the photos on file the model may choose."""
     content: list[dict] = []
     for i, f in enumerate(fr, 1):
-        content += [{"type": "text", "text": f"Frame {i} ({f['t'] // 60:.0f}:{f['t'] % 60:04.1f})"},
+        found = sorted({x["person"] for x in f.get("faces", [])})
+        label = f"Frame {i} ({f['t'] // 60:.0f}:{f['t'] % 60:04.1f})" + (
+            f", faces found: {', '.join(found)}" if found else "")
+        content += [{"type": "text", "text": label},
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                  "data": image(f["path"])}}]
     content.append({"type": "text", "text": describe(x, info, len(fr), style) + feedback})
@@ -216,9 +220,19 @@ def finish_enquirer(out: dict, fr: list[dict], tc: dict) -> dict:
         name = photo_name(tc, out.pop(k, ""))
         if name:
             out[k] = name
+    found = found_face(fr[out["frame"] - 1], out["main_person"])
+    if found:  # the face recognition found, not the model's guess at the box
+        out["face"], out["face_found"] = found, True
     out["t"] = fr[out["frame"] - 1]["t"]
     out["text"] = " ".join(out["headline"])  # what reviewers edit (Kitsu, Discord)
     return out
+
+
+def found_face(f: dict, person: str) -> dict | None:
+    """The head box faces.json found for person in this candidate frame, if any (the biggest)."""
+    who = (person or "").strip().lower()
+    boxes = [x["face"] for x in f.get("faces", []) if who and x["person"].lower() == who]
+    return max(boxes, key=lambda b: b["height"], default=None)
 
 
 # style: (clean, the retry prompt, fallback, finish)

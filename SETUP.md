@@ -240,7 +240,10 @@ The model is gated on Hugging Face:
 **Faces on screen (#54).** `clipper faces <stream>` finds who is on screen: every keyframe
 (one every ~4 s on Kick) through two small face models OpenCV runs on the CPU, no GPU or
 Modal. An 8 h stream takes ~15 min on a 16-core laptop, most of it reading the video off the
-NAS share. It isn't a pipeline stage yet: covers and the weekly don't read it yet.
+NAS share. It isn't a pipeline stage yet: run it by hand before `clipper thumbs`. Enquirer covers
+(prompt v5) then get each named person's best frames as candidates, labelled with who is in them,
+and use the found head box when the main face is one (`face_found` in thumbnails.json). The weekly
+doesn't read faces.json yet.
 
 1. `uv sync --extra faces` (add it to the other extras you use). The models (YuNet and SFace,
    from OpenCV's model zoo, MIT and Apache-2.0) download on the first scan into `[paths]
