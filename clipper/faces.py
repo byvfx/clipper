@@ -64,9 +64,14 @@ def known_path(cfg: dict) -> Path:
 
 
 def ensure_models(cfg: dict) -> Path:
-    """The model folder, downloading what's missing (checked against its hash)."""
+    """The model folder, downloading what's missing (checked against its hash). OpenCV is
+    checked first: without it the models are no use."""
     import requests
 
+    try:
+        import cv2  # noqa: F401
+    except ImportError:
+        raise ClipperError("OpenCV isn't installed here: uv sync --extra faces") from None
     d = model_dir(cfg)
     for name, (folder, sha) in MODELS.items():
         p = d / name
@@ -78,9 +83,10 @@ def ensure_models(cfg: dict) -> Path:
         r.raise_for_status()
         if hashlib.sha256(r.content).hexdigest() != sha:
             raise ClipperError(f"{name}: downloaded file doesn't match its pinned hash")
-        tmp = p.with_suffix(".tmp")
-        tmp.write_bytes(r.content)
-        tmp.replace(p)
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=f"{name}.", suffix=".tmp")  # one per download
+        with os.fdopen(fd, "wb") as f:
+            f.write(r.content)
+        os.replace(tmp, p)
     return d
 
 
@@ -183,13 +189,15 @@ def unit(v: np.ndarray) -> np.ndarray:
 
 def cluster(emb: np.ndarray, threshold: float, max_n: int = 8000) -> np.ndarray:
     """A group label per embedding (0 = none). Average linkage over at most max_n of them,
-    evenly picked (the distance matrix grows with the square); the rest join the group whose
-    centroid they're most like, if at least threshold."""
+    picked at random with a fixed seed (the distance matrix grows with the square; every nth
+    would follow the detector's order within a frame and could skip a person); the rest join
+    the group whose centroid they're most like, if at least threshold."""
     from scipy.cluster.hierarchy import fcluster, linkage
 
     if len(emb) < 2:
         return np.ones(len(emb), dtype=int)
-    idx = np.arange(0, len(emb), max(1, math.ceil(len(emb) / max_n)))
+    idx = (np.sort(np.random.default_rng(0).choice(len(emb), max_n, replace=False))
+           if len(emb) > max_n else np.arange(len(emb)))
     picked = fcluster(linkage(emb[idx], "average", metric="cosine"), t=1 - threshold, criterion="distance")
     cents = np.array([unit(emb[idx][picked == g].mean(0)) for g in range(1, picked.max() + 1)])
     sims = emb @ cents.T
@@ -263,15 +271,21 @@ def name_groups(groups: dict, people: dict, match: float) -> None:
 
 def apply(sdir: Path, cfg: dict) -> dict:
     """Name the groups in faces.json against the known faces; the groups."""
-    data = jsonstate.load(sdir / "faces.json")
     known = load_known(cfg)
+    with jsonstate.update(sdir / "faces.json", indent=None) as data:
+        if data is None:
+            raise ClipperError(f"no faces.json in {sdir}: clipper faces {sdir.name}")
+        name_by_known(data, known, cfg)
+        return data["groups"]
+
+
+def name_by_known(data: dict, known: dict, cfg: dict) -> None:
+    """name_groups against known.json, when its faces are from this stream's model."""
     if known["people"] and known["model"] != data["model"]:
         print(f"known faces are from {known['model']}, this stream from {data['model']}: not matching")
         known = {"people": {}}
     name_groups(data["groups"], known["people"], cfg["faces"]["match"])
     data["known"] = str(known_path(cfg))
-    jsonstate.write(sdir / "faces.json", data, indent=None)
-    return data["groups"]
 
 
 def quality(f: dict) -> float:
@@ -322,16 +336,20 @@ def video_faces(data: dict, parts: list[tuple], people: int, per: int) -> list[t
     as {"person", "face" (head box)}), best first."""
     groups = data["groups"]
     named = {k: g["name"] for k, g in groups.items() if g.get("name")}
-    inside = [f for f in data["faces"] if f["group"] in named and local_time(parts, f["t"]) is not None]
-    seen = Counter(named[f["group"]] for f in inside)
+    at: dict[float, list[dict]] = {}
+    usable: set[int] = set()  # like their group (no strays) and inside the frame grab keeps
+    for f in data["faces"]:
+        if (f["group"] in named and f["sim"] >= groups[f["group"]]["floor"]
+                and local_time(parts, f["t"]) is not None):
+            box = head_box(f["box"], data.get("size"))
+            if box["width"] > 0 and box["height"] > 0:
+                usable.add(id(f))
+                at.setdefault(f["t"], []).append({"person": named[f["group"]], "face": box})
+    seen = Counter(x["person"] for found in at.values() for x in found)
     picks: list[dict] = []
     for person, _ in seen.most_common(people):
-        best = [f for a, b, _ in parts for f in best_faces(data, person, a, b, per)]
+        best = [f for a, b, _ in parts for f in best_faces(data, person, a, b, 3 * per) if id(f) in usable]
         picks += sorted(best, key=quality, reverse=True)[:per]
-    at: dict[float, list[dict]] = {}
-    for f in inside:
-        at.setdefault(f["t"], []).append({"person": named[f["group"]],
-                                          "face": head_box(f["box"], data.get("size"))})
     out, done = [], set()
     for f in sorted(picks, key=quality, reverse=True):
         if f["t"] not in done:
@@ -399,6 +417,7 @@ def scan(sdir: Path, cfg: dict) -> dict:
         data = {"model": MODEL, "source": src.name, "frames": len(times), "size": size,
                 "every_s": round(float(np.median(np.diff(times))), 2) if len(times) > 1 else 0,
                 "groups": groups, "faces": faces}
+        name_by_known(data, load_known(cfg), cfg)  # so a group named by face gets a sheet too
         out = sdir / "faces"
         out.mkdir(exist_ok=True)
         for old_sheet in out.glob("F*.jpg"):
@@ -408,39 +427,46 @@ def scan(sdir: Path, cfg: dict) -> dict:
                 draw_sheet(sheet_faces(data, key), frames, out / f"{key}.jpg")
     for f in faces:
         del f["i"]
-    jsonstate.write(sdir / "faces.json", data, indent=None)
+    with jsonstate.update(sdir / "faces.json", {}, indent=None) as cur:
+        # hand names as they are now: --name may have run while this scan did
+        for g in groups.values():
+            if g.get("by") == "hand":
+                g.pop("name")
+                g.pop("by")
+        carry_names(groups, cur.get("groups", {}))
+        cur.clear()
+        cur.update(data)
     print(f"{len(rows)} faces -> {len(groups)} groups of {fc['min_faces']}+")
     return apply(sdir, cfg)
 
 
 def set_names(sdir: Path, names: dict[str, str]) -> None:
     """Hand names ({"F03": "Jer"}; "" clears one) kept in faces.json for apply()."""
-    path = sdir / "faces.json"
-    data = jsonstate.load(path)
-    for key, name in names.items():
-        if key not in data["groups"]:
-            raise ClipperError(f"no group {key} in {sdir.name} (F01-F{len(data['groups']):02d})")
-        g = data["groups"][key]
-        g.pop("name", None)
-        g.pop("by", None)
-        if name:
-            g.update(name=name, by="hand")
-    jsonstate.write(path, data, indent=None)
+    with jsonstate.update(sdir / "faces.json", indent=None) as data:
+        if data is None:
+            raise ClipperError(f"no faces.json in {sdir}: clipper faces {sdir.name}")
+        for key, name in names.items():
+            if key not in data["groups"]:
+                raise ClipperError(f"no group {key} in {sdir.name} (F01-F{len(data['groups']):02d})")
+            g = data["groups"][key]
+            g.pop("name", None)
+            g.pop("by", None)
+            if name:
+                g.update(name=name, by="hand")
 
 
 def add_known(cfg: dict, name: str, centroid: list[float]) -> int:
     """Keep one more sample of name's face; how many they have now."""
-    known = load_known(cfg)
-    if known["people"] and known["model"] != MODEL:
-        raise ClipperError(f"{known_path(cfg)} holds {known['model']} faces; this is {MODEL}")
-    known["model"] = MODEL
-    refs = known["people"].setdefault(name, [])
-    refs.append(centroid)
-    del refs[:-cfg["faces"]["max_refs"]]
     path = known_path(cfg)
     path.parent.mkdir(parents=True, exist_ok=True)
-    jsonstate.write(path, known, indent=None)
-    return len(refs)
+    with jsonstate.update(path, {"model": MODEL, "people": {}}, indent=None) as known:
+        if known["people"] and known["model"] != MODEL:
+            raise ClipperError(f"{path} holds {known['model']} faces; this is {MODEL}")
+        known["model"] = MODEL
+        refs = known["people"].setdefault(name, [])
+        refs.append(centroid)
+        del refs[:-cfg["faces"]["max_refs"]]
+        return len(refs)
 
 
 def enroll(sdir: Path, cfg: dict, keys: list[str]) -> None:

@@ -118,3 +118,38 @@ def test_local_time_and_video_faces():
     assert [t for t, _ in got] == [520, 120]  # 300 is cut out, F03 has no name
     assert sorted(x["person"] for x in got[1][1]) == ["Andy", "Jer"]
     assert [t for t, _ in faces.video_faces(data, parts, people=1, per=1)] == [520]
+
+
+def test_cluster_sample_doesnt_follow_order_within_a_frame():
+    # two people per frame, always in the same order: every 2nd would only see the first
+    a, b = people(2, 1, seed=5)
+    rng = np.random.default_rng(1)
+    emb = np.array([faces.unit(v + rng.normal(scale=0.02, size=128)) for _ in range(40) for v in (a, b)],
+                   dtype=np.float32)
+    lab = faces.cluster(emb, 0.4, max_n=40)
+    assert len(set(lab[0::2])) == 1 and len(set(lab[1::2])) == 1 and lab[0] != lab[1] and 0 not in lab
+
+
+def test_video_faces_skips_strays_and_faces_outside_the_crop():
+    f = {"sharp": 50, "frontal": 1, "px": 200}
+    data = {"groups": {"F01": {"name": "Jer", "floor": 0.6}, "F02": {"name": "Andy", "floor": 0.0}},
+            "size": [1440, 1080],  # 4:3: grab keeps rows 1/8 to 7/8
+            "faces": [{**f, "t": 10, "group": "F01", "sim": 0.9, "box": [0.4, 0.4, 0.1, 0.1]},
+                      {**f, "t": 10, "group": "F02", "sim": 0.9, "box": [0.1, 0.0, 0.05, 0.04]},  # above the crop
+                      {**f, "t": 20, "group": "F01", "sim": 0.3, "sharp": 999, "box": [0.4, 0.4, 0.1, 0.1]}]}
+    got = faces.video_faces(data, [(0.0, 100.0, 0.0)], people=4, per=2)
+    assert [(t, [x["person"] for x in found]) for t, found in got] == [(10, ["Jer"])]
+
+
+def test_scan_save_keeps_names_set_meanwhile(tmp_path, defaults):
+    # what scan() does as it saves: hand names come from faces.json as it is then
+    groups, fs = faces.build_groups(rows(12), people(2, 6), FC)
+    jsonstate.write(tmp_path / "faces.json", {"model": faces.MODEL, "groups": groups, "faces": fs})
+    faces.set_names(tmp_path, {"F02": "PPP"})  # e.g. while a rescan runs
+    new = {k: dict(g) for k, g in groups.items()}
+    with jsonstate.update(tmp_path / "faces.json", {}) as cur:
+        faces.carry_names(new, cur["groups"])
+    assert new["F02"]["name"] == "PPP"
+    cfg = {**defaults, "paths": {**defaults["paths"], "faces": str(tmp_path / "known")}}
+    assert faces.add_known(cfg, "PPP", groups["F02"]["centroid"]) == 1
+    assert faces.add_known(cfg, "PPP", groups["F02"]["centroid"]) == 2

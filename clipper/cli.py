@@ -258,14 +258,14 @@ def cmd_speakers(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_faces(cfg: dict, args: argparse.Namespace) -> None:
     from . import faces
 
-    if args.enroll_photos:
-        faces.enroll_photos(cfg)
-        if not args.stream:
-            return
     if not args.stream:
-        raise ClipperError("clipper faces <stream>, or --enroll-photos")
+        if not args.enroll_photos:
+            raise ClipperError("clipper faces <stream>, or --enroll-photos")
+        return faces.enroll_photos(cfg)
     sdir = stream_dir(cfg, args.stream)
-    scfg = config.for_stream(cfg, sdir)
+    scfg = config.for_stream(cfg, sdir)  # its show's [thumbnail] photos and [paths] faces
+    if args.enroll_photos:
+        faces.enroll_photos(scfg)
     if args.rescan or not (sdir / "faces.json").exists():
         faces.scan(sdir, scfg)
     names = {}

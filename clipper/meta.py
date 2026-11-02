@@ -93,8 +93,10 @@ def load_assets(stream_dir: Path) -> list[dict]:
     for side in sorted((stream_dir / "compilations").glob("*.json")):
         d = jsonstate.load(side)
         offsets = {c["id"]: c["start_s"] for c in d["chapters"]}
-        parts = [(segs[s].get("cut_start_s", segs[s]["start_s"]), segs[s]["end_s"], offsets[s])
-                 for s in d["segments"]]
+        # exact spans and offsets from `clipper cut`; compilations cut before them: the chapters
+        parts = ([tuple(p) for p in d["parts"]] if d.get("parts") else
+                 [(segs[s].get("cut_start_s", segs[s]["start_s"]), segs[s]["end_s"], offsets[s])
+                  for s in d["segments"]])
         out.append({"kind": "compilation", "id": f"comp-{side.stem}", "video": side.with_suffix(".mp4"),
                     "title": d["title"], "body": d["description"], "summary": "",
                     "topic": d["topic"], "segments": d["segments"],
