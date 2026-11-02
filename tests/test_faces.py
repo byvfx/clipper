@@ -153,3 +153,36 @@ def test_scan_save_keeps_names_set_meanwhile(tmp_path, defaults):
     cfg = {**defaults, "paths": {**defaults["paths"], "faces": str(tmp_path / "known")}}
     assert faces.add_known(cfg, "PPP", groups["F02"]["centroid"]) == 1
     assert faces.add_known(cfg, "PPP", groups["F02"]["centroid"]) == 2
+
+
+def test_inside_and_checked_values():
+    assert faces.inside([0.1, 0.1, 0.2, 0.2], [0, 0, 1, 1]) == pytest.approx(1.0)
+    assert faces.inside([0.5, 0.5, 0.2, 0.2], [0, 0, 0.6, 0.6]) == pytest.approx(0.25)
+    assert faces.inside([0.8, 0.8, 0.1, 0.1], [0, 0, 0.5, 0.5]) == 0.0
+    assert faces.checked_name("  Jer ") == "Jer"
+    for bad in ("", "  ", "x" * 41, "two\nlines", None, 3):
+        with pytest.raises(ClipperError):
+            faces.checked_name(bad)
+    e = faces.checked_embedding([2.0] * 128)
+    assert len(e) == 128 and abs(np.linalg.norm(e) - 1) < 1e-3
+    for bad in ([1.0] * 127, [0.0] * 128, ["x"] * 128, [float("nan")] * 128, None):
+        with pytest.raises(ClipperError):
+            faces.checked_embedding(bad)
+
+
+def test_enroll_pick_names_look_alikes_and_forget(tmp_path, defaults):
+    cfg = {**defaults, "paths": {**defaults["paths"], "faces": str(tmp_path / "known")}}
+    emb = people(2, 6)
+    groups, fs = faces.build_groups(rows(len(emb)), emb, FC)
+    jsonstate.write(tmp_path / "faces.json", {"model": faces.MODEL, "groups": groups, "faces": fs})
+    faces.apply(tmp_path, cfg)
+    pick = emb[0].tolist()  # one face of the first person, picked by hand
+    who = next(k for k, g in groups.items() if np.dot(g["centroid"], pick) > 0.7)
+    assert faces.enroll_pick(tmp_path, cfg, "Andy", pick) == 1
+    named = jsonstate.load(tmp_path / "faces.json")["groups"]
+    assert named[who]["name"] == "Andy" and named[who]["by"] == "face"
+    assert sum(1 for g in named.values() if g.get("name")) == 1
+    assert faces.forget(cfg, "Andy") == 1
+    assert "name" not in faces.apply(tmp_path, cfg)[who]
+    with pytest.raises(ClipperError):
+        faces.forget(cfg, "Andy")

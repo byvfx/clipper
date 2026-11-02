@@ -256,7 +256,11 @@ doesn't read faces.json yet.
    streams are named by face (`[faces] match`). Enroll from an ordinary stream, not a costume
    one; a second stream's `--enroll` adds another sample. `clipper faces --enroll-photos` adds
    the `[thumbnail] photos` portraits under their file names.
-4. `clipper doctor --role gpu` lists the known faces.
+4. Or do it in the war room (docs/warroom.md, Faces): name and enroll groups from their
+   sheets, or draw a box round a face on a paused video ("Who's this?", B) to keep one that
+   never made a group. `clipper faces <stream> --at 1:23:45 --box x,y,w,h --person Name` is the
+   same from the command line; `clipper faces --forget Name` drops someone.
+5. `clipper doctor --role gpu` lists the known faces.
 
 ## 2b-2. Other model providers (optional)
 

@@ -40,6 +40,26 @@ from `[thumbnail] photos`, change the words. Preview renders without saving; Sav
 with no model calls (every cover of the stream when the teaser changes) and re-attaches it in
 Kitsu.
 
+## Faces
+
+Who is who on screen (#54), kept in `[paths] faces/known.json` for every show.
+
+- **A stream's groups:** "Faces" in an item's window, or "👤 faces" on a scanned stream in
+  the pipeline panel. Each group of faces `clipper faces` found has its contact sheet (first
+  row its clearest faces, second a spread over the stream), its name, and whether that came by
+  hand or by face (with the match, 0.7+ names a group). Type a name and press Name (this stream
+  only) or Name + enroll (every stream; the stream's look-alike groups are named at once).
+  "✓ Right" keeps a by-face name as a hand one; Clear removes a name. Filter by named/unnamed.
+- **Who's this? (B):** pause the video on a face, press B or the button, and drag a box round
+  one face. clipper takes that frame at full size, finds the face in the box (small ones too)
+  and says who it looks like; Keep this face adds it to the known faces and names the stream's
+  look-alike groups. For a face too rare or small to make a group: a guest, a costume, a
+  picture-in-picture. Not on a phone (no inline video there).
+- The × on a known face forgets that person (every sample). Hand names stay.
+
+The command line does the same: `clipper faces <stream> --name F03=Jer --enroll`,
+`clipper faces <stream> --at 1:23:45 --box x,y,w,h --person Jer`, `clipper faces --forget Jer`.
+
 ## Schedule and uploads
 
 The schedule shows the open slots of the next two weeks and the approved items with no slot.

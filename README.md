@@ -29,6 +29,7 @@ fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> t
   Covers can use portraits from a photos folder for people talked about but not on screen.
 - **faces**: who is on screen, by face, over every keyframe (CPU, `clipper faces`): groups named
   against known faces kept for every show; enquirer covers get each named person's best frames and use the found face box (#54).
+  The war room names groups from their sheets and picks a face by hand from a paused video.
 - **review**: every item goes to Kitsu and Discord. Approve, reject, hold, or leave a note asking for a change.
   Notes become retakes: the item is re-cut or re-thumbnailed and comes back for review.
 - **schedule / upload**: approved items get release slots and go to YouTube as private videos with a publish time
