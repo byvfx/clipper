@@ -51,7 +51,7 @@ ROLES = {"worker": "worker: transcribe, score, cut, Shorts, covers (`clipper wor
 BACKENDS = {"whisperx": "WhisperX on this machine's NVIDIA GPU",
             "mlx": "mlx-whisper on this Mac's Apple GPU",
             "modal": "WhisperX on a Modal cloud GPU (any machine; ~$0.34 per 8 h stream)"}
-EXTRA_MODULE = {"gpu": "whisperx", "mac": "mlx_whisper", "modal": "modal", "discord": "discord"}
+EXTRA_MODULE = {"gpu": "whisperx", "mac": "mlx_whisper", "modal": "modal", "discord": "discord", "faces": "cv2"}
 
 
 # ---------- questions ----------
@@ -316,6 +316,7 @@ def extras_for(roles: list[str], backend: str) -> list[str]:
     out = []
     if "worker" in roles:
         out.append({"whisperx": "gpu", "mlx": "mac", "modal": "modal"}[backend])
+        out.append("faces")  # the default [worker] stages run `clipper faces` (OpenCV, CPU)
     if "bot" in roles:
         out.append("discord")
         if backend == "modal" and "modal" not in out:

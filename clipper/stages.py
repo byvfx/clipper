@@ -40,6 +40,9 @@ STAGES = (
     Stage("shorts", ("shorts", S), ("shorts.json",), fast=True, after_cut="cut"),
     Stage("clips_review", ("review", "publish", S), ("review_state.json",), fast=True,
           twin_of="review", after_cut="clips"),
+    # Who is on screen (`clipper faces`, CPU, minutes reading the source): before the slow cut,
+    # so segment and compilation covers get named faces; the fast lane's covers don't wait.
+    Stage("faces", ("faces", S), ("faces.json",)),
     # Only what has no draft/cover yet with the fast lane: the clips in review keep theirs.
     Stage("cut", ("cut", S), ("segments/*.json",),
           fast_cmd=("cut", S, "segments", "compilations")),

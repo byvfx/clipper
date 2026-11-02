@@ -1,5 +1,6 @@
 """Faces for the pages: person -> a face crop, a wide scene, a cut-out, a photo on file or
-initials, from the frames the week's thumbnail stage picked (thumbnails.json)."""
+initials, from the faces `clipper faces` named (faces.json) and the frames the week's
+thumbnail stage picked (thumbnails.json)."""
 
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ class Faces:
             for f in s["faces"]:
                 self.by_person[f["person"].lower()].append(f)
         for v in self.by_person.values():
-            v.sort(key=lambda f: -f["size"])
+            v.sort(key=lambda f: (not f.get("found"), -f["size"]))  # named by face first, then the biggest
         self.photos = {k.lower(): v for k, v in photo_dir(cfg["thumbnail"]).items()}
         root = Path(cfg["paths"]["streams"])
         for person, pin in (pinned or {}).items():

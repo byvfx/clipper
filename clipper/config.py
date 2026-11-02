@@ -170,6 +170,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "article_prompt_version": "v2",  # ...with prompts/weekly_article_<v>.md...
         "article_example": "weekly_article_example.md",  # ...and this piece (in prompts/) as the voice to match
         "quote_match": 0.75,      # a hook this close to word for word in the Short is credited to its speaker
+        "face_frames": 3,         # each person named in a stream's faces.json: their best faces, frames for the pages; 0 = off
         "first_issue": 1,         # number of the first issue this install makes
         "formats": ["tiktok", "youtube"],  # tiktok: 1080x1440 pages; youtube: the same pages square (youtube/)
         "masthead": ["LOLCOW", "CINEMA"],  # red word, chrome word (then "WEEKLY" inside)
@@ -265,8 +266,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # `clipper worker` (GPU machine) runs `clipper run` on each recording finished under
         # paths.streams; `clipper run <stream>` resumes at the first stage not done.
         "poll_s": 300,
-        "stages": ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts",
-                   "review"],
+        "stages": ["signals", "transcribe", "score", "segments", "faces", "cut", "meta", "thumbs", "shorts",
+                   "review"],  # faces needs the faces extra (OpenCV); take it out where that isn't installed
         # Clips first: cut, draft, cover and publish the picks and their Shorts, then cut
         # the long segments and compilations (hours of cutting and previews).
         "fast_lane": True,

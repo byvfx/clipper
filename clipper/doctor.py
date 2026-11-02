@@ -716,7 +716,11 @@ def check_faces(cfg: dict) -> None:
     try:
         import cv2
     except ImportError:
-        warn("faces", "OpenCV not installed: `clipper faces` can't run here", "uv sync --extra faces")
+        if "faces" in cfg["worker"]["stages"]:
+            fail("faces", "OpenCV not installed, and [worker] stages runs faces on every stream",
+                 "uv sync --extra faces, or take \"faces\" out of [worker] stages")
+        else:
+            warn("faces", "OpenCV not installed: `clipper faces` can't run here", "uv sync --extra faces")
         return
     missing = [n for n in faces.MODELS if not (faces.model_dir(cfg) / n).exists()]
     ok("faces", f"OpenCV {cv2.__version__}" + (f"; models download on the first scan into {faces.model_dir(cfg)}"

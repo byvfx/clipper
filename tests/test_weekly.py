@@ -124,3 +124,40 @@ def test_square_canvas_is_passed_not_global(renderer):
     assert (square.W, square.H, square.CW) == (1440, 1440, 1328)
     assert renderer().W == 1080  # nothing left behind
     assert square.p_article(4, ARTICLE)[0].size == (1440, 1440)
+
+
+def test_found_faces_come_from_faces_json_and_go_first(cfg, tmp_path, monkeypatch):
+    from clipper import faces as face_mod
+    from clipper import jsonstate
+    from clipper.weekly import gather
+    from clipper.weekly.faces import Faces
+
+    sdir = tmp_path / "kick-1"
+    sdir.mkdir()
+    (sdir / "source.mkv").write_bytes(b"")
+    box = [0.4, 0.3, 0.1, 0.15]
+    jsonstate.write(sdir / "faces.json", {
+        "groups": {"F01": {"name": "Jer", "floor": 0.0}, "F02": {"floor": 0.0}},  # F02 nobody named
+        "faces": [{"t": 100.01, "group": "F01", "sim": 0.9, "sharp": 80, "frontal": 1.0, "px": 150, "box": box},
+                  {"t": 200.0, "group": "F02", "sim": 0.9, "sharp": 99, "frontal": 1.0, "px": 200, "box": box}]})
+    grabbed = []
+    monkeypatch.setattr(face_mod, "grab", lambda src, t, dst: grabbed.append(t) or dst.write_bytes(b"jpg") or dst)
+    here = tmp_path / "issue"
+    found = gather.found_faces(sdir, here, 3)
+    assert [(f["person"], f["found"]) for f in found] == [("Jer", True)] and grabbed == [100.01]
+    assert Path(found[0]["frame"]) == here / "faces" / "kick-1_100.01.jpg"
+    assert found[0]["key"] == "faces-F01@100.01" and found[0]["face"] == face_mod.head_box(box)
+    (sdir / "source.mkv").unlink()
+    assert gather.found_faces(sdir, here, 3) == found  # kept from the first time, source or not
+    assert grabbed == [100.01]
+    assert gather.found_faces(sdir, here, 0) == []
+
+    guess = {"person": "Jer", "key": "s01", "frame": "x.jpg", "face": {}, "size": 0.5, "photo": ""}
+    week = {"streams": {"kick-1": {"faces": [guess] + found}}}
+    assert Faces(cfg, week).best("Jer")["found"]  # named by face beats a bigger thumbnail guess
+
+
+def test_a_new_worker_gets_the_faces_extra():
+    from clipper import setup
+    assert "faces" in setup.extras_for(["worker"], "modal") and "faces" not in setup.extras_for(["bot"], "modal")
+    assert setup.EXTRA_MODULE["faces"] == "cv2"

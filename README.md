@@ -7,7 +7,7 @@ anything goes out. New here: [Start here](#start-here).
 One stream in, a reviewed set of videos out:
 
 ```
-fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> thumbs -> shorts
+fetch / record -> signals -> transcribe -> score -> segments -> faces -> cut -> meta -> thumbs -> shorts
                                                                                     |
                         upload <- schedule <- review (Kitsu, Discord, war room) <- review publish
 ```
@@ -28,7 +28,8 @@ fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> t
   Picks are also cut as horizontal clips; leave `"picks"` out of `[review] include` to post only their Shorts.
   Covers can use portraits from a photos folder for people talked about but not on screen.
 - **faces**: who is on screen, by face, over every keyframe (CPU, `clipper faces`): groups named
-  against known faces kept for every show; enquirer covers get each named person's best frames and use the found face box (#54).
+  against known faces kept for every show; enquirer covers get each named person's best frames and use the found face box,
+  and so does the weekly (#54). The worker runs it after the fast lane, before the slow cut.
   The war room names groups from their sheets and picks a face by hand from a paused video.
 - **review**: every item goes to Kitsu and Discord. Approve, reject, hold, or leave a note asking for a change.
   Notes become retakes: the item is re-cut or re-thumbnailed and comes back for review.
@@ -97,7 +98,7 @@ is data, `LAYOUT` in `clipper/thumbs/enquirer.py`; a show changes any of it in
 Weekly*, a ten-page tabloid for a TikTok carousel or two YouTube Posts: a cover, contents,
 the cover story and two features, news in brief, the quote of the week, the week in numbers,
 a marketplace of parody ads, and next week's schedule with a readers' poll. It gathers the
-week (segments, chat, transcripts, the thumbnail stage's faces) into `weekly/<saturday>/week.json`,
+week (segments, chat, transcripts, faces named by `clipper faces` and the thumbnail stage's) into `weekly/<saturday>/week.json`,
 has the `[weekly]` model draft the copy into `issue.json` (about $0.35), writes the three articles
 again one call each with a writer prompt and the owner's own piece as the voice to match (about
 $0.10 each), and renders 1080x1440 pages plus a square 1080x1080 set in `youtube/` for YouTube

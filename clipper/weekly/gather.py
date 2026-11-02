@@ -160,6 +160,37 @@ def faces_of(sdir: Path) -> list[dict]:
     return out
 
 
+def found_faces(sdir: Path, here: Path, n: int) -> list[dict]:
+    """faces.json (`clipper faces`): each named person's n best faces in the stream, the frame
+    grabbed from the source into <issue>/faces/ once. Marked "found": the face model named
+    them, so the pages take them before the thumbnail stage's guesses."""
+    from ..faces import best_faces, grab, head_box
+    from ..media import source_file
+
+    data = _load(sdir / "faces.json") if n else None
+    if not data:
+        return []
+    people = sorted({g["name"] for g in data["groups"].values() if g.get("name")})
+    src: Path | None = None
+    out = []
+    for person in people:
+        for f in best_faces(data, person, n=n):
+            dst = here / "faces" / f"{sdir.name}_{f['t']}.jpg"  # the stored time as is: keyframes can be 0.03 s apart
+            if not dst.exists():
+                try:
+                    src = src or source_file(sdir)  # only when a frame isn't kept yet: the source may be gone
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    grab(src, f["t"], dst)
+                except ClipperError as e:
+                    print(f"  {sdir.name}: {e}")
+                    continue
+            face = head_box(f["box"])  # the whole frame is kept, so no 16:9 crop to allow for
+            # Two people can share a frame: the key names the group too, so a pin finds the right face.
+            out.append({"person": person, "key": f"faces-{f['group']}@{f['t']}", "frame": str(dst), "face": face,
+                        "size": round(face["height"], 3), "photo": "", "found": True})
+    return out
+
+
 def gather(cfg: dict, start: datetime, end: datetime, here: Path) -> tuple[dict, dict]:
     root = Path(cfg["paths"]["streams"])
     tz = ZoneInfo(cfg["schedule"]["timezone"])
@@ -208,7 +239,8 @@ def gather(cfg: dict, start: datetime, end: datetime, here: Path) -> tuple[dict,
                                                     for c in seg.get("compilations", [])],
             "shorts": len(shorts), "uploaded": len(uploads), "hooks": hooks,
             "chat": chat_stats(sdir, meta, hours) if not preshow else {},
-            "words": counts, "spoken_words": n_words, "faces": faces_of(sdir),
+            "words": counts, "spoken_words": n_words,
+            "faces": found_faces(sdir, here, wc["face_frames"]) + faces_of(sdir),
         }
         print(f"  {sdir.name}: {show_name} {at:%a %b %d}, {hours:.1f} h, {len(segments)} segments, "
               f"{len(hooks)} hooks, {len(streams[sdir.name]['faces'])} faces")
