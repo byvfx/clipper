@@ -74,8 +74,20 @@ def test_style_toml_overrides_what_it_names(cfg):
     assert style.DEFAULTS["palette"]["red"] == [226, 30, 38]  # the defaults are untouched
 
 
+def test_style_palette_names_follow_through(cfg):
+    (cfg["paths"]["weekly"] / "style.toml").write_text(
+        '[palette]\nred = "navy"\nnavy = [1, 2, 3]\ninitials = ["red", [4, 5, 6]]\n'
+        '[cover]\nmasthead_chrome = [[0.0, "red"], [1.0, [7, 8, 9]]]\n', encoding="utf-8")
+    s = style.load(cfg)
+    assert s.palette.red == (1, 2, 3) and s.palette.initials == [(1, 2, 3), (4, 5, 6)]
+    assert s.cover.masthead_chrome == [(0.0, (1, 2, 3)), (1.0, (7, 8, 9))]
+    assert s.cover.teasers[1]["kicker"] == (1, 2, 3)
+
+
 @pytest.mark.parametrize("toml", ['[cover]\nsubjct_height = 900\n', '[colours]\nred = [1, 2, 3]\n',
-                                  '[cover]\ntint = "pink"\n', '[cover\n'])
+                                  '[cover]\ntint = "pink"\n', '[cover\n', '[cover]\ntint = 123\n',
+                                  '[cover]\ntint = [1, 2]\n', '[palette]\nred = "navy"\nnavy = "red"\n',
+                                  '[cover]\nteasers = [{bg = "red"}]\n', '[cover]\nmasthead_chrome = [1]\n'])
 def test_style_toml_refuses_what_it_does_not_know(cfg, toml):
     (cfg["paths"]["weekly"] / "style.toml").write_text(toml, encoding="utf-8")
     with pytest.raises(ClipperError):

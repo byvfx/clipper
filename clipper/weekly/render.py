@@ -394,7 +394,7 @@ class Renderer:
         H, P, F, L = self.H, self.P, self.F, self.S.cover
         M = L.margin
         lines = [up(line) for line in c["headline"]]
-        HX, HY, HW = M + 26, KY + 134, L.headline_width  # the headline keeps its width on the square canvas: the subject needs the room
+        HX, HY, HW = M + 26, KY + L.kicker_height + 16, L.headline_width  # the headline keeps its width on the square canvas: the subject needs the room
         HB = H - M - 3 * L.bullet_row - 18 - 14
         size = min(min(fit(line, F.impact, HW, L.headline_size) for line in lines), int((HB - HY) / len(lines) / 0.96 / 1.02))
         hf = F.impact(size)

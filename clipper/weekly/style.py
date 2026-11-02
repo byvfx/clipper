@@ -110,8 +110,8 @@ class Style:
 
     def __init__(self, data: dict):
         self.data = data
-        pal = {k: tuple(v) for k, v in data["palette"].items() if k != "initials"}
-        self.palette = SimpleNamespace(**pal, initials=[tuple(c) for c in data["palette"]["initials"]])
+        pal = {k: self.colour(k) for k in data["palette"] if k != "initials"}
+        self.palette = SimpleNamespace(**pal, initials=[self.colour(c) for c in data["palette"]["initials"]])
         self.canvas = SimpleNamespace(**data["canvas"])
         self.copy = SimpleNamespace(**data["copy"])
         cover = dict(data["cover"])
@@ -119,14 +119,20 @@ class Style:
             cover[k] = self.colour(cover[k])
         cover["teasers"] = [{**t, **{c: self.colour(t[c]) for c in ("bg", "kicker", "headline")}}
                             for t in cover["teasers"]]
-        cover["masthead_chrome"] = [(t, tuple(c)) for t, c in cover["masthead_chrome"]]
+        cover["masthead_chrome"] = [(t, self.colour(c)) for t, c in cover["masthead_chrome"]]
         self.cover = SimpleNamespace(**cover)
 
-    def colour(self, v) -> tuple:
+    def colour(self, v, seen: tuple = ()) -> tuple:
+        """[r, g, b], or a [palette] name, followed through names that name names."""
         if isinstance(v, str):
             if v not in self.data["palette"] or v == "initials":
                 raise ClipperError(f"weekly {FILE}: no [palette] colour {v!r}")
-            return tuple(self.data["palette"][v])
+            if v in seen:
+                raise ClipperError(f"weekly {FILE}: [palette] colours name each other: {' -> '.join((*seen, v))}")
+            return self.colour(self.data["palette"][v], (*seen, v))
+        if (not isinstance(v, (list, tuple)) or len(v) != 3
+                or not all(isinstance(c, int) and not isinstance(c, bool) and 0 <= c <= 255 for c in v)):
+            raise ClipperError(f"weekly {FILE}: {v!r} is not a colour: [r, g, b] (0-255) or a [palette] name")
         return tuple(v)
 
 
@@ -142,4 +148,7 @@ def load(cfg: dict) -> Style:
         over = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as e:
         raise ClipperError(f"{path}: {e}") from None
-    return Style(merge(DEFAULTS, over))
+    try:
+        return Style(merge(DEFAULTS, over))
+    except (TypeError, ValueError, KeyError, AttributeError) as e:  # a value of the wrong shape
+        raise ClipperError(f"{path}: a value has the wrong shape ({type(e).__name__}: {e})") from None
