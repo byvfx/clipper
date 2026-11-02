@@ -153,8 +153,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   A war-room find-and-replace dry run found 14; not applied.
 - Decisions on #66 (transcript-framed edits): which item kinds, replace or sit beside the plain cut,
   sound effects, order after #67. Sloth Beat handle check (@slothbeat).
-- Faces: name/enroll kick-135553454's F01 (Andy) and, optionally, F04 (PPP, crocodile mask) in the war room's
-  Faces window; enroll PPP in his maple-leaf cap from the first non-costume stream the worker scans.
+- Faces: enroll PPP in his maple-leaf cap from the first non-costume stream the worker scans (kick-135553454
+  is named and enrolled: known.json has 12 people, Andy/PPP/Jer 4 samples each).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
