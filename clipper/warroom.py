@@ -719,7 +719,12 @@ def faces_pick(cfg: dict, body: dict) -> dict:
     if not 0 <= t < 86400:
         raise ClipperError("no time in the video")
     box = checked_box(body.get("box"))
+    # the cut, full size, on the preview's timeline; but a compilation's preview joins its
+    # segments' previews whole while the cut trims their overlaps: the preview watched, then
     video = sdir / item.state["file"].replace("\\", "/")
+    preview = sdir / "review" / f"{item.key}.mp4"
+    if item.state.get("kind") == "compilation" and preview.exists():
+        video = preview
     with tempfile.TemporaryDirectory(prefix="clipper-face-") as tmp:
         found = faces.pick(faces.grab(video, t, Path(tmp) / "frame.jpg"), box, for_stream(cfg, sdir))
     found["tile"] = "data:image/jpeg;base64," + base64.b64encode(found["tile"]).decode()

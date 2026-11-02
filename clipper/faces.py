@@ -584,7 +584,8 @@ def pick(img_path: Path, box: list[float], cfg: dict) -> dict:
                     cw, ch = (x1 - x0) / w, (y1 - y0) / h
                     row.update(box=[round(x0 / w + fx * cw, 4), round(y0 / h + fy * ch, 4),
                                     round(fw * cw, 4), round(fh * ch, 4)], px=int(row["px"] / k))
-                    found.append((row, e))
+                    if inside(row["box"], box) >= 0.5:  # not a neighbour caught in the padding
+                        found.append((row, e))
     if not found:
         raise ClipperError("no face in that box: draw it around one face, forehead to chin")
     row, e = max(found, key=lambda fe: (inside(fe[0]["box"], box), fe[0]["px"]))

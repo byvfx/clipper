@@ -3,6 +3,8 @@
 
 let FC = null;  // {stream, data, filter: "all" | "unnamed" | "named"}
 let FP = null;  // {ref, stream, t, frame (data URL), box, found, busy}
+let FACEWIN = 0;  // which faces window is open: an answer for an older one is dropped
+const faceWin = (win, kind) => win === FACEWIN && $("#tool").open && $("#tool").dataset.kind === kind;
 const knownList = known => `<datalist id="fcKnown">${Object.keys(known || {}).map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
 const knownChips = known => Object.entries(known || {}).map(([n, k]) =>
   `<span class="fk">${esc(n)} <i>${k}</i><button data-fcforget="${esc(n)}" title="Forget ${esc(n)}'s face (every sample)">×</button></span>`).join("")
@@ -12,12 +14,16 @@ const knownChips = known => Object.entries(known || {}).map(([n, k]) =>
 
 async function showFaces(stream) {
   const d = $("#tool");
-  FP = null;
+  const win = ++FACEWIN, filter = FC?.stream === stream ? FC.filter : "all";
+  FP = null; FC = null;
   d.dataset.kind = "faces"; d.classList.remove("cover"); d.classList.add("facesw");
   d.innerHTML = `<div class="m-head"><b>Faces</b><span style="color:var(--faint);font-size:12px">${esc(stream)}</span><button class="x" data-close>×</button></div><div class="tbody">Loading…</div>`;
   if (!d.open) d.showModal();
-  try { FC = { stream, data: await api("/api/faces?stream=" + encodeURIComponent(stream)), filter: FC?.stream === stream ? FC.filter : "all" }; }
-  catch (e) { d.querySelector(".tbody").innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; return; }
+  let data;
+  try { data = await api("/api/faces?stream=" + encodeURIComponent(stream)); }
+  catch (e) { if (faceWin(win, "faces")) d.querySelector(".tbody").innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; return; }
+  if (!faceWin(win, "faces")) return;
+  FC = { stream, data, filter, win };
   renderFaces();
 }
 function groupWho(g) {
@@ -49,18 +55,21 @@ async function facesName(key, name, enroll) {
   row?.querySelectorAll("button").forEach(x => { x.disabled = true; });
   const btn = row?.querySelector(enroll ? "[data-enroll]" : name ? "[data-fcset]:not([data-enroll])" : "[data-fcclear]");
   if (btn) btn.textContent = "Saving…";
+  const { stream, win } = FC;
   try {
-    FC.data = await api("/api/faces/name", { stream: FC.stream, names: { [key]: name }, enroll });
+    const r = await api("/api/faces/name", { stream, names: { [key]: name }, enroll });
     toast(name ? `${key} is ${name}${enroll ? ", enrolled" : ""}` : `${key} cleared`);
-    renderFaces();
-  } catch (e) { toast(e.message, true); renderFaces(); }
+    if (faceWin(win, "faces")) { FC.data = r; renderFaces(); }
+  } catch (e) { toast(e.message, true); if (faceWin(win, "faces")) renderFaces(); }
 }
 async function facesForget(name, stream) {
   if (!confirm(`Forget ${name}'s face? Every sample goes; groups named by it lose the name.`)) return;
+  const win = FACEWIN;
   try {
     const r = await api("/api/faces/forget", { stream, name });
     toast(`Forgot ${name}`);
-    if (FC) { FC.data = r; renderFaces(); } else if (FP) { FP.known = r.known; renderPick(); }
+    if (faceWin(win, "faces") && FC?.stream === stream) { FC.data = r; renderFaces(); }
+    else if (faceWin(win, "facepick") && FP?.stream === stream) { FP.known = r.known; renderPick(); }
   } catch (e) { toast(e.message, true); }
 }
 
@@ -72,15 +81,16 @@ function pickFace(ref) {
   if (v.readyState < 2 || !v.videoWidth) return toast("Play the video to the face first.", true);
   v.pause();
   FC = null;
+  const win = ++FACEWIN;
   const c = document.createElement("canvas");
   c.width = v.videoWidth; c.height = v.videoHeight;
   c.getContext("2d").drawImage(v, 0, 0);
-  FP = { ref, stream: i.stream, t: v.currentTime, frame: c.toDataURL("image/jpeg", 0.85), box: null, found: null, busy: false, known: {} };
+  FP = { ref, stream: i.stream, t: v.currentTime, frame: c.toDataURL("image/jpeg", 0.85), box: null, found: null, busy: false, known: {}, win };
   const d = $("#tool");
   d.dataset.kind = "facepick"; d.classList.remove("cover"); d.classList.add("facesw");
   if (!d.open) d.showModal();
   renderPick();
-  api("/api/faces?stream=" + encodeURIComponent(i.stream)).then(r => { if (FP?.ref === ref) { FP.known = r.known; renderPick(); } }).catch(() => {});
+  api("/api/faces?stream=" + encodeURIComponent(i.stream)).then(r => { if (faceWin(win, "facepick")) { FP.known = r.known; renderPick(); } }).catch(() => {});
 }
 function renderPick() {
   const { box: b, found: f } = FP;
@@ -128,9 +138,11 @@ function wirePick() {
     const name = $("#fpName").value.trim();
     if (!name) return toast("Type who it is first.", true);
     keep.disabled = true;
+    const { win } = FP;
     try {
       const r = await api("/api/faces/enroll", { stream: FP.stream, name, embedding: FP.found.embedding });
       toast(`Kept as ${name} (${r.samples} sample${r.samples > 1 ? "s" : ""})`);
+      if (!faceWin(win, "facepick")) return;
       Object.assign(FP, { known: r.known, box: null, found: null });
       renderPick();
     } catch (e) { toast(e.message, true); keep.disabled = false; }
@@ -138,13 +150,13 @@ function wirePick() {
 }
 async function lookUp() {
   FP.busy = true; FP.found = null; renderPick();
-  const ref = FP.ref;
+  const { win } = FP;
   try {
-    const r = await api("/api/faces/pick", { ref, t: FP.t, box: FP.box });
-    if (FP?.ref !== ref) return;
+    const r = await api("/api/faces/pick", { ref: FP.ref, t: FP.t, box: FP.box });
+    if (!faceWin(win, "facepick")) return;
     FP.found = r;
-  } catch (e) { toast(e.message, true); }
-  if (FP?.ref === ref) { FP.busy = false; renderPick(); }
+  } catch (e) { if (!faceWin(win, "facepick")) return; toast(e.message, true); }
+  FP.busy = false; renderPick();
 }
 
 document.addEventListener("click", e => {
@@ -166,4 +178,4 @@ document.addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.matches?.("[data-fcname]")) { e.preventDefault(); $(`[data-fcset="${e.target.dataset.fcname}"]`).click(); }
   if (e.key === "Enter" && e.target.id === "fpName") { e.preventDefault(); $("#fpKeep")?.click(); }
 });
-$("#tool").addEventListener("close", () => { $("#tool").classList.remove("facesw"); FC = null; FP = null; });
+$("#tool").addEventListener("close", () => { $("#tool").classList.remove("facesw"); FC = null; FP = null; FACEWIN++; });

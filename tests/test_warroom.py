@@ -136,3 +136,27 @@ def test_faces_window(tmp_path, defaults, monkeypatch):
         with pytest.raises(ClipperError):
             warroom.checked_box(bad)
     assert warroom.checked_box({"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4}) == [0.1, 0.2, 0.3, 0.4]
+
+
+def test_face_pick_grabs_the_cut_or_a_compilations_preview(tmp_path, defaults, monkeypatch):
+    from clipper import actions, faces
+
+    cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path}}
+    sdir = tmp_path / "kick-1"
+    (sdir / "review").mkdir(parents=True)
+    (sdir / "review" / "comp-x.mp4").write_bytes(b"")
+    (sdir / "review" / "c01_t20.mp4").write_bytes(b"")
+    states = {"c01_t20": {"kind": "pick", "file": r"clips\01_t20.mp4"},
+              "comp-x": {"kind": "compilation", "file": r"compilations\x.mp4"}}
+    monkeypatch.setattr(warroom.actions, "resolve", lambda c, ref: actions.Item(sdir, ref.split("/")[1], states[ref.split("/")[1]]))
+    grabbed = []
+    monkeypatch.setattr(faces, "grab", lambda video, t, dst: grabbed.append(video) or dst)
+    monkeypatch.setattr(faces, "pick", lambda img, box, c: {"box": box, "px": 90, "embedding": [], "closest": "", "match": 0.0, "tile": b"jpg"})
+    monkeypatch.setattr(warroom, "for_stream", lambda c, d: cfg)
+    box = {"x": 0.1, "y": 0.1, "width": 0.2, "height": 0.2}
+    got = warroom.faces_pick(cfg, {"ref": "kick-1/c01_t20", "t": 3.0, "box": box})
+    assert got["tile"].startswith("data:image/jpeg;base64,") and got["stream"] == "kick-1"
+    warroom.faces_pick(cfg, {"ref": "kick-1/comp-x", "t": 3.0, "box": box})
+    assert grabbed == [sdir / "clips/01_t20.mp4", sdir / "review" / "comp-x.mp4"]
+    with pytest.raises(ClipperError):
+        warroom.faces_pick(cfg, {"ref": "kick-1/c01_t20", "t": "soon", "box": box})

@@ -258,9 +258,9 @@ def cmd_speakers(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_faces(cfg: dict, args: argparse.Namespace) -> None:
     from . import faces
 
-    if args.forget:
-        print(f"forgot {args.forget} ({faces.forget(cfg, args.forget)} sample(s))")
     if not args.stream:
+        if args.forget:
+            print(f"forgot {args.forget} ({faces.forget(cfg, args.forget)} sample(s))")
         if args.enroll_photos:
             return faces.enroll_photos(cfg)
         if not args.forget:
@@ -268,6 +268,8 @@ def cmd_faces(cfg: dict, args: argparse.Namespace) -> None:
         return None
     sdir = stream_dir(cfg, args.stream)
     scfg = config.for_stream(cfg, sdir)  # its show's [thumbnail] photos and [paths] faces
+    if args.forget:
+        print(f"forgot {args.forget} ({faces.forget(scfg, args.forget)} sample(s))")
     if args.enroll_photos:
         faces.enroll_photos(scfg)
     if args.box or args.at or args.person:
