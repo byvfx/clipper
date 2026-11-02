@@ -48,6 +48,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "warroom_layouts": "logs/warroom_layouts.json",  # the war room's saved panel layouts
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
+        "faces": "faces",         # known faces, every show: known.json (`clipper faces --enroll`) + models/
     },
     "modal": {
         # `clipper modal` and the war room's Modal panel (#49): spend is Modal's own billing.
@@ -342,6 +343,17 @@ DEFAULTS: dict[str, dict[str, Any]] = {
                                   # voice 0.88, different people <= 0.46; music beds near the co-hosts)
         "min_talk_s": 20,         # speakers with less talk time are listed but never named
         "max_refs": 10,           # embeddings kept per enrolled voice (newest win)
+    },
+    "faces": {
+        # `clipper faces`: who is on screen, by face, over the stream's keyframes (#54). CPU only.
+        "workers": 0,             # processes for detection; 0 = half the CPU threads
+        "min_px": 40,             # faces shorter than this (source pixels) are too small to name
+        "cluster": 0.4,           # lowest average cosine similarity inside one group of faces
+        "match": 0.7,             # lowest similarity of a group to a known face to name it
+                                  # (kick-131151926 vs kick-135522987: same person 0.93, lookalikes <= 0.55)
+        "min_faces": 5,           # smaller groups are dropped
+        "sheets": 60,             # contact sheets for the biggest groups (faces/F01.jpg ...); named ones always
+        "max_refs": 10,           # group averages kept per known face (newest win)
     },
     "segments": {
         "model": "claude-opus-5-5",   # one call over the whole transcript

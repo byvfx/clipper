@@ -27,6 +27,7 @@ layouts = "layouts"                            # reference screenshots per show 
 archive = "archive"                            # clipper archive subjects (other channels' back catalogs)
 modal_runs = "logs/modal_runs.jsonl"           # every Modal call's start and end (clipper modal, war room)
 voices = "voices"                              # enrolled voices per show (clipper speakers --enroll); the NAS share once it runs everything
+faces = "faces"                                # known faces for every show (clipper faces --enroll) + the face models
 costs = "logs/costs.jsonl"                     # every model call's cost, one line each (clipper costs, war room)
 warroom_undo = "logs/warroom_undo.json"        # the war room's last 20 actions, for Undo
 warroom_layouts = "logs/warroom_layouts.json"  # the war room's saved panel layouts (Layout button)
@@ -137,6 +138,16 @@ max_speakers = 0
 match = 0.6                # lowest cosine similarity to name a speaker (same voice ~0.9, others < 0.5)
 min_talk_s = 20            # less talk than this: listed, never named
 max_refs = 10              # embeddings kept per enrolled voice (newest win)
+
+[faces]
+# `clipper faces`: who is on screen, by face, over the keyframes (CPU; the `faces` extra).
+workers = 0                # detection processes; 0 = half the CPU threads
+min_px = 40                # faces shorter than this (source pixels) are too small to name
+cluster = 0.4              # lowest average similarity inside one group of faces
+match = 0.7                # lowest similarity to a known face to name a group (same person ~0.9, lookalikes < 0.6)
+min_faces = 5              # smaller groups are dropped
+sheets = 60                # contact sheets faces/F01.jpg ... for the biggest groups
+max_refs = 10              # group averages kept per known face (newest win)
 
 [costs]
 # `clipper costs` / the war room's Costs panel: what the logs can't know.

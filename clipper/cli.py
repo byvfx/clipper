@@ -255,6 +255,32 @@ def cmd_speakers(cfg: dict, args: argparse.Namespace) -> None:
     speakers.show(sdir, scfg, found)
 
 
+def cmd_faces(cfg: dict, args: argparse.Namespace) -> None:
+    from . import faces
+
+    if args.enroll_photos:
+        faces.enroll_photos(cfg)
+        if not args.stream:
+            return
+    if not args.stream:
+        raise ClipperError("clipper faces <stream>, or --enroll-photos")
+    sdir = stream_dir(cfg, args.stream)
+    scfg = config.for_stream(cfg, sdir)
+    if args.rescan or not (sdir / "faces.json").exists():
+        faces.scan(sdir, scfg)
+    names = {}
+    if args.name:
+        names = dict(n.split("=", 1) for n in args.name if "=" in n)
+        if len(names) != len(args.name):
+            raise ClipperError("--name takes F03=Name")
+        faces.set_names(sdir, names)
+    found = faces.apply(sdir, scfg)
+    if args.enroll:
+        faces.enroll(sdir, scfg, [k for k, v in names.items() if v] if args.name else
+                     [k for k, v in found.items() if v.get("by") == "hand"])
+    faces.show(sdir, scfg, found)
+
+
 def cmd_signals(cfg: dict, args: argparse.Namespace) -> None:
     from . import signals
 
@@ -639,7 +665,7 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
 
 
 COMMAND_GROUPS = [
-    ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
+    ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
@@ -689,6 +715,16 @@ def add_pipeline(sub) -> None:
     p.add_argument("--enroll", action="store_true",
                    help="keep the named voices (these --name ones, else every hand-named one) for the show")
     p.set_defaults(fn=cmd_speakers)
+
+    p = sub.add_parser("faces", help="who is on screen: group the keyframes' faces, name them -> faces.json")
+    add_stream(p, optional=True)
+    p.add_argument("--rescan", action="store_true", help="scan the keyframes again (the first run always scans)")
+    p.add_argument("--name", action="append", metavar="F03=Name",
+                   help="name a group by hand (repeatable; F03= clears); see faces/F03.jpg")
+    p.add_argument("--enroll", action="store_true",
+                   help="keep the named faces (these --name ones, else every hand-named one) for every show")
+    p.add_argument("--enroll-photos", action="store_true", help="add the [thumbnail] photos portraits to the known faces")
+    p.set_defaults(fn=cmd_faces)
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")
     add_stream(p)

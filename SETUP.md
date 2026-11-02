@@ -237,6 +237,24 @@ The model is gated on Hugging Face:
    a `clipper.toml` that pins older `prompt_version`s gets tags the prompt doesn't expect, so
    keep the pins current). Streams without names give the same text as before.
 
+**Faces on screen (#54).** `clipper faces <stream>` finds who is on screen: every keyframe
+(one every ~4 s on Kick) through two small face models OpenCV runs on the CPU, no GPU or
+Modal. An 8 h stream takes ~15 min on a 16-core laptop, most of it reading the video off the
+NAS share. It isn't a pipeline stage yet: covers and the weekly don't read it yet.
+
+1. `uv sync --extra faces` (add it to the other extras you use). The models (YuNet and SFace,
+   from OpenCV's model zoo, MIT and Apache-2.0) download on the first scan into `[paths]
+   faces/models`, checked against pinned hashes.
+2. `clipper faces <stream>` writes `faces.json` and `faces/F01.jpg`... one contact sheet per
+   group of faces, biggest first. Groups that aren't people (game characters, puppets, a
+   poster on the wall) are fine to leave unnamed.
+3. Name the regulars once from the sheets: `clipper faces <stream> --name F01=Andy --name
+   F03=Jer --enroll` keeps them in `[paths] faces/known.json`, one file for every show. Later
+   streams are named by face (`[faces] match`). Enroll from an ordinary stream, not a costume
+   one; a second stream's `--enroll` adds another sample. `clipper faces --enroll-photos` adds
+   the `[thumbnail] photos` portraits under their file names.
+4. `clipper doctor --role gpu` lists the known faces.
+
 ## 2b-2. Other model providers (optional)
 
 Every model key (`[scoring] model_a`, `[segments] model`, `[shorts] layout_model`, ...) picks
