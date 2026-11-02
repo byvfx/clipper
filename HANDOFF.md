@@ -153,6 +153,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   A war-room find-and-replace dry run found 14; not applied.
 - Decisions on #66 (transcript-framed edits): which item kinds, replace or sit beside the plain cut,
   sound effects, order after #67. Sloth Beat handle check (@slothbeat).
+- Faces: name/enroll kick-135553454's F01 (Andy) and, optionally, F04 (PPP, crocodile mask) in the war room's
+  Faces window; enroll PPP in his maple-leaf cap from the first non-costume stream the worker scans.
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
@@ -194,7 +196,15 @@ War room (merged 2026-11-02, PR #118, bot restarted): a stream's Faces window na
 "Who's this?" (B) boxes one face on a paused video and keeps it; × forgets someone; same on the CLI
 (`--at/--box/--person`, `--forget`). Enrolling now re-applies names, so look-alikes are named at once.
 Saved where: enrolled faces go in `[paths] faces` known.json (here `faces/known.json` in C:/clipper, local, not on the NAS: back it up; the desktop install needs a copy); hand names in the stream's faces.json on the NAS share.
-Left: enroll from a non-costume stream, the weekly, a `faces` stage row, then close #54.
+**Stage + weekly (merged 2026-11-02, PR #119, #54 closed):** `faces` is a worker stage after the fast lane,
+before the slow cut (user's pick: picks/Shorts don't wait; segment and compilation covers get faces); in
+clipper.toml's `[worker] stages` since 11-02 (backup backups/clipper.before_faces_stage_2026-11-02.toml),
+worker restarted; only new recordings get it (done runs are skipped). Doctor fails if the stage is listed
+without OpenCV; `clipper setup` installs the faces extra for a worker. The weekly takes each named person's
+3 best faces per stream (`[weekly] face_frames`) ahead of the thumbnail stage's guesses (frames cached in
+`<issue>/faces/`). kick-135553454 (11-01) scanned: F02 Jer and F17 Mel mac auto-named; F01 = Andy (normal
+look first hour, then costume), F04 = PPP in a crocodile mask all night. October was costumes every night,
+so a normal-look PPP sample waits on the first non-costume stream (Waiting on the user).
 Older notes not on an issue: republish the 2026-10-19 re-cut streams to Kitsu (user said not yet);
 Blade compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`);
 a daily "post kit" folder; `clipper setup` walkthrough #78 (phase 1 done 2026-10-28: bootstrap,
