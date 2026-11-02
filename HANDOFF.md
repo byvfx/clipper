@@ -168,9 +168,10 @@ running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/th
 `draw.py`, war room split into `web/warroom.css` + `web/js/*.js` (docs/warroom.md), `clipper services
 status|stop|restart`, `deploy/common.ps1` for both task scripts, per-show `[meta] cast`, Kitsu push of
 changed schedule values only (`schedule --kitsu-all` for everything), doctor checks every show's prompts.
-**Held: #101 (weekly split, worktree `C:\clipper-weekly`)**: issue 03 was built 2026-11-01, so it can
-merge now (wait for Copilot as usual); it merged cleanly with main on 10-30.
-Then remove that worktree (the other audit worktrees are already gone).
+**#101 (weekly split) merged 2026-11-02** as d9e1477: `clipper/weekly/` package (gather, draft, render,
+faces, style), prompts through Prompts, the look as data in `<paths.weekly>/style.toml` (doctor checks
+it). Issue 04 (11-07) is the first one built from it. Worktree removed; the remote `weekly-split`
+branch is still on GitHub (deleting it was left to the user).
 Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (provider side-by-side,
 `clipper edit`), #50 (revenue once monetized), #42 (closes after the first check-in). #77 is done
 (#106, 10-30): YouTube quota counted per Pacific day in `logs/youtube_quota.json` (each upload run
