@@ -258,14 +258,20 @@ def cmd_speakers(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_faces(cfg: dict, args: argparse.Namespace) -> None:
     from . import faces
 
+    if args.forget:
+        print(f"forgot {args.forget} ({faces.forget(cfg, args.forget)} sample(s))")
     if not args.stream:
-        if not args.enroll_photos:
-            raise ClipperError("clipper faces <stream>, or --enroll-photos")
-        return faces.enroll_photos(cfg)
+        if args.enroll_photos:
+            return faces.enroll_photos(cfg)
+        if not args.forget:
+            raise ClipperError("clipper faces <stream>, --enroll-photos or --forget Name")
+        return None
     sdir = stream_dir(cfg, args.stream)
     scfg = config.for_stream(cfg, sdir)  # its show's [thumbnail] photos and [paths] faces
     if args.enroll_photos:
         faces.enroll_photos(scfg)
+    if args.box or args.at or args.person:
+        return _face_box(sdir, scfg, args)
     if args.rescan or not (sdir / "faces.json").exists():
         faces.scan(sdir, scfg)
     names = {}
@@ -278,7 +284,38 @@ def cmd_faces(cfg: dict, args: argparse.Namespace) -> None:
     if args.enroll:
         faces.enroll(sdir, scfg, [k for k, v in names.items() if v] if args.name else
                      [k for k, v in found.items() if v.get("by") == "hand"])
+        found = faces.apply(sdir, scfg)  # the new samples may name other groups
     faces.show(sdir, scfg, found)
+
+
+def _face_box(sdir: Path, cfg: dict, args: argparse.Namespace) -> None:
+    """clipper faces <stream> --at T --box x,y,w,h [--person Name]."""
+    import tempfile
+
+    from . import faces
+    from .media import source_file
+    from .timefmt import parse_time
+
+    if not (args.box and args.at):
+        raise ClipperError("a face by hand takes --at <stream time> and --box x,y,w,h")
+    try:
+        box = [float(v) for v in args.box.split(",")]
+    except ValueError:
+        box = []
+    if len(box) != 4 or not all(0 <= v <= 1 for v in box) or box[2] <= 0 or box[3] <= 0:
+        raise ClipperError("--box takes x,y,width,height as fractions of the frame (0-1)")
+    with tempfile.TemporaryDirectory(prefix="clipper-face-") as tmp:
+        try:
+            t = parse_time(args.at)
+        except ValueError as e:
+            raise ClipperError(str(e)) from None
+        frame = faces.grab(source_file(sdir), t, Path(tmp) / "frame.jpg")
+        found = faces.pick(frame, box, cfg)
+    who = f"looks like {found['closest']} ({found['match']:.2f})" if found["closest"] else "nobody known yet"
+    print(f"face at {found['box']}, {found['px']} px: {who}")
+    if args.person:
+        n = faces.enroll_pick(sdir, cfg, args.person, found["embedding"])
+        print(f"enrolled {args.person} ({n} sample(s)); {sdir.name}'s groups named again")
 
 
 def cmd_signals(cfg: dict, args: argparse.Namespace) -> None:
@@ -724,6 +761,10 @@ def add_pipeline(sub) -> None:
     p.add_argument("--enroll", action="store_true",
                    help="keep the named faces (these --name ones, else every hand-named one) for every show")
     p.add_argument("--enroll-photos", action="store_true", help="add the [thumbnail] photos portraits to the known faces")
+    p.add_argument("--at", metavar="H:MM:SS", help="with --box: the stream time of the frame")
+    p.add_argument("--box", metavar="X,Y,W,H", help="a face by hand: its box in the source frame, 0-1")
+    p.add_argument("--person", metavar="NAME", help="with --box: keep that face as NAME's")
+    p.add_argument("--forget", metavar="NAME", help="drop NAME from the known faces")
     p.set_defaults(fn=cmd_faces)
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")

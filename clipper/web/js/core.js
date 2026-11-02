@@ -123,7 +123,7 @@ function renderStreams() {
         <span style="margin-left:auto;font-size:11px;color:${x.run_status === "failed" ? "var(--red)" : x.run_status === "running" ? "var(--accent)" : "var(--faint)"}">${esc(status)}</span></div>
       <div class="t">${esc(x.title)}</div>
       <div class="stages">${STATE.stages.map(g => `<div class="stage ${esc(x.stages[g] || "")}" title="${g}: ${x.stages[g] || "not yet"}"></div>`).join("")}</div>
-      <div class="meta"><span>${esc(x.id)}</span><span>${x.duration_s ? (x.duration_s / 3600).toFixed(1) + " h" : ""}</span></div></div>`;
+      <div class="meta"><span>${esc(x.id)}</span>${x.faces ? `<button class="lnk" data-faces="${esc(x.id)}" title="Name this stream's face groups">👤 faces</button>` : ""}<span>${x.duration_s ? (x.duration_s / 3600).toFixed(1) + " h" : ""}</span></div></div>`;
   }).join("") || `<div class="empty">No streams yet</div>`;
 }
 

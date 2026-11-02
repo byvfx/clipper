@@ -99,3 +99,40 @@ def test_the_page_loads_every_script_app_last():
     assert sorted(scripts) == sorted(p.name for p in (warroom.WEB / "js").glob("*.js"))
     assert scripts[-1] == "app.js" and '<link rel="stylesheet" href="warroom.css">' in html
     assert "<script>" not in html and "<style>" not in html
+
+
+def test_faces_window(tmp_path, defaults, monkeypatch):
+    import numpy as np
+
+    from clipper import faces, jsonstate
+
+    cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path, "faces": str(tmp_path / "known")}}
+    monkeypatch.setattr(warroom, "for_stream", lambda c, sdir: cfg)
+    sdir = tmp_path / "kick-1"
+    (sdir / "faces").mkdir(parents=True)
+    jsonstate.write(sdir / "meta.json", {"channel": "x"})
+    with pytest.raises(ClipperError):
+        warroom.faces_get(cfg, "kick-2")
+    with pytest.raises(ClipperError):
+        warroom.faces_get(cfg, "kick-1/c01")
+    assert warroom.faces_get(cfg, "kick-1")["scanned"] is False
+    rng = np.random.default_rng(0)
+    emb = np.array([faces.unit(c + rng.normal(scale=0.2, size=128)) for c in rng.normal(size=(2, 128)) for _ in range(5)])
+    rows = [{"t": float(k), "box": [0.4, 0.3, 0.1, 0.2], "px": 90, "sharp": 50.0, "frontal": 0.9} for k in range(10)]
+    groups, fs = faces.build_groups(rows, emb, {"cluster": 0.4, "min_faces": 3})
+    jsonstate.write(sdir / "faces.json", {"model": faces.MODEL, "frames": 10, "groups": groups, "faces": fs})
+    (sdir / "faces" / "F01.jpg").write_bytes(b"jpg")
+    got = warroom.faces_get(cfg, "kick-1")
+    assert [g["key"] for g in got["groups"]] == ["F01"] and got["more"] == 1
+    assert got["groups"][0]["sheet_url"].startswith("/media/kick-1/faces/F01.jpg?v=")
+    with pytest.raises(ClipperError):
+        warroom.faces_name(cfg, {"stream": "kick-1", "names": {"../x": "Jer"}})
+    got = warroom.faces_name(cfg, {"stream": "kick-1", "names": {"F02": "Jer"}, "enroll": True})
+    assert got["known"] == {"Jer": 1} and [g["key"] for g in got["groups"]] == ["F01", "F02"]
+    assert got["groups"][1]["name"] == "Jer"
+    got = warroom.faces_forget(cfg, {"stream": "kick-1", "name": "Jer"})
+    assert got["known"] == {} and got["groups"][1]["by"] == "hand"  # a hand name stays
+    for bad in ({}, {"x": 0, "y": 0, "width": 0, "height": 0.5}, {"x": 1.2, "y": 0, "width": 0.1, "height": 0.1}):
+        with pytest.raises(ClipperError):
+            warroom.checked_box(bad)
+    assert warroom.checked_box({"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4}) == [0.1, 0.2, 0.3, 0.4]

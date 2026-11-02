@@ -49,7 +49,8 @@ const KEYS = [
   ["Queue", [["J K", "next / previous item (in the item window too)"], ["Enter", "open the item"], ["Esc", "close the window, or clear the selection"]]],
   ["Decide", [["A", "approve (in the item window: then the next item)"], ["R", "reject, asks why"], ["C", "retake note"],
               ["H", "hold / release"], ["P", "pin a release time"], ["U", "reopen an approved item"]]],
-  ["Video (item window)", [["Space", "play / pause"], ["← →", "back / forward 5 s"], ["F", "picture in picture"], ["O", "open the video in its own window"]]],
+  ["Video (item window)", [["Space", "play / pause"], ["← →", "back / forward 5 s"], ["F", "picture in picture"], ["O", "open the video in its own window"],
+                           ["B", "box a face on the paused frame: who it is"]]],
   ["Other", [["1 2 3 4 5 6", "queue tabs"], ["/", "search"], ["L", "watch the live show"], ["?", "this list"]]],
 ];
 function showKeys() {
@@ -108,6 +109,7 @@ document.addEventListener("keydown", e => {
     else if (video.requestPictureInPicture) video.requestPictureInPicture().catch(err => toast(err.message, true));
   }
   else if (k === "o" && (OPEN || SEL)) { take(); popOut(OPEN || SEL); }
+  else if (k === "b" && video) { take(); pickFace(OPEN); }
   else if (/^[1-6]$/.test(k) && !OPEN) { take(); TAB = Object.keys(TABS)[+k - 1]; SEL = null; renderQueue(); }
   else if (k === "/" && !OPEN) { take(); $("#q").focus(); }
   else if (k === "l") {

@@ -196,7 +196,9 @@ function openModal(ref) {
         ${!i.video_url ? `<div class="empty">No preview file</div>` : PHONE.matches
           ? `<button class="tap ${i.kind === "short" ? "vertical" : ""}" id="mTap">${i.thumbnail_url ? `<img src="${i.thumbnail_url}" alt="">` : ""}<span><b>▶</b>Play (phone size)</span></button>`
           : `<video controls preload="metadata" src="${i.video_url}"></video>`}
-        ${i.video_url && !PHONE.matches ? `<div class="row" style="margin-top:6px"><button class="btn" data-pop="${esc(i.ref)}" title="Open the video in its own window (O)">⧉ Pop out</button></div>` : ""}
+        ${i.video_url && !PHONE.matches ? `<div class="row" style="margin-top:6px"><button class="btn" data-pop="${esc(i.ref)}" title="Open the video in its own window (O)">⧉ Pop out</button>
+          <button class="btn" data-facepick="${esc(i.ref)}" title="Draw a box round a face on the paused frame: who it is, and keep it (B)">👤 Who's this?</button>
+          <button class="btn" data-faces="${esc(i.stream)}" title="Name this stream's face groups">Faces</button></div>` : ""}
         ${i.thumbnail_url ? `<img src="${i.thumbnail_url}" alt="thumbnail">` : ""}
         ${i.thumbnail_url && i.kind !== "short" ? `<div class="row" style="margin-top:6px"><button class="btn" data-cover="${esc(i.ref)}" title="Frame, face box, photos and words; re-renders without model calls">🖼 Edit cover</button></div>` : ""}
         <div class="kv">

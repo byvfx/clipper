@@ -8,6 +8,10 @@ Usage:
                                                 name a group by hand ("F03=" clears it); --enroll
                                                 keeps that face for every show
     clipper faces --enroll-photos               add the [thumbnail] photos portraits to the known faces
+    clipper faces <stream> --at 1:23:45 --box 0.4,0.1,0.2,0.3 [--person Jer]
+                                                the face in that box of the source frame (x, y, width,
+                                                height, 0-1): who it looks like; --person keeps it
+    clipper faces --forget Jer                  drop someone from the known faces
 
 Every keyframe of source.* (one every ~4 s on Kick) goes through YuNet (a face detector) and SFace
 (128 numbers per face), two small ONNX models OpenCV runs on the CPU (the `faces` extra); they
@@ -22,6 +26,10 @@ faces.json: the groups (F01 biggest first: count, time span, centroid, name or c
 every grouped face (stream time, box 0-1 of the frame, height in px, sharpness, frontal 0-1,
 similarity to its group). faces/F01.jpg: each group's best faces, then a spread over the stream,
 to tell who it is. best_faces() is a person's faces in a stretch, best for a cover first.
+
+The war room does the same by hand: a stream's Faces window names and enrolls groups, and its
+box tool picks one face on a paused video (pick()), for a face too small or too rare to make a
+group. Enrolling names the stream's groups again, so the new sample names its look-alikes.
 """
 
 from __future__ import annotations
@@ -32,6 +40,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
@@ -112,8 +121,12 @@ def _detect(path: str) -> list[tuple[dict, np.ndarray]]:
     import cv2
 
     img = cv2.imread(path)
-    if img is None:
-        return []
+    return [] if img is None else _faces(img)
+
+
+def _faces(img: np.ndarray) -> list[tuple[dict, np.ndarray]]:
+    import cv2
+
     h, w = img.shape[:2]
     _det.setInputSize((w, h))
     _, found = _det.detect(img)
@@ -497,6 +510,112 @@ def enroll_photos(cfg: dict) -> None:
             continue
         _, e = max(faces, key=lambda fe: fe[0]["px"])
         print(f"enrolled {name} from {path.name} ({add_known(cfg, name, [round(float(v), 4) for v in e])} sample(s))")
+
+
+NAME = re.compile(r"[^\x00-\x1f]{1,40}")  # a person's name: one line, short (covers print it)
+
+
+def checked_name(name) -> str:
+    name = name.strip() if isinstance(name, str) else ""
+    if not NAME.fullmatch(name):
+        raise ClipperError(f"not a name: {str(name)[:60]!r}")
+    return name
+
+
+def forget(cfg: dict, name: str) -> int:
+    """Drop name from the known faces; how many samples they had. Groups named by those
+    samples lose the name at the next apply()."""
+    path = known_path(cfg)
+    with jsonstate.update(path, indent=None) as known:
+        if not known or name not in known["people"]:
+            raise ClipperError(f"{name!r} isn't in the known faces")
+        return len(known["people"].pop(name))
+
+
+# ---------- picking a face by hand ----------
+
+_PICK = threading.Lock()  # one detector per process; the war room answers on threads
+_ready = ""
+
+
+def grab(video: Path, t: float, dst: Path) -> Path:
+    """One full-size frame of video at t seconds, as dst (a JPEG)."""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-ss", f"{t:.3f}",
+                        "-i", str(video), "-frames:v", "1", "-q:v", "2", "-y", str(dst)],
+                       check=False, capture_output=True, text=True)
+    if r.returncode or not dst.exists():
+        raise ClipperError(f"no frame of {video.name} at {hms(t)}")
+    return dst
+
+
+def inside(a: list[float], b: list[float]) -> float:
+    """How much of box a [x, y, w, h] lies inside box b, 0-1."""
+    w = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+    h = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+    return max(w, 0) * max(h, 0) / (a[2] * a[3]) if a[2] * a[3] > 0 else 0.0
+
+
+def pick(img_path: Path, box: list[float], cfg: dict) -> dict:
+    """The face in box [x, y, w, h] (0-1 of the image): the detected face most inside it, or,
+    when none is, the detector again on the box alone, enlarged (a small face in a corner).
+    {"box", "px", "embedding", "closest", "match", "tile" (a JPEG of the face)}."""
+    import cv2
+
+    global _ready
+    img = cv2.imread(str(img_path))
+    if img is None:
+        raise ClipperError(f"can't read {img_path.name}")
+    h, w = img.shape[:2]
+    x, y, bw, bh = box
+    with _PICK:
+        models = str(ensure_models(cfg))
+        if _ready != models:
+            _init(models, 0)
+            _ready = models
+        found = [(row, e) for row, e in _faces(img) if inside(row["box"], box) >= 0.5]
+        if not found:  # the box alone, padded a little and at least 320 px tall
+            x0, y0 = max(0, int((x - bw / 4) * w)), max(0, int((y - bh / 4) * h))
+            x1, y1 = min(w, int((x + bw * 1.25) * w)), min(h, int((y + bh * 1.25) * h))
+            crop = img[y0:y1, x0:x1]
+            if crop.size:
+                k = max(1.0, 320 / crop.shape[0])
+                for row, e in _faces(cv2.resize(crop, None, fx=k, fy=k)):
+                    fx, fy, fw, fh = row["box"]  # 0-1 of the crop -> of the image
+                    cw, ch = (x1 - x0) / w, (y1 - y0) / h
+                    row.update(box=[round(x0 / w + fx * cw, 4), round(y0 / h + fy * ch, 4),
+                                    round(fw * cw, 4), round(fh * ch, 4)], px=int(row["px"] / k))
+                    found.append((row, e))
+    if not found:
+        raise ClipperError("no face in that box: draw it around one face, forehead to chin")
+    row, e = max(found, key=lambda fe: (inside(fe[0]["box"], box), fe[0]["px"]))
+    known = load_known(cfg)
+    people = known["people"] if known["model"] == MODEL else {}
+    who, score = closest(e.tolist(), people) if people else ("", 0.0)
+    fx, fy, fw, fh = row["box"]
+    cx, cy, side = (fx + fw / 2) * w, (fy + fh / 2) * h, max(fw * w, fh * h) * 1.6
+    tile = img[max(0, int(cy - side / 2)):int(cy + side / 2), max(0, int(cx - side / 2)):int(cx + side / 2)]
+    ok, jpg = cv2.imencode(".jpg", cv2.resize(tile, (TILE, TILE)), [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return {"box": row["box"], "px": row["px"], "embedding": [round(float(v), 4) for v in e],
+            "closest": who, "match": round(score, 3), "tile": jpg.tobytes() if ok else b""}
+
+
+def checked_embedding(v) -> list[float]:
+    """An embedding sent back by the war room: 128 numbers, made unit length again."""
+    try:
+        e = np.array(v, dtype=np.float64)
+    except (TypeError, ValueError):
+        raise ClipperError("not a face embedding") from None
+    if e.shape != (128,) or not np.isfinite(e).all() or not np.linalg.norm(e):
+        raise ClipperError("not a face embedding")
+    return [round(float(x), 4) for x in unit(e)]
+
+
+def enroll_pick(sdir: Path | None, cfg: dict, name: str, embedding: list[float]) -> int:
+    """Keep a hand-picked face under name, then name sdir's groups again with it; its samples."""
+    n = add_known(cfg, checked_name(name), checked_embedding(embedding))
+    if sdir and (sdir / "faces.json").exists():
+        apply(sdir, cfg)
+    return n
 
 
 def show(sdir: Path, cfg: dict, groups: dict) -> None:

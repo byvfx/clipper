@@ -190,6 +190,9 @@ names from the sheets; enroll Andy/PPP from a non-costume stream). Covers done: 
 named people's best frames (labelled) and uses the found head box (`face_found`); clipper.toml
 pins `enquirer_prompt_version = "v5"` since 2026-11-01 (backup in backups/). Spot check passed (t20 Jer).
 kick-131151926 rescanned 2026-11-01 (7.3 min, names carried) and enrolled: known.json has Andy, Jer, PPP (+ the mouse costume); on re-apply F21/F44/F59 auto-named Andy, F36 PPP, all right on the sheets.
+War room (branch faces-picker): a stream's Faces window names/enrolls groups from the sheets,
+"Who's this?" (B) boxes one face on a paused video and keeps it; × forgets someone; same on the CLI
+(`--at/--box/--person`, `--forget`). Enrolling now re-applies names, so look-alikes are named at once.
 Left: enroll from a non-costume stream, the weekly, a `faces` stage row, then close #54.
 Older notes not on an issue: republish the 2026-10-19 re-cut streams to Kitsu (user said not yet);
 Blade compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`);

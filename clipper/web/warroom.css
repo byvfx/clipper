@@ -231,6 +231,28 @@ input.search { margin-left: auto; width: 180px; }
 .unslotted .chip { display: grid; grid-template-columns: 6px 1fr; gap: 8px; align-items: center; font-size: 12px; padding: 3px 6px; border-radius: 6px; cursor: grab; }
 .unslotted .chip:hover { background: var(--panel2); }
 .unslotted .chip span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* #54 faces: a stream's groups, the box tool */
+#tool.facesw { width: min(1180px, 97vw); }
+.lnk { background: none; border: 0; padding: 0; color: var(--blue); font: inherit; cursor: pointer; }
+.fknown { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.fknown .f { color: var(--faint); margin-right: 4px; }
+.fk { display: inline-flex; gap: 4px; align-items: center; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 4px 2px 10px; }
+.fk i { font-style: normal; color: var(--faint); font: 11px var(--mono); }
+.fk button { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; }
+.fk button:hover { color: var(--red); }
+.fgroups { display: grid; gap: 14px; }
+.fg { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 6px; }
+.fg .fh { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.fg .fh .k { font: 700 12px var(--mono); color: var(--dim); }
+.fg .fh .f { color: var(--faint); font-size: 12px; margin-left: auto; }
+.fg img { width: 100%; display: block; border-radius: 6px; }
+.fg .fa { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.fg .fa input.search { width: 200px; flex: 0 1 200px; }
+.by { color: var(--faint); font: 11px var(--mono); }
+.fpwrap { cursor: crosshair; }
+.fpwrap .box { cursor: crosshair; pointer-events: none; }
+.fpres { display: flex; gap: 12px; align-items: center; }
+.fpres img { width: 96px; height: 96px; border-radius: 8px; }
 /* #18 cover editor */
 #tool.cover { width: min(1180px, 97vw); }
 .cv { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 16px; padding: 12px 16px; }
@@ -249,9 +271,9 @@ input.search { margin-left: auto; width: 180px; }
 .cv .form { display: grid; gap: 7px; font-size: 12px; color: var(--dim); align-content: start; }
 .cv .form input, .cv .form select { width: 100%; margin: 0; font-size: 13px; }
 .cv .form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.cv .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
-.cv .seg button { border: 0; background: none; padding: 3px 10px; color: var(--dim); font-size: 12px; cursor: pointer; }
-.cv .seg button.on { background: var(--panel2); color: var(--text); }
+.cv .seg, .facesw .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.cv .seg button, .facesw .seg button { border: 0; background: none; padding: 3px 10px; color: var(--dim); font-size: 12px; cursor: pointer; }
+.cv .seg button.on, .facesw .seg button.on { background: var(--panel2); color: var(--text); }
 .slot .up { color: var(--green); }
 .sched { max-height: calc(100vh - 140px); overflow: auto; }
 
