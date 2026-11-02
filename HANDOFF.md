@@ -40,9 +40,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - `third_party_audio = "allow_reactions"`, `audience_knowledge = "fans"`, Victor/blackjack segments stay.
 - Kitsu is the record for review/edits (no separate DB). Discord approvals must keep working.
 - Thumbnails: `[thumbnail] style = "enquirer"` (1990s tabloid: KINO CASINO masthead, no "THE NEW" roundel,
-  no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v4` (face = headline
+  no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v5` (face = headline
   subject; may use `[thumbnail] photos` portraits for people not on screen; v4 names the show's
-  `[meta] cast`, live 2026-10-30). Cast per show: Kino = Andy + PPP, Channel 404 = Don (solo show,
+  `[meta] cast`, live 2026-10-30; v5 trusts faces.json labels, live 2026-11-01). Cast per show: Kino = Andy + PPP, Channel 404 = Don (solo show,
   user 2026-10-30). Pre-show covers are one
   story, no side boxes (`[preshow] teasers = false`, user 2026-10-28: "single issue for preshows").
   The main face must never sit under the reaction inset or badge (user 2026-10-29): `face_crop(avoid=)`
@@ -182,14 +182,15 @@ the issue on "fix". Roadmaps, issues only: NAS hub #14 (#9 war room on
 the NAS, #12 worker/bot on the NAS, #64 single-owner daemon `clipper serve`, #65 Claude Code on the NAS),
 transcript-framed edits #66 (#67-#71), YouTube Posts magazine #30 (#32-#38), cast library #41,
 lore-order playlists #43, archive fun #63, Udder Truth #58/#59/#60, Modal ideas #53, #55, #56.
-**Faces #54 (branch `faces-54`, not merged):** `clipper faces <stream>` runs locally on the CPU (no Modal:
+**Faces #54 (merged 2026-11-01, PR #117):** `clipper faces <stream>` runs locally on the CPU (no Modal:
 the cost is reading the video, not compute; YuNet + SFace via OpenCV 5, `--extra faces`). Groups each
 stream's keyframe faces into faces.json + faces/F01.jpg sheets, names them against `faces/known.json`
 (every show), `--name F03=Jer --enroll`. kick-131151926 scanned (191 groups, nobody named yet: the user
-names from the sheets; enroll Andy/PPP from a non-costume stream). Covers done on the branch: thumbs adds
-named people's best frames (labelled) and uses the found head box (`face_found`); needs
-`enquirer_prompt_version = "v5"` in clipper.toml (still v4 there). Left: a spot check once names exist,
-the weekly, a `faces` stage row, then close #54.
+names from the sheets; enroll Andy/PPP from a non-costume stream). Covers done: thumbs adds
+named people's best frames (labelled) and uses the found head box (`face_found`); clipper.toml
+pins `enquirer_prompt_version = "v5"` since 2026-11-01 (backup in backups/). Spot check passed (t20 Jer).
+kick-131151926 rescanned 2026-11-01 (7.3 min, names carried) and enrolled: known.json has Andy, Jer, PPP (+ the mouse costume); on re-apply F21/F44/F59 auto-named Andy, F36 PPP, all right on the sheets.
+Left: enroll from a non-costume stream, the weekly, a `faces` stage row, then close #54.
 Older notes not on an issue: republish the 2026-10-19 re-cut streams to Kitsu (user said not yet);
 Blade compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`);
 a daily "post kit" folder; `clipper setup` walkthrough #78 (phase 1 done 2026-10-28: bootstrap,
