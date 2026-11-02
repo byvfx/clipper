@@ -48,6 +48,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "warroom_layouts": "logs/warroom_layouts.json",  # the war room's saved panel layouts
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
+        "faces": "faces",         # known faces, every show: known.json (`clipper faces --enroll`) + models/
     },
     "modal": {
         # `clipper modal` and the war room's Modal panel (#49): spend is Modal's own billing.
@@ -343,6 +344,17 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_talk_s": 20,         # speakers with less talk time are listed but never named
         "max_refs": 10,           # embeddings kept per enrolled voice (newest win)
     },
+    "faces": {
+        # `clipper faces`: who is on screen, by face, over the stream's keyframes (#54). CPU only.
+        "workers": 0,             # processes for detection; 0 = half the CPU threads
+        "min_px": 40,             # faces shorter than this (source pixels) are too small to name
+        "cluster": 0.4,           # lowest average cosine similarity inside one group of faces
+        "match": 0.7,             # lowest similarity of a group to a known face to name it
+                                  # (kick-131151926 vs kick-135522987: same person 0.93, lookalikes <= 0.55)
+        "min_faces": 5,           # smaller groups are dropped
+        "sheets": 60,             # contact sheets for the biggest groups (faces/F01.jpg ...); named ones always
+        "max_refs": 10,           # group averages kept per known face (newest win)
+    },
     "segments": {
         "model": "claude-opus-5-5",   # one call over the whole transcript
         "effort": "medium",
@@ -440,7 +452,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # style = "enquirer": a 1990s supermarket-tabloid cover (masthead, teaser band and
         # boxes plugging the episode's other videos, big face, yellow headline, inset).
         "style": "classic",       # classic | enquirer
-        "enquirer_prompt_version": "v4",  # prompts/thumbnail_enquirer_<v>.md (v4: names [meta] cast, not "a host")
+        "enquirer_prompt_version": "v5",  # prompts/thumbnail_enquirer_<v>.md (v5: frames say whose face
+                                          # `clipper faces` found; v4: names [meta] cast, not "a host")
+        "face_frames": 2,         # enquirer: with faces.json, each named person's best frames added...
+        "face_people": 4,         # ...for this many people, the ones seen most in the video
         "masthead": "",           # empty = meta.show_name
         "masthead_tagline": "LARGEST CIRCULATION OF ANY STREAM ON KICK",
         "masthead_price": "$1.39",

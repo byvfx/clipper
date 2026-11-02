@@ -206,6 +206,16 @@ def compilation_parts(segs: list[dict]) -> tuple[list[tuple[float, float]], list
     return list(zip(begin, ends)), chapters, t
 
 
+def part_offsets(spans: list[tuple[float, float]]) -> list[list[float]]:
+    """[src_start, src_end, offset in the compilation] per part, unrounded (chapters are
+    rounded to 0.1 s for display; a frame needs better)."""
+    out, t = [], 0.0
+    for b, end in spans:
+        out.append([round(b, 3), round(end, 3), round(t, 3)])
+        t += end - b
+    return out
+
+
 def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = None) -> None:
     """One video per topic with several segments, e.g. every Quartering segment in order."""
     cfg = for_stream(cfg, stream_dir)
@@ -241,6 +251,7 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         listing.unlink()
         chapter_text = "\n".join(f"{hms(c['start_s'])} {c['title']}" for c in chapters)
         write_sidecar(dst, {**comp, "duration_s": round(t, 1), "chapters": chapters,
+                            "parts": part_offsets(spans),
                             "chapter_text": chapter_text,
                             "youtube_description": f"{comp['description']}\n\n{chapter_text}"})
         print(f"{topic}: {len(segs)} segments, {t / 60:.0f} min -> {dst.name}")

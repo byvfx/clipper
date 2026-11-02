@@ -27,6 +27,8 @@ fetch / record -> signals -> transcribe -> score -> segments -> cut -> meta -> t
   moment (15-59 s here, under YouTube's 60 s Content ID block line), ending on a full sentence.
   Picks are also cut as horizontal clips; leave `"picks"` out of `[review] include` to post only their Shorts.
   Covers can use portraits from a photos folder for people talked about but not on screen.
+- **faces**: who is on screen, by face, over every keyframe (CPU, `clipper faces`): groups named
+  against known faces kept for every show; enquirer covers get each named person's best frames and use the found face box (#54).
 - **review**: every item goes to Kitsu and Discord. Approve, reject, hold, or leave a note asking for a change.
   Notes become retakes: the item is re-cut or re-thumbnailed and comes back for review.
 - **schedule / upload**: approved items get release slots and go to YouTube as private videos with a publish time

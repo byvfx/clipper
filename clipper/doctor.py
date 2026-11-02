@@ -702,6 +702,25 @@ def check_photos(cfg: dict) -> None:
     ok("photos", f"{len(names)} in {d}: {', '.join(names)}" if names else f"none yet in {d}")
 
 
+def check_faces(cfg: dict) -> None:
+    from . import faces
+
+    try:
+        import cv2
+    except ImportError:
+        warn("faces", "OpenCV not installed: `clipper faces` can't run here", "uv sync --extra faces")
+        return
+    missing = [n for n in faces.MODELS if not (faces.model_dir(cfg) / n).exists()]
+    ok("faces", f"OpenCV {cv2.__version__}" + (f"; models download on the first scan into {faces.model_dir(cfg)}"
+                                               if missing else ", face models in place"))
+    known = faces.load_known(cfg)
+    if known["people"]:
+        ok("faces", f"{len(known['people'])} known: " + ", ".join(sorted(known["people"])))
+    else:
+        warn("faces", f"no known faces in {faces.known_path(cfg)}",
+             "clipper faces <stream>, then --name F01=Name --enroll (or --enroll-photos)")
+
+
 def check_tailnet(cfg: dict, offline: bool) -> None:
     """[warroom] tailnet: the phone reaches the war room through `tailscale serve` here."""
     if not cfg["warroom"]["tailnet"]:
@@ -767,6 +786,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     if role in ("all", "gpu"):
         check_fonts(cfg)
         check_photos(cfg)
+        check_faces(cfg)
         check_gpu(cfg)
     check_keys(cfg, role)
     if role in ("all", "gpu"):

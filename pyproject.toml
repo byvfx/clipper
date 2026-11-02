@@ -34,6 +34,10 @@ mac = [
 modal = [
     "modal>=1.6",
 ]
+# Who is on screen, by face (`clipper faces`, #54): OpenCV runs two small ONNX models on the CPU.
+faces = [
+    "opencv-python-headless>=5.0",
+]
 # Discord review bot (`clipper bot`).
 discord = [
     "discord-py>=2.5",
