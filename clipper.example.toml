@@ -76,12 +76,14 @@ alert_mention = ""         # prepended to warnings, e.g. "<@123456789012345678>"
 [worker]
 # `clipper worker` on the GPU machine (deploy/worker/worker-task.ps1): every poll_s it
 # looks for recordings the NAS recorder finished (streams/<id>/live/state.json "done")
-# and runs `clipper run <id>`: signals, transcribe, score, segments, cut, meta, thumbs,
+# and runs `clipper run <id>`: signals, transcribe, score, segments, faces, cut, meta, thumbs,
 # review publish. Progress in <id>/run.json, logs in <id>/run_<stage>.log; a failed or
 # interrupted run resumes at its first unfinished stage. paths.streams must be the NAS
 # share the recorder writes to. `clipper worker --status` lists runs.
 poll_s = 300
-stages = ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts", "review"]
+# faces (who is on screen, CPU) runs after the fast lane, before the slow cut; it needs
+# `uv sync --extra faces`: drop it from the list on a machine without that.
+stages = ["signals", "transcribe", "score", "segments", "faces", "cut", "meta", "thumbs", "shorts", "review"]
 fast_lane = true           # clips + Shorts to review first, then the long segments and compilations
 notify = true              # review stage posts Discord cards (needs [discord] enabled)
 channels = []              # only recordings of these Kick slugs; [] = all
@@ -714,6 +716,7 @@ write_articles = true          # after a draft, write the three articles again, 
 article_prompt_version = "v2"  # ...with prompts/weekly_article_<v>.md...
 article_example = "weekly_article_example.md"  # ...and this piece (in prompts/) as the voice to match
 quote_match = 0.75             # a hook this close to word for word in the Short is credited to its speaker
+face_frames = 3                # each person named in a stream's faces.json: their best faces for the pages; 0 = off
 formats = ["tiktok", "youtube"]  # tiktok: 1080x1440 pages | youtube: the same pages 1080x1080 in youtube/
 masthead = ["LOLCOW", "CINEMA"]  # red word, chrome word (then "WEEKLY")
 byline = "BY THE LOLCOW DESK"

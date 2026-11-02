@@ -20,6 +20,14 @@ def test_plan_fast_lane(tmp_path):
     assert worker.plan(c, tmp_path, ["meta", "cut"]) == ["cut", "meta"]
 
 
+def test_faces_runs_after_the_fast_lane_before_the_slow_cut(tmp_path):
+    with_faces = [*SLOW[:4], "faces", *SLOW[4:]]
+    assert worker.plan(cfg(stages=with_faces), tmp_path, lane="slow") == ["faces", "cut", "meta", "thumbs", "review"]
+    assert "faces" not in worker.plan(cfg(stages=with_faces), tmp_path, lane="fast")
+    off = worker.plan(cfg(fast_lane=False, stages=with_faces), tmp_path)
+    assert off.index("segments") < off.index("faces") < off.index("cut") < off.index("thumbs")
+
+
 def test_plan_without_fast_lane_has_no_clips_stages(tmp_path):
     assert not [s for s in worker.plan(cfg(fast_lane=False), tmp_path) if s.startswith("clips")]
 
@@ -143,7 +151,7 @@ def test_every_stage_has_a_cli_command():
         for wc in ({"fast_lane": True, "notify": True}, {"fast_lane": False, "notify": False}):
             args = stages.argv(st.name, "S", wc)
             assert "S" in args and args[0] in {"signals", "transcribe", "score", "segments", "cut",
-                                               "meta", "thumbs", "shorts", "review"}
+                                               "meta", "thumbs", "shorts", "review", "faces"}
 
 
 def test_run_from_follows_the_planned_order():

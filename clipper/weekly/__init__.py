@@ -15,7 +15,7 @@
 Three idempotent steps in one folder:
 - gather: every stream started in the week (shows and pre-shows) -> week.json (segments
   with their titles and summaries, compilations, uploads, Shorts, the hooks of the picks
-  as a verbatim quote pool, which faces thumbnails.json found) and stats.json (hours live,
+  as a verbatim quote pool, the faces faces.json named and thumbnails.json found) and stats.json (hours live,
   chat, top emote, screen time per topic, word counts in the transcripts).
 - draft: [weekly] model writes issue.json from week.json and prompts/weekly_<v>.md: every
   page's copy, who is pictured where (people the renderer can find a face for), the poll.
