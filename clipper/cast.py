@@ -157,10 +157,18 @@ def choose_face(found: list[tuple[dict, list[float]]], person: str, known: dict,
     people = {n.lower(): np.array(r) for n, r in known.items()}
     mine = people.get(person.lower())
     if mine is not None:
-        scored = [(float((mine @ e).max()), f) for f, e in found]
-        score, f = max(scored, key=lambda sf: sf[0])
+        scored = [(float((mine @ e).max()), f, e) for f, e in found]
+        score, f, e = max(scored, key=lambda sf: sf[0])
         if score < match:
             return None, round(score, 3), f"no face like {person}'s (best {score:.2f})"
+        # Someone else enrolled who fits this face better (or well enough): a frame of Don
+        # in a Jer grab used to become Jer at 0.68 although it was Don at 0.92.
+        for name, refs in people.items():
+            if name == person.lower():
+                continue
+            s = float((refs @ e).max())
+            if s >= other or s > score:
+                return None, round(score, 3), f"looks like {name} ({s:.2f}) more than {person} ({score:.2f})"
         return f, round(score, 3), ""
     f, e = max(found, key=lambda fe: fe[0]["px"])
     for name, refs in people.items():
@@ -267,6 +275,10 @@ def add(cfg: dict, person: str, data: bytes, source: dict, claude=None, say=prin
     for other, ph in have["photos"].items():  # Commons keeps a photo and its "(cropped)" copy
         if ph.get("emb") and float(emb @ ph["emb"]) >= SAME_PHOTO:
             say(f"  {source.get('url') or source['key']}: the same photo as {other}")
+            return None
+    for old in have.get("dropped_embs") or []:  # a dropped photo back under another file name
+        if float(emb @ old) >= SAME_PHOTO:
+            say(f"  {source.get('url') or source['key']}: the same as a photo you dropped")
             return None
     W, H = img.size
     bx = [face["box"][0] * W, face["box"][1] * H, face["box"][2] * W, face["box"][3] * H]
@@ -385,6 +397,8 @@ def grab(cfg: dict, sdir: Path, person: str | None, n: int, claude=None, say=pri
         everyone = people(cfg)
         room = {nm: cfg["cast"]["target"] - count(everyone.get(nm)) for nm in names}
         names = [nm for nm in names if room[nm] > 0]
+    if not names:  # before the source is looked for: an old stream whose source is gone is fine then
+        return 0
     src, added, by = source_file(sdir), 0, {}
     with tempfile.TemporaryDirectory() as tmp:
         for name in names:
@@ -558,7 +572,9 @@ def _channel(cfg: dict, ch: str, say) -> list[dict]:
     if not host.endswith(("youtube.com", "youtu.be")):
         say(f"  {ch}: only YouTube and Kick channels so far")
         return []
-    r = ytdl.run("--flat-playlist", "-J", "--playlist-end", str(cfg["cast"]["videos"]), ch.rstrip("/") + "/videos")
+    page = ch.rstrip("/")
+    r = ytdl.run("--flat-playlist", "-J", "--playlist-end", str(cfg["cast"]["videos"]),
+                 page if page.endswith("/videos") else page + "/videos")
     if r.returncode:
         say(f"  {ch}: {ytdl.last_error(r)}")
         return []
@@ -628,6 +644,8 @@ def set_status(cfg: dict, person: str, ids: list[str], status: str) -> None:
             if status == "drop":
                 ph = photos.pop(pid)
                 idx.setdefault("dropped", []).append(ph["key"])
+                if ph.get("emb"):  # so the same picture isn't "new" again under another name
+                    idx.setdefault("dropped_embs", []).append(ph["emb"])
                 (d / ph["file"]).unlink(missing_ok=True)
             else:
                 photos[pid]["status"] = "kept"

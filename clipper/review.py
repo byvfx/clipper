@@ -827,8 +827,14 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
         apply_thumbnail_text(stream_dir, cfg, gazu, fmap, thumb_edits)
     # Merged under the lock: the bot and the war room both sync single items at once.
     with jsonstate.locked(review_path):
+        have = jsonstate.read(review_path, {})
         if keys is not None:
-            out = {**jsonstate.read(review_path, {}), **out}
+            out = {**have, **out}
+        # A whole-stream sync reads Kitsu for a while; a decision made meanwhile (the war
+        # room, a button) already synced its item with a newer Kitsu updated_at: keep that.
+        for k, cur in have.items():
+            if k in out and (cur.get("updated_at") or "") > (out[k].get("updated_at") or ""):
+                out[k] = cur
         out = {k: out[k] for k in state if k in out}  # state order; drops items no longer published
         jsonstate.write(review_path, out)
     if quiet:

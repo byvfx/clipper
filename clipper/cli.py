@@ -45,7 +45,7 @@ def time_arg(s: str) -> float:
 
     try:
         return parse_time(s)
-    except ValueError as e:
+    except (ClipperError, ValueError) as e:
         raise argparse.ArgumentTypeError(str(e)) from None
 
 
@@ -262,7 +262,7 @@ def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
         news.dismiss(cfg, args.ids)
         print(f"dismissed {', '.join(map(str, args.ids))}")
     elif a == "context":
-        e = news.set_context(cfg, args.ids, args.show or "", who="cli")
+        e = news.set_context(cfg, args.ids, args.context_show or "", who="cli")
         print(f"for {e['show']}'s next stream: {e['text']}")
 
 
@@ -598,6 +598,8 @@ def cmd_x(cfg: dict, args: argparse.Namespace) -> None:
         print(f"signed in to X as @{xpost.whoami(cfg)}")
     if args.items:
         xpost.post(cfg, args.items, args.stream, dry_run=args.dry_run)
+    elif args.mark:
+        xpost.mark(cfg, *args.mark)
     elif args.issue:
         xpost.post_issue(cfg, None if args.issue == "latest" else args.issue, dry_run=args.dry_run)
     elif args.auto:
@@ -1069,6 +1071,8 @@ def add_review(sub) -> None:
     m.add_argument("--issue", nargs="?", const="latest", metavar="DAY",
                    help="post a weekly issue's pages as a thread (any day of its week, YYYY-MM-DD; "
                         "default the newest issue)")
+    m.add_argument("--mark", nargs=2, metavar=("KEY", "STATUS"),
+                   help="after a hand check of a post that timed out (\"unknown\"): posted[:URL] or failed")
     p.add_argument("--sign-in", action="store_true", help="one-time X sign-in in your browser (then "
                                                          "carries on with --items/--auto/--issue if given)")
     p.add_argument("--dry-run", action="store_true", help="show files and text, post nothing")
@@ -1307,7 +1311,7 @@ def add_extras(sub) -> None:
     r.add_argument("ids", nargs="+", type=int, metavar="STORY")
     r = nsub.add_parser("context", help="these stories as the show's next stream_context")
     r.add_argument("ids", nargs="+", type=int, metavar="STORY")
-    r.add_argument("--show", help="the show (default: the story's)")
+    r.add_argument("--show", dest="context_show", help="the show (default: the story's)")
 
     p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
     p.add_argument("--month", help="YYYY-MM (default: this month, UTC)")

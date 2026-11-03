@@ -705,7 +705,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
                                   # the best go (Shorts by score, segments by chat heat); {} = all;
                                   # 0 = none of that kind unless pinned
         "budget_hours": 8.0,      # a stream this long gets the whole budget; others scale with length
-        "stale_days": 0,          # an item not out this many days after its first allowed slot
+        "stale_days": 0,          # an item not out this many days after its first allowed slot (a pinned Publish at never goes stale)
                                   # never goes (keeps releases current); 0 = off
         "clip_order": "score",    # score (best first) or stream (oldest stream first)
         "mix_shows": True,        # shows take turns in each kind's queue; false = one queue
@@ -805,9 +805,15 @@ def _coerce(raw: str, like: Any, name: str = "") -> Any:
 
 
 def stream_dir(cfg: dict, ref: str) -> Path:
-    """A stream id under paths.streams, or a stream directory."""
+    """A stream id under paths.streams, or a stream directory. One that doesn't exist is an
+    error here, not a traceback three calls later (or a base config labelled as the stream)."""
     p = Path(ref)
-    return p if p.is_dir() else cfg["paths"]["streams"] / ref
+    if p.is_dir():
+        return p
+    d = cfg["paths"]["streams"] / ref
+    if not d.is_dir():
+        raise ClipperError(f"no stream {ref!r} in {cfg['paths']['streams']} (clipper worker --status lists them)")
+    return d
 
 
 # Settings that take one of a fixed set of values. Anything else would quietly do the wrong
@@ -835,9 +841,15 @@ SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "C
 SHOW_KEYS = ("channel", "channels")  # a [shows.<key>] table's own settings; the rest are sections
 
 
+EFFORTS = ("low", "medium", "high", "xhigh", "max")  # every *effort* key (clipper/llm.py maps them per provider)
+
+
 def check_choices(cfg: dict, where: str = "") -> None:
     bad = [f"[{s}] {k} = {cfg[s][k]!r} (one of: {', '.join(c)})"
            for (s, k), c in CHOICES.items() if s in cfg and cfg[s].get(k) not in c]
+    bad += [f"[{s}] {k} = {v!r} (one of: {', '.join(EFFORTS)})"
+            for s, sec in _sections(cfg) for k, v in sec.items()
+            if "effort" in k and v not in EFFORTS]  # any type: false or 3 is as wrong as "med"
     if bad:
         raise ClipperError(f"{where}not a valid choice: " + "; ".join(bad))
 
@@ -934,6 +946,12 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
         with open(path, "rb") as f:
             data = tomllib.load(f)
         shows = data.pop("shows", {})
+        loose = [k for k, v in data.items() if not isinstance(v, dict)]  # a key above any [section]
+        unknown += [f"{path.name}: {k} = {data[k]!r} is outside any [section]" for k in loose]
+        for k in loose:
+            data.pop(k)
+        if not isinstance(shows, dict) or any(not isinstance(s, dict) for s in shows.values()):
+            raise ClipperError(f"{path.name}: [shows] holds [shows.<key>] tables only")
         unknown += _unknown(data, f"{path.name}: ")
         for key, show in shows.items():
             unknown += _unknown({s: v for s, v in show.items() if isinstance(v, dict)},

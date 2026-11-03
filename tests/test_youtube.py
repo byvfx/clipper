@@ -51,7 +51,7 @@ def fake_uploads(monkeypatch, fail: dict | None = None) -> list[str]:
     """upload_one replaced: records the keys it was given, raises for the ones in `fail`."""
     done: list[str] = []
 
-    def one(cfg, yt, e, sched, sched_path, sources, playlists, cache_path, tz):
+    def one(cfg, yt, e, sched, sched_path, sources, playlists, cache_path, tz, now=None):
         if fail and e["key"] in fail:
             raise fail[e["key"]]
         done.append(e["key"])

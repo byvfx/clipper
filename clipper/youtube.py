@@ -758,12 +758,12 @@ def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: i
     cache_path = paths["youtube_token"].with_name("youtube_playlists.json")
     playlists = jsonstate.read(cache_path, {})
     failed: list[str] = []
-    for e in due:
+    for e in due:  # with the run's `now`: a long run mustn't carry a later entry into "public at once"
         # #77 M5: one bad entry (a missing file, a refused upload) no longer blocks every
         # later one each hour; it's noted on the entry and the run moves on. A quota or daily
         # limit refusal stops the run, since everything after would fail the same way.
         try:
-            upload_one(cfg, yt, e, sched, sched_path, sources, playlists, cache_path, tz)
+            upload_one(cfg, yt, e, sched, sched_path, sources, playlists, cache_path, tz, now)
         except Exception as ex:  # noqa: BLE001  # ClipperError: a missing file etc.
             reason = getattr(ex, "reason", "") or ""
             text = f"{type(ex).__name__}: {ex}"[:300]
@@ -780,7 +780,7 @@ def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: i
 
 
 def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: dict,
-               playlists: dict, cache_path: Path, tz) -> None:
+               playlists: dict, cache_path: Path, tz, now: datetime | None = None) -> None:
     # #77 M6: a show's [shows.<key>.youtube] (manual_publish, notify_subscribers, captions,
     # made_for_kids, playlist_privacy...) applies to its uploads.
     cfg = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])
@@ -793,8 +793,13 @@ def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: d
                          if parents else {})
     m["description"] = clean(with_links(m["description"], "", links), 5000)
     publish_utc = datetime.fromisoformat(e["publish_at"]).astimezone(UTC)
-    at_once = publish_utc <= datetime.now(UTC) + timedelta(minutes=yc["min_lead_minutes"])
+    lead = timedelta(minutes=yc["min_lead_minutes"])
+    at_once = publish_utc <= (now or datetime.now(UTC)) + lead
     slot = f"{publish_utc.astimezone(tz):%a %m-%d %H:%M}"
+    if not at_once and e.get("source") != "asap" and publish_utc <= datetime.now(UTC) + lead:
+        # Its slot passed while earlier uploads ran: a past publishAt would publish at once.
+        print(f"  skipped {e['key']}: its slot {slot} passed during this run; the next replan moves it")
+        return
     if yc["manual_publish"]:  # stays private; you make it public in YouTube Studio
         status, when = {"privacyStatus": "private"}, f"private, publish in Studio {'now' if at_once else slot}"
     elif at_once:
@@ -815,9 +820,11 @@ def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: d
     url = f"https://youtu.be/{vid}"
     # Record the upload before the optional extras, so a failure there can't
     # make the next run upload the same video twice.
+    # publish_at and source too: a replan that moved the slot while this ran would otherwise
+    # leave schedule.json (and Kitsu, the digest) saying a time YouTube doesn't have.
     done = {"status": "uploaded", "video_id": vid, "url": url,
             "uploaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
-            "source_links": links}
+            "source_links": links, "publish_at": e["publish_at"], "source": e.get("source")}
     e.update(done)
     # Re-read under the lock: a replan or `clipper rumble` may have written meanwhile.
     with jsonstate.update(sched_path) as fresh:
