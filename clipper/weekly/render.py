@@ -665,11 +665,11 @@ class Renderer:
         y = rows_y + len(cast) * rh + 8
         rest = sum(mins[m["topic"]] for m in cast[1:])
         line = c["lolcow_line"]
-        if "put together" in line.lower() and mins[cast[0]["topic"]] <= rest:
+        if cast and "put together" in line.lower() and mins[cast[0]["topic"]] <= rest:
             line = f"More airtime than anyone else this week: {hm(mins[cast[0]['topic']])} of it."
             self.warnings.append("page 08: 'put together' line was false; replaced")
         lf = F.bahn(36)
-        label = f"{self.T.lolcow}: {up(c['lolcow'] or cast[0]['name'])}"
+        label = f"{self.T.lolcow}: {up(c['lolcow'] or (cast[0]['name'] if cast else ''))}"
         d.rectangle([MX - 6, y + 4, MX + d.textlength(label, font=lf) + 6, y + 44], fill=P.yellow)
         d.text((MX, y), label, font=lf, fill=P.ink)
         y = para(d, (MX, y + 50), line, F.serif(29), CW, P.ink, 36) + 20

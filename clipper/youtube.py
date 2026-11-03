@@ -793,8 +793,13 @@ def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: d
                          if parents else {})
     m["description"] = clean(with_links(m["description"], "", links), 5000)
     publish_utc = datetime.fromisoformat(e["publish_at"]).astimezone(UTC)
-    at_once = publish_utc <= (now or datetime.now(UTC)) + timedelta(minutes=yc["min_lead_minutes"])
+    lead = timedelta(minutes=yc["min_lead_minutes"])
+    at_once = publish_utc <= (now or datetime.now(UTC)) + lead
     slot = f"{publish_utc.astimezone(tz):%a %m-%d %H:%M}"
+    if not at_once and e.get("source") != "asap" and publish_utc <= datetime.now(UTC) + lead:
+        # Its slot passed while earlier uploads ran: a past publishAt would publish at once.
+        print(f"  skipped {e['key']}: its slot {slot} passed during this run; the next replan moves it")
+        return
     if yc["manual_publish"]:  # stays private; you make it public in YouTube Studio
         status, when = {"privacyStatus": "private"}, f"private, publish in Studio {'now' if at_once else slot}"
     elif at_once:

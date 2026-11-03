@@ -849,7 +849,7 @@ def check_choices(cfg: dict, where: str = "") -> None:
            for (s, k), c in CHOICES.items() if s in cfg and cfg[s].get(k) not in c]
     bad += [f"[{s}] {k} = {v!r} (one of: {', '.join(EFFORTS)})"
             for s, sec in _sections(cfg) for k, v in sec.items()
-            if "effort" in k and isinstance(v, str) and v not in EFFORTS]
+            if "effort" in k and v not in EFFORTS]  # any type: false or 3 is as wrong as "med"
     if bad:
         raise ClipperError(f"{where}not a valid choice: " + "; ".join(bad))
 

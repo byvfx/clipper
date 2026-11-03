@@ -32,10 +32,10 @@ def parse_time(s: str) -> float:
         if len(parts) == 2:
             parts.append(0.0)
         if len(parts) != 3:
-            raise ClipperError(f"not a time: {s!r} (use seconds, M:SS or H:MM:SS)")
+            raise ClipperError(f"not a time: {s!r} (use seconds, H:MM or H:MM:SS)")
         return parts[0] * 3600 + parts[1] * 60 + parts[2]
     m = re.fullmatch(r"(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s?)?", s)
     if not m or not any(m.groups()):
-        raise ClipperError(f"not a time: {s!r} (use seconds, M:SS or H:MM:SS)")
+        raise ClipperError(f"not a time: {s!r} (use seconds, H:MM or H:MM:SS)")
     h, mi, sec = (float(x) if x else 0.0 for x in m.groups())
     return h * 3600 + mi * 60 + sec

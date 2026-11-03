@@ -428,10 +428,12 @@ def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: C
         # the same id is a different moment, so no id keeps its number. The history stays, so
         # the new numbers never collide with keys already in Kitsu or schedule.json.
         print("windows.json changed since the last score: picks get new numbers (old keys keep theirs)")
-        old_b = {"numbers": {f"\0{k}": v for k, v in number_history(old_b).items()}, "picks": []}
+        # Retired ids stay in the history under RETIRED, so their numbers stay reserved for
+        # good and a later re-score can't hand v02_t02 to yet another moment; hand picks
+        # (`clipper pick`, not positional) keep their ids, numbers and places in the list.
+        old_b = retire_numbers(old_b, hand_ids)
     pass_b["picks"], pass_b["numbers"] = carry_numbers(
         old_b, pass_b.get("picks", []) + [p for p in old_b.get("picks", []) if p["id"] in hand_ids])
-    pass_b["numbers"] = {k.lstrip("\0"): v for k, v in pass_b["numbers"].items()}
     out = {"stream_id": stream_dir.name, "title": meta.get("title"),
            "prompt_version": prompts.version, "cost_usd": round(claude.cost, 4),
            "windows_sha": windows_sha, "pass_a": results, "pass_b": pass_b}
@@ -446,6 +448,18 @@ def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: C
         print(f"{i:>2}. {p['id']} {c.get('in_s', 0):8.1f}-{c.get('out_s', 0):8.1f}s "
               f"[{c.get('category')}, A={c.get('score')}] {p['title']}")
     return out
+
+
+RETIRED = "retired:"  # pass_b "numbers" prefix for ids whose moment changed (windows.json rewritten)
+
+
+def retire_numbers(old_b: dict, hand_ids: set[str]) -> dict:
+    """pass_b as the next carry_numbers should see it after windows.json changed: every
+    positional id's number stays reserved under RETIRED (so no later re-score can hand it to
+    another moment), hand picks keep their ids, numbers and places in the list."""
+    return {"numbers": {k if k in hand_ids or k.startswith(RETIRED) else RETIRED + k: v
+                        for k, v in number_history(old_b).items()},
+            "picks": [p for p in old_b.get("picks", []) if p["id"] in hand_ids]}
 
 
 def file_sha(path: Path) -> str:

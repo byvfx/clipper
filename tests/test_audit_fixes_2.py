@@ -154,3 +154,32 @@ def test_stream_dir_still_accepts_a_directory(tmp_path):
     d = tmp_path / "anywhere"
     d.mkdir()
     assert config.stream_dir({"paths": {"streams": Path("/nope")}}, str(d)) == d
+
+
+# ---------- review round ----------
+
+def test_retired_numbers_stay_reserved_and_hand_picks_stay():
+    old_b = {"picks": [{"id": "t01", "n": 1}, {"id": "t02", "n": 2}, {"id": "h01", "n": 3}], "numbers": {"t05": 4}}
+    fresh = scoring.retire_numbers(old_b, {"h01"})
+    assert fresh["numbers"] == {"retired:t01": 1, "retired:t02": 2, "h01": 3, "retired:t05": 4}
+    assert [p["id"] for p in fresh["picks"]] == ["h01"]
+    from clipper.states import carry_numbers
+    picks, numbers = carry_numbers(fresh, [{"id": "t02"}, {"id": "h01"}])
+    assert [(p["id"], p["n"]) for p in picks] == [("t02", 5), ("h01", 3)]  # t02 is a new moment: a new number
+    again = scoring.retire_numbers({"picks": picks, "numbers": numbers}, {"h01"})
+    assert again["numbers"]["retired:t02"] == 5 and again["numbers"]["retired:t01"] == 1
+
+
+def test_an_unknown_x_post_keeps_its_place_and_is_never_claimed():
+    from clipper import xpost
+    now = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
+    x = {"status": "unknown", "failed_at": "2026-11-03T11:00:00+00:00"}
+    assert xpost.active(x, now) == datetime(2026, 11, 3, 11, 0, tzinfo=UTC)
+    assert xpost.active({"status": "failed", "failed_at": "2026-11-03T11:00:00+00:00"}, now) is None
+
+
+def test_effort_values_of_any_type_are_checked(defaults):
+    for bad in (False, 3, ["high"]):
+        cfg = {**defaults, "meta": {**defaults["meta"], "effort": bad}}
+        with pytest.raises(ClipperError, match=r"\[meta\] effort"):
+            config.check_choices(cfg)

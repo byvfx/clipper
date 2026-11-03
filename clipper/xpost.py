@@ -27,7 +27,8 @@ max_per_24h. X doesn't wait for YouTube (a clip is worth most on X while the top
 hot); with [x] after_youtube it does, and asks YouTube that each Short is really public
 (an upload can stay private). --auto tries a failed post again up to MAX_TRIES times, and skips titles that say
 "host(s)". A post call that times out is recorded "unknown" and never retried: X may have
-created it, so check x.com by hand. Settings are the Short's show's ([shows.<key>.x]); the allowance is the account's.
+created it, so check x.com by hand, then `clipper x --mark <key> posted[:url]|failed`.
+Settings are the Short's show's ([shows.<key>.x]); the allowance is the account's.
 A failed post makes the command exit non-zero, so the bot DMs it.
 
 Keys: paths.x_client, JSON {"client_id": ...} for a Native App (public client), plus
@@ -274,6 +275,8 @@ def active(x: dict, now: datetime) -> datetime | None:
     if x.get("status") == "posting":
         at = datetime.fromisoformat(x["claimed_at"])
         return at if (now - at).total_seconds() < CLAIM_S else None
+    if x.get("status") == "unknown":  # a timed-out post: X may have it, so it keeps its place
+        return datetime.fromisoformat(x["failed_at"])
     return None
 
 
@@ -345,6 +348,22 @@ def due(sched: dict, xc_for, now: datetime | None = None, aired=lambda e: None,
     return sorted((e for e in sched["entries"] if ready(e)), key=order)
 
 
+def mark(cfg: dict, key: str, status: str) -> None:
+    """After a hand check of an "unknown" record (a post call that timed out): `posted` (X
+    has it; `posted:<url>` keeps the link) or `failed` (it isn't there; --auto may try again)."""
+    status, _, url = status.partition(":")
+    if status not in ("posted", "failed"):
+        raise ClipperError("clipper x --mark KEY posted[:URL] or failed")
+    sched = jsonstate.load(cfg["paths"]["schedule"])
+    if not any(e["key"] == key for e in sched["entries"] + sched.get("unscheduled", [])):
+        raise ClipperError(f"{key}: not in schedule.json (a full key, e.g. kick-1/v01_t20)")
+    now = costs.now_iso()
+    rec = ({"status": "posted", "posted_at": now, "url": url, "by_hand": True} if status == "posted"
+           else {"status": "failed", "tries": 0, "error": "not on X (checked by hand)", "failed_at": now})
+    rumble.save_platform(cfg, {key: rec}, "x")
+    print(f"{key}: X record set to {status}")
+
+
 def claim(cfg: dict, key: str) -> str:
     """Take `key` for this run under the schedule's lock, so an overlapping run (the bot's
     --auto and a hand --items) can't post it twice or past max_per_24h. "" when claimed,
@@ -357,6 +376,8 @@ def claim(cfg: dict, key: str) -> str:
         x = x_of(e)
         if x.get("status") == "posted":
             return f"already on X ({x['url']})"
+        if x.get("status") == "unknown":
+            return "a post call timed out: check x.com by hand, then clipper x --mark <key> posted|failed"
         if active(x, now):
             return "being posted by another run"
         if used_last_24h(cfg, sched, now) >= cfg["x"]["max_per_24h"]:

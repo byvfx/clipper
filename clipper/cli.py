@@ -598,6 +598,8 @@ def cmd_x(cfg: dict, args: argparse.Namespace) -> None:
         print(f"signed in to X as @{xpost.whoami(cfg)}")
     if args.items:
         xpost.post(cfg, args.items, args.stream, dry_run=args.dry_run)
+    elif args.mark:
+        xpost.mark(cfg, *args.mark)
     elif args.issue:
         xpost.post_issue(cfg, None if args.issue == "latest" else args.issue, dry_run=args.dry_run)
     elif args.auto:
@@ -1069,6 +1071,8 @@ def add_review(sub) -> None:
     m.add_argument("--issue", nargs="?", const="latest", metavar="DAY",
                    help="post a weekly issue's pages as a thread (any day of its week, YYYY-MM-DD; "
                         "default the newest issue)")
+    m.add_argument("--mark", nargs=2, metavar=("KEY", "STATUS"),
+                   help="after a hand check of a post that timed out (\"unknown\"): posted[:URL] or failed")
     p.add_argument("--sign-in", action="store_true", help="one-time X sign-in in your browser (then "
                                                          "carries on with --items/--auto/--issue if given)")
     p.add_argument("--dry-run", action="store_true", help="show files and text, post nothing")
