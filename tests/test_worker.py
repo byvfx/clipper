@@ -151,7 +151,7 @@ def test_every_stage_has_a_cli_command():
         for wc in ({"fast_lane": True, "notify": True}, {"fast_lane": False, "notify": False}):
             args = stages.argv(st.name, "S", wc)
             assert "S" in args and args[0] in {"signals", "transcribe", "score", "segments", "cut",
-                                               "meta", "thumbs", "shorts", "review", "faces"}
+                                               "meta", "thumbs", "shorts", "review", "faces", "cast"}
 
 
 def test_run_from_follows_the_planned_order():

@@ -288,3 +288,60 @@ def test_labelled_photos_for_covers_and_known_figures(cfg, monkeypatch):
     assert figures(cfg) == "Jer (The Quartering), Blade"
     cfg["cast"]["known_figures"], cfg["thumbnail"]["photos"] = True, ""
     assert figures(cfg) == "Jer (The Quartering), Blade" and cast.figures(cfg) == []
+
+
+def test_the_brave_key_from_env_or_the_secrets_file(cfg, tmp_path, monkeypatch):
+    monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+    cfg["paths"]["brave_key"] = tmp_path / "brave_secret.txt"
+    assert cast.search_key(cfg) == ""                                    # no file yet
+    (tmp_path / "brave_secret.txt").write_text("  file-key\n", encoding="utf-8")
+    assert cast.search_key(cfg) == "file-key" and cast.search_key() == ""
+    monkeypatch.setenv("BRAVE_API_KEY", "env-key")
+    assert cast.search_key(cfg) == "env-key"
+
+
+def test_sure_photos_are_kept_up_to_the_target(cfg, monkeypatch):
+    known(cfg, Jer=JER)
+    seeds = iter(range(100, 200))
+    monkeypatch.setattr(cast, "faces_in", lambda img, cfg: [face(near(JER, scale=0.3, seed=next(seeds)))])
+    labels = iter([{"label": "neutral", "flag": ""}, {"label": "angry", "flag": "a thumbnail with text"},
+                   {"label": "smug", "flag": ""}, {"label": "sad", "flag": ""}])
+    monkeypatch.setattr(cast, "label_photo", lambda cfg, path, claude: next(labels))
+    cfg["cast"].update(auto_keep=0.65, target=2)
+    ids = [cast.add(cfg, "Jer", jpeg(), {"key": f"s{i}", "kind": "stream"}, claude=object()) for i in range(4)]
+    photos_ = jsonstate.load(cast.person_dir(cfg, "Jer") / "cast.json")["photos"]
+    assert [photos_[i]["status"] for i in ids] == ["kept", "new", "kept", "new"]  # doubt waits; target 2 reached
+    cc, ok = {"auto_keep": 0.65, "auto_keep_sources": ["stream"]}, {"label": "neutral", "flag": "", "source": "stream"}
+    assert cast.sure(cc, 0.9, ok) and not cast.sure({**cc, "auto_keep": 0}, 0.99, ok)
+    assert not cast.sure(cc, None, ok)                                  # not enrolled
+    assert not cast.sure(cc, 0.9, {**ok, "source": "web"})              # image search: you keep those
+
+
+def test_auto_finds_for_the_people_short_of_photos(cfg, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    known(cfg, Jer=JER, Don=DON)
+    cast.person_dir(cfg, "Victor").mkdir()
+    cast.person_dir(cfg, "Don").mkdir()
+    jsonstate.write(cast.person_dir(cfg, "Don") / "cast.json",
+                    {"photos": {str(i): {"file": f"{i}.jpg", "status": "kept"} for i in range(6)}})
+    two_days = (datetime.now(UTC) - timedelta(days=2)).isoformat(timespec="seconds")
+    jsonstate.write(cast.person_dir(cfg, "Victor") / "cast.json", {"auto": {"at": two_days, "added": 0}})
+    asked = []
+    monkeypatch.setattr(cast, "find", lambda cfg, name, sources, claude, say: asked.append((name, sources)) or 2)
+    assert cast.auto(cfg, say=lambda *a: None) == 2
+    assert asked == [("Jer", ["commons", "channels", "search"])]  # Don has 6; Victor found nothing 2 days ago
+    assert jsonstate.load(cast.person_dir(cfg, "Jer") / "cast.json")["auto"]["added"] == 2
+    cfg["cast"]["retry_days"] = 1
+    asked.clear()
+    cast.auto(cfg, say=lambda *a: None)
+    assert [n for n, _ in asked] == ["Jer", "Victor"]
+
+
+def test_the_worker_stage_grab_needs_no_faces(cfg, tmp_path):
+    sdir = tmp_path / "kick-1"
+    sdir.mkdir()
+    assert cast.grab(cfg, sdir, None, 4, needed=True, say=lambda *a: None) == 0
+    assert jsonstate.load(sdir / "cast_grab.json")["added"] == {}
+    with pytest.raises(ClipperError, match="no faces.json"):
+        cast.grab(cfg, sdir, None, 4)

@@ -173,6 +173,7 @@ class Bot(discord.Client):
         self.preshow_proc: asyncio.subprocess.Process | None = None
         self.tiktok_proc: asyncio.subprocess.Process | None = None
         self.x_proc: asyncio.subprocess.Process | None = None
+        self.cast_proc: asyncio.subprocess.Process | None = None
         register_commands(self)
 
     async def setup_hook(self) -> None:
@@ -233,6 +234,9 @@ class Bot(discord.Client):
             ("analytics", cfg["analytics"]["auto_hours"] * 3600,
              lambda: paths["youtube_token"].exists() and has_upload(),
              lambda: self.loop.create_task(self._clipper_bg("analytics", ["analytics"]))),
+            ("cast", cfg["cast"]["auto_hours"] * 3600,  # #41: photos for anyone short of them
+             lambda: bool(cfg["thumbnail"]["photos"]) and not self.running("cast"),
+             lambda: self.loop.create_task(self._clipper_bg("cast", ["cast", "auto"]))),
             # retake notes made in Kitsu (review.json is synced by the card refresh and the replan)
             ("retake", (cfg["discord"]["refresh_minutes"] or 10) * 60 if cfg["retake"]["auto"] else 0,
              lambda: retake.pending(cfg), self.start_retake),

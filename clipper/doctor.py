@@ -726,9 +726,10 @@ def check_cast(cfg: dict) -> None:
              "war room > Cast (or clipper cast find <Person>, clipper cast grab <stream>)")
     elif people:
         ok("cast", f"{len(people)} people, {cc['min_photos']}+ photos each")
-    if not cast.search_key():
-        warn("cast", "no $BRAVE_API_KEY: cast image search is off (Commons, channels and streams still work)",
-             "optional: a Brave Search API key (api-dashboard.search.brave.com) as $BRAVE_API_KEY")
+    if not cast.search_key(cfg):
+        warn("cast", f"no $BRAVE_API_KEY or {cfg['paths']['brave_key']}: cast image search is off "
+             "(Commons, channels and streams still work)",
+             "optional: a Brave Search API key (api-dashboard.search.brave.com) in that file or $BRAVE_API_KEY")
 
 
 def check_faces(cfg: dict) -> None:

@@ -30,7 +30,8 @@ fetch / record -> signals -> transcribe -> score -> segments -> faces -> cut -> 
   the cast library (`clipper cast`, #41) keeps a few head-and-shoulders photos of each regular
   there, from their streams' named faces, Wikimedia Commons, their own channels and image search,
   each checked against their known face and labelled (neutral, laughing, angry...); the war
-  room's Cast window keeps or drops them. The cover model and the weekly pick the photo whose
+  room's Cast window keeps or drops them. It fills itself from each new stream and a daily web
+  find, keeping the photos whose face surely matches. The cover model and the weekly pick the photo whose
   label fits the story, and the cast joins the prompts' known figures.
 - **faces**: who is on screen, by face, over every keyframe (CPU, `clipper faces`): groups named
   against known faces kept for every show; enquirer covers get each named person's best frames and use the found face box,

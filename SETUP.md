@@ -133,11 +133,22 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    Every photo is checked for the person's face first (only theirs if they're enrolled in
    `faces/known.json`), cropped 4:5 and labelled by a Haiku call (`[cast] label_model`,
    about $0.0002 a photo; `--no-label` or `""` skips it). Image search is Brave's Search API
-   (about $5 per 1,000 searches): make a key at api-dashboard.search.brave.com and set the
-   Windows user environment variable `BRAVE_API_KEY`; without it the other sources still work.
+   (about $5 per 1,000 searches): make a key at api-dashboard.search.brave.com and put it in
+   `secrets/brave_secret.txt` (`[paths] brave_key`) or the Windows user environment variable
+   `BRAVE_API_KEY`; without it the other sources still work.
    It never takes photo agencies' pictures (`[cast] blocked_domains`), but its photos have no
    known licence, so prefer stream and Commons ones for covers (covers do, given the choice).
    `clipper doctor` flags anyone with fewer than `[cast] min_photos` (3) kept.
+
+   It fills itself: the worker's `cast` stage (after `faces` in `[worker] stages`) grabs each
+   new stream's named faces for anyone with fewer than `[cast] target` (6) photos, and the bot
+   runs `clipper cast auto` every `[cast] auto_hours` (24), a find from every source for the
+   same people (someone it found nothing for waits `[cast] retry_days`). A photo is kept
+   without asking when it comes from a stream, Commons or a channel (`[cast] auto_keep_sources`;
+   never image search, whose licence is unknown), the person is enrolled, their face matches at
+   `[cast] auto_keep` (0.65) or better and the label has no doubt; the rest wait as New in the
+   Cast window. Costs: a
+   Haiku label per photo and a Brave search per person tried, cents a day.
 
    Covers (`[thumbnail] enquirer_prompt_version` v6) and the weekly (`[weekly] prompt_version`
    v3) are told each person's labels and pick the photo that fits the story; the war room's

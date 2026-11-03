@@ -223,7 +223,11 @@ def cmd_cast(cfg: dict, args: argparse.Namespace) -> None:
     if a == "add":
         cast.add_file(cfg, args.person, args.src, claude)
     elif a == "grab":
-        print(f"{cast.grab(cfg, stream_dir(cfg, args.stream), args.person, args.n, claude)} new photo(s)")
+        sdir = stream_dir(cfg, args.stream)
+        n = cast.grab(config.for_stream(cfg, sdir), sdir, args.person, args.n, claude, needed=args.needed)
+        print(f"{n} new photo(s)")
+    elif a == "auto":
+        print(f"{cast.auto(cfg, claude)} new photo(s)")
     elif a == "find":
         print(f"{cast.find(cfg, args.person, args.source or list(cast.SOURCES), claude)} new photo(s)")
     if claude and claude.cost:
@@ -1199,9 +1203,11 @@ def add_extras(sub) -> None:
     add_stream(r)
     r.add_argument("--person", help="only this person (default: everyone named)")
     r.add_argument("-n", type=int, default=4, help="photos tried per person (default 4)")
+    r.add_argument("--needed", action="store_true", help="only people with fewer than [cast] target photos; "
+                                                         "no faces.json is not an error (the worker's cast stage)")
     r.add_argument("--no-label", action="store_true", help="skip the label call")
     r = csub.add_parser("find", help="new photos from the web: Wikimedia Commons, the person's channels, "
-                                     "image search ($BRAVE_API_KEY)")
+                                     "image search ($BRAVE_API_KEY or [paths] brave_key)")
     r.add_argument("person")
     r.add_argument("--source", action="append", choices=["commons", "channels", "search"],
                    help="only these (repeatable; default all)")
@@ -1209,6 +1215,9 @@ def add_extras(sub) -> None:
     r = csub.add_parser("add", help="one photo from a file or a web address")
     r.add_argument("person")
     r.add_argument("src", metavar="FILE|URL")
+    r.add_argument("--no-label", action="store_true", help="skip the label call")
+    r = csub.add_parser("auto", help="a find from every source for everyone with fewer than [cast] target "
+                                     "photos (the bot runs it every [cast] auto_hours)")
     r.add_argument("--no-label", action="store_true", help="skip the label call")
     for act, what in (("keep", "keep these new photos"), ("drop", "delete these photos; their sources aren't fetched again")):
         r = csub.add_parser(act, help=what)

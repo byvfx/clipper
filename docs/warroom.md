@@ -82,7 +82,12 @@ photos/<Person>/`, for covers and the weekly. **Cast** in the header opens it.
   same for people it pictures from a photo, and everyone with a kept photo joins the prompts'
   known figures.
 
-The command line: `clipper cast list|grab|find|add|keep|drop|label|set` (SETUP.md, Photos).
+Photos also arrive by themselves (the worker after each stream, the bot's daily `cast auto`);
+the sure ones are already kept (not from image search, an enrolled face matched well, a label
+with no doubt), so
+look over Kept too and drop what's wrong.
+
+The command line: `clipper cast list|grab|find|add|keep|drop|label|set|auto` (SETUP.md, Photos).
 
 ## Schedule and uploads
 
