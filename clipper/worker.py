@@ -38,6 +38,7 @@ from pathlib import Path
 
 from . import jsonstate, preshow, stages
 from .config import for_stream, show_args, show_of_channel
+from .errors import ClipperError
 
 log = logging.getLogger("clipper.worker")
 
@@ -265,6 +266,12 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
     name = stream_dir.name
     ok = False
     try:
+        try:  # #110: news context queued for this show's next stream, before scoring reads it
+            from . import news
+
+            news.apply_pending(cfg, stream_dir, say=lambda m: log.info("%s: %s", name, m))
+        except (ClipperError, OSError, ValueError, KeyError) as e:  # never worth failing a stream over
+            log.warning("%s: news context not applied: %s", name, e)
         for stage in order:
             if run.lost:  # the heartbeat found the lock taken over
                 raise Busy(f"{name}: another worker took the stream over")

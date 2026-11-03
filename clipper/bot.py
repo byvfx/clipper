@@ -46,7 +46,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord import app_commands
 
-from . import actions, alerts, cardsync, notify, preshow, retake, schedule
+from . import actions, alerts, cardsync, news, notify, preshow, retake, schedule
 from .errors import ClipperError
 from .timefmt import length
 
@@ -181,6 +181,7 @@ class Bot(discord.Client):
         self.tiktok_proc: asyncio.subprocess.Process | None = None
         self.x_proc: asyncio.subprocess.Process | None = None
         self.cast_proc: asyncio.subprocess.Process | None = None
+        self.news_proc: asyncio.subprocess.Process | None = None
         register_commands(self)
 
     async def setup_hook(self) -> None:
@@ -244,6 +245,9 @@ class Bot(discord.Client):
             ("cast", cfg["cast"]["auto_hours"] * 3600,  # #41: photos for anyone short of them
              lambda: bool(cfg["thumbnail"]["photos"]) and has_opencv() and not self.running("cast"),
              lambda: self.loop.create_task(self._clipper_bg("cast", ["cast", "auto"]))),
+            ("news", cfg["news"]["check_minutes"] * 60,  # #110: headlines about the shows' people
+             lambda: not self.running("news"),
+             lambda: self.loop.create_task(self._news())),
             # retake notes made in Kitsu (review.json is synced by the card refresh and the replan)
             ("retake", (cfg["discord"]["refresh_minutes"] or 10) * 60 if cfg["retake"]["auto"] else 0,
              lambda: retake.pending(cfg), self.start_retake),
@@ -357,6 +361,100 @@ class Bot(discord.Client):
         await self._clipper_bg("upload", ["schedule"])
         await self._clipper_bg("upload", ["upload"])
 
+    async def _news(self) -> None:
+        """`clipper news check`, then post the new stories and any pre-show suggestion due."""
+        await self._clipper_bg("news", ["news", "check"])
+        try:
+            await self.post_news()
+        except (Exception, SystemExit):
+            log.exception("news: posting failed")
+
+    async def news_channel(self):
+        """[news] channel_id, else the review channel; in a forum, one "News" post kept for it."""
+        nc, dc = self.cfg["news"], self.cfg["discord"]
+        cid = int(nc["channel_id"] or dc["review_channel_id"] or 0)
+        if not cid:
+            raise ClipperError("set [news] channel_id or [discord] review_channel_id")
+        channel = self.get_channel(cid) or await self.fetch_channel(cid)
+        if not isinstance(channel, discord.ForumChannel):
+            return channel
+        path = news.home(self.cfg) / "discord.json"
+        state = await asyncio.to_thread(news.jsonstate.read, path, {})
+        if state.get("channel_id") == str(cid) and state.get("thread_id"):
+            with contextlib.suppress(discord.NotFound):
+                return self.get_channel(int(state["thread_id"])) or await self.fetch_channel(int(state["thread_id"]))
+        made = await channel.create_thread(name="News", content="📰 Headlines about the shows' people "
+                                           "(`clipper news`). Dismiss what isn't news; Tonight's context "
+                                           "adds a story to the show's next stream.")
+        await asyncio.to_thread(news.jsonstate.write, path, {"channel_id": str(cid), "thread_id": str(made.thread.id)})
+        return made.thread
+
+    async def post_news(self) -> None:
+        cfg = self.cfg
+        todo = await asyncio.to_thread(news.unposted, cfg)
+        due = await asyncio.to_thread(news.due_suggestions, cfg) if cfg["news"]["preshow_minutes"] > 0 else []
+        if not todo and not due:
+            return
+        channel = await self.news_channel()
+        for s in todo:
+            view = discord.ui.View(timeout=None)
+            view.add_item(CardButton("newsctx", str(s["id"]), "Tonight's context", discord.ButtonStyle.primary))
+            view.add_item(CardButton("newsdismiss", str(s["id"]), "Dismiss"))
+            msg = await channel.send(news.post_text(cfg, s), view=view)
+            await asyncio.to_thread(news.mark, cfg, s["id"], posted_at=news.iso(news.now()), message_id=str(msg.id))
+        for d in due:
+            ref = f"{d['show']}.{'-'.join(map(str, d['stories']))}"
+            view = discord.ui.View(timeout=None)
+            if len(ref) <= 80:
+                view.add_item(CardButton("newsctx", ref, f"Add to {d['show_name']}'s context",
+                                         discord.ButtonStyle.primary))
+            start = datetime.fromisoformat(d["start"])
+            text = (f"🗞️ **{d['show_name']}** usually starts <t:{int(start.timestamp())}:R>. In the news today "
+                    "about its people:\n" + "\n".join(f"- #{i} {h}" for i, h in zip(d["stories"], d["headlines"]))
+                    + f"\n\nAs context for tonight's clips:\n> {d['text'][:1200]}")
+            await channel.send(text[:2000], view=view)
+            await asyncio.to_thread(news.mark_suggested, cfg, d["slot"])
+        log.info(f"news: posted {len(todo)} story(ies), {len(due)} pre-show suggestion(s)")
+
+    async def news_button(self, interaction: discord.Interaction, action: str, ref: str) -> None:
+        """newsdismiss <id>; newsctx [<show>.]<id>[-<id>...] shows the context text with an Add
+        button (newsadd), which queues it for the show's next stream."""
+        show, _, ids_text = ref.rpartition(".")
+        try:
+            ids = [int(x) for x in ids_text.split("-")]
+        except ValueError:
+            await interaction.response.send_message(f"Bad news button {ref}", ephemeral=True)
+            return
+        who = self.who(interaction)
+        try:
+            if action == "newsdismiss":
+                await asyncio.to_thread(news.dismiss, self.cfg, ids)
+                log.info(f"{who}: news dismiss {ids}")
+                await interaction.response.edit_message(
+                    content=f"~~{interaction.message.content[:1900]}~~\nDismissed by {interaction.user.name}.",
+                    view=None)
+            elif action == "newsctx":
+                found = await asyncio.to_thread(news.stories, self.cfg, 3, ids)
+                show = show or (await asyncio.to_thread(news.story_show, self.cfg, found[0]) if found else "")
+                text = " ".join(news.context_text(s) for s in found)
+                view = discord.ui.View(timeout=None)
+                view.add_item(CardButton("newsadd", f"{show or '-'}.{ids_text}", "Add it", discord.ButtonStyle.success))
+                await interaction.response.send_message(
+                    f"For {news.show_names(self.cfg).get(show, show) or 'which show? (`clipper news context --show`)'}'s "
+                    f"next stream, [scoring] stream_context gets:\n> {text[:1700]}", view=view if show else None,
+                    ephemeral=True)
+            elif action == "newsadd":
+                e = await asyncio.to_thread(news.set_context, self.cfg, ids, "" if show == "-" else show, who)
+                log.info(f"{who}: news context {ids} for {e['show']}")
+                await interaction.response.edit_message(
+                    content=f"Added to {news.show_names(self.cfg).get(e['show'], e['show'])}'s next stream: "
+                            f"the worker puts it in that stream's config.toml before scoring.", view=None)
+        except ClipperError as e:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"Nothing changed: {e}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Nothing changed: {e}", ephemeral=True)
+
     async def _retake(self) -> None:
         await self._clipper_bg("retake", ["retake"])
         if self.retake_again:
@@ -395,6 +493,9 @@ class Bot(discord.Client):
     # ---------- buttons ----------
 
     async def on_button(self, interaction: discord.Interaction, action: str, ref: str) -> None:
+        if action.startswith("news"):
+            await self.news_button(interaction, action, ref)
+            return
         if action == "retitle":
             try:
                 item = actions.resolve(self.cfg, ref)

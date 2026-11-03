@@ -44,3 +44,4 @@ backups/
 
 # video never goes in git (demo clips, renders)
 *.mp4
+news/

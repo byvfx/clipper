@@ -47,6 +47,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "costs": "logs/costs.jsonl",  # every model call's cost (`clipper costs`, the war room)
         "warroom_undo": "logs/warroom_undo.json",  # the war room's last 20 actions, for Undo
         "warroom_layouts": "logs/warroom_layouts.json",  # the war room's saved panel layouts
+        "news": "news",           # `clipper news`: news.sqlite (headlines, stories), context.json
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
         "faces": "faces",         # known faces, every show: known.json (`clipper faces --enroll`) + models/
@@ -391,6 +392,30 @@ DEFAULTS: dict[str, dict[str, Any]] = {
                             "zumapress.com", "dreamstime.com", "depositphotos.com", "123rf.com",
                             "stock.adobe.com", "imago-images.com", "newscom.com", "agefotostock.com",
                             "pond5.com", "eyevine.com", "rexfeatures.com", "photoshelter.com"],
+    },
+    "news": {
+        # `clipper news` (#110): headlines about the shows' people from feeds, subreddits and
+        # Google News; the bot checks every check_minutes and posts what the judge rates.
+        "check_minutes": 0,       # the bot's `news check` this often; 0 = off
+        "channel_id": "",         # Discord channel for news posts ("" = [discord] review_channel_id)
+        "feeds": [{"name": "TMZ", "url": "https://www.tmz.com/rss.xml"},
+                  {"name": "Dexerto", "url": "https://www.dexerto.com/feed/"}],
+        "reddit": ["LivestreamFail"],  # subreddits whose new posts are read (their RSS)
+        "google_news": True,      # one Google News search per watched person with a full name
+        "watch": {},              # more people: { "Ethan Klein" = ["H3 Podcast"] } (always searched)
+        "ignore": [],             # names never watched (a cast name that is also a common word)
+        "min_fetch_minutes": 20,  # a feed or subreddit at most this often
+        "search_minutes": 120,    # each Google News search at most this often
+        "max_age_hours": 48,      # older items are skipped
+        "keep_days": 30,          # items and stories are forgotten after this
+        "judge_model": "claude-haiku-5-5",  # rates each matched headline ("" = --no-judge)
+        "judge_effort": "low",
+        "prompt_version": "v1",   # prompts/news_judge_<v>.md
+        "max_judge": 60,          # most headlines judged per check (newest first)
+        "post_maybe": True,       # post "maybe" stories too, marked as such
+        "max_posts": 5,           # most stories posted per check (strong ones first)
+        "preshow_minutes": 60,    # suggest the day's stories this long before a show's usual start
+                                  # (learned from the last three weeks of streams); 0 = off
     },
     "segments": {
         "model": "claude-opus-5-5",   # one call over the whole transcript

@@ -60,6 +60,19 @@ Who is who on screen (#54), kept in `[paths] faces/known.json` for every show.
 The command line does the same: `clipper faces <stream> --name F03=Jer --enroll`,
 `clipper faces <stream> --at 1:23:45 --box x,y,w,h --person Jer`, `clipper faces --forget Jer`.
 
+## News
+
+Headlines about the shows' people (`clipper news`, #110). **News** in the header opens it.
+
+- **Stories** from the last 1, 3, 7 or 30 days, newest first: the headline the judge wrote, strong
+  or maybe, who and which show, why it matters, and the outlets' links. "posted" means the bot
+  put it in Discord; "in context" that it was added to a show's next stream.
+- **Tonight's context…** shows the text the stream would get and the show it goes to (change it
+  in the menu); **Add to its next stream** queues it. **Dismiss** hides a story and the bot never
+  posts it.
+- **Search** asks Google News now (the last 7 days) and adds the stored headlines that match.
+- The header line says how often the bot checks and how many sources are failing (hover for why).
+
 ## Cast
 
 The cast library (#41): a few head-and-shoulders photos of each regular in `[thumbnail]
