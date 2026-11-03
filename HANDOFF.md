@@ -196,6 +196,7 @@ desktop (#46) is still planned and goes with the install work; the day-to-day an
 between Claude and the war room/Discord (#13 chat panel); services going quiet is the failure they
 see. The behaviour questions (report §4, pin vs stale_days, at-once public, X retry, Pass B ids,
 weekly --render, cast auto-keep, Commons credit, example toml, old flags) are still open.
+**Jev gate experiment 2026-11-03** (`clipper gate`, branch `jev-gate`): TypeSafe's Jev decision model asked Pass A's questions (prompts/gate_v5.md) on the 7 v5 streams (403 windows, $0.076). Ranks Haiku's keeps fairly well (AUC 0.81, picks 0.86) but has_clip sits at 0.64-0.89 for everything and third_party_audio hovers at 0.5; best gate (has_clip >= 0.8) passes half the windows, keeps 34/35 picks but loses the top-viewed Short (kick-134300801/t11, 1,075 views), and saves ~$0.02/stream. Verdict: not wired into scoring. Rerun `clipper gate` (cached; only new streams cost) once more Shorts have 7-day views. Key: TYPESAFE_API_KEY user env var.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,

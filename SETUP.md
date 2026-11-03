@@ -325,6 +325,13 @@ Add prices under `[llm.prices]` (`"openai:gpt-5-mini" = [0.25, 2.00]`, $ per 1M 
 tokens) so the cost lines stay right; an unlisted model counts as $0. `clipper doctor` checks
 the key or URL for every provider in use and, online, that the server lists the model.
 
+`typesafe:<model>` (TypeSafe's Jev, `TYPESAFE_API_KEY` from console.typesafe.ai/keys) is a
+decision model: it answers typed yes/no, choice and score questions with probabilities and
+writes no text, so no stage can use it as its model. `clipper gate` is the experiment:
+it asks Jev Pass A's questions (prompts/gate_<v>.md) for streams already scored with the
+current prompts and compares the answers with Haiku's keeps, Pass B's picks and the Shorts'
+7-day views, at each has_clip threshold (cached per stream in gate_<model>_<v>.json).
+
 The prompts are tuned on Claude. Before moving a stage, run both on the test stream
 `kick-131151926` and compare; if the other model needs different wording, add a new prompt
 version for it. Claude's server-side refusal fallback has no equivalent elsewhere, and the

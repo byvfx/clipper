@@ -232,6 +232,7 @@ clipper archive transcribe jer --diarize                          # speaker turn
 clipper archive status
 clipper modal                                                     # GPUs up, runs, spend, archive ETA
 clipper costs [--month 2026-10]                                   # month's spend: models + Modal + fixed, by stage/show/stream
+clipper gate [STREAM ...] [--last 10]                             # experiment: Jev answers Pass A's questions; vs Haiku, picks and views
 clipper analytics --report [--month 2026-10] [--refresh]          # YouTube month: views, sources, 7-day numbers by show/kind/day/hour
 clipper archive check jer                                         # which source links still play
 clipper archive links jer                                         # the dead and restricted ones

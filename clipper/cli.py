@@ -266,6 +266,15 @@ def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
         print(f"for {e['show']}'s next stream: {e['text']}")
 
 
+def cmd_gate(cfg: dict, args: argparse.Namespace) -> None:
+    from . import gate
+
+    dirs = [stream_dir(cfg, s) for s in args.streams] or gate.recent(cfg, args.last)
+    rep = gate.run(cfg, dirs, args.model, force=args.force)
+    if args.json:
+        print(json.dumps(rep, indent=2))
+
+
 def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
     from . import costs
 
@@ -785,7 +794,7 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
+    ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs', 'gate']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
@@ -1314,6 +1323,14 @@ def add_extras(sub) -> None:
                    help="add model spend earlier runs recorded in their output files, once")
     p.add_argument("--dry-run", action="store_true", help="with --backfill: list, write nothing")
     p.set_defaults(fn=cmd_costs)
+
+    p = sub.add_parser("gate", help="ask a decision model (Jev) Pass A's questions, compare with Haiku and views")
+    p.add_argument("streams", nargs="*", metavar="STREAM", help="default: the last --last reviewed streams")
+    p.add_argument("--last", type=int, default=10, help="how many recent streams without STREAM (default 10)")
+    p.add_argument("--model", default="typesafe:jev-latest")
+    p.add_argument("--force", action="store_true", help="ask again instead of reading the cache")
+    p.add_argument("--json", action="store_true", help="the report as JSON")
+    p.set_defaults(fn=cmd_gate)
 
 
 def add_setup(sub) -> None:

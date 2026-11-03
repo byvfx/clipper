@@ -42,7 +42,8 @@ keep README and SETUP true whenever behaviour changes.
   `clipper.example.toml`. `clipper doctor` should fail with a fix when a required one is unset.
 - Secrets are env vars (`ANTHROPIC_API_KEY`, `KITSU_TOKEN`, `DISCORD_BOT_TOKEN`,
   `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`, `ELEVENLABS_API_KEY`, `BRAVE_API_KEY` for cast image
-  search, and `OPENAI_API_KEY` / `GEMINI_API_KEY` if a stage uses those providers) or files
+  search, and `OPENAI_API_KEY` / `GEMINI_API_KEY` if a stage uses those providers, `TYPESAFE_API_KEY` for
+  `clipper gate`) or files
   under `secrets/`. Never write them into tracked files, logs, or messages.
 - Anything a new check or install step needs belongs in `clipper doctor` and SETUP.md, not
   only in a chat answer (and in `clipper setup`, `clipper/setup.py`, when a new user would

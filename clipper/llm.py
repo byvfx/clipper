@@ -38,7 +38,11 @@ PROVIDERS = {  # prefix -> (base URL, key env var)
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
     "local": ("", "LOCAL_LLM_API_KEY"),
+    # Decision models (TypeSafe's Jev): typed answers with probabilities, no text. Only
+    # LLM.decide() calls them; json_call/text_call refuse.
+    "typesafe": ("https://api.typesafe.ai/v1", "TYPESAFE_API_KEY"),
 }
+DECIDERS = {"typesafe"}
 EFFORT = {"low": "low", "medium": "medium", "high": "high", "xhigh": "high", "max": "high"}
 RETRY_STATUS = (408, 429, 500, 502, 503, 504, 529)
 MODEL_KEY = re.compile(r"(^|_)model(_[ab])?$")
@@ -236,9 +240,58 @@ class LLM:
             raise RuntimeError(f"{model} hit max_tokens ({meta['request_id']})")
         return parse_json("".join(b.text for b in resp.content if b.type == "text")), meta
 
+    def decide(self, model: str, state: Any, questions: dict) -> tuple[dict, dict]:
+        """A decision model (typesafe:jev-latest): typed questions about `state` (text or a
+        JSON object), {name: {"type": "noul" | "choice" | "score", "instructions",
+        "criteria"}}. Returns ({name: answer}, meta); a noul answer is {"noul": p}, a choice
+        {"choice", "confidence", "probabilities"}, a score {"score", "confidence", ...}."""
+        prov, name = split(model)
+        if prov not in DECIDERS:
+            raise ClipperError(f"{model}: not a decision model (use typesafe:<model>)")
+        base, env = PROVIDERS[prov]
+        key = os.environ.get(env, "")
+        if not key:
+            raise ClipperError(f"{model}: set the {env} environment variable")
+        t0 = time.time()
+        r = self._post(model, f"{base}/systemone", {"model": name, "state": state, "questions": questions},
+                       {"Authorization": f"Bearer {key}"})
+        if r.status_code == 401:
+            raise ClipperError(f"{model}: {env} rejected (HTTP 401)")
+        if not r.ok:
+            raise RuntimeError(f"{model}: HTTP {r.status_code}: {r.text[:300]}")
+        data = r.json()
+        usage = data.get("usage") or {}
+        meta = {"model": f"{prov}:{data.get('model') or name}", "latency_s": round(time.time() - t0, 3),
+                **self._account(model, usage.get("input_tokens", 0), usage.get("output_tokens", 0))}
+        return data.get("answers") or {}, meta
+
+    def _post(self, model: str, url: str, body: dict, headers: dict):
+        """POST with retries on network errors and RETRY_STATUS; returns the last response."""
+        import requests
+
+        for attempt in range(6):
+            try:
+                r = requests.post(url, json=body, headers=headers, timeout=self.lc["timeout_s"])
+            except requests.RequestException as e:
+                if attempt == 5:
+                    raise RuntimeError(f"{model}: {type(e).__name__}: {e}") from None
+                time.sleep(2 ** attempt)
+                continue
+            if r.status_code in RETRY_STATUS and attempt < 5:
+                time.sleep(min(60.0, float(r.headers.get("retry-after") or 2 ** (attempt + 1))))
+                continue
+            return r
+        raise RuntimeError(f"{model}: no response")  # unreachable: the loop returns or raises
+
     def preflight(self, model: str) -> None:
         """One tiny call so account problems (auth, workspace, credits, a wrong URL) stop the
         run with one clear line instead of 60 identical failures."""
+        if split(model)[0] in DECIDERS:
+            try:
+                self.decide(model, "OK", {"ok": {"type": "noul", "instructions": "The text says OK."}})
+            except RuntimeError as e:
+                raise ClipperError(f"{model} unavailable: {e}") from None
+            return
         if split(model)[0] != "anthropic":
             try:
                 self._compat(model, [{"role": "user", "content": "Say OK."}], "low", 16)
@@ -306,9 +359,10 @@ class LLM:
                 response_format: dict | None = None) -> tuple[dict, dict]:
         """One chat/completions request with retries. Returns (response JSON, meta); meta has
         "refusal" when the model refused."""
-        import requests
-
         prov, name = split(model)
+        if prov in DECIDERS:
+            raise ClipperError(f"{model} is a decision model: it answers typed questions "
+                               "(LLM.decide), not prompts")
         base, env = PROVIDERS[prov]
         base = (self.lc["local_base_url"] if prov == "local" else base).rstrip("/")
         if not base:
@@ -324,18 +378,8 @@ class LLM:
         if effort and model not in self._no_effort:
             body["reasoning_effort"] = EFFORT.get(effort, "medium")
         headers = {"Authorization": f"Bearer {key}"} if key else {}
-        for attempt in range(6):
-            try:
-                r = requests.post(f"{base}/chat/completions", json=body, headers=headers,
-                                  timeout=self.lc["timeout_s"])
-            except requests.RequestException as e:
-                if attempt == 5:
-                    raise RuntimeError(f"{model}: {type(e).__name__}: {e}") from None
-                time.sleep(2 ** attempt)
-                continue
-            if r.status_code in RETRY_STATUS and attempt < 5:
-                time.sleep(min(60.0, float(r.headers.get("retry-after") or 2 ** (attempt + 1))))
-                continue
+        while True:
+            r = self._post(model, f"{base}/chat/completions", body, headers)
             if r.status_code == 400:
                 text = r.text.lower()
                 if "reasoning_effort" in body and "reasoning" in text:
