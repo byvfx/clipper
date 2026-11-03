@@ -143,7 +143,7 @@ class Renderer:
         self.W = self.H if square else self.S.canvas.width
         self.CW = self.W - 2 * self.MX
         self.F = Fonts(self.wc)
-        self.faces = Faces(cfg, week, issue.get("faces"), here, palette=self.P)
+        self.faces = Faces(cfg, week, issue.get("faces"), here, palette=self.P, labels=issue.get("photo_labels"))
         self.faces.fonts = self.F
         self.ISSUE = f"ISSUE {int(issue.get('issue') or 1):02d}"
         self.WEEK = issue.get("week") or week["label"]

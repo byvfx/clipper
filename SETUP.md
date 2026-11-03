@@ -136,8 +136,13 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    (about $5 per 1,000 searches): make a key at api-dashboard.search.brave.com and set the
    Windows user environment variable `BRAVE_API_KEY`; without it the other sources still work.
    It never takes photo agencies' pictures (`[cast] blocked_domains`), but its photos have no
-   known licence, so prefer stream and Commons ones for covers. `clipper doctor` flags anyone
-   with fewer than `[cast] min_photos` (3) kept.
+   known licence, so prefer stream and Commons ones for covers (covers do, given the choice).
+   `clipper doctor` flags anyone with fewer than `[cast] min_photos` (3) kept.
+
+   Covers (`[thumbnail] enquirer_prompt_version` v6) and the weekly (`[weekly] prompt_version`
+   v3) are told each person's labels and pick the photo that fits the story; the war room's
+   cover editor offers them too ("Jer · angry"). Everyone with a kept photo is added to
+   `[scoring] known_figures` (with their aliases) unless `[cast] known_figures = false`.
 
 7. **Check**: `clipper doctor --role gpu` (or `--role bot`).
 

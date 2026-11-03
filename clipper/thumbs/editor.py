@@ -11,11 +11,12 @@ from ..errors import ClipperError
 from ..meta import load_assets
 from .classic import compose
 from .enquirer import compose_enquirer, cover_context, enquirer_setup
-from .frames import asset_key, grab, photo_name, photos
+from .frames import asset_key, grab, photo_labels, photo_name, photos
 from .pick import enquirer_lines, unsafe
 from .stage import check_text, printable, run
 
 COVER_TEXT = ("attribution", "subhead", "band_kicker", "band_headline", "teaser")
+PHOTO_KEYS = ("photo", "photo_label", "teaser_photo", "teaser_photo_label")  # dropped when ""
 
 
 def cover_info(stream_dir: Path, cfg: dict, key: str) -> dict:
@@ -28,12 +29,13 @@ def cover_info(stream_dir: Path, cfg: dict, key: str) -> dict:
     if e.get("style") == "enquirer" and e.get("headline") and e["text"] != " ".join(e["headline"]):
         e["headline"] = enquirer_lines(e["text"])  # a hand edit of the words: what the cover prints
     tc = {**cfg["thumbnail"]}
+    tc["_photos"] = photos(tc)
     return {"key": key, "style": e.get("style", "classic"), "id": e["id"],
             "frames": [{"n": i, "t": f["t"], "path": f"thumbs/{key}/{f['path']}"}
                        for i, f in enumerate(e["frames"], 1)],
-            "fields": {k: e.get(k) for k in ("frame", "face", "inset_frame", "inset_face", "photo",
-                                              "teaser_photo", "headline", "text", *COVER_TEXT)},
-            "photos": sorted(photos(tc)), "max_words": tc["max_words"]}
+            "fields": {k: e.get(k) for k in ("frame", "face", "inset_frame", "inset_face", *PHOTO_KEYS,
+                                              "headline", "text", *COVER_TEXT)},
+            "photos": sorted(tc["_photos"]), "photo_labels": photo_labels(tc), "max_words": tc["max_words"]}
 
 
 def _clean_changes(cfg: dict, e: dict, changes: dict) -> dict:
@@ -43,6 +45,7 @@ def _clean_changes(cfg: dict, e: dict, changes: dict) -> dict:
 
     tc = {**cfg["thumbnail"]}
     tc["_photos"] = photos(tc)
+    labels = photo_labels(tc)
     bleeper = Bleeper({**cfg["bleep"], "mode": "bleep"})
     out: dict = {}
     n = len(e["frames"])
@@ -64,6 +67,12 @@ def _clean_changes(cfg: dict, e: dict, changes: dict) -> dict:
             if name and not photo_name(tc, name):
                 raise ClipperError(f"no photo of {name!r} in [thumbnail] photos")
             out[k] = photo_name(tc, name) if name else ""
+            out[f"{k}_label"] = ""  # a new person: their best photo unless a label comes with it
+        if f"{k}_label" in changes:
+            who, label = out.get(k, e.get(k, "")), (changes[f"{k}_label"] or "").strip()
+            if label and label not in labels.get(who, []):
+                raise ClipperError(f"no {label!r} photo of {who or 'nobody'} in the cast library")
+            out[f"{k}_label"] = label if who else ""
     if "headline" in changes:
         lines = [" ".join(str(x).split()).upper() for x in changes["headline"] if str(x).strip()][:3]
         if not lines:
@@ -91,7 +100,7 @@ def edit_cover(stream_dir: Path, cfg: dict, key: str, changes: dict, preview: bo
     if key not in state:
         raise ClipperError("no cover yet for this item")
     e = {**state[key], **_clean_changes(cfg, state[key], changes)}
-    for k in ("photo", "teaser_photo"):
+    for k in PHOTO_KEYS:
         if e.get(k) == "":
             e.pop(k)
     if "frame" in changes:
@@ -118,9 +127,9 @@ def edit_cover(stream_dir: Path, cfg: dict, key: str, changes: dict, preview: bo
         return dst
     with jsonstate.update(state_path, {}) as fresh:
         fresh[key] = {**fresh.get(key, state[key]), **{k: v for k, v in e.items()}}
-        for k in ("photo", "teaser_photo"):
+        for k in PHOTO_KEYS:
             if k not in e:
                 fresh[key].pop(k, None)
-    wide = any(k in changes for k in ("teaser", "teaser_photo"))
+    wide = any(k in changes for k in ("teaser", "teaser_photo", "teaser_photo_label"))
     run(stream_dir, cfg, ids=None if wide else [state[key]["id"]], compose_only=True)
     return x["video"].with_suffix(".jpg")

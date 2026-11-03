@@ -161,3 +161,29 @@ def test_a_new_worker_gets_the_faces_extra():
     from clipper import setup
     assert "faces" in setup.extras_for(["worker"], "modal") and "faces" not in setup.extras_for(["bot"], "modal")
     assert setup.EXTRA_MODULE["faces"] == "cv2"
+
+
+def test_photos_by_label_for_people_only_talked_about(cfg, tmp_path):
+    from PIL import Image
+
+    from clipper import jsonstate
+    from clipper.weekly.faces import Faces
+
+    jer = tmp_path / "photos" / "Jer"
+    jer.mkdir(parents=True)
+    for pid in ("a", "b"):
+        Image.new("RGB", (10, 10)).save(jer / f"{pid}.jpg")
+    jsonstate.write(jer / "cast.json", {"photos": {
+        "a": {"file": "a.jpg", "status": "kept", "label": "neutral", "px": 200},
+        "b": {"file": "b.jpg", "status": "kept", "label": "angry", "px": 100}}})
+    cfg["thumbnail"]["photos"] = str(tmp_path / "photos")
+    week = {"streams": {}}
+    assert Faces(cfg, week).photos["jer"] == jer / "a.jpg"                       # neutral by default
+    assert Faces(cfg, week, labels={"Jer": "angry"}).photos["jer"] == jer / "b.jpg"
+    assert Faces(cfg, week, labels=["junk"]).photos["jer"] == jer / "a.jpg"      # a bad field is ignored
+    stats = {"shows": 0, "preshows": 0, "hours": 0, "hours_with_preshows": 0, "segments": 0, "shorts": 0,
+             "chat_messages": 0, "chatters": 0, "laughs": 0, "peak_per_min": 0, "peak_stream": "",
+             "top_emotes": [], "fucks": 0, "fuck_every_s": 0, "screen_minutes": {}, "said": {}}
+    user = draft.draft_user({"label": "Oct 25-31", "streams": {}}, stats, "", 4, {"Jer": jer / "a.jpg", "Don": Path("Don.jpg")},
+                            {"Jer": ["angry", "neutral"], "Don": []})
+    assert user.endswith("Portrait photos on file (also usable): Don, Jer (angry, neutral)")

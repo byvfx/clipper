@@ -149,6 +149,25 @@ def photos(tc: dict) -> dict[str, Path]:
     return out
 
 
+def photo_labels(tc: dict) -> dict[str, list[str]]:
+    """{person: the labels of their kept photos} for tc["_photos"], [] for a single file."""
+    from ..cast import labels
+
+    d = Path(tc["photos"]) if tc.get("photos") else None
+    return {n: labels(p.parent) if p.parent != d else [] for n, p in tc.get("_photos", {}).items()}
+
+
+def photo_file(tc: dict, name: str, label: str = "") -> Path | None:
+    """The photo a cover shows for this person (tc["_photos"]): their kept photo with this
+    label when they have one, else their best."""
+    from ..cast import best_photo
+
+    p = tc.get("_photos", {}).get(photo_name(tc, name))
+    if p and label and Path(tc.get("photos") or "") != p.parent:
+        return best_photo(p.parent, label) or p
+    return p
+
+
 def photo_name(tc: dict, name: str) -> str:
     """The on-file spelling of a photo's person, matched ignoring case; "" if none."""
     return next((n for n in tc.get("_photos", {}) if n.lower() == (name or "").strip().lower()), "")

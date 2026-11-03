@@ -36,7 +36,7 @@ badge.
 
 "Edit cover" in an item's window opens it: pick the main frame (shift-click for the inset)
 from the candidate frames, drag and resize the face boxes, choose a photo or teaser photo
-from `[thumbnail] photos`, change the words. Preview renders without saving; Save re-renders
+from `[thumbnail] photos` (a cast library person by label too: "Jer · angry"), change the words. Preview renders without saving; Save re-renders
 with no model calls (every cover of the stream when the teaser changes) and re-attaches it in
 Kitsu.
 
@@ -76,7 +76,11 @@ photos/<Person>/`, for covers and the weekly. **Cast** in the header opens it.
   against the person's known face, so other people are left out, and labelled by a small model.
 - **New photos** come first, blue-edged; ⚠ is the labeller's doubt (a designed thumbnail with
   text, a hidden face). Keep or Drop each; fix a label with its menu. A dropped photo is deleted
-  and its source never fetched again. Kept photos are what covers use (neutral first).
+  and its source never fetched again. Kept photos are what covers use: the cover model picks
+  the label that fits the headline (angry for a meltdown, laughing for a gloat), else neutral;
+  a stream, Commons or channel photo before an image search one. The weekly draft does the
+  same for people it pictures from a photo, and everyone with a kept photo joins the prompts'
+  known figures.
 
 The command line: `clipper cast list|grab|find|add|keep|drop|label|set` (SETUP.md, Photos).
 

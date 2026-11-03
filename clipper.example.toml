@@ -162,6 +162,7 @@ per_source = 6             # most new photos one find adds from each source
 videos = 12                # recent videos whose thumbnails a YouTube channel offers
 search_count = 40          # image search results looked at
 min_photos = 3             # doctor flags anyone with fewer kept
+known_figures = true       # everyone with a kept photo is added to [scoring] known_figures
 label_model = "claude-haiku-5-5"  # labels each new photo ("" = no labels)
 label_effort = "low"
 prompt_version = "v1"      # prompts/cast_label_<v>.md
@@ -230,7 +231,7 @@ max_source_audio_s = 5
 #   "fans"       know the regulars in known_figures and their running drama; rejects only
 #                moments that depend on something earlier in the same stream
 audience_knowledge = "strangers"
-known_figures = ""
+known_figures = ""             # plus the cast library's people ([cast] known_figures)
 
 # Transcript-first candidates: the Pass A model scans each 15-minute block for moments
 # carried by the hosts' own words, added to the chat-heat windows (scan prompt, v4+).
@@ -346,7 +347,7 @@ kitsu = true                   # attach to each item's Kitsu revision and set it
 # Thumbnail look: "classic" (frame + big text) or "enquirer" (1990s tabloid cover:
 # masthead, teaser band and boxes plugging the episode's other videos, big face, inset).
 style = "classic"
-enquirer_prompt_version = "v5"   # prompts/thumbnail_enquirer_<v>.md (v5: frames say whose face `clipper faces` found)
+enquirer_prompt_version = "v6"   # prompts/thumbnail_enquirer_<v>.md (v6: picks a cast photo by label, #41; v5: frames say whose face `clipper faces` found)
 face_frames = 2                # with faces.json: each named person's best frames offered for the cover...
 face_people = 4                # ...for this many people, the ones seen most in the video
 masthead = ""                  # empty = meta.show_name
@@ -735,7 +736,7 @@ words = ["grift", "coffee", "cameo", "sub", "clip", "lawsuit", "divorce"]  # cou
 model = "claude-opus-5-5"      # drafts issue.json from prompts/weekly_<v>.md; edit it, then
                                # `clipper weekly --render`
 effort = "high"
-prompt_version = "v2"          # v2: quotes credited to who said them (speaker names)
+prompt_version = "v3"          # v3: people only talked about from the cast library, photo by label (#41); v2: quotes credited
 write_articles = true          # after a draft, write the three articles again, one call each...
 article_prompt_version = "v2"  # ...with prompts/weekly_article_<v>.md...
 article_example = "weekly_article_example.md"  # ...and this piece (in prompts/) as the voice to match

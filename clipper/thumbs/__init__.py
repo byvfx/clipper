@@ -22,10 +22,13 @@ flag re-renders everything after changing the brand settings. Text is checked ag
 touching files through the Kitsu "Thumbnail text" column or Discord's Thumbnail text button;
 `clipper review sync` writes it here and re-renders (set_texts).
 
-Enquirer covers can use [thumbnail] photos ("<Person>.jpg" portraits) for people talked
-about but not on screen: the model is offered the names and may set "photo" (the main
-face) or "teaser_photo" (shown beside this video's teaser on the other covers);
-`--photo` / `--teaser-photo` set them by hand (set_photos).
+Enquirer covers can use [thumbnail] photos ("<Person>.jpg" portraits, or the cast library's
+photos/<Person>/ folders) for people talked about but not on screen: the model is offered
+the names and may set "photo" (the main face) or "teaser_photo" (shown beside this video's
+teaser on the other covers), and for a cast library person "photo_label" /
+"teaser_photo_label", which of their labelled photos fits the story (angry, laughing...);
+`--photo` / `--teaser-photo` set them by hand (set_photos), the war room's cover editor
+with a label.
 
 Shorts get a 9:16 version of their clip's enquirer cover beside them (shorts/<name>.jpg):
 compose_vertical, from the clip's thumbnails.json choice, no model calls. `clipper thumbs`

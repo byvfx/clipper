@@ -57,7 +57,8 @@ def credit(hook: dict) -> str:
     return "said in a clip they played or by a guest; " if by == "?" else f"said by {by}; "
 
 
-def draft_user(week: dict, stats: dict, headline: str, issue: int, photos: dict[str, Path]) -> str:
+def draft_user(week: dict, stats: dict, headline: str, issue: int, photos: dict[str, Path],
+               labels: dict[str, list[str]] | None = None) -> str:
     lines = [f"Issue {issue:02d}, week of {week['label']}.",
              f"Editor's note: {headline}" if headline else "Editor's note: none; pick the biggest story.", ""]
     for sid, s in week["streams"].items():
@@ -89,7 +90,9 @@ def draft_user(week: dict, stats: dict, headline: str, issue: int, photos: dict[
                  "anyone else gets initials.")
     lines.append(", ".join(f"{p} ({n})" for p, n in people.most_common()))
     if photos:
-        lines.append("Portrait photos on file (also usable): " + ", ".join(sorted(photos)))
+        labels = labels or {}
+        lines.append("Portrait photos on file (also usable): " + ", ".join(
+            f"{p} ({', '.join(labels[p])})" if labels.get(p) else p for p in sorted(photos)))
     return "\n".join(lines)
 
 
@@ -103,11 +106,14 @@ def draft_system(cfg: dict) -> str:
 def draft(cfg: dict, here: Path, week: dict, stats: dict, headline: str) -> dict:
     from ..llm import Claude, preflight
     from ..thumbs import photos as photo_dir
+    from ..thumbs.frames import photo_labels
 
     wc = cfg["weekly"]
     system = draft_system(cfg)
     issue = next_issue_number(cfg, here)
-    user = draft_user(week, stats, headline, issue, photo_dir(cfg["thumbnail"]))
+    tc = {**cfg["thumbnail"]}
+    tc["_photos"] = photo_dir(tc)
+    user = draft_user(week, stats, headline, issue, tc["_photos"], photo_labels(tc))
     claude = Claude(cfg)
     preflight(claude, wc["model"])
     print(f"  drafting issue {issue:02d} with {wc['model']} ({len(user) // 4:,} tokens of week)...")

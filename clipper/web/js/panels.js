@@ -115,7 +115,12 @@ function renderCover() {
   const boxFrame = CV.box === "face" ? main : inset;
   const b = cvVal(CV.box) || { x: 0.35, y: 0.2, width: 0.3, height: 0.4 };
   const hl = cvVal("headline") || [];
-  const photoSel = (id, v) => `<select id="${id}"><option value="">(none: use the frame)</option>${info.photos.map(p => `<option ${p === v ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>`;
+  // A person's best photo, or (#41) one of their cast photos by label: "Jer|angry" (a name has no |).
+  const photoSel = (id, k) => {
+    const v = (cvVal(k) || "") + (cvVal(k + "_label") ? "|" + cvVal(k + "_label") : "");
+    const opt = (val, text) => `<option value="${esc(val)}" ${val === v ? "selected" : ""}>${esc(text)}</option>`;
+    return `<select id="${id}">${opt("", "(none: use the frame)")}${info.photos.map(p => opt(p, p) + (info.photo_labels?.[p] || []).map(l => opt(p + "|" + l, `${p} · ${l}`)).join("")).join("")}</select>`;
+  };
   $("#tool").innerHTML = `<div class="m-head"><b>Cover</b><span style="color:var(--faint);font-size:12px">${esc(CV.ref)} · ${esc(info.style)}</span><button class="x" data-close>×</button></div>
     <div class="cv"><div>
       <img class="shot" id="cvShot" src="${esc(CV.preview || info.cover_url)}" alt="cover">
@@ -131,10 +136,10 @@ function renderCover() {
         <label>Band headline</label><input class="search" data-cvf="band_headline" value="${esc(cvVal("band_headline") || "")}">
         <label>Subhead</label><input class="search" data-cvf="subhead" value="${esc(cvVal("subhead") || "")}">
         <label>Teaser (shows on this stream's other covers)</label><input class="search" data-cvf="teaser" value="${esc(cvVal("teaser") || "")}">
-        <div class="row2"><div><label>Main face photo</label>${photoSel("cvPhoto", cvVal("photo"))}</div><div><label>Teaser photo</label>${photoSel("cvTeaserPhoto", cvVal("teaser_photo"))}</div></div>`
+        <div class="row2"><div><label>Main face photo</label>${photoSel("cvPhoto", "photo")}</div><div><label>Teaser photo</label>${photoSel("cvTeaserPhoto", "teaser_photo")}</div></div>`
         : `<label>Words (at most ${info.max_words})</label><input class="search" data-cvf="text" value="${esc(cvVal("text") || "")}">`}
       <div style="display:flex;gap:6px;margin-top:6px"><button class="btn" id="cvPrev">Preview</button><button class="btn primary" id="cvSave" ${Object.keys(CV.changes).length ? "" : "disabled"}>Save and re-render</button></div>
-      <div class="f" style="font-size:11px;color:var(--faint)">Saving re-renders without model calls and re-attaches the cover in Kitsu${cvVal("teaser") !== CV.info.fields.teaser || "teaser_photo" in CV.changes ? "; a teaser change re-renders every cover of the stream" : ""}. An uploaded video's YouTube thumbnail isn't changed.</div>
+      <div class="f" style="font-size:11px;color:var(--faint)">Saving re-renders without model calls and re-attaches the cover in Kitsu${cvVal("teaser") !== CV.info.fields.teaser || "teaser_photo" in CV.changes || "teaser_photo_label" in CV.changes ? "; a teaser change re-renders every cover of the stream" : ""}. An uploaded video's YouTube thumbnail isn't changed.</div>
     </div></div>`;
   wireCover();
 }
@@ -142,8 +147,9 @@ function wireCover() {
   const set = (k, v) => { CV.changes[k] = v; $("#cvSave").disabled = false; };
   document.querySelectorAll("[data-cvhl]").forEach(el => el.addEventListener("input", () => set("headline", [...document.querySelectorAll("[data-cvhl]")].map(x => x.value).filter(x => x.trim()))));
   document.querySelectorAll("[data-cvf]").forEach(el => el.addEventListener("input", () => set(el.dataset.cvf, el.value)));
-  $("#cvPhoto")?.addEventListener("change", e => set("photo", e.target.value));
-  $("#cvTeaserPhoto")?.addEventListener("change", e => set("teaser_photo", e.target.value));
+  const setPhoto = k => e => { const [who, label = ""] = e.target.value.split("|"); set(k, who); set(k + "_label", label); };
+  $("#cvPhoto")?.addEventListener("change", setPhoto("photo"));
+  $("#cvTeaserPhoto")?.addEventListener("change", setPhoto("teaser_photo"));
   $("#cvPrev").onclick = () => coverSend(true);
   $("#cvSave").onclick = () => coverSend(false);
   const wrap = $("#cvWrap"), box = $("#cvBox");
