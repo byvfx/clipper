@@ -220,8 +220,12 @@ agencies blocked), a file or URL. Face-checked against known.json, duplicates sk
 first), so covers and the weekly use them already. Tried into a scratch folder only: the real folder still
 has just Hasan Piker.jpg and luther morgan.jpg; Jer's YouTube thumbnails are designed graphics (flagged),
 streams are the better source for him, Andy/PPP need a non-costume stream. Commons spells "Candace Owens":
-add it as her alias. **Part two (not started):** covers pick a photo by label for the story (new
-thumbnail_enquirer prompt version), `known_figures` from the cast, #35 slides; then #41 closes.
+add it as her alias. **Part two (PR #122, branch cast-labels, waiting on Copilot):** covers pick a cast photo
+by label (prompts/thumbnail_enquirer_v6.md, `photo_label`/`teaser_photo_label` in thumbnails.json; the war
+room's cover editor offers "Jer · angry"); the weekly v3 pictures people only talked about from a photo
+and picks the label (issue.json `photo_labels`); `{known_figures}` adds everyone with a kept photo plus
+aliases (`[cast] known_figures`). After merge: clipper.toml `enquirer_prompt_version` v5 -> v6 (backup
+first), restart the bot. #41 closes once a cover and a weekly issue (04, 11-07) use kept cast photos.
 Older notes not on an issue: republish the 2026-10-19 re-cut streams to Kitsu (user said not yet);
 Blade compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`);
 a daily "post kit" folder; `clipper setup` walkthrough #78 (phase 1 done 2026-10-28: bootstrap,
