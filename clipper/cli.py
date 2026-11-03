@@ -215,6 +215,9 @@ def cmd_cast(cfg: dict, args: argparse.Namespace) -> None:
         return cast.set_label(cfg, args.person, args.id, args.label)
     if a == "set":
         return cast.set_info(cfg, args.person, args.alias, args.channel)
+    if a == "grab":  # the stream's show may set its own [cast] (label_model, target)
+        sdir = stream_dir(cfg, args.stream)
+        cfg = config.for_stream(cfg, sdir)
     claude = None
     if cfg["cast"]["label_model"] and not args.no_label:
         from .llm import Claude
@@ -223,9 +226,7 @@ def cmd_cast(cfg: dict, args: argparse.Namespace) -> None:
     if a == "add":
         cast.add_file(cfg, args.person, args.src, claude)
     elif a == "grab":
-        sdir = stream_dir(cfg, args.stream)
-        n = cast.grab(config.for_stream(cfg, sdir), sdir, args.person, args.n, claude, needed=args.needed)
-        print(f"{n} new photo(s)")
+        print(f"{cast.grab(cfg, sdir, args.person, args.n, claude, needed=args.needed)} new photo(s)")
     elif a == "auto":
         print(f"{cast.auto(cfg, claude)} new photo(s)")
     elif a == "find":

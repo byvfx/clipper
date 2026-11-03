@@ -319,6 +319,7 @@ def extras_for(roles: list[str], backend: str) -> list[str]:
         out.append("faces")  # the default [worker] stages run `clipper faces` (OpenCV, CPU)
     if "bot" in roles:
         out.append("discord")
+        out.append("faces")  # the war room's Cast window and the daily `cast auto` check faces (OpenCV)
         if backend == "modal" and "modal" not in out:
             out.append("modal")  # the war room's Modal panel
     return out

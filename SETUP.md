@@ -149,6 +149,9 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    `[cast] auto_keep` (0.65) or better and the label has no doubt; the rest wait as New in the
    Cast window. Costs: a
    Haiku label per photo and a Brave search per person tried, cents a day.
+   The bot runs the daily find and the Cast window, so it needs the `faces` extra too (`clipper
+   setup` adds it for the bot role; an existing bot install: `uv sync --extra discord --extra faces`,
+   which `clipper doctor --role bot` checks).
 
    Covers (`[thumbnail] enquirer_prompt_version` v6) and the weekly (`[weekly] prompt_version`
    v3) are told each person's labels and pick the photo that fits the story; the war room's

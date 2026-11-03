@@ -328,14 +328,14 @@ def test_auto_finds_for_the_people_short_of_photos(cfg, monkeypatch):
     two_days = (datetime.now(UTC) - timedelta(days=2)).isoformat(timespec="seconds")
     jsonstate.write(cast.person_dir(cfg, "Victor") / "cast.json", {"auto": {"at": two_days, "added": 0}})
     asked = []
-    monkeypatch.setattr(cast, "find", lambda cfg, name, sources, claude, say: asked.append((name, sources)) or 2)
+    monkeypatch.setattr(cast, "find", lambda cfg, name, sources, claude, say, limit: asked.append((name, sources, limit)) or 2)
     assert cast.auto(cfg, say=lambda *a: None) == 2
-    assert asked == [("Jer", ["commons", "channels", "search"])]  # Don has 6; Victor found nothing 2 days ago
+    assert asked == [("Jer", ["commons", "channels", "search"], 6)]  # Don has 6; Victor found nothing 2 days ago
     assert jsonstate.load(cast.person_dir(cfg, "Jer") / "cast.json")["auto"]["added"] == 2
     cfg["cast"]["retry_days"] = 1
     asked.clear()
     cast.auto(cfg, say=lambda *a: None)
-    assert [n for n, _ in asked] == ["Jer", "Victor"]
+    assert [n for n, _, _ in asked] == ["Jer", "Victor"]
 
 
 def test_the_worker_stage_grab_needs_no_faces(cfg, tmp_path):
@@ -345,3 +345,37 @@ def test_the_worker_stage_grab_needs_no_faces(cfg, tmp_path):
     assert jsonstate.load(sdir / "cast_grab.json")["added"] == {}
     with pytest.raises(ClipperError, match="no faces.json"):
         cast.grab(cfg, sdir, None, 4)
+
+
+def test_auto_keep_counts_the_flat_photo_and_a_repeat_changes_nothing(cfg, monkeypatch):
+    known(cfg, Jer=JER)
+    Image.new("RGB", (10, 10)).save(cast.root(cfg) / "Jer.jpg")              # counts as one kept
+    seeds = iter(range(300, 400))
+    monkeypatch.setattr(cast, "faces_in", lambda img, cfg: [face(near(JER, scale=0.3, seed=next(seeds)))])
+    monkeypatch.setattr(cast, "label_photo", lambda cfg, path, claude: {"label": "neutral", "flag": ""})
+    cfg["cast"].update(auto_keep=0.65, target=2)
+    a = cast.add(cfg, "Jer", jpeg(), {"key": "s1", "kind": "stream"}, claude=object())
+    b = cast.add(cfg, "Jer", jpeg(), {"key": "s2", "kind": "stream"}, claude=object())
+    idx = jsonstate.load(cast.person_dir(cfg, "Jer") / "cast.json")["photos"]
+    assert (idx[a]["status"], idx[b]["status"]) == ("kept", "new")          # the file + a = the target
+    real = cast.load
+    monkeypatch.setattr(cast, "load", lambda d: {**real(d), "photos": {}})  # a find that read before a's write
+    assert cast.add(cfg, "Jer", jpeg(), {"key": "s1", "kind": "stream"}, claude=object()) is None
+    assert jsonstate.load(cast.person_dir(cfg, "Jer") / "cast.json")["photos"][a] == idx[a]
+
+
+def test_find_stops_at_its_limit(cfg, monkeypatch):
+    monkeypatch.setattr(cast, "commons", lambda cfg, p, d, say: [{"key": f"c{i}", "kind": "commons", "url": f"u{i}"} for i in range(5)])
+    monkeypatch.setattr(cast, "channel_pictures", lambda cfg, p, d, say: [{"key": "ch", "kind": "channel", "url": "uc"}])
+    monkeypatch.setattr(cast, "fetch", lambda url, cfg: b"x")
+    monkeypatch.setattr(cast.time, "sleep", lambda s: None)
+    monkeypatch.setattr(cast, "add", lambda cfg, person, data, src, claude, say: src["key"])
+    assert cast.find(cfg, "Jer", ["commons", "channels"], say=lambda *a: None, limit=3) == 3
+    assert cast.find(cfg, "Jer", ["commons", "channels"], say=lambda *a: None) == 6  # by hand: per_source each
+
+
+def test_only_the_whole_stream_grab_marks_the_stage_done(cfg, tmp_path):
+    sdir = tmp_path / "kick-2"
+    sdir.mkdir()
+    cast.grab(cfg, sdir, "Jer", 4, needed=True, say=lambda *a: None)
+    assert not (sdir / "cast_grab.json").exists()

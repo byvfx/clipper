@@ -290,8 +290,11 @@ def add(cfg: dict, person: str, data: bytes, source: dict, claude=None, say=prin
              "face": fb, "px": int(face["px"]), "match": score,
              "added": datetime.now(UTC).isoformat(timespec="seconds"),
              "emb": [round(float(v), 4) for v in emb]}
+    single = any((d.parent / f"{d.name}{ext}").exists() for ext in PHOTO_EXT)  # a flat <Person>.jpg
     with jsonstate.update(d / INDEX, {}) as idx:
-        if sure(cc, score, entry) and len(kept({"photos": idx.get("photos", {})})) < cc["target"]:
+        if pid in idx.get("photos", {}) or source["key"] in idx.get("dropped", []):
+            return None  # another find or grab added (or dropped) it meanwhile: leave it as it is
+        if sure(cc, score, entry) and len(kept({"photos": idx.get("photos", {})})) + single < cc["target"]:
             entry["status"], entry["auto_kept"] = "kept", True
         idx.setdefault("photos", {})[pid] = entry
     say(f"  + {person} {pid} {entry['label'] or ''} ({source['kind']}, face {face['px']} px"
@@ -355,17 +358,20 @@ def grab(cfg: dict, sdir: Path, person: str | None, n: int, claude=None, say=pri
          needed: bool = False) -> int:
     """Each named person's (or person's) n best faces in the stream's faces.json, the frame at
     full size from the source. needed (the worker's `cast` stage): only people with fewer than
-    [cast] target photos, and no faces.json or no [thumbnail] photos is not an error. What it
-    added goes in the stream's cast_grab.json."""
+    [cast] target photos and only up to it, and no faces.json or no [thumbnail] photos is not an
+    error; for everyone (no person), what it added goes in the stream's cast_grab.json, the
+    stage's done marker."""
     import tempfile
 
     from . import faces
     from .media import source_file
 
     data = jsonstate.read(sdir / "faces.json", None)
+    marker = needed and not person
     if needed and not (data and cfg["thumbnail"]["photos"]):
         say("no faces.json or no [thumbnail] photos: nothing to grab")
-        jsonstate.write(sdir / "cast_grab.json", {"at": now(), "added": {}})
+        if marker:
+            jsonstate.write(sdir / "cast_grab.json", {"at": now(), "added": {}})
         return 0
     if not data:
         raise ClipperError(f"{sdir.name}: no faces.json (clipper faces {sdir.name})")
@@ -374,20 +380,25 @@ def grab(cfg: dict, sdir: Path, person: str | None, n: int, claude=None, say=pri
         names = [nm for nm in names if nm.lower() == person.lower()]
         if not names:
             raise ClipperError(f"{sdir.name}: nobody named {person} in faces.json")
+    room = {}  # needed: how many more each person may get
     if needed:
         everyone = people(cfg)
-        names = [nm for nm in names if count(everyone.get(nm)) < cfg["cast"]["target"]]
+        room = {nm: cfg["cast"]["target"] - count(everyone.get(nm)) for nm in names}
+        names = [nm for nm in names if room[nm] > 0]
     src, added, by = source_file(sdir), 0, {}
     with tempfile.TemporaryDirectory() as tmp:
         for name in names:
             for f in faces.best_faces(data, name, n=n, gap=120.0):
+                if needed and by.get(name, 0) >= room[name]:
+                    break
                 frame = faces.grab(src, f["t"], Path(tmp) / "frame.jpg")
                 key = f"stream:{sdir.name}@{f['t']}"
                 if add(cfg, name, frame.read_bytes(), {"key": key, "kind": "stream", "page": key},
                        claude, say, box=f["box"]):
                     added += 1
                     by[name] = by.get(name, 0) + 1
-    jsonstate.write(sdir / "cast_grab.json", {"at": now(), "added": by})
+    if marker:
+        jsonstate.write(sdir / "cast_grab.json", {"at": now(), "added": by})
     return added
 
 
@@ -412,7 +423,7 @@ def auto(cfg: dict, claude=None, say=print) -> int:
                 datetime.now(UTC) - datetime.fromisoformat(last["at"]) < timedelta(days=cc["retry_days"]):
             continue
         say(f"{name} ({count(data)} of {cc['target']}):")
-        n = find(cfg, name, list(SOURCES), claude, say)
+        n = find(cfg, name, list(SOURCES), claude, say, limit=cc["target"] - count(data))
         d = person_dir(cfg, name)
         d.mkdir(parents=True, exist_ok=True)
         with jsonstate.update(d / INDEX, {}) as idx:
@@ -423,7 +434,10 @@ def auto(cfg: dict, claude=None, say=print) -> int:
 
 # ---------- from the web ----------
 
-def find(cfg: dict, person: str, sources: list[str], claude=None, say=print) -> int:
+def find(cfg: dict, person: str, sources: list[str], claude=None, say=print,
+         limit: int | None = None) -> int:
+    """New photos of person from these sources, at most [cast] per_source from each and, with
+    limit (`cast auto`: what the person still needs), at most limit in all."""
     d = person_dir(cfg, person)
     data = load(d)
     if not d.exists():
@@ -431,6 +445,8 @@ def find(cfg: dict, person: str, sources: list[str], claude=None, say=print) -> 
     per = cfg["cast"]["per_source"]
     added = 0
     for kind in sources:
+        if limit is not None and added >= limit:
+            break
         if kind == "search" and not search_key(cfg):
             say("image search: no $BRAVE_API_KEY or [paths] brave_key file, skipped")
             continue
@@ -445,7 +461,7 @@ def find(cfg: dict, person: str, sources: list[str], claude=None, say=print) -> 
         say(f"{kind}: {len(found)} to look at")
         n = 0
         for i, src in enumerate(found):
-            if n >= per:
+            if n >= per or (limit is not None and added + n >= limit):
                 break
             if i and kind == "commons":
                 time.sleep(1.0)  # Wikimedia answers 429 to quick runs of downloads

@@ -159,7 +159,7 @@ def test_found_faces_come_from_faces_json_and_go_first(cfg, tmp_path, monkeypatc
 
 def test_a_new_worker_gets_the_faces_extra():
     from clipper import setup
-    assert "faces" in setup.extras_for(["worker"], "modal") and "faces" not in setup.extras_for(["bot"], "modal")
+    assert "faces" in setup.extras_for(["worker"], "modal") and "faces" in setup.extras_for(["bot"], "modal")  # Cast window
     assert setup.EXTRA_MODULE["faces"] == "cv2"
 
 
