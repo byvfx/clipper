@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
@@ -44,6 +45,8 @@ BUTTONS = [[("approve", "Approve", 3), ("reject", "Reject…", 4), ("changes", "
            [("pin", "Pin time…", 2), ("retitle", "Retitle…", 2),
             ("thumbtext", "Thumbnail text…", 2)]]
 MEDIA = {".mp4": "video/mp4", ".jpg": "image/jpeg"}
+MAX_CONTENT = 2000  # characters in a Discord message
+ISSUE_CLAIM_S = 30 * 60  # a `weekly --discord` run that died holding its issue lets go after this
 
 
 def token(cfg: dict) -> str:
@@ -286,7 +289,12 @@ def issue_messages(issue: dict, here: Path, pages: list[Path]) -> list[tuple[str
     if all(p.exists() for p in square):
         out += [("youtube1", f"YouTube Post part 1 (square 01-05):\n{post.get('part1', '')}", square[:5]),
                 ("youtube2", f"YouTube Post part 2 (square 06-10):\n{post.get('part2', '')}", square[5:])]
-    return [(k, t.strip()[:2000], f) for k, t, f in out]
+    out = [(k, t.strip(), f) for k, t, f in out]
+    long = [k for k, t, _ in out if len(t) > MAX_CONTENT]
+    if long:
+        raise ClipperError(f"over Discord's {MAX_CONTENT} characters: {', '.join(long)}; "
+                           f"shorten issue.json post.part1/part2")
+    return out
 
 
 def weekly_channel(api: Rest, dc: dict) -> str:
@@ -307,6 +315,23 @@ def weekly_channel(api: Rest, dc: dict) -> str:
     return ch["id"]
 
 
+def claim_issue(dpath: Path, now: datetime | None = None) -> bool:
+    """Take the issue for this run under discord.json's lock, so two runs can't post it twice;
+    False while another run holds it (a claim older than ISSUE_CLAIM_S is taken over)."""
+    now = now or datetime.now(UTC)
+    with jsonstate.update(dpath, {}) as state:
+        c = state.get("claim")
+        if c and (now - datetime.fromisoformat(c)).total_seconds() < ISSUE_CLAIM_S:
+            return False
+        state["claim"] = now.isoformat(timespec="seconds")
+    return True
+
+
+def release_issue(dpath: Path) -> None:
+    with jsonstate.update(dpath, {}) as state:
+        state.pop("claim", None)
+
+
 def post_issue(cfg: dict, day: str | None = None) -> int:
     """Post a weekly issue's pages to [discord] weekly_channel, to save them on a phone for
     posting by hand. <issue>/discord.json keeps each message, so a rerun posts only what's missing."""
@@ -323,17 +348,23 @@ def post_issue(cfg: dict, day: str | None = None) -> int:
     api = Rest(cfg)
     channel_id = weekly_channel(api, dc)
     dpath = here / "discord.json"
+    if not claim_issue(dpath):
+        raise ClipperError(f"issue {here.name} is being posted to Discord by another run")
     posted = 0
-    for key, text, files in messages:
-        if jsonstate.read(dpath, {}).get("messages", {}).get(key, {}).get("channel_id") == channel_id:
-            continue
-        msg = api("POST", f"/channels/{channel_id}/messages",
-                  {"content": text, "attachments": [{"id": i, "filename": f.name} for i, f in enumerate(files)]},
-                  files=files)
-        with jsonstate.update(dpath, {}) as state:
-            state.setdefault("messages", {})[key] = {"id": msg["id"], "channel_id": channel_id}
-        posted += 1
-        print(f"discord {key}: {len(files)} pages")
+    try:
+        for key, text, files in messages:
+            if jsonstate.read(dpath, {}).get("messages", {}).get(key, {}).get("channel_id") == channel_id:
+                continue
+            msg = api("POST", f"/channels/{channel_id}/messages",
+                      {"content": text,
+                       "attachments": [{"id": i, "filename": f.name} for i, f in enumerate(files)]},
+                      files=files)
+            with jsonstate.update(dpath, {}) as state:
+                state.setdefault("messages", {})[key] = {"id": msg["id"], "channel_id": channel_id}
+            posted += 1
+            print(f"discord {key}: {len(files)} pages")
+    finally:
+        release_issue(dpath)
     print(f"discord: issue {here.name}, {posted} of {len(messages)} messages posted"
           f"{'' if posted == len(messages) else ' (the rest were already there)'}")
     return posted

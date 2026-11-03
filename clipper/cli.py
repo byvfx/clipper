@@ -598,6 +598,10 @@ def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
     if args.discord:
         from . import notify
 
+        if any([args.headline, args.gather, args.draft, args.render, args.only, args.write, args.format]):
+            raise ClipperError("--discord posts the pages already rendered; build the issue first, "
+                               "then run --discord on its own (with --week for an older issue)")
+
         notify.post_issue(cfg, args.week)
         return
     weekly.run(cfg, day=args.week, headline=args.headline or "", gather_only=args.gather,

@@ -207,3 +207,36 @@ def test_the_issue_goes_to_discord_as_the_carousel_then_two_square_posts(tmp_pat
     msgs = notify.issue_messages(issue, tmp_path, pages)
     assert [(k, len(f)) for k, _, f in msgs] == [("tiktok", 10), ("youtube1", 5), ("youtube2", 5)]
     assert msgs[1][1].endswith("one") and msgs[2][2][0].parent.name == "youtube"
+
+
+def test_a_caption_too_long_for_discord_is_refused_not_cut(tmp_path):
+    from clipper import notify
+
+    pages = [tmp_path / f"{n:02d}_p.jpg" for n in range(1, 11)]
+    (tmp_path / "youtube").mkdir()
+    for p in pages:
+        (tmp_path / "youtube" / p.name).write_bytes(b"")
+    issue = {"issue": 3, "post": {"part1": "x" * 2000, "part2": "two"}}
+    with pytest.raises(ClipperError, match="youtube1"):
+        notify.issue_messages(issue, tmp_path, pages)
+
+
+def test_one_discord_run_at_a_time_and_a_dead_claim_lets_go(tmp_path):
+    from clipper import notify
+
+    dpath = tmp_path / "discord.json"
+    t = datetime(2026, 11, 7, 12, tzinfo=UTC)
+    assert notify.claim_issue(dpath, t)
+    assert not notify.claim_issue(dpath, t + timedelta(minutes=5))
+    assert notify.claim_issue(dpath, t + timedelta(seconds=notify.ISSUE_CLAIM_S + 1))
+    notify.release_issue(dpath)
+    assert notify.claim_issue(dpath, t)
+
+
+def test_discord_refuses_the_build_options(tmp_path, monkeypatch):
+    from clipper import notify
+
+    monkeypatch.setattr(notify, "post_issue", lambda *a: pytest.fail("posted"))
+    args = cli.build_parser().parse_args(["weekly", "--render", "--discord"])
+    with pytest.raises(ClipperError, match="on its own"):
+        cli.cmd_weekly({}, args)
