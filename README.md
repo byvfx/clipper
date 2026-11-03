@@ -100,6 +100,16 @@ is data, `LAYOUT` in `clipper/thumbs/enquirer.py`; a show changes any of it in
 `[colors] green = "#0b3d91"` or `[cover.inset] size = [200, 180]`, and
 `clipper thumbs <stream> --compose-only` redraws with no model calls. An unknown key is an error.
 
+**News.** `clipper news` (#110) watches the headlines about the shows' people: TMZ, Dexerto,
+r/LivestreamFail and a Google News search for each person with a full name. The watchlist is
+each show's cast, known figures and name, plus the cast library and `[news] watch`. A cheap
+model (Haiku, well under a cent a check) rates each headline that names someone: about them and
+not a namesake, new, public conduct (never their children or private people), and groups five
+outlets on one event into one story. The bot posts new stories to Discord with **Dismiss** and
+**Tonight's context**, which adds the story to that show's next stream's `stream_context`
+before scoring; an hour before a show's usual start it suggests that day's stories. The war
+room's News window lists them and searches Google News by hand.
+
 **Weekly issue.** `clipper weekly` turns the week's streams (Sun-Sat) into *Lolcow Cinema
 Weekly*, a ten-page tabloid for a TikTok carousel or two YouTube Posts: a cover, contents,
 the cover story and two features, news in brief, the quote of the week, the week in numbers,

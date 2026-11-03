@@ -732,6 +732,34 @@ def check_cast(cfg: dict) -> None:
              "optional: a Brave Search API key (api-dashboard.search.brave.com) in that file or $BRAVE_API_KEY")
 
 
+def check_news(cfg: dict, offline: bool) -> None:
+    """#110: where the bot posts news, the judge's prompt, and (online) whether the feeds answer."""
+    nc = cfg["news"]
+    if nc["check_minutes"] <= 0:
+        return
+    if not (nc["channel_id"] or cfg["discord"]["review_channel_id"]):
+        fail("news", "[news] check_minutes is on but there is no channel to post to",
+             "set [news] channel_id (or [discord] review_channel_id), or [news] check_minutes = 0")
+    if nc["judge_model"] and not (Path(cfg["paths"]["prompts"]) / f"news_judge_{nc['prompt_version']}.md").exists():
+        fail("news", f"prompts/news_judge_{nc['prompt_version']}.md missing", "set [news] prompt_version to a version on file")
+    if offline:
+        return
+    from . import news
+
+    bad = []
+    for f in nc["feeds"][:4]:
+        try:
+            body, _, _ = news.fetch(f["url"])
+            news.parse_feed(body or b"<rss/>")
+        except Exception as e:  # noqa: BLE001 - any failure is the finding
+            bad.append(f"{f.get('name') or f['url']}: {type(e).__name__}")
+    if bad:
+        warn("news", "feeds not answering: " + "; ".join(bad), "check the address in [news] feeds")
+    else:
+        ok("news", f"every {nc['check_minutes']} min, {len(nc['feeds'])} feeds, {len(nc['reddit'])} subreddits"
+           + (", Google News" if nc["google_news"] else ""))
+
+
 def check_cast_bot(cfg: dict) -> None:
     """The bot's daily `cast auto` and the war room's Cast window check faces with OpenCV."""
     import importlib.util
@@ -838,6 +866,8 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_tailnet(cfg, offline)
     if role == "bot":
         check_cast_bot(cfg)
+    if role in ("all", "bot"):
+        check_news(cfg, offline)
     if not offline:
         check_online(cfg, role)
     n = report(RESULTS)

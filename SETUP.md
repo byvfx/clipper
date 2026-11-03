@@ -601,3 +601,38 @@ recommended portrait size.
    issue posts share with Shorts; a second run at the same time is refused.
 
 Each post's cost is logged like a model call (`clipper costs`, kind `x`).
+
+## News watcher
+
+`clipper news` (#110) reads headlines about the shows' people and posts the ones that matter
+to Discord. Only headlines, a short snippet and the link are stored (`[paths] news`,
+`news.sqlite`); articles are never fetched.
+
+1. **Who**: `clipper news watch` lists the watchlist: each show's `[meta] cast`, `[scoring]
+   known_figures` ("Jer (The Quartering)" adds an alias) and show name, the cast library's
+   people with their aliases, and `[news] watch` (`{ "Ethan Klein" = ["H3 Podcast"] }`).
+   One-word names ("Jer", "Don") only match as written; people with a full name or in `watch`
+   also get a Google News search. Put a name that's a common word in `[news] ignore`.
+2. **Where**: make a #news channel in Discord and put its id in `[news] channel_id` (with none,
+   news goes to the review channel; in a forum it keeps one "News" post).
+3. **Try it**: `clipper news check --no-judge` fetches and matches with no model call;
+   `clipper news check` also rates the matches (`[news] judge_model`, Haiku: about $0.004 for
+   30 headlines) and `clipper news list` shows the stories. `clipper news feeds` shows each
+   source's last fetch and error.
+4. **Automatic**: set `[news] check_minutes = 30` and restart the bot. It posts at most
+   `max_posts` (5) new stories a check, the shows' own people first; "maybe" ones too while
+   `post_maybe` is on. **Tonight's context** shows the text, then **Add it** queues it in
+   `news/context.json` (whole stories, at most 1,500 characters: the preview is all of it); the
+   worker writes it into that show's next stream's `streams/<id>/config.toml` `[scoring]
+   stream_context` (a backup beside it) before scoring, however many days later; a note no stream
+   took in `context_days` (7) is dropped. A `stream_context` in clipper.local.toml or
+   `$CLIPPER_SCORING_STREAM_CONTEXT` would hide it, so the worker leaves the note queued and logs
+   why. `[news] preshow_minutes` (60) before a show's usual start (learned from the last three
+   weeks of streams; once a day per show) the bot lists that day's stories for it with a
+   Context button that previews and adds them.
+5. **Command line**: `clipper news search "Ethan Klein"`, `clipper news dismiss 12`,
+   `clipper news context 12 --show kino`.
+
+The bot and the worker must see the same `[paths] news` folder; on two machines, put it on the
+streams share. `clipper doctor` (bot role) fails when news is on with nowhere to post and, online,
+checks the feeds answer.
