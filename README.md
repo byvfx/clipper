@@ -121,7 +121,8 @@ $0.10 each), and renders 1080x1440 pages plus a square 1080x1080 set in `youtube
 Posts, which show images square (`[weekly] formats`). `--headline "..."` tells the draft what the cover story is; edit `issue.json` (copy, or
 `faces` to pin a frame for someone) and `clipper weekly --render`. Colours, the cover's
 geometry and the fixed copy can be changed in `weekly/style.toml` (SETUP.md). Posting is by hand
-(`post_text.md` has the captions).
+(`post_text.md` has the captions); `clipper weekly --discord` drops the pages and captions in a
+`#weekly` Discord channel to save them on a phone.
 
 ## Start here
 

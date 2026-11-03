@@ -623,6 +623,15 @@ def cmd_receipts(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
     from . import weekly
 
+    if args.discord:
+        from . import notify
+
+        if any([args.headline, args.gather, args.draft, args.render, args.only, args.write, args.format]):
+            raise ClipperError("--discord posts the pages already rendered; build the issue first, "
+                               "then run --discord on its own (with --week for an older issue)")
+
+        notify.post_issue(cfg, args.week)
+        return
     weekly.run(cfg, day=args.week, headline=args.headline or "", gather_only=args.gather,
                redraft=args.draft, render_only=args.render, only=args.only or "", write=args.write or "",
                fmt=args.format or "")
@@ -1123,6 +1132,9 @@ def add_extras(sub) -> None:
                                     "default [weekly] formats")
     p.add_argument("--write", nargs="?", const="03,04,05", metavar="PAGES",
                    help="write the articles again with the writer prompt (03 cover story, 04, 05; default all three)")
+    p.add_argument("--discord", action="store_true",
+                   help="post the issue's pages to [discord] weekly_channel (made if missing), to save on a "
+                        "phone; the newest issue, or --week's")
     p.set_defaults(fn=cmd_weekly)
 
     p = sub.add_parser("receipts", help="old clips of the archive subject for a stream's stories, "
