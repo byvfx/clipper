@@ -158,8 +158,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   A war-room find-and-replace dry run found 14; not applied.
 - Decisions on #66 (transcript-framed edits): which item kinds, replace or sit beside the plain cut,
   sound effects, order after #67. Sloth Beat handle check (@slothbeat).
-- Cast (#41): fill the library in the war room's Cast window (3+ kept each); optionally a Brave Search API
-  key as the Windows user env var `BRAVE_API_KEY` (~$5 per 1,000 searches) for image search.
+- Cast (#41): it fills itself once PR #123 is merged; look over Kept and New in the war room's Cast window
+  (drop wrong or costume photos; image search photos always wait for you). Check Jer f868aa21db.
 - Faces: enroll PPP in his maple-leaf cap from the first non-costume stream the worker scans (kick-135553454
   is named and enrolled: known.json has 12 people, Andy/PPP/Jer 4 samples each).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
@@ -227,6 +227,12 @@ and picks the label (issue.json `photo_labels`); `{known_figures}` adds everyone
 aliases (`[cast] known_figures`). clipper.toml now `enquirer_prompt_version = "v6"` (backup
 backups/clipper.before_prompt_v6_2026-11-02.toml); bot restarted 18:26. #41 closes once a cover and a
 weekly issue (04, 11-07) use kept cast photos.
+**Self-filling (PR #123, branch cast-auto, waiting on Copilot):** worker stage `cast` after `faces` (`cast grab
+--needed`), the bot's daily `cast auto` (Commons, channels, Brave), sure photos auto-kept (stream/Commons/channel
+only, enrolled match >= 0.65, unflagged label, up to [cast] target 6). The Brave key is in secrets/brave_secret.txt
+(user, 11-02; works: Ethan Klein search added 6 New). After merge: `cast` into clipper.toml `[worker] stages`
+(backup), restart bot + worker, first `cast auto` (~$0.15). Jer f868aa21db was auto-kept at 0.73 from
+kick-135553454 but may be a costume lookalike (his enrolled samples are from that stream): the user checks.
 Older notes not on an issue: republish the 2026-10-19 re-cut streams to Kitsu (user said not yet);
 Blade compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`);
 a daily "post kit" folder; `clipper setup` walkthrough #78 (phase 1 done 2026-10-28: bootstrap,
