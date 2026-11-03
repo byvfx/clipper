@@ -105,7 +105,7 @@ r/LivestreamFail and a Google News search for each person with a full name. The 
 each show's cast, known figures and name, plus the cast library and `[news] watch`. A cheap
 model (Haiku, well under a cent a check) rates each headline that names someone: about them and
 not a namesake, new, public conduct (never their children or private people), and groups five
-outlets on one event into one story. The bot posts new stories to Discord with **Dismiss** and
+outlets on one event into one story. The bot posts new stories to a #news channel (it makes it if missing) with **Dismiss** and
 **Tonight's context**, which adds the story to that show's next stream's `stream_context`
 before scoring; an hour before a show's usual start it suggests that day's stories. The war
 room's News window lists them and searches Google News by hand.

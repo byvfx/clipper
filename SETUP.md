@@ -613,8 +613,9 @@ to Discord. Only headlines, a short snippet and the link are stored (`[paths] ne
    people with their aliases, and `[news] watch` (`{ "Ethan Klein" = ["H3 Podcast"] }`).
    One-word names ("Jer", "Don") only match as written; people with a full name or in `watch`
    also get a Google News search. Put a name that's a common word in `[news] ignore`.
-2. **Where**: make a #news channel in Discord and put its id in `[news] channel_id` (with none,
-   news goes to the review channel; in a forum it keeps one "News" post).
+2. **Where**: the bot posts to the text channel `[news] channel` ("news"), and makes it if the server
+   has none (it needs Manage Channels for that; otherwise make #news by hand). `channel_id` picks a
+   channel by id instead; with both empty, news goes to the review channel (in a forum, one "News" post).
 3. **Try it**: `clipper news check --no-judge` fetches and matches with no model call;
    `clipper news check` also rates the matches (`[news] judge_model`, Haiku: about $0.004 for
    30 headlines) and `clipper news list` shows the stories. `clipper news feeds` shows each

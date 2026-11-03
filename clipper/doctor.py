@@ -737,9 +737,9 @@ def check_news(cfg: dict, offline: bool) -> None:
     nc = cfg["news"]
     if nc["check_minutes"] <= 0:
         return
-    if not (nc["channel_id"] or cfg["discord"]["review_channel_id"]):
+    if not (nc["channel"] or nc["channel_id"] or cfg["discord"]["review_channel_id"]):
         fail("news", "[news] check_minutes is on but there is no channel to post to",
-             "set [news] channel_id (or [discord] review_channel_id), or [news] check_minutes = 0")
+             "set [news] channel (a name the bot makes) or channel_id, or [news] check_minutes = 0")
     if nc["judge_model"] and not (Path(cfg["paths"]["prompts"]) / f"news_judge_{nc['prompt_version']}.md").exists():
         fail("news", f"prompts/news_judge_{nc['prompt_version']}.md missing", "set [news] prompt_version to a version on file")
     if offline:
