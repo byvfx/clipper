@@ -61,24 +61,28 @@ document.addEventListener("click", async e => {
   if (t.id === "newsBtn") return showNews();
   if (!NS) return;
   const ds = t.dataset;
-  if (ds.ndis) return newsPost("/api/news/dismiss", { ids: [+ds.ndis] }, "Dismissed");
+  if (ds.ndis) return newsPost("/api/news/dismiss", { ids: [+ds.ndis], days: NS.days }, "Dismissed");
   if (ds.nctx) {
+    const win = NS.win;
     const r = await newsPost("/api/news/context", { ids: [+ds.nctx], preview: true });
-    if (r) { NS.ctx = { ids: [+ds.nctx], show: r.show, text: r.text }; renderNews(); }
+    if (r && NS && newsWin(win)) { NS.ctx = { ids: r.ids, show: r.show, text: r.text }; renderNews(); }
     return;
   }
   if (t.id === "newsCancel") { NS.ctx = null; return renderNews(); }
   if (t.id === "newsAdd") {
     const show = $("#newsShow").value;
-    return newsPost("/api/news/context", { ids: NS.ctx.ids, show }, `Added to ${NS.data.shows[show] || show}'s next stream`);
+    return newsPost("/api/news/context", { ids: NS.ctx.ids, show, days: NS.days }, `Added to ${NS.data.shows[show] || show}'s next stream`);
   }
   if (t.id === "newsClear") { NS.hits = null; NS.q = ""; return renderNews(); }
   if (t.id === "newsGo") {
     const q = $("#newsQ").value.trim();
     if (!q) return toast("Type something to search for.", true);
     t.disabled = true;
-    try { const r = await api("/api/news/search?q=" + encodeURIComponent(q)); NS.hits = r.hits; NS.q = q; renderNews(); }
-    catch (err) { toast(err.message, true); t.disabled = false; }
+    const win = NS.win;  // the window may close, or be replaced, before Google answers
+    try {
+      const r = await api("/api/news/search?q=" + encodeURIComponent(q));
+      if (NS && newsWin(win)) { NS.hits = r.hits; NS.q = q; renderNews(); }
+    } catch (err) { if (NS && newsWin(win)) { toast(err.message, true); t.disabled = false; } }
   }
 });
 document.addEventListener("change", e => {

@@ -269,7 +269,8 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
         try:  # #110: news context queued for this show's next stream, before scoring reads it
             from . import news
 
-            news.apply_pending(cfg, stream_dir, say=lambda m: log.info("%s: %s", name, m))
+            if "score" in order and (force or not run.done("score")):  # only a run that will score
+                news.apply_pending(cfg, stream_dir, say=lambda m: log.info("%s: %s", name, m))
         except (ClipperError, OSError, ValueError, KeyError) as e:  # never worth failing a stream over
             log.warning("%s: news context not applied: %s", name, e)
         for stage in order:

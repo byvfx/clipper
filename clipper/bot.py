@@ -396,58 +396,69 @@ class Bot(discord.Client):
         if not todo and not due:
             return
         channel = await self.news_channel()
+        quiet = discord.AllowedMentions.none()  # headlines are outside text: never a ping
         for s in todo:
             view = discord.ui.View(timeout=None)
             view.add_item(CardButton("newsctx", str(s["id"]), "Tonight's context", discord.ButtonStyle.primary))
             view.add_item(CardButton("newsdismiss", str(s["id"]), "Dismiss"))
-            msg = await channel.send(news.post_text(cfg, s), view=view)
+            msg = await channel.send(news.post_text(cfg, s), view=view, allowed_mentions=quiet)
             await asyncio.to_thread(news.mark, cfg, s["id"], posted_at=news.iso(news.now()), message_id=str(msg.id))
         for d in due:
-            ref = f"{d['show']}.{'-'.join(map(str, d['stories']))}"
+            # The button carries the suggestion's number; its stories are kept with it.
+            n = await asyncio.to_thread(news.mark_suggested, cfg, d["slot"], d["show"], d["stories"])
             view = discord.ui.View(timeout=None)
-            if len(ref) <= 80:
-                view.add_item(CardButton("newsctx", ref, f"Add to {d['show_name']}'s context",
-                                         discord.ButtonStyle.primary))
+            view.add_item(CardButton("newsctx", f"s{n}", f"Context for {d['show_name']}"[:80],
+                                     discord.ButtonStyle.primary))
             start = datetime.fromisoformat(d["start"])
             text = (f"🗞️ **{d['show_name']}** usually starts <t:{int(start.timestamp())}:R>. In the news today "
-                    "about its people:\n" + "\n".join(f"- #{i} {h}" for i, h in zip(d["stories"], d["headlines"]))
-                    + f"\n\nAs context for tonight's clips:\n> {d['text'][:1200]}")
-            await channel.send(text[:2000], view=view)
-            await asyncio.to_thread(news.mark_suggested, cfg, d["slot"])
+                    "about its people:\n" + "\n".join(f"- #{i} {h}" for i, h in zip(d["stories"], d["headlines"])))
+            await channel.send(text[:1990], view=view, allowed_mentions=quiet)
         log.info(f"news: posted {len(todo)} story(ies), {len(due)} pre-show suggestion(s)")
 
     async def news_button(self, interaction: discord.Interaction, action: str, ref: str) -> None:
-        """newsdismiss <id>; newsctx [<show>.]<id>[-<id>...] shows the context text with an Add
-        button (newsadd), which queues it for the show's next stream."""
-        show, _, ids_text = ref.rpartition(".")
+        """newsdismiss <id>; newsctx <id> (a story) or s<n> (a pre-show suggestion) shows the
+        context text exactly as it would be queued, with an Add button (newsadd <show>.<id> or
+        s<n>) that queues it for the show's next stream."""
+        cfg, quiet = self.cfg, discord.AllowedMentions.none()
+        show = ""
         try:
-            ids = [int(x) for x in ids_text.split("-")]
+            if ref.startswith("s"):
+                show, ids = await asyncio.to_thread(news.suggestion, cfg, int(ref[1:]))
+            else:
+                show, _, ids_text = ref.rpartition(".")
+                ids = [int(x) for x in ids_text.split("-")]
         except ValueError:
             await interaction.response.send_message(f"Bad news button {ref}", ephemeral=True)
             return
+        except ClipperError as e:
+            await interaction.response.send_message(f"Nothing changed: {e}", ephemeral=True)
+            return
+        show = "" if show == "-" else show
         who = self.who(interaction)
         try:
             if action == "newsdismiss":
-                await asyncio.to_thread(news.dismiss, self.cfg, ids)
+                await asyncio.to_thread(news.dismiss, cfg, ids)
                 log.info(f"{who}: news dismiss {ids}")
                 await interaction.response.edit_message(
                     content=f"~~{interaction.message.content[:1900]}~~\nDismissed by {interaction.user.name}.",
-                    view=None)
+                    view=None, allowed_mentions=quiet)
             elif action == "newsctx":
-                found = await asyncio.to_thread(news.stories, self.cfg, 3, ids)
-                show = show or (await asyncio.to_thread(news.story_show, self.cfg, found[0]) if found else "")
-                text = " ".join(news.context_text(s) for s in found)
+                found = await asyncio.to_thread(news.stories, cfg, 3, ids)
+                found.sort(key=lambda s: ids.index(s["id"]))
+                text, used = news.context_block(found)  # what Add queues, whole (at most CONTEXT_MAX)
+                show = show or (await asyncio.to_thread(news.story_show, cfg, found[0]) if found else "")
                 view = discord.ui.View(timeout=None)
-                view.add_item(CardButton("newsadd", f"{show or '-'}.{ids_text}", "Add it", discord.ButtonStyle.success))
+                add_ref = ref if ref.startswith("s") else f"{show or '-'}.{'-'.join(map(str, used))}"
+                view.add_item(CardButton("newsadd", add_ref, "Add it", discord.ButtonStyle.success))
                 await interaction.response.send_message(
-                    f"For {news.show_names(self.cfg).get(show, show) or 'which show? (`clipper news context --show`)'}'s "
-                    f"next stream, [scoring] stream_context gets:\n> {text[:1700]}", view=view if show else None,
-                    ephemeral=True)
+                    f"For {news.show_names(cfg).get(show, show) or 'which show? (`clipper news context --show`)'}'s "
+                    f"next stream, [scoring] stream_context gets:\n> {text}"[:2000],
+                    view=view if show and used else None, ephemeral=True, allowed_mentions=quiet)
             elif action == "newsadd":
-                e = await asyncio.to_thread(news.set_context, self.cfg, ids, "" if show == "-" else show, who)
-                log.info(f"{who}: news context {ids} for {e['show']}")
+                e = await asyncio.to_thread(news.set_context, cfg, ids, show, who)
+                log.info(f"{who}: news context {e['stories']} for {e['show']}")
                 await interaction.response.edit_message(
-                    content=f"Added to {news.show_names(self.cfg).get(e['show'], e['show'])}'s next stream: "
+                    content=f"Added to {news.show_names(cfg).get(e['show'], e['show'])}'s next stream: "
                             f"the worker puts it in that stream's config.toml before scoring.", view=None)
         except ClipperError as e:
             if interaction.response.is_done():

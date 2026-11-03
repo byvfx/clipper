@@ -1040,7 +1040,7 @@ def _check(cfg: dict, body: dict) -> dict:  # #19: style warnings while typing
 
 # ---------- #110 news: stories about the shows' people ----------
 
-def news_get(cfg: dict, days: str = "") -> dict:
+def news_get(cfg: dict, days: str | float = "") -> dict:
     """The last few days' stories (dismissed ones too, marked), the shows, each source's state."""
     from . import news
 
@@ -1071,20 +1071,22 @@ def news_dismiss(cfg: dict, body: dict) -> dict:
     from . import news
 
     news.dismiss(cfg, _news_ids(body))
-    return news_get(cfg)
+    return news_get(cfg, body.get("days") or "")
 
 
 def news_context(cfg: dict, body: dict) -> dict:
-    """{ids, show?, preview?}: preview returns the text and the show without queueing it."""
+    """{ids, show?, preview?, days?}: preview returns the text, the stories it covers and the show
+    without queueing it."""
     from . import news
 
     ids = _news_ids(body)
     if body.get("preview"):
         found = news.stories(cfg, ids=ids)
+        text, used = news.context_block(found)
         return {"show": str(body.get("show") or (news.story_show(cfg, found[0]) if found else "")),
-                "text": " ".join(news.context_text(s) for s in found)}
+                "text": text, "ids": used}
     e = news.set_context(cfg, ids, str(body.get("show") or ""), who="war room")
-    return {**news_get(cfg), "added": e}
+    return {**news_get(cfg, body.get("days") or ""), "added": e}
 
 
 # The API: path -> fn(cfg, query) for GET, fn(cfg, JSON body) for POST; each returns JSON.

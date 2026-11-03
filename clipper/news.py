@@ -66,13 +66,17 @@ CREATE TABLE IF NOT EXISTS feeds (url TEXT PRIMARY KEY, name TEXT, etag TEXT, mo
     fetched_at TEXT, error TEXT, items INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS items (url TEXT PRIMARY KEY, tkey TEXT, title TEXT, snippet TEXT,
     published TEXT, source TEXT, feed TEXT, seen_at TEXT, matched TEXT, rating TEXT,
-    story INTEGER, why TEXT);
+    story INTEGER, why TEXT, dup_of TEXT, claim TEXT, claimed_at TEXT);
 CREATE INDEX IF NOT EXISTS items_tkey ON items(tkey);
-CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY, headline TEXT, person TEXT,
+CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY AUTOINCREMENT, headline TEXT, person TEXT,
     show TEXT, rating TEXT, why TEXT, first_at TEXT, last_at TEXT, posted_at TEXT,
     message_id TEXT, dismissed INTEGER DEFAULT 0, context_at TEXT);
-CREATE TABLE IF NOT EXISTS suggested (slot TEXT PRIMARY KEY, at TEXT);
+CREATE TABLE IF NOT EXISTS suggested (id INTEGER PRIMARY KEY AUTOINCREMENT, slot TEXT UNIQUE, at TEXT,
+    show TEXT, stories TEXT);
 """
+
+# AUTOINCREMENT: a story id is never reused after old ones are forgotten, so a Discord button
+# that outlives its story can't act on a newer one.
 
 
 def now() -> datetime:
@@ -152,9 +156,13 @@ def watchlist(cfg: dict) -> dict[str, Watch]:
             if aliases and not any(a[0].isupper() or a[0].isdigit() for a in aliases):
                 continue  # "Rich (review tech)": someone described, not a public name
             add(person, aliases, show=key)
-    for person, aliases in cast.figures(cfg):
+    try:  # everyone in the cast library, with or without a kept photo
+        library = cast.people(cfg) if cfg["thumbnail"].get("photos") else {}
+    except OSError:  # a machine without the photos share
+        library = {}
+    for person, d in library.items():
         if "(" not in person:
-            add(person, aliases)
+            add(person, d.get("aliases") or [])
     for person, aliases in (nc["watch"] or {}).items():
         add(person, aliases if isinstance(aliases, list) else [aliases], search=True)
     return out
@@ -261,20 +269,32 @@ def title_key(title: str) -> str:
 
 
 def store(db: sqlite3.Connection, entries: list[dict], feed: str, max_age_hours: int) -> int:
-    """New items (not seen by url, or by headline in the last 3 days); returns how many."""
+    """New items (not seen by url); returns how many. The same headline from another place in
+    the last 3 days is kept as a copy of the first (dup_of): its link joins the story, and it
+    takes the first one's verdict instead of being judged again."""
     t, cut, n = now(), now() - timedelta(hours=max_age_hours), 0
     for e in entries:
         if e["published"] and datetime.fromisoformat(e["published"]) < cut:
             continue
-        tk = title_key(e["title"])
-        if db.execute("SELECT 1 FROM items WHERE url = ? OR (tkey = ? AND seen_at > ?)",
-                      (e["url"], tk, iso(t - timedelta(days=3)))).fetchone():
+        if db.execute("SELECT 1 FROM items WHERE url = ?", (e["url"],)).fetchone():
             continue
-        db.execute("INSERT INTO items (url, tkey, title, snippet, published, source, feed, seen_at) "
-                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                   (e["url"], tk, e["title"], e["snippet"], e["published"] or iso(t), e["source"], feed, iso(t)))
+        tk = title_key(e["title"])
+        first = db.execute("SELECT url FROM items WHERE tkey = ? AND dup_of IS NULL AND seen_at > ?",
+                           (tk, iso(t - timedelta(days=3)))).fetchone()
+        db.execute("INSERT INTO items (url, tkey, title, snippet, published, source, feed, seen_at, dup_of) "
+                   "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                   (e["url"], tk, e["title"], e["snippet"], e["published"] or iso(t), e["source"], feed, iso(t),
+                    first["url"] if first else None))
         n += 1
     return n
+
+
+def copy_verdicts(db: sqlite3.Connection) -> None:
+    """Copies of a judged headline take its rating and story."""
+    db.execute("UPDATE items SET rating = (SELECT o.rating FROM items o WHERE o.url = items.dup_of), "
+               "story = (SELECT o.story FROM items o WHERE o.url = items.dup_of) "
+               "WHERE dup_of IS NOT NULL AND rating IS NULL "
+               "AND (SELECT o.rating FROM items o WHERE o.url = items.dup_of) IS NOT NULL")
 
 
 # ---------- check ----------
@@ -295,9 +315,10 @@ def check(cfg: dict, judge: bool = True, claude=None, say=print) -> list[int]:
             err, got = "", 0
             etag, modified = (row["etag"], row["modified"]) if row else ("", "")
             try:
-                body, etag, modified = fetch(url, etag, modified)
+                body, new_etag, new_modified = fetch(url, etag, modified)
                 if body:
                     got = store(db, parse_feed(body, name), name, nc["max_age_hours"])
+                etag, modified = new_etag, new_modified  # only once the body was read and stored
             except (OSError, ET.ParseError, ValueError, ClipperError) as e:
                 err = f"{type(e).__name__}: {e}"[:200]
                 say(f"  {name}: {err}")
@@ -318,6 +339,7 @@ def check(cfg: dict, judge: bool = True, claude=None, say=print) -> list[int]:
         say(f"{new} new item(s), {hits} name match(es)")
         if judge:
             judge_items(cfg, db, watch, claude, say)
+        copy_verdicts(db)
         cut = iso(now() - timedelta(days=nc["keep_days"]))
         db.execute("DELETE FROM items WHERE seen_at < ?", (cut,))
         db.execute("DELETE FROM stories WHERE last_at < ? AND id NOT IN (SELECT story FROM items WHERE story IS NOT NULL)", (cut,))
@@ -362,13 +384,32 @@ def judge_request(batch: list[sqlite3.Row], watch: dict[str, Watch], open_storie
 
 def judge_items(cfg: dict, db: sqlite3.Connection, watch: dict[str, Watch], claude=None, say=print) -> int:
     """Rate the matched, unjudged items, newest first, at most [news] max_judge per check."""
+
+    nc = cfg["news"]
+    # A claim per check, so a `news check` by hand while the bot's runs judges other rows; a
+    # claim older than half an hour was left by a check that died. Unjudged rows (a refusal, a
+    # verdict missing) are tried again by later checks until they're older than max_age_hours.
+    token, t = f"{os.getpid()}-{time.monotonic_ns()}", now()
+    db.execute("UPDATE items SET claim = NULL WHERE claim IS NOT NULL AND claimed_at < ?",
+               (iso(t - timedelta(minutes=30)),))
+    db.execute("UPDATE items SET claim = ?, claimed_at = ? WHERE url IN (SELECT url FROM items WHERE rating IS NULL "
+               "AND claim IS NULL AND dup_of IS NULL AND seen_at > ? ORDER BY published DESC LIMIT ?)",
+               (token, iso(t), iso(t - timedelta(hours=nc["max_age_hours"])), nc["max_judge"]))
+    db.commit()
+    todo = db.execute("SELECT * FROM items WHERE claim = ? ORDER BY published DESC", (token,)).fetchall()
+    if not todo:
+        return 0
+    try:
+        return _judge(cfg, db, watch, todo, claude, say)
+    finally:
+        db.execute("UPDATE items SET claim = NULL WHERE claim = ?", (token,))
+        db.commit()
+
+
+def _judge(cfg: dict, db: sqlite3.Connection, watch: dict[str, Watch], todo: list, claude, say) -> int:
     from .prompts import Prompts
 
     nc = cfg["news"]
-    todo = db.execute("SELECT * FROM items WHERE rating IS NULL ORDER BY published DESC LIMIT ?",
-                      (nc["max_judge"],)).fetchall()
-    if not todo:
-        return 0
     if claude is None:
         from .llm import Claude, preflight
 
@@ -381,14 +422,18 @@ def judge_items(cfg: dict, db: sqlite3.Connection, watch: dict[str, Watch], clau
     done = 0
     for b in range(0, len(todo), 20):
         batch = todo[b:b + 20]
-        opened = db.execute("SELECT id, headline, person FROM stories WHERE dismissed = 0 AND last_at > ? "
+        # Dismissed stories too: a later headline on a dismissed event joins it (and stays unposted).
+        opened = db.execute("SELECT id, headline, person FROM stories WHERE last_at > ? "
                             "ORDER BY last_at DESC LIMIT 40", (iso(now() - timedelta(days=3)),)).fetchall()
         out, _meta = claude.json_call(nc["judge_model"], system, judge_request(batch, watch, opened, names),
                                       JUDGE_SCHEMA, nc["judge_effort"])
-        verdicts = {v["i"]: v for v in (out or {}).get("items", []) if isinstance(v.get("i"), int)}
+        if out is None:  # refused: leave the rest unjudged for the next check
+            say(f"the judge refused a batch of {len(batch)}; trying again next check")
+            break
+        verdicts = {v["i"]: v for v in out.get("items", []) if isinstance(v.get("i"), int)}
         apply_verdicts(db, batch, verdicts, {s["id"] for s in opened}, set(names))
         db.commit()
-        done += len(batch)
+        done += len(verdicts)
     say(f"judged {done} item(s)" + (f", ${claude.cost:.3f}" if getattr(claude, "cost", 0) else ""))
     return done
 
@@ -397,11 +442,12 @@ def apply_verdicts(db: sqlite3.Connection, batch: list, verdicts: dict[int, dict
                    shows: set[str]) -> None:
     """Each item's rating, and its story: an open one the judge named, the new one of an earlier
     item in this batch it is the same event as (same_as), else a new one. An item the judge left
-    out is "no"."""
+    out stays unjudged (a later check tries it again)."""
     made: dict[int, int] = {}  # item number -> the story it went into, in this batch
     for i, r in enumerate(batch, 1):
-        v = verdicts.get(i) or {"rating": "no", "why": "not judged", "person": "", "show": "", "story": 0,
-                                "same_as": 0, "headline": ""}
+        v = verdicts.get(i)
+        if not v:
+            continue
         rating = v["rating"] if v["rating"] in RATINGS else "no"
         sid = v["story"] if v["story"] in open_ids else made.get(v.get("same_as") or 0)
         if rating == "no":
@@ -514,9 +560,24 @@ def post_text(cfg: dict, s: dict) -> str:
 
 # ---------- tonight's context ----------
 
+CONTEXT_MAX = 1500  # one queued note, at most (the Discord preview shows all of it)
+
+
 def context_text(s: dict) -> str:
-    day = (s["last_at"] or "")[:10]
-    return f"In the news ({day}): {s['headline']}. {s['why']}".strip()
+    return f"In the news: {s['headline']}. {s['why']}".strip()
+
+
+def context_block(found: list[dict]) -> tuple[str, list[int]]:
+    """(text, story ids) for these stories as one note: whole stories while they fit in
+    CONTEXT_MAX, so a preview of it shows exactly what Add queues."""
+    parts, ids = [], []
+    for s in found:
+        t = context_text(s)
+        if parts and len(" ".join([*parts, t])) > CONTEXT_MAX:
+            continue
+        parts.append(t[:CONTEXT_MAX])
+        ids.append(s["id"])
+    return " ".join(parts), ids
 
 
 def story_show(cfg: dict, s: dict) -> str:
@@ -536,13 +597,20 @@ def set_context(cfg: dict, ids: list[int], show: str = "", who: str = "") -> dic
     show = show or story_show(cfg, found[0])
     if show not in (cfg.get("shows") or {}):
         raise ClipperError(f"no show for story {ids[0]}: give one with --show ({', '.join(cfg.get('shows') or {})})")
-    entry = {"show": show, "stories": sorted(set(ids)), "text": " ".join(context_text(s) for s in found),
-             "at": iso(now()), "by": who, "used": ""}
+    found.sort(key=lambda s: ids.index(s["id"]))
+    text, used = context_block(found)
+    entry = {"show": show, "stories": used, "text": text, "at": iso(now()), "by": who, "used": ""}
     with jsonstate.update(home(cfg) / "context.json", {}) as data:
         data.setdefault("pending", []).append(entry)
-    for s in found:
-        mark(cfg, s["id"], context_at=entry["at"])
+    for sid in used:
+        mark(cfg, sid, context_at=entry["at"])
     return entry
+
+
+def queued(cfg: dict, show: str) -> set[int]:
+    """Stories waiting (or used) as context for this show."""
+    data = jsonstate.read(Path(cfg["paths"]["news"]) / "context.json", {}) or {}
+    return {sid for e in data.get("pending", []) if e["show"] == show for sid in e["stories"]}
 
 
 def toml_value(v) -> str:
@@ -575,6 +643,12 @@ def add_stream_context(cfg: dict, sdir: Path, text: str) -> None:
     copied first to config.toml.before_news_<time>); starts from the show's when it has none."""
     from .config import STREAM_CONFIG, for_stream
 
+    root = cfg.get("_root") or cfg
+    if os.environ.get("CLIPPER_SCORING_STREAM_CONTEXT") is not None or \
+            "stream_context" in ((root.get("_local") or {}).get("scoring") or {}):
+        raise ClipperError("[scoring] stream_context is set in clipper.local.toml or $CLIPPER_SCORING_STREAM_CONTEXT, "
+                           "which win over a stream's config.toml: take it out there, or the news note can't reach "
+                           "scoring (it stays queued)")
     path = sdir / STREAM_CONFIG
     data = tomllib.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     if path.exists():
@@ -586,8 +660,10 @@ def add_stream_context(cfg: dict, sdir: Path, text: str) -> None:
 
 
 def apply_pending(cfg: dict, sdir: Path, say=print) -> int:
-    """The worker, before a stream's stages: context.json entries for its show made from a day
-    before the stream started to 12 h after go into its config.toml, once. Returns how many."""
+    """The worker, before a stream's scoring: context.json entries for its show go into its
+    config.toml, once: notes added up to 12 h after the stream started (so not an older stream
+    being redone), however long before. A note no stream took in [news] context_days is
+    dropped. Returns how many were added."""
     from .config import show_of_channel, stream_channel
 
     path = Path(cfg["paths"]["news"]) / "context.json"
@@ -600,9 +676,13 @@ def apply_pending(cfg: dict, sdir: Path, say=print) -> int:
     except (KeyError, TypeError, ValueError):
         return 0
     start = start if start.tzinfo else start.replace(tzinfo=UTC)
+    stale = now() - timedelta(days=cfg["news"]["context_days"])
     with jsonstate.update(path, {}) as data:
+        for e in data.get("pending", []):
+            if not e["used"] and datetime.fromisoformat(e["at"]) < stale:
+                e["used"] = "expired"
         due = [e for e in data.get("pending", []) if e["show"] == show and not e["used"]
-               and start - timedelta(hours=24) <= datetime.fromisoformat(e["at"]) <= start + timedelta(hours=12)]
+               and datetime.fromisoformat(e["at"]) <= start + timedelta(hours=12)]
         if due:
             add_stream_context(cfg, sdir, "\n".join(e["text"] for e in due))
             for e in due:
@@ -637,9 +717,11 @@ def show_slots(cfg: dict, days: int = 21) -> dict[str, list[tuple[int, int]]]:
             continue
         if not show or datetime.now(tz) - at > timedelta(days=days):
             continue
-        minute = round((at.hour * 60 + at.minute) / 30) * 30 % 1440
-        if (at.weekday(), minute) not in slots.setdefault(show, []):
-            slots[show].append((at.weekday(), minute))
+        at = at.replace(second=0, microsecond=0)
+        at += timedelta(minutes=round(at.minute / 30) * 30 - at.minute)  # 23:50 -> the next day's 00:00
+        slot = (at.weekday(), at.hour * 60 + at.minute)
+        if slot not in slots.setdefault(show, []):
+            slots[show].append(slot)
     _SLOTS.update(at=time.monotonic(), slots=slots)
     return slots
 
@@ -658,7 +740,8 @@ def next_start(slots: list[tuple[int, int]], at: datetime) -> datetime | None:
 
 def due_suggestions(cfg: dict, at: datetime | None = None) -> list[dict]:
     """Shows starting within [news] preshow_minutes with stories about their people from the last
-    day that haven't been suggested for that start: [{slot, show, show_name, start, stories, text}]."""
+    day not yet queued for that show, once per show and day (a show that started at 18:00 one
+    week and 18:30 another gets one): [{slot, show, show_name, start, stories, headlines, text}]."""
     nc = cfg["news"]
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     at = (at or now()).astimezone(tz)
@@ -674,26 +757,43 @@ def due_suggestions(cfg: dict, at: datetime | None = None) -> list[dict]:
         start = next_start(slots, at)
         if not start or start - at > timedelta(minutes=nc["preshow_minutes"]):
             continue
-        slot = f"{show}@{iso(start)}"
+        slot = f"{show}@{start.date().isoformat()}"
         if slot in done:
             continue
         people = {w.name for w in watch.values() if show in w.shows}
-        picked = [s for s in stories(cfg, days=1) if s["rating"] in ("strong", "maybe") and not s["context_at"]
+        taken = queued(cfg, show)
+        picked = [s for s in stories(cfg, days=1) if s["rating"] in ("strong", "maybe") and s["id"] not in taken
                   and (s["show"] == show or s["person"] in people)]
-        if picked:
+        text, ids = context_block(picked)
+        if ids:
+            heads = {s["id"]: s["headline"] for s in picked}
             out.append({"slot": slot, "show": show, "show_name": names.get(show, show), "start": iso(start),
-                        "stories": [s["id"] for s in picked], "headlines": [s["headline"] for s in picked],
-                        "text": " ".join(context_text(s) for s in picked)})
+                        "stories": ids, "headlines": [heads[i] for i in ids], "text": text})
     return out
 
 
-def mark_suggested(cfg: dict, slot: str) -> None:
+def mark_suggested(cfg: dict, slot: str, show: str = "", ids: list[int] | None = None) -> int:
+    """Record a suggestion; returns its number (the Discord button's short reference)."""
     db = connect(cfg)
     try:
-        db.execute("INSERT OR REPLACE INTO suggested (slot, at) VALUES (?, ?)", (slot, iso(now())))
+        sid = db.execute("INSERT OR REPLACE INTO suggested (slot, at, show, stories) VALUES (?, ?, ?, ?)",
+                         (slot, iso(now()), show, json.dumps(ids or []))).lastrowid
         db.commit()
+        return sid
     finally:
         db.close()
+
+
+def suggestion(cfg: dict, sid: int) -> tuple[str, list[int]]:
+    """(show, story ids) of suggestion sid."""
+    db = connect(cfg)
+    try:
+        r = db.execute("SELECT show, stories FROM suggested WHERE id = ?", (sid,)).fetchone()
+    finally:
+        db.close()
+    if not r:
+        raise ClipperError(f"no suggestion {sid}")
+    return r["show"], json.loads(r["stories"] or "[]")
 
 
 # ---------- the command line ----------

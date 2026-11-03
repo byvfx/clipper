@@ -414,6 +414,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_judge": 60,          # most headlines judged per check (newest first)
         "post_maybe": True,       # post "maybe" stories too, marked as such
         "max_posts": 5,           # most stories posted per check (strong ones first)
+        "context_days": 7,        # a queued context note no stream of its show took by then is dropped
         "preshow_minutes": 60,    # suggest the day's stories this long before a show's usual start
                                   # (learned from the last three weeks of streams); 0 = off
     },
