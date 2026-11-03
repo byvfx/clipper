@@ -23,7 +23,8 @@ Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds 
 `cut` (segments lossless w/ keyframe starts, compilations joined, picks re-encoded; slurs+"fuck" bleeped) →
 `meta` (SEO title/description/chapters/tags + .srt) → `thumbs` (Enquirer tabloid covers) →
 `review publish` (Kitsu on NAS 192.168.0.155:8090 + Discord cards) → `review sync` / Discord bot →
-`schedule` → `upload` (YouTube). Discord bot runs always-on (`clipper bot`, scheduled task `clipper-bot`).
+`schedule` → `upload` (YouTube). Always on: `clipper serve` (task `clipper-serve`: the war room, hourly
+replan + upload, pre-show grabs, retakes, daily jobs) and the Discord bot (`clipper bot`, task `clipper-bot`).
 
 Around it (each a subcommand; details in README and the log): `record` (NAS Docker recorder),
 `worker` (GPU machine: fast lane clips/Shorts first, then segments), `shorts` (vertical, scene-aware
@@ -56,7 +57,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   `youtube.metadata()` masks again at upload (#8).
 - Shorts: 15-59 s hot takes, 3 slots a day (10/15/20); horizontal clips are cut and drafted but never
   scheduled (user, 2026-10-21). A Short switches layout at each scene cut (Haiku + reference frames).
-- Uploads: automatic since 2026-10-20 (bot: `clipper schedule` then `clipper upload` hourly), private with
+- Uploads: automatic since 2026-10-20 (serve: `clipper schedule` then `clipper upload` hourly), private with
   publishAt, 15 a day hourly 08:00-22:00, `[youtube] max_per_24h` 15 (channel allows 100; user leaves room),
   shows take turns (`mix_shows`). `manual_publish = false`: **"asap" items (pre-shows, one-offs) publish
   public the moment they upload.** Every upload also joins its show's playlist. Source links are added
@@ -92,12 +93,14 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - The taste layer is the asset (prompts, clipper.toml show tables, house_style, Kitsu): see "Back up".
 
 ## State now (2026-10-30)
-- **Running on this laptop** as scheduled tasks: `clipper-bot` (Discord cards, hourly replan + upload,
-  pre-show polls every 5 min, retakes, DM alerts, war room on :8765 and https://thor.taile415cd.ts.net/)
-  and `clipper-worker` (runs each finished NAS recording). Both restarted 2026-10-30 17:15 at dbee129
-  (#106) through the task scripts.
-  Restart the bot after scheduler/war-room Python changes (see Gotchas); stages run as fresh
-  processes, so most other changes need no restart.
+- **Running on this laptop** as scheduled tasks (since 2026-11-03, branch serve-split): `clipper-serve`
+  (war room on :8765 and https://thor.taile415cd.ts.net/, hourly replan + upload, pre-show polls every
+  5 min, retakes, daily cast / news / analytics jobs; heartbeat `streams/.serve/status.json`),
+  `clipper-bot` (Discord cards, buttons, DMs, news posts; asks serve over `[serve] url` to replan and
+  start retakes; heartbeat `streams/.bot/status.json`) and `clipper-worker` (runs each finished NAS
+  recording). `clipper services status` shows all three with the heartbeats.
+  Restart serve after scheduler/war-room Python changes, the bot after Discord changes (see Gotchas);
+  stages run as fresh processes, so most other changes need no restart.
 - **NAS** (192.168.0.155): recorder container (`deploy/record`, redeployed 2026-10-30 15:09 at 1e4f724,
   watching kinocasinogaming + donflurgundy), Kitsu :8090, the streams share, photos share, cut container.
 - **Shows:** kino and c404 live through review → schedule; dsp and blade are config-only tests; `trish` is a
@@ -173,6 +176,26 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The user signed in again 11-02 16:57 (In production), so the token shouldn't lapse.
 
 ## Open work
+**Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
+10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line
+wedges a stream's finalize; ~15 medium: quiet failures in the bot's notify loop and Health, `[notify]`
+time strings never validated, a passed Publish-at pin dropped as stale, upload `done` without
+publish_at, Pass B ids never checked against kept candidates, re-runs of score/cut+thumbs/weekly
+--render that repay model calls, cast auto-keep one-sided for enrolled people, stream ids and effort
+values unvalidated). Proposed order and the user's questions are in the report. **Done: the
+`clipper serve` split (branch serve-split, 2026-11-03; State now), which also fixed audit #2 (tailnet
+status before the notify loop's try) and #3 (Health from a lock file that never went away: now
+heartbeats). The other findings are not fixed yet.** User's direction answers (2026-11-03): split the
+jobs loop and the war room out of the bot into `clipper serve` so the laptop can sleep (first step of
+#64/#12; done); the war room is the
+review surface, Discord cards kept because they approve from anywhere (phone); keep building as if
+for a public package (little tech debt) but simple for the user first, with a packaged release in a
+few weeks once it has been used and tested; the next three features
+are #84 story, #108 investigate, #109 swarm, everything else can wait; the second channel on the
+desktop (#46) is still planned and goes with the install work; the day-to-day annoyance is switching
+between Claude and the war room/Discord (#13 chat panel); services going quiet is the failure they
+see. The behaviour questions (report §4, pin vs stale_days, at-once public, X retry, Pass B ids,
+weekly --render, cast auto-keep, Commons credit, example toml, old flags) are still open.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
@@ -245,9 +268,10 @@ thumbs: reject a picked frame with no face, `--frame-at <s>`; Discord excerpts f
 start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 
 ## Recipes (how we did it last time; details in the log)
-- **Restart the bot:** `clipper services restart bot` (or `deploy\discord\bot-task.ps1 -Restart`; stopping
-  the task alone leaves the supervisor's process alive). Worker: `clipper services status|restart worker`.
-  A restart kills a running upload: wait until no `clipper upload` process is left.
+- **Restart serve / the bot:** `clipper services restart serve|bot` (or the task scripts; stopping the task
+  alone leaves the supervisor's process alive). Worker: `clipper services status|restart worker`.
+  A serve restart kills a running upload: `clipper services status serve` lists its jobs; wait until none
+  is running.
 - **Upload one item now:** approve in Kitsu, `clipper schedule` (back up schedule.json first), then
   `clipper upload --max 1`; asap items go public at once. Logs in `logs/upload_*.log`.
 - **One-off from a YouTube video:** `clipper --show <key> preshow fetch <url> --from H:MM:SS --about "..."`
@@ -308,15 +332,17 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 - Kitsu's proxy rejects big uploads; previews over `[review] max_upload_mb` (480) re-encode to fit.
 - review.py reads every `*.json` beside cut videos as sidecars; metadata lives in `metadata/<folder>/`.
 - Windows: a file open in another process can't be replaced (fork sessions render previews from cuts).
-- `schtasks /End /TN clipper-bot` leaves the supervisor's bot process alive (lock in streams/.bot.lock);
-  `clipper services` / the task scripts stop the supervisor and its children too.
-- `deploy/common.ps1` finds the bot/worker as a clipper.exe command line ending in "bot"/"worker";
+- `schtasks /End /TN clipper-bot` (or clipper-serve) leaves the supervisor's process alive (locks in
+  streams/.bot.lock, .serve.lock); `clipper services` / the task scripts stop the supervisor and its children too.
+- `deploy/common.ps1` finds serve/bot/worker as a clipper.exe command line ending in "serve"/"bot"/"worker";
   `clipper.exe services restart bot` ends in "bot" too and killed itself mid-restart (10-30, bot down
   ~5 min). It now skips its own process chain; keep that if the match changes.
-- The war room page loads `warroom.css` and `js/*.js` from disk: a pull that changes the page before the
-  bot restarts leaves the old server unable to serve them (bare, unstyled page). Restart the bot.
+- The war room page loads `warroom.css` and `js/*.js` from disk: a pull that changes the page before
+  serve restarts leaves the old server unable to serve them (bare, unstyled page). Restart serve.
 - schedule: a compilation approved as its own Kitsu item needs segment_keys (fixed 2026-10-18).
-- The bot runs `schedule.run` in-process (replan after a decision): scheduler changes need a bot restart.
+- serve runs `schedule.run` in-process (the war room's and the bot's replans go through its /api/replan):
+  scheduler changes need a serve restart. A bot whose serve is down still writes the decision to Kitsu and
+  says "not replanned"; the next hourly run places it.
 - Retake planner can't edit cover layout; a note about the cover's boxes comes back "unsupported",
   or worse, gets read as an edit it can make ("single issue" became a 63 s trim, 10-28). A layout
   rule belongs in config; undo a bad retake with `retake.apply` + `publish_retake` and a hand plan.

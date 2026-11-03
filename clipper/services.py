@@ -1,14 +1,16 @@
 """clipper's long-running pieces in one place: status, stop and restart.
 
-    clipper services [status]                 the bot, the GPU worker, the recorder, NAS cuts
-    clipper services stop|restart bot|worker|all
+    clipper services [status]                 serve, the bot, the GPU worker, the recorder, NAS cuts
+    clipper services stop|restart serve|bot|worker|all
     clipper services stop|restart recorder [--force]
     clipper record status                     the recorder alone (exit 3 while recording)
 
-The bot and the worker are Windows scheduled tasks; this runs their deploy scripts
-(deploy/discord/bot-task.ps1, deploy/worker/worker-task.ps1), which also stop the
-supervisor and the stage processes. The recorder is a container on the NAS: its state is
-the heartbeat it writes to the streams share every 2 s (streams/.record/status.json), and
+serve, the bot and the worker are Windows scheduled tasks; this runs their deploy scripts
+(deploy/serve/serve-task.ps1, deploy/discord/bot-task.ps1, deploy/worker/worker-task.ps1),
+which also stop the supervisor and the stage processes. serve and the bot write a
+heartbeat to the streams share every minute (streams/.serve/status.json, .bot/status.json,
+clipper/daemon.py), shown whatever machine they run on. The recorder is a container on
+the NAS: its state is the heartbeat it writes every 2 s (streams/.record/status.json), and
 stop/restart go over ssh like deploy/record/deploy.sh (RECORD_SSH_HOST, RECORD_DIR,
 RECORD_SUDO). A restart starts a new recording part, so it's refused while a show is being
 recorded unless --force; `all` never includes the recorder. NAS cuts are the
@@ -25,12 +27,14 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import jsonstate
+from . import daemon, jsonstate
 from .errors import ClipperError
 
 ROOT = Path(__file__).resolve().parent.parent
-TASKS = {"bot": ROOT / "deploy" / "discord" / "bot-task.ps1",
+TASKS = {"serve": ROOT / "deploy" / "serve" / "serve-task.ps1",
+         "bot": ROOT / "deploy" / "discord" / "bot-task.ps1",
          "worker": ROOT / "deploy" / "worker" / "worker-task.ps1"}
+HEARTBEATS = ("serve", "bot")  # write one (clipper/daemon.py); the recorder has its own
 ACTION_FLAG = {"status": "-Status", "stop": "-Stop", "restart": "-Restart"}
 HEARTBEAT_S = 60   # the recorder writes every 2 s; a minute without one means it's down
 
@@ -112,8 +116,10 @@ def recorder_compose(action: str) -> int:
 
 def run(cfg: dict, action: str = "status", which: str = "all", force: bool = False) -> int:
     if action == "status":
-        for name in (["bot", "worker"] if which == "all" else [which] if which in TASKS else []):
+        for name in (list(TASKS) if which == "all" else [which] if which in TASKS else []):
             print(f"===== {name}", flush=True)
+            if name in HEARTBEATS:
+                print("\n".join(daemon.heartbeat_lines(name, daemon.heartbeat(cfg, name))), flush=True)
             run_task(name, "status")
         if which in ("all", "recorder"):
             print("===== recorder")
@@ -128,7 +134,7 @@ def run(cfg: dict, action: str = "status", which: str = "all", force: bool = Fal
                                "Wait until the show ends, or pass --force")
         return recorder_compose(action)
     worst = 0
-    for name in (["worker", "bot"] if which == "all" else [which]):
+    for name in (["worker", "serve", "bot"] if which == "all" else [which]):
         print(f"===== {name}", flush=True)
         worst = max(worst, run_task(name, action))
     return worst

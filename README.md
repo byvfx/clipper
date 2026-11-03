@@ -62,12 +62,12 @@ fetch / record -> signals -> transcribe -> score -> segments -> faces -> cut -> 
   Times are the Kick VOD's clock. The moments found join the stream's picks (ids `h01`...) and go through
   cut, meta, thumbs, Shorts and review like scored ones; `--dry-run` shows them without saving.
 - **tiktok / rumble**: `clipper tiktok --items ...` sends Shorts to the TikTok app's drafts (you post from the
-  phone; the caption comes to Discord); `--auto`, which the bot runs every `[tiktok] auto_send_minutes`,
+  phone; the caption comes to Discord); `--auto`, which `clipper serve` runs every `[tiktok] auto_send_minutes`,
   sends the next ones in YouTube-schedule order up to `max_per_24h` (TikTok is parked: we post by hand,
   auto-send off, no direct posting; SETUP.md says why). `clipper rumble` prepares folders
   for Rumble's upload form.
 - **x**: `clipper x --items ...` posts Shorts to X as native video (hook-first title + one hashtag, no
-  link: X bills a link post at $0.20 against $0.015); `--auto`, which the bot runs every
+  link: X bills a link post at $0.20 against $0.015); `--auto`, which `clipper serve` runs every
   `[x] auto_post_minutes` (off by default), posts approved Shorts from streams of the last
   `max_age_hours`, newest stream first, without waiting for YouTube. `clipper x --issue [DAY]`
   posts a weekly issue's ten pages as a thread of 4 + 4 + 2 images (text from issue.json `post`,
@@ -82,7 +82,7 @@ clips go ahead of an older stream's segments.
 
 **Pre-shows.** A show can also post a pre-recorded pre-show on its own YouTube channel (Kino
 Casino does, on show days around midday PT). With `[shows.<key>.preshow] youtube_channel`
-set, the bot checks that channel's feed every few minutes, grabs each new pre-show into
+set, `clipper serve` checks that channel's feed every few minutes, grabs each new pre-show into
 `streams/yt-<video id>/` and runs it as **one whole video** (less `[preshow] trim_end_s`, 3 s,
 off the end): transcribe, one segment, cut, meta, thumbs, review. No clips and no Shorts. Once approved, `clipper schedule` places it
 "asap", outside the release slots, and the next `clipper upload` publishes it at once.
@@ -132,19 +132,20 @@ geometry and the fixed copy can be changed in `weekly/style.toml` (SETUP.md). Po
    current state between work sessions: what runs where, what's waiting, known gotchas.
 2. **One stream end to end**: `clipper fetch <kick vod url>`, then `clipper run <stream id>`.
    Each stage skips what's done; `clipper run <id> --from cut` redoes from a stage on. Review the
-   items in the war room ([docs/warroom.md](docs/warroom.md)) or on the Discord cards; the bot
+   items in the war room ([docs/warroom.md](docs/warroom.md)) or on the Discord cards; `clipper serve`
    schedules approved ones and uploads every `[youtube] auto_upload_minutes`
    (`clipper schedule`, `clipper upload` by hand when that's 0).
-3. **Check**: `clipper doctor --role gpu|bot|nas` (this machine), `clipper worker --status`
+3. **Check**: `clipper doctor --role gpu|serve|bot|nas` (this machine), `clipper worker --status`
    (each recording's stages), `clipper review status` (decisions and what's scheduled),
    `clipper costs` (the month's spend).
-4. **Stop and restart**: the bot and the GPU worker are Windows scheduled tasks:
-   `deploy\discord\bot-task.ps1 -Status | -Stop | -Restart` and
-   `deploy\worker\worker-task.ps1 -Status | -Stop | -Restart`. The recorder is a container on
+4. **Stop and restart**: `clipper serve`, the bot and the GPU worker are Windows scheduled tasks:
+   `clipper services status|stop|restart serve|bot|worker` (the task scripts
+   `deploy\serve\serve-task.ps1`, `deploy\discord\bot-task.ps1` and `deploy\worker\worker-task.ps1`
+   take `-Status | -Stop | -Restart`). The recorder is a container on
    the NAS: `bash deploy/record/deploy.sh`, only when no show is live (a restart starts a new
    recording part).
-5. **When something breaks**: the bot DMs you (`[notify]`); logs are in `logs/` (`bot.log`,
-   `worker.log`); `clipper doctor` prints a fix for each problem it finds.
+5. **When something breaks**: the bot DMs you (`[notify]`); logs are in `logs/` (`serve.log`,
+   `bot.log`, `worker.log`); `clipper doctor` prints a fix for each problem it finds.
 
 ## Roles
 
@@ -152,11 +153,12 @@ geometry and the fixed copy can be changed in `weekly/style.toml` (SETUP.md). Po
 |---|---|---|
 | Recorder | `clipper record watch` | Docker on a NAS, see `deploy/record` |
 | GPU worker | `clipper worker` | a machine with an NVIDIA GPU (8 GB+) or Apple Silicon, or any machine with `[transcribe] backend = "modal"` (cloud GPU) |
-| Bot | `clipper bot` | any always-on machine: Discord review cards, retakes, the war room, pre-show grabs |
+| Serve | `clipper serve` | any always-on machine: the war room, hourly replan and upload, pre-show grabs, retakes, daily jobs |
+| Bot | `clipper bot` | the same machine, or any other: Discord review cards, buttons and DMs; asks serve to replan |
 
 All roles share one streams folder (a NAS share). One machine can do more than one role.
 `clipper services` shows them all (and any cut running on the NAS);
-`clipper services restart bot|worker|all` restarts the bot and worker, `... recorder` the
+`clipper services restart serve|bot|worker|all` restarts them, `... recorder` the
 recorder, refused while it's recording a show.
 
 ## Quick start
@@ -300,7 +302,7 @@ is wanted instead. Setup: SETUP.md, "Narration voice".
 
 Review happens in [Kitsu](https://www.cg-wire.com/kitsu), with one production per show and
 one episode per stream. `deploy/kitsu` runs it in Docker. The Discord bot mirrors each item
-as a card with buttons, and the war room (a web page the bot serves) shows what is live,
+as a card with buttons, and the war room (a web page `clipper serve` serves) shows what is live,
 where each stream is in the pipeline, the review queue and the upload schedule, with bulk
 edits, undo, a cover editor and a drag-and-drop schedule. Its manual is [docs/warroom.md](docs/warroom.md).
 

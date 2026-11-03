@@ -769,6 +769,12 @@ def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
         raise ClipperError("", status=status)
 
 
+def cmd_serve(cfg: dict, args: argparse.Namespace) -> None:
+    from . import serve
+
+    serve.run(cfg, port=args.port)
+
+
 def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
     from . import bot
 
@@ -778,7 +784,7 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
-    ('Services (long-running)', ['services', 'record', 'worker', 'bot', 'warroom', 'alert']),
+    ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
@@ -1091,11 +1097,11 @@ def add_services(sub) -> None:
     r = rsub.add_parser("finalize", help="join an interrupted recording's parts and write its files")
     add_stream(r)
 
-    p = sub.add_parser("services", help="status, stop or restart the bot, the worker and the NAS recorder")
+    p = sub.add_parser("services", help="status, stop or restart serve, the bot, the worker and the NAS recorder")
     p.add_argument("action", nargs="?", choices=["status", "stop", "restart"], default="status")
-    p.add_argument("which", nargs="?", choices=["bot", "worker", "recorder", "all"],
-                   help="default for status: everything; stop/restart need one (all = bot and worker; "
-                        "the recorder is only ever named)")
+    p.add_argument("which", nargs="?", choices=["serve", "bot", "worker", "recorder", "all"],
+                   help="default for status: everything; stop/restart need one (all = worker, serve "
+                        "and bot; the recorder is only ever named)")
     p.add_argument("--force", action="store_true",
                    help="restart or stop the recorder even while it's recording (starts a new part)")
     p.set_defaults(fn=cmd_services)
@@ -1105,10 +1111,14 @@ def add_services(sub) -> None:
     p.add_argument("--status", action="store_true", help="run state of each recording")
     p.set_defaults(fn=cmd_worker)
 
-    p = sub.add_parser("bot", help="Discord review bot: buttons on review cards, slash commands")
+    p = sub.add_parser("serve", help="the always-on process: war room, hourly uploads, pre-shows, retakes, daily jobs")
+    p.add_argument("--port", type=int, help="the war room's port; default [warroom] port (8765)")
+    p.set_defaults(fn=cmd_serve)
+
+    p = sub.add_parser("bot", help="Discord review bot: buttons on review cards, slash commands, DMs")
     p.set_defaults(fn=cmd_bot)
 
-    p = sub.add_parser("warroom", help="local dashboard: live shows, pipeline, review queue, schedule")
+    p = sub.add_parser("warroom", help="the dashboard alone (clipper serve runs it with the jobs)")
     p.add_argument("--port", type=int, help="default [warroom] port (8765)")
     p.add_argument("--open", action="store_true", help="open it in the browser")
     p.add_argument("--tailnet", choices=("on", "off", "status"),
@@ -1320,8 +1330,8 @@ def add_setup(sub) -> None:
 
     p = sub.add_parser("doctor", help="check this machine: ffmpeg, GPU, fonts, keys, Kitsu/Discord/NAS")
     p.add_argument("--offline", action="store_true", help="skip the network checks")
-    p.add_argument("--role", choices=["all", "gpu", "bot", "nas"], default="all",
-                   help="only what this machine runs (gpu worker, bot, nas recorder)")
+    p.add_argument("--role", choices=["all", "gpu", "serve", "bot", "nas"], default="all",
+                   help="only what this machine runs (gpu worker, serve, bot, nas recorder)")
     p.set_defaults(fn=cmd_doctor)
 
     p = sub.add_parser("config", help="settings: where a value comes from (default, clipper.toml, show, ...)")

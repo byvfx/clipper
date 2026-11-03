@@ -139,15 +139,20 @@ function renderRetakes() {
 }
 
 function renderHealth() {
-  const h = STATE.health, botAge = h.bot_log_age_s;
-  const bot = !h.bot_lock ? ["bad", "not running"] : botAge != null && botAge > 1800 ? ["mid", `quiet ${Math.round(botAge / 60)} min`] : ["ok", "running"];
-  $("#health").innerHTML = `
-    <div>Discord bot: <span class="${bot[0]}">${bot[1]}</span></div>
+  const h = STATE.health, svc = h.services || {};
+  // serve and the bot from their heartbeats (streams/.serve, .bot: any machine), with what serve is running
+  const lines = ["serve", "bot"].filter(k => svc[k]).map(k => {
+    const s = svc[k], busy = s.running && s.running.length ? ` Â· ${s.running.join(", ")} running` : "";
+    return `<div>${esc(s.label)}: <span class="${s.level}">${esc(s.text)}</span>${esc(busy)}</div>`;
+  }).join("");
+  const last = svc.serve && svc.serve.last ? Object.entries(svc.serve.last)
+    .filter(([, j]) => j.exit).map(([k, j]) => `${k} exit ${j.exit} ${ago(j.at)}`) : [];
+  $("#health").innerHTML = lines + `
+    ${last.length ? `<div class="bad" style="font-size:12px">failed: ${esc(last.join("; "))}</div>` : ""}
     <div>Retakes: <span class="${h.retake_running ? "mid" : "ok"}">${h.retake_running ? "working" : "idle"}</span></div>
-    <div>Kitsu sync: <span class="${h.sync.error ? "bad" : h.sync.running ? "mid" : "ok"}">${h.sync.running ? "syncing…" : h.sync.error ? esc(h.sync.error) : h.sync.last ? ago(h.sync.last) : "via bot"}</span></div>
+    <div>Kitsu sync: <span class="${h.sync.error ? "bad" : h.sync.running ? "mid" : "ok"}">${h.sync.running ? "syncing…" : h.sync.error ? esc(h.sync.error) : h.sync.last ? ago(h.sync.last) : "via serve"}</span></div>
     <div>YouTube uploads: <span class="${h.auto_upload_minutes ? "ok" : "mid"}">${h.auto_upload_minutes ? "automatic, every " + h.auto_upload_minutes + " min" : "by hand (clipper upload)"}</span></div>
-    <div>Schedule: ${STATE.schedule_generated_at ? "planned " + ago(STATE.schedule_generated_at) : "never planned"}</div>
-    <div style="color:var(--faint);font-family:var(--mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(h.bot_last)}">${esc(h.bot_last)}</div>`;
+    <div>Schedule: ${STATE.schedule_generated_at ? "planned " + ago(STATE.schedule_generated_at) : "never planned"}</div>`;
   $("#syncBtn").disabled = h.sync.running;
 }
 

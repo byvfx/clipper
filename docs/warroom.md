@@ -1,7 +1,8 @@
 # The war room
 
-A web page for running the review and the schedule. The bot serves it
-(`http://localhost:8765`, `[warroom] port`); `clipper warroom --open` runs it on its own. It
+A web page for running the review and the schedule. `clipper serve` serves it together
+with the background jobs (`http://localhost:8765`, `[warroom] port`); `clipper warroom
+--open` runs the page on its own. It
 shows what is live, where each stream is in the pipeline, the review queue and the upload
 schedule. Press `?` on the page for every keyboard shortcut.
 
@@ -66,12 +67,13 @@ Headlines about the shows' people (`clipper news`, #110). **News** in the header
 
 - **Stories** from the last 1, 3, 7 or 30 days, newest first: the headline the judge wrote, strong
   or maybe, who and which show, why it matters, and the outlets' links. "posted" means the bot
-  put it in Discord; "in context" that it was added to a show's next stream.
+  put it in Discord (`clipper serve` finds them, the bot posts them); "in context" that it was
+  added to a show's next stream.
 - **Tonight's context…** shows the text the stream would get and the show it goes to (change it
   in the menu); **Add to its next stream** queues it. **Dismiss** hides a story and the bot never
   posts it.
 - **Search** asks Google News now (the last 7 days) and adds the stored headlines that match.
-- The header line says how often the bot checks and how many sources are failing (hover for why).
+- The header line says how often serve checks and how many sources are failing (hover for why).
 
 ## Cast
 
@@ -95,7 +97,7 @@ photos/<Person>/`, for covers and the weekly. **Cast** in the header opens it.
   same for people it pictures from a photo, and everyone with a kept photo joins the prompts'
   known figures.
 
-Photos also arrive by themselves (the worker after each stream, the bot's daily `cast auto`);
+Photos also arrive by themselves (the worker after each stream, serve's daily `cast auto`);
 the sure ones are already kept (not from image search, an enrolled face matched well, a label
 with no doubt), so
 look over Kept too and drop what's wrong.

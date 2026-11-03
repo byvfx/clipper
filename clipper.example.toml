@@ -23,6 +23,7 @@ discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 elevenlabs_key = "secrets/elevenlabs_api_key.txt"  # if $ELEVENLABS_API_KEY ([narrate] key_env) is unset
 sync_key = "secrets/sync_api_key.txt"          # sync.so lip-sync key, if $SYNC_API_KEY ([perform] sync_key_env) is unset
 bot_log = "logs/bot.log"                       # clipper bot log, rotated; "" = console only
+serve_log = "logs/serve.log"                   # clipper serve log (its jobs' output too), rotated; "" = console only
 rumble = "rumble"                              # clipper rumble upload folders
 layouts = "layouts"                            # reference screenshots per show layout (clipper shorts --save-example)
 archive = "archive"                            # clipper archive subjects (other channels' back catalogs)
@@ -520,15 +521,21 @@ cooldown_hours = 6           # the same problem at most once per this long
 digest_time = "09:00"        # "" = no digest
 disk_free_gb = 50            # 0 = no disk check
 
+[serve]
+# `clipper serve`: the always-on process (the war room, the hourly replan and upload,
+# pre-show grabs, retakes, the daily jobs). The bot and `clipper doctor` reach it at url;
+# "" = this machine (http://127.0.0.1:<[warroom] port>/). On another machine, e.g.
+# "http://nas:8765/", with the same [warroom] token (or secrets/warroom_token.txt) on both.
+url = ""
+
 [warroom]
-# `clipper warroom`: a local dashboard at http://127.0.0.1:8765/ with which shows are live,
-# each stream's pipeline, the review queue (approve / changes / reject / hold / pin / edit),
-# the schedule and retakes. The Discord bot serves it too (with_bot), so it's up whenever
-# the bot runs. To open it to other machines: host = "0.0.0.0" plus a token.
+# The dashboard at http://127.0.0.1:8765/ with which shows are live, each stream's pipeline,
+# the review queue (approve / changes / reject / hold / pin / edit), the schedule and
+# retakes. `clipper serve` runs it with the jobs; `clipper warroom` runs the page alone.
+# To open it to other machines: host = "0.0.0.0" plus a token.
 host = "127.0.0.1"
 port = 8765
 token = ""
-with_bot = true
 # On a phone (narrow screen) videos play from a low-res copy (lowres/ beside each preview),
 # made on first play, or ahead of time for items waiting for review when lowres_prewarm is on
 # (one ffmpeg at a time, low priority).

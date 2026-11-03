@@ -49,7 +49,7 @@ keep README and SETUP true whenever behaviour changes.
   have to do it).
 - Kitsu is the record for review decisions. Bot buttons and the war room act through
   `clipper/actions.py`; do not write decisions anywhere else.
-- Uploads are automatic since 2026-10-20: the bot replans and runs `clipper upload` every
+- Uploads are automatic since 2026-10-20: `clipper serve` replans and runs `clipper upload` every
   `[youtube] auto_upload_minutes` (60 here; the default 0 means only by hand), private with publishAt, at most `max_per_24h`. Do not run
   `clipper upload` or `clipper review publish` by hand without being asked.
 - Generated titles, descriptions and thumbnail text should avoid the word "hosts"; the
@@ -62,9 +62,11 @@ keep README and SETUP true whenever behaviour changes.
 - Keys are Windows *user* environment variables, which agent shells do not inherit. Load
   them first, for example in PowerShell:
   `$env:KITSU_TOKEN = [Environment]::GetEnvironmentVariable("KITSU_TOKEN","User")`.
-- The Discord bot and GPU worker run as scheduled tasks (`deploy/discord`, `deploy/worker`).
-  `clipper services status|stop|restart bot|worker|all` runs their task scripts, which also
-  stop the supervisor and stage processes (stopping the task alone doesn't).
+- `clipper serve` (the war room and every background job), the Discord bot and the GPU worker
+  run as scheduled tasks (`deploy/serve`, `deploy/discord`, `deploy/worker`).
+  `clipper services status|stop|restart serve|bot|worker|all` runs their task scripts, which also
+  stop the supervisor and stage processes (stopping the task alone doesn't). Restart serve after
+  scheduler or war-room Python changes, the bot after Discord changes.
 - The NAS recorder is deployed with `bash deploy/record/deploy.sh`, only when no show is live:
   the restart starts a new recording part. The script refuses while `clipper record status`
   shows a recording (exit 3); `--force` overrides it.
@@ -83,5 +85,5 @@ keep README and SETUP true whenever behaviour changes.
   pure logic gets a test in `tests/`. CI runs both on every push (`.github/workflows/check.yml`).
   Merging a PR: wait for Copilot's automatic review (a few minutes after the PR opens), handle
   each comment and show the user, then merge. Green CI alone isn't enough.
-  Avoid `uv run`/`uv sync` while the bot is up: they re-sync and cannot replace the running
+  Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running
   clipper.exe (`uv pip install --python .venv/Scripts/python.exe pytest` installs pytest alone).

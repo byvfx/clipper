@@ -1,14 +1,15 @@
 # Setting up clipper on another machine
 
-clipper runs in three roles. A machine can do more than one.
+clipper runs in four roles. A machine can do more than one.
 
 | Role | What runs there | Needs |
 |---|---|---|
 | **GPU worker** | `clipper worker`: transcribe, score, segments, then Shorts (and clips, if `[review] include` has `"picks"`) to review, then long segments to review | an NVIDIA GPU (8 GB+), or none with `[transcribe] backend = "modal"`; the NAS share, ffmpeg |
-| **Bot** | `clipper bot`: Discord review cards, buttons, retakes | always on, the NAS share (or local streams), ffmpeg |
+| **Serve** | `clipper serve`: the war room, hourly replan and upload, pre-show grabs, retakes, daily jobs | always on, the NAS share (or local streams), ffmpeg; the GPU extra, Modal or a CPU transcribe for pre-shows |
+| **Bot** | `clipper bot`: Discord review cards, buttons, DMs | always on (usually the serve machine), the NAS share |
 | **Recorder** | `clipper record watch` in Docker on the NAS | Docker; see `deploy/record/deploy.sh` |
 
-After any setup, run `clipper doctor` (add `--role gpu`, `--role bot` or `--role nas`). It
+After any setup, run `clipper doctor` (add `--role gpu`, `--role serve`, `--role bot` or `--role nas`). It
 checks everything below and prints a fix for each problem.
 
 ## 0. The walkthrough: `clipper setup` (#78)
@@ -27,7 +28,7 @@ packages, then runs `clipper setup`:
 
 1. **Join or start fresh.** Join copies the main machine's `clipper.toml` (and, if you like, the
    `secrets/` beside it) from a path or the share; new writes a short starter (only what differs from the defaults; clipper.example.toml lists every setting).
-2. **Roles.** Worker, bot, recorder (the recorder is the NAS's Docker container; setup only
+2. **Roles.** Worker, serve, bot, recorder (the recorder is the NAS's Docker container; setup only
    points at `deploy/record/deploy.sh`). It looks at the GPU and offers WhisperX (NVIDIA), mlx
    (Apple Silicon) or Modal, keeping the shared choice when this machine can run it. If the
    roles need packages that aren't installed, it exits with code 3 and the bootstrap runs
@@ -65,7 +66,7 @@ longer folder and doctor warns.
 Not in the walkthrough yet (SETUP below, and #78 phases 2-4): creating the Discord app and its
 ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
 
-## 1. Windows GPU worker or bot
+## 1. Windows GPU worker, serve or bot
 
 1. **Tools**
    ```powershell
@@ -77,7 +78,7 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
 2. **Code**: copy the repo folder (everything except `streams/`, `.venv/`, `logs/`) to
    `C:\clipper` (or anywhere), then in it:
    ```powershell
-   uv sync --extra gpu --extra discord   # GPU worker; a bot-only machine can skip --extra gpu
+   uv sync --extra gpu --extra faces --extra discord   # worker + serve + bot; a bot-only machine needs only --extra discord
    ```
    The `gpu` extra pulls torch 2.8 with CUDA 12.8 from the PyTorch index (pinned in
    pyproject.toml). The CUDA toolkit is not needed; the wheels bring the runtime and cuDNN.
@@ -149,27 +150,31 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    `[cast] auto_keep` (0.65) or better and the label has no doubt; the rest wait as New in the
    Cast window. Costs: a
    Haiku label per photo and a Brave search per person tried, cents a day.
-   The bot runs the daily find and the Cast window, so it needs the `faces` extra too (`clipper
-   setup` adds it for the bot role; an existing bot install: `uv sync --extra discord --extra faces`,
-   which `clipper doctor --role bot` checks).
+   `clipper serve` runs the daily find and the Cast window, so it needs the `faces` extra too (`clipper
+   setup` adds it for the serve role; an existing install: `uv sync --extra faces`,
+   which `clipper doctor --role serve` checks).
 
    Covers (`[thumbnail] enquirer_prompt_version` v6) and the weekly (`[weekly] prompt_version`
    v3) are told each person's labels and pick the photo that fits the story; the war room's
    cover editor offers them too ("Jer · angry"). Everyone with a kept photo is added to
    `[scoring] known_figures` (with their aliases) unless `[cast] known_figures = false`.
 
-7. **Check**: `clipper doctor --role gpu` (or `--role bot`).
+7. **Check**: `clipper doctor --role gpu` (or `--role serve`, `--role bot`).
 
 8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed;
-   both scripts share `deploy\common.ps1`, which lists the user env vars a task copies in,
+   the scripts share `deploy\common.ps1`, which lists the user env vars a task copies in,
    since scheduled tasks don't always see ones set after logon: a new key goes there too):
    ```powershell
    deploy\worker\worker-task.ps1 -Install     # GPU worker
+   deploy\serve\serve-task.ps1 -Install       # clipper serve (only one machine runs it)
    deploy\discord\bot-task.ps1 -Install       # Discord bot (only one machine runs it)
    ```
-   `-Status`, `-Restart`, `-Stop`, `-Uninstall` work on both. Logs go to `logs\`.
-   `clipper services` shows both plus the recorder and any NAS cuts;
-   `clipper services restart bot` (or `worker`, `all`) runs the same scripts.
+   `-Status`, `-Restart`, `-Stop`, `-Uninstall` work on all three. Logs go to `logs\`.
+   `clipper services` shows them plus the recorder and any NAS cuts, with serve's and the
+   bot's heartbeats from the share; `clipper services restart serve` (or `bot`, `worker`,
+   `all`) runs the same scripts. The bot reaches serve at `[serve] url` (empty = this
+   machine); on different machines set it, and give both the same `[warroom] token` (or
+   `secrets/warroom_token.txt`).
 
 ## 2. macOS (Apple Silicon)
 
@@ -221,7 +226,7 @@ month's spend from Modal's own billing: metered, credit, billed, the last 24 h a
 over the last 3 hours. The per-run estimates are only a guide; billing is the real number.
 The bot DMs (`[notify]` kind `spend`) each time the month passes a multiple of `[modal]
 alert_every_usd` (25); set `monthly_budget_usd` to show the month against your own ceiling.
-The process that serves the war room (the bot) needs the Modal token, as the worker does.
+The process that serves the war room (`clipper serve`) needs the Modal token, as the worker does.
 
 **Age-restricted archive videos.** `clipper archive transcribe` downloads anonymously; a video
 YouTube won't serve without sign-in ("Sign in to confirm your age") is retried with `[paths]
@@ -357,7 +362,7 @@ The war room listens on localhost only. To open it from the phone anywhere, put 
 tailnet with `tailscale serve`: HTTPS at the machine's tailnet name, reachable only by your
 own Tailscale devices, nothing on the LAN or the internet, no port forwarding.
 
-1. Install Tailscale on the machine that runs the bot (https://tailscale.com/download) and
+1. Install Tailscale on the machine that runs `clipper serve` (https://tailscale.com/download) and
    on the phone (App Store / Play Store), and sign in to the same account on both.
 2. In the Tailscale admin console, DNS page: turn on MagicDNS and HTTPS certificates
    (`tailscale serve` asks for this the first time if it is off).
@@ -367,12 +372,12 @@ own Tailscale devices, nothing on the LAN or the internet, no port forwarding.
    if `[warroom] token` is empty, starts `tailscale serve` (it persists across reboots), and
    prints the link to open once on the phone (`https://<name>.ts.net/?key=...`). The key
    is printed only there; the phone keeps a cookie for a year.
-4. Restart the bot (`deploy\discord\bot-task.ps1 -Restart`) so its war room asks for the
+4. Restart serve (`clipper services restart serve`) so the war room asks for the
    token, and set `[warroom] tailnet = true` in clipper.toml.
 5. On the phone, open the link, then Share / menu → Add to Home Screen.
 
-Check: `clipper doctor --role bot` (fetches the war room through the tailnet name), or
-`clipper warroom --tailnet status`. Off again: `clipper warroom --tailnet off`. When the bot
+Check: `clipper doctor --role serve` (fetches the war room through the tailnet name), or
+`clipper warroom --tailnet status`. Off again: `clipper warroom --tailnet off`. When serve
 moves to the NAS (#9), do the same there with the Tailscale container.
 
 ## 3. The NAS recorder
@@ -413,10 +418,10 @@ its streams; the show's Kitsu production is created on its first publish.
 If the show posts a pre-show on YouTube, add `[shows.<key>.preshow] youtube_channel =
 "UC..."` (the channel id: the `channel_id` in `yt-dlp -J <any video url>`, or the
 `channelId` in the channel page's source). `clipper preshow list` should then list its
-recent pre-shows, and `clipper doctor` checks the feed. The bot polls it ([preshow]
-poll_minutes) and runs new pre-shows on the bot's machine, transcribe included, so the
-bot's machine needs the GPU extra (or `[transcribe] device = "cpu"`); set poll_minutes = 0
-on a bot that shouldn't. yt-dlp needs deno for YouTube; `uv sync` installs it (yt-dlp's
+recent pre-shows, and `clipper doctor` checks the feed. `clipper serve` polls it ([preshow]
+poll_minutes) and runs new pre-shows on its machine, transcribe included, so serve's
+machine needs the GPU extra, Modal, or `[transcribe] device = "cpu"`; set poll_minutes = 0
+on a serve that shouldn't. yt-dlp needs deno for YouTube; `uv sync` installs it (yt-dlp's
 `deno` extra). Without it YouTube answers downloads with HTTP 403 partway through.
 
 ## A new YouTube channel

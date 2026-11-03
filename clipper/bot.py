@@ -15,16 +15,18 @@ notify.py) and a few slash commands, for [discord] allowed_user_ids only.
 
 Every [discord] refresh_minutes the bot also re-reads Kitsu for streams with posted cards
 and edits cards whose status, hold, pin, title or schedule changed outside Discord
-(clipper/cardsync.py). It logs to paths.bot_log as well as the console, and only one bot
-runs per streams folder (a lock file). deploy/discord/bot-task.ps1 runs it at logon.
-Every [preshow] poll_minutes it runs `clipper preshow check --run`: new pre-shows on the
-shows' YouTube channels are grabbed and put through the pipeline (clipper/preshow.py).
+(clipper/cardsync.py). Every minute it DMs the notifications other processes queued
+(clipper/alerts.py), and every few minutes it posts the stories `clipper news check`
+found. It logs to paths.bot_log as well as the console, only one bot runs per streams
+folder (a lock file), and it writes a heartbeat (clipper/daemon.py) that the war room's
+Health panel and `clipper services status` read. deploy/discord/bot-task.ps1 runs it at
+logon.
 
-Background jobs (`jobs_loop`, their own loop, independent of the card refresh): every
-[youtube] auto_upload_minutes `clipper schedule` then `clipper upload`; every [tiktok]
-auto_send_minutes `clipper tiktok --auto`; every [x] auto_post_minutes `clipper x --auto`;
-every [analytics] auto_hours `clipper analytics`; with [retake] auto, `clipper retake` when Kitsu has new retake notes. Each runs as a child
-process and a non-zero exit is DMed.
+Everything that isn't Discord is `clipper serve` (clipper/serve.py): the war room, the
+hourly replan and upload, pre-show grabs, retakes and the daily jobs. The bot asks it over
+its API ([serve] url) to replan after a decision ([discord] replan) and to start a retake
+after "Changes": when serve isn't up, the decision is still in Kitsu and serve's next
+hourly run picks it up.
 
 There is no bulk approve: every release needs its own Approve. Slash commands are
 registered on [discord] guild_id only. The bot needs no privileged intents.
@@ -36,17 +38,15 @@ import asyncio
 import contextlib
 import io
 import logging
-import logging.handlers
 import os
-import sys
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import discord
 from discord import app_commands
 
-from . import actions, alerts, cardsync, news, notify, preshow, retake, schedule
+from . import actions, alerts, cardsync, daemon, news, notify, schedule, serve
 from .errors import ClipperError
 from .timefmt import length
 
@@ -58,16 +58,10 @@ FORMS = {  # action: (modal title, field label, required, max length, multiline)
     "pin": ("Pin release time", "YYYY-MM-DD HH:MM, or a date; empty unpins", False, 16, False),
     "thumbtext": ("Thumbnail text", "2-4 words on the thumbnail", True, 40, False),
 }
+NEWS_POST_S = 300  # how often the bot posts what `clipper news check` (a serve job) found
 DONE = {"approve": "Approved", "reject": "Rejected", "changes": "Changes requested for",
         "reopen": "Reopened", "hold": "Hold toggled on", "pin": "Pinned",
         "thumbtext": "New thumbnail text for"}
-
-
-def has_opencv() -> bool:
-    """`cast auto` checks faces with OpenCV (the faces extra)."""
-    import importlib.util
-
-    return importlib.util.find_spec("cv2") is not None
 
 
 class UserError(Exception):
@@ -172,16 +166,8 @@ class Bot(discord.Client):
         self.allowed = notify.user_ids(dc)
         self.guild_id = int(dc["guild_id"]) if dc["guild_id"] else None
         self.tree = app_commands.CommandTree(self)
-        self.lock = asyncio.Lock()  # one Kitsu/schedule job at a time
-        self.retake_proc: asyncio.subprocess.Process | None = None
-        self.retake_again = False
-        self.upload_proc: asyncio.subprocess.Process | None = None
-        self.analytics_proc: asyncio.subprocess.Process | None = None
-        self.preshow_proc: asyncio.subprocess.Process | None = None
-        self.tiktok_proc: asyncio.subprocess.Process | None = None
-        self.x_proc: asyncio.subprocess.Process | None = None
-        self.cast_proc: asyncio.subprocess.Process | None = None
-        self.news_proc: asyncio.subprocess.Process | None = None
+        self.lock = asyncio.Lock()  # one Kitsu job at a time
+        self.started_at = datetime.now(UTC).isoformat(timespec="seconds")
         register_commands(self)
 
     async def setup_hook(self) -> None:
@@ -191,11 +177,11 @@ class Bot(discord.Client):
         await self.tree.sync(guild=guild)
         if self.cfg["discord"]["refresh_minutes"] > 0:
             self.loop.create_task(self.refresh_cards())
-        self.loop.create_task(self.jobs_loop())
-        if preshow.watched(self.cfg) and self.cfg["preshow"]["poll_minutes"] > 0:
-            self.loop.create_task(self.preshow_loop())
+        if self.cfg["news"]["check_minutes"] > 0:
+            self.loop.create_task(self.news_loop())
         if self.cfg["notify"]["enabled"]:
             self.loop.create_task(self.notify_loop())
+        self.loop.create_task(self.beat_loop())
 
     async def on_ready(self) -> None:
         log.info(f"clipper bot ready as {self.user} in guild {self.guild_id}; "
@@ -220,66 +206,25 @@ class Bot(discord.Client):
                 log.info(f"card refresh: {edited} card(s) updated")
             await asyncio.sleep(every)
 
-    def running(self, name: str) -> bool:
-        proc = getattr(self, f"{name}_proc")
-        return bool(proc and proc.returncode is None)
-
-    def jobs(self) -> list[tuple[str, float, object, object]]:
-        """(name, every s, ready() -> bool, start()) for the background jobs; every <= 0 is off."""
-        cfg, paths = self.cfg, self.cfg["paths"]
-        has_upload = lambda: paths["schedule"].exists() \
-            and '"uploaded"' in paths["schedule"].read_text(encoding="utf-8")
-        return [
-            ("upload", cfg["youtube"]["auto_upload_minutes"] * 60,
-             lambda: not self.running("upload"),
-             lambda: self.loop.create_task(self._auto_upload())),
-            ("tiktok", cfg["tiktok"]["auto_send_minutes"] * 60,
-             lambda: paths["tiktok_token"].exists() and not self.running("tiktok"),
-             lambda: self.loop.create_task(self._clipper_bg("tiktok", ["tiktok", "--auto"]))),
-            ("x", cfg["x"]["auto_post_minutes"] * 60,
-             lambda: paths["x_token"].exists() and not self.running("x"),
-             lambda: self.loop.create_task(self._clipper_bg("x", ["x", "--auto"]))),
-            ("analytics", cfg["analytics"]["auto_hours"] * 3600,
-             lambda: paths["youtube_token"].exists() and has_upload(),
-             lambda: self.loop.create_task(self._clipper_bg("analytics", ["analytics"]))),
-            ("cast", cfg["cast"]["auto_hours"] * 3600,  # #41: photos for anyone short of them
-             lambda: bool(cfg["thumbnail"]["photos"]) and has_opencv() and not self.running("cast"),
-             lambda: self.loop.create_task(self._clipper_bg("cast", ["cast", "auto"]))),
-            ("news", cfg["news"]["check_minutes"] * 60,  # #110: headlines about the watched terms
-             lambda: not self.running("news") and bool(news.watchlist(cfg)),  # no terms: nothing to do
-             lambda: self.loop.create_task(self._news())),
-            # retake notes made in Kitsu (review.json is synced by the card refresh and the replan)
-            ("retake", (cfg["discord"]["refresh_minutes"] or 10) * 60 if cfg["retake"]["auto"] else 0,
-             lambda: retake.pending(cfg), self.start_retake),
-        ]
-
-    async def jobs_loop(self) -> None:
-        """Start each background job when it's due. Its own loop, not the card refresh's,
-        so turning card refresh off ([discord] refresh_minutes = 0) leaves uploads running."""
+    async def beat_loop(self) -> None:
+        """The heartbeat `clipper services status` and the war room's Health panel read."""
         await self.wait_until_ready()
-        await asyncio.sleep(30)
-        last: dict[str, float] = {}
         while not self.is_closed():
-            for name, every, ready, start in self.jobs():
-                if every <= 0 or time.monotonic() - last.get(name, float("-inf")) < every:
-                    continue
+            await asyncio.to_thread(daemon.beat, self.cfg, "bot", self.started_at,
+                                    user=str(self.user), guild=self.guild_id)
+            await asyncio.sleep(daemon.BEAT_S)
+
+    async def news_loop(self) -> None:
+        """Post the stories `clipper news check` (a serve job) found, every few minutes."""
+        await self.wait_until_ready()
+        await asyncio.sleep(90)  # after serve's first check
+        while not self.is_closed():
+            if news.watchlist(self.cfg):
                 try:
-                    if not await asyncio.to_thread(ready):
-                        continue
-                    last[name] = time.monotonic()
-                    start()
-                except (Exception, SystemExit):  # SystemExit would stop the event loop, and the bot
-                    log.exception(f"{name} check failed")
-            await asyncio.sleep(60)
-
-    async def preshow_loop(self) -> None:
-        """Grab new pre-shows from the shows' YouTube feeds and run them, every poll_minutes."""
-        await self.wait_until_ready()
-        every = self.cfg["preshow"]["poll_minutes"] * 60
-        while not self.is_closed():
-            if not (self.preshow_proc and self.preshow_proc.returncode is None):
-                self.loop.create_task(self._clipper_bg("preshow", ["preshow", "check", "--run"]))
-            await asyncio.sleep(every)
+                    await self.post_news()
+                except (Exception, SystemExit):
+                    log.exception("news: posting failed")
+            await asyncio.sleep(NEWS_POST_S)
 
     async def notify_loop(self) -> None:
         """DM the queued notifications (#22, clipper/alerts.py) every minute."""
@@ -289,14 +234,12 @@ class Bot(discord.Client):
         if not uid:
             log.warning("notify: no [notify] user_id or [discord] allowed_user_ids; no DMs")
             return
-        link = ""
-        if self.cfg["warroom"]["tailnet"]:
-            from . import warroom
-
-            link = (await asyncio.to_thread(warroom.tailnet_status, self.cfg))["served"]
+        link = ""  # the war room's tailnet URL for the DMs; serve knows it (and may not be up yet)
         share_down = 0.0
         while not self.is_closed():
             try:
+                if not link and self.cfg["warroom"]["tailnet"]:
+                    link = await asyncio.to_thread(serve.tailnet_link, self.cfg)
                 msgs, files, st = await asyncio.to_thread(alerts.pending, self.cfg, link)
                 if msgs:
                     user = self.get_user(uid) or await self.fetch_user(uid)
@@ -318,56 +261,6 @@ class Bot(discord.Client):
             except (Exception, SystemExit):  # SystemExit would stop the event loop, and the bot
                 log.exception("notify pass failed")
             await asyncio.sleep(60)
-
-    def start_retake(self) -> None:
-        """`clipper retake` in the background: act on retake notes, republish for review.
-        A request while one runs makes it run once more when it ends."""
-        if not self.cfg["retake"]["auto"]:
-            return
-        if self.retake_proc and self.retake_proc.returncode is None:
-            self.retake_again = True
-            return
-        self.loop.create_task(self._retake())
-
-    async def _clipper_bg(self, name: str, args: list[str]) -> int | None:
-        """Run `clipper <args>` as a child process, its output into the bot log."""
-        cmd = actions.clipper_cmd(self.cfg)
-        log.info(f"{name}: starting")
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-                env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
-            setattr(self, f"{name}_proc", proc)
-            out, _ = await proc.communicate()
-            for line in out.decode("utf-8", "replace").splitlines():
-                if line.strip() and not line.startswith("["):  # skip ffmpeg decoder noise
-                    log.info(f"{name}: {line}")
-            log.info(f"{name}: done (exit {proc.returncode})")
-            if proc.returncode:  # #22: a background job failing is worth a DM (once per cooldown)
-                last = next((x.strip() for x in reversed(out.decode("utf-8", "replace").splitlines())
-                             if x.strip() and not x.startswith("[")), "")
-                alerts.send(self.cfg, "upload" if name in ("upload", "tiktok", "x") else "failure",
-                            f"`clipper {' '.join(args)}` failed (exit {proc.returncode}): {last[:400]}",
-                            key=f"bg:{' '.join(args)}")
-            return proc.returncode
-        except Exception:
-            log.exception(f"{name} run failed")
-            return None
-
-    async def _auto_upload(self) -> None:
-        """Replan first (slots that passed get new ones), then upload what's due. A failed
-        replan (Kitsu down) is DMed on its own and the upload still runs on the last plan,
-        so one outage doesn't miss every slot that hour."""
-        await self._clipper_bg("upload", ["schedule"])
-        await self._clipper_bg("upload", ["upload"])
-
-    async def _news(self) -> None:
-        """`clipper news check`, then post the new stories and any pre-show suggestion due."""
-        await self._clipper_bg("news", ["news", "check"])
-        try:
-            await self.post_news()
-        except (Exception, SystemExit):
-            log.exception("news: posting failed")
 
     async def news_channel(self):
         """[news] channel_id; else the text channel named [news] channel, made if missing; else
@@ -485,12 +378,6 @@ class Bot(discord.Client):
             else:
                 await interaction.response.send_message(f"Nothing changed: {e}", ephemeral=True)
 
-    async def _retake(self) -> None:
-        await self._clipper_bg("retake", ["retake"])
-        if self.retake_again:
-            self.retake_again = False
-            self.start_retake()
-
     async def check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id in self.allowed and interaction.guild_id == self.guild_id:
             return True
@@ -556,7 +443,7 @@ class Bot(discord.Client):
             row = actions.decide(self.cfg, item, "edit", who, values=text)
         else:  # hold flips (on=None), as the card's one Hold button does
             row = actions.decide(self.cfg, item, action, who, text=text)
-        row, note = actions.replan(self.cfg, item, action, row)
+        row, note = actions.replan(self.cfg, item, action, row, via=serve.replan)
         return row, f"; {note}" if note else ""
 
     async def apply(self, interaction: discord.Interaction, action: str, ref: str, text) -> None:
@@ -587,8 +474,11 @@ class Bot(discord.Client):
         if action == "pin" and not row["publish_at"]:
             verb = "Unpinned"
         if action == "changes" and self.cfg["retake"]["auto"]:
-            note += "; clipper is working on it and will post the new version here"
-            self.start_retake()
+            try:
+                await asyncio.to_thread(serve.start_retake, self.cfg)
+                note += "; clipper is working on it and will post the new version here"
+            except ClipperError as e:
+                note += f"; retake not started ({e}); serve's next check will"
         await interaction.followup.send(f"{verb} `{row['short']}` in Kitsu{note}.", ephemeral=True)
 
 
@@ -679,7 +569,7 @@ def register_commands(bot: Bot) -> None:
         await interaction.response.defer(thinking=True)
         try:
             if replan:
-                await bot.blocking(schedule.run, cfg)
+                await bot.blocking(serve.replan, cfg, True)
             entries = await bot.blocking(schedule.upcoming, cfg, days)
         except UserError as e:
             return await fail(interaction, e)
@@ -705,65 +595,20 @@ def register_commands(bot: Bot) -> None:
         await interaction.followup.send(f"Posted {n} cards for `{stream}`.", ephemeral=True)
 
 
-def setup_logging(path) -> None:
-    """Console plus paths.bot_log (rotated at 5 MB, 5 kept); empty bot_log = console only."""
-    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S")
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
-    if path and not path.is_dir():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.handlers.RotatingFileHandler(
-            path, maxBytes=5_000_000, backupCount=5, encoding="utf-8"))
-    root = logging.getLogger()
-    root.setLevel(logging.INFO)
-    for h in handlers:
-        h.setFormatter(fmt)
-        root.addHandler(h)
-
-
-def single_instance(cfg: dict):
-    """Hold a lock on <streams>/.bot.lock for the process's life; refuse a second bot
-    (two would race to answer every button)."""
-    path = cfg["paths"]["streams"] / ".bot.lock"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    f = open(path, "a+")  # noqa: SIM115 (held for the process's life)
-    try:
-        if os.name == "nt":
-            import msvcrt
-            f.seek(0)
-            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        f.close()
-        raise ClipperError(f"another clipper bot is already running (lock {path})") from None
-    return f
-
-
 def run(cfg: dict) -> None:
     dc = cfg["discord"]
     if not notify.user_ids(dc):
         raise ClipperError("set [discord] allowed_user_ids (your Discord user id) in clipper.toml")
     if not dc["guild_id"]:
         raise ClipperError("set [discord] guild_id (your server's id) in clipper.toml")
-    setup_logging(cfg["paths"]["bot_log"])
+    daemon.setup_logging(cfg["paths"]["bot_log"])
     try:
-        lock = single_instance(cfg)
+        lock = daemon.single_instance(cfg, "bot")
     except ClipperError as e:
         log.error(str(e))
         raise
     log.info(f"clipper bot starting (pid {os.getpid()}); card refresh every "
-             f"{dc['refresh_minutes']} min")
-    if cfg["warroom"]["with_bot"]:  # the dashboard rides along, so it's up whenever the bot is
-        import threading
-
-        from . import warroom
-        try:
-            srv = warroom.server(cfg)
-            threading.Thread(target=srv.serve_forever, daemon=True, name="warroom").start()
-            log.info(f"war room on {warroom.url(cfg, with_key=False)}")  # no token in the log
-        except OSError as e:
-            log.warning(f"war room not started: {e}")
+             f"{dc['refresh_minutes']} min; clipper serve at {serve.url(cfg)}")
     try:
         Bot(cfg).run(notify.token(cfg), log_handler=None)
     except BaseException as e:

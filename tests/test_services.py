@@ -61,4 +61,17 @@ def test_all_never_touches_the_recorder(tmp_path, monkeypatch):
     monkeypatch.setattr(services, "run_task", lambda name, action: done.append((name, action)) or 0)
     monkeypatch.setattr(services, "recorder_compose", lambda action: pytest.fail("recorder touched"))
     services.run(cfg_with(tmp_path, {}), "stop", "all")
-    assert done == [("worker", "stop"), ("bot", "stop")]
+    assert done == [("worker", "stop"), ("serve", "stop"), ("bot", "stop")]
+
+
+def test_status_shows_serve_and_bot_heartbeats(tmp_path, monkeypatch, capsys):
+    """From the share, so it's right whichever machine they run on."""
+    from clipper import daemon
+
+    monkeypatch.setattr(services, "run_task", lambda name, action: 0)
+    cfg = cfg_with(tmp_path, None)
+    daemon.beat(cfg, "serve", "2026-11-03T10:00:00+00:00", jobs={"upload": {"running": True, "started": "2026-11-03T10:05:00+00:00"}})
+    services.run(cfg, "status", "all")
+    out = capsys.readouterr().out
+    assert "serve: up on" in out and "upload: running since" in out
+    assert "bot: no heartbeat" in out
