@@ -72,6 +72,24 @@ def test_request_offers_photos_to_enquirer_covers_only():
     assert content[-1]["text"] == "Photos on file: Hasan Piker."
     assert schema["properties"]["photo"]["enum"] == ["", "Hasan Piker"]
     assert "photo" in schema["required"] and "photo" not in pick.ENQ_SCHEMA["required"]
+    assert "photo_label" not in schema["properties"]                   # no labelled photos, no label
+    tc["_photos"]["Jer"] = Path("Jer/abc.jpg")
+    tc["_photo_labels"] = {"Hasan Piker": [], "Jer": ["laughing", "angry"]}
+    content, schema = pick.request(X, fr, INFO, tc, "enquirer", "", image=lambda p: "IMG")
+    assert content[-1]["text"] == "Photos on file: Hasan Piker, Jer (laughing, angry)."
+    assert schema["properties"]["teaser_photo_label"]["enum"] == ["", "angry", "laughing"]
+    assert {"photo_label", "teaser_photo_label"} <= set(schema["required"])
+
+
+def test_enquirer_keeps_a_photo_label_only_if_that_person_has_it(defaults, tmp_path):
+    tc = {**defaults["thumbnail"], "_photos": {"Jer": Path("Jer/a.jpg"), "Don": Path("Don/b.jpg")},
+          "_photo_labels": {"Jer": ["angry"], "Don": []}}
+    answer = {**pick.fallback_enquirer(X, INFO, "w"), "photo": "jer", "photo_label": "angry",
+              "teaser_photo": "Don", "teaser_photo_label": "angry"}
+    out = pick.pick(X, frames(tmp_path), INFO, tc, Fake(answer), "SYSTEM", Words(), retry(defaults),
+                    style="enquirer")
+    assert (out["photo"], out["photo_label"], out["teaser_photo"]) == ("Jer", "angry", "Don")
+    assert "teaser_photo_label" not in out                              # Don has no angry photo
 
 
 def test_classic_pick_asks_again_then_clamps(defaults, tmp_path):

@@ -165,7 +165,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # prompts/weekly_<v>.md; edit it and `clipper weekly --render`.
         "model": "claude-opus-5-5",
         "effort": "high",
-        "prompt_version": "v2",   # v2: quotes credited to who said them (speaker names, #52)
+        "prompt_version": "v3",   # v3: people only talked about from the cast library, photo by
+                                  # label (#41); v2: quotes credited to who said them (#52)
         "write_articles": True,   # after a draft, write the three articles again, one call each...
         "article_prompt_version": "v2",  # ...with prompts/weekly_article_<v>.md...
         "article_example": "weekly_article_example.md",  # ...and this piece (in prompts/) as the voice to match
@@ -367,6 +368,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "videos": 12,             # recent videos whose thumbnails a YouTube channel offers
         "search_count": 40,       # image search results looked at
         "min_photos": 3,          # doctor flags anyone with fewer kept
+        "known_figures": True,    # everyone with a kept photo is added to [scoring] known_figures
         "label_model": "claude-haiku-5-5",  # labels each new photo ("" = no labels)
         "label_effort": "low",
         "prompt_version": "v1",   # prompts/cast_label_<v>.md
@@ -476,8 +478,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # style = "enquirer": a 1990s supermarket-tabloid cover (masthead, teaser band and
         # boxes plugging the episode's other videos, big face, yellow headline, inset).
         "style": "classic",       # classic | enquirer
-        "enquirer_prompt_version": "v5",  # prompts/thumbnail_enquirer_<v>.md (v5: frames say whose face
-                                          # `clipper faces` found; v4: names [meta] cast, not "a host")
+        "enquirer_prompt_version": "v6",  # prompts/thumbnail_enquirer_<v>.md (v6: picks a cast photo by
+                                          # label, #41; v5: frames say whose face `clipper faces` found;
+                                          # v4: names [meta] cast, not "a host")
         "face_frames": 2,         # enquirer: with faces.json, each named person's best frames added...
         "face_people": 4,         # ...for this many people, the ones seen most in the video
         "masthead": "",           # empty = meta.show_name

@@ -31,7 +31,8 @@ Three idempotent steps in one folder:
   canvas and scaled to 1080x1080 in youtube/ ([weekly] formats).
 
 Faces come from the streams' thumbnails.json (the frame the thumbnail model picked and its
-face box, by main_person), then [thumbnail] photos, else initials. The cover subject is cut
+face box, by main_person), then [thumbnail] photos (from the cast library, the photo whose
+label issue.json "photo_labels" names), else initials. The cover subject is cut
 out with torchvision DeepLabV3 when torch is installed (the GPU machine); otherwise the
 cover shows the frame in a rounded panel.
 

@@ -83,15 +83,43 @@ def kept(data: dict) -> list[dict]:
 
 
 def best_photo(d: Path, label: str = "") -> Path | None:
-    """A person's kept photo for a cover: the label asked for if there is one, else neutral,
-    then the biggest face."""
+    """A person's kept photo for a cover: the label asked for if there is one, else neutral;
+    a stream, Commons, channel or file photo before one from the web (image search or a
+    pasted address: its licence is unknown), then the biggest face."""
     data = load(d)
     ks = [ph for ph in kept(data) if (d / ph["file"]).exists()]
     if not ks:
         return None
     want = label or "neutral"
-    ks.sort(key=lambda ph: (ph.get("label") != want, ph.get("label") != "neutral", -ph.get("px", 0)))
+    ks.sort(key=lambda ph: (ph.get("label") != want, ph.get("label") != "neutral",
+                            ph.get("source") == "web", -ph.get("px", 0)))
     return d / ks[0]["file"]
+
+
+def labels(d: Path) -> list[str]:
+    """The labels a person's kept photos have, sorted."""
+    return sorted({ph["label"] for ph in kept(load(d)) if ph.get("label") and (d / ph["file"]).exists()})
+
+
+def figures(cfg: dict) -> list[tuple[str, list[str]]]:
+    """(name, aliases) of everyone with a kept photo (or a single photo file); [] when
+    [thumbnail] photos is unset or not there (a machine without the photos share)."""
+    if not cfg["thumbnail"].get("photos"):
+        return []
+    try:
+        everyone = people(cfg)
+    except OSError:
+        return []
+    return [(n, d.get("aliases", [])) for n, d in everyone.items() if kept(d) or d.get("single")]
+
+
+def known_figures(configured: str, cast: list[tuple[str, list[str]]]) -> str:
+    """[scoring] known_figures with the cast library's people added after it ("Jer (The
+    Quartering)"), leaving out anyone already named there by name or alias."""
+    have = {w.strip().lower() for w in re.split(r"[,()]", configured or "") if w.strip()}
+    extra = [f"{n} ({', '.join(a)})" if a else n for n, a in cast
+             if not ({n.lower(), *(x.lower() for x in a)} & have)]
+    return ", ".join(x for x in [(configured or "").strip(), *extra] if x)
 
 
 def photo_id(key: str) -> str:

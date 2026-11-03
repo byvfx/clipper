@@ -1,8 +1,9 @@
 """The model's pick: one vision call per asset over its candidate frames. Classic: the
 frame with the strongest readable expression or moment, 2-4 words of text, the word to
 highlight, top/bottom placement and a crop. Enquirer: the main face and a reaction inset,
-the headline and the cover's other lines, and maybe a [thumbnail] photos portrait. Frames
-from faces.json say whose face was found; when the main face is one, its found box is used.
+the headline and the cover's other lines, and maybe a [thumbnail] photos portrait (and, from
+the cast library, which of the person's labelled photos). Frames from faces.json say whose
+face was found; when the main face is one, its found box is used.
 Text that comes back empty or with a word the channel never prints is asked for once more
 (prompts/thumbnail_retry_<v>.md); a reviewer's note on a retake goes in with the request
 (prompts/thumbnail_feedback_<v>.md)."""
@@ -161,11 +162,16 @@ def request(x: dict, fr: list[dict], info: dict, tc: dict, style: str, feedback:
         return content, PICK_SCHEMA
     schema, names = ENQ_SCHEMA, list(tc.get("_photos", {}))
     if names:
-        content.append({"type": "text", "text": f"Photos on file: {', '.join(names)}."})
+        labels = tc.get("_photo_labels") or {}
+        listed = [f"{n} ({', '.join(labels[n])})" if labels.get(n) else n for n in names]
+        content.append({"type": "text", "text": f"Photos on file: {', '.join(listed)}."})
         pick_one = {"type": "string", "enum": ["", *names]}
-        schema = {**ENQ_SCHEMA, "properties": {**ENQ_SCHEMA["properties"], "photo": pick_one,
-                                               "teaser_photo": pick_one},
-                  "required": [*ENQ_SCHEMA["required"], "photo", "teaser_photo"]}
+        extra = {"photo": pick_one, "teaser_photo": pick_one}
+        if every := sorted({lb for v in labels.values() for lb in v}):  # #41: which of their photos
+            pick_label = {"type": "string", "enum": ["", *every]}
+            extra |= {"photo_label": pick_label, "teaser_photo_label": pick_label}
+        schema = {**ENQ_SCHEMA, "properties": {**ENQ_SCHEMA["properties"], **extra},
+                  "required": [*ENQ_SCHEMA["required"], *extra]}
     return content, schema
 
 
@@ -216,10 +222,13 @@ def finish_enquirer(out: dict, fr: list[dict], tc: dict) -> dict:
     for f_key, b_key in (("frame", "face"), ("inset_frame", "inset_face")):
         out[f_key] = min(max(int(out[f_key]), 1), len(fr))
         out[b_key] = clamp_box(out[b_key])
+    labels = tc.get("_photo_labels") or {}
     for k in ("photo", "teaser_photo"):  # kept only when set, so older entries read the same
-        name = photo_name(tc, out.pop(k, ""))
+        name, label = photo_name(tc, out.pop(k, "")), out.pop(f"{k}_label", "")
         if name:
             out[k] = name
+            if label in labels.get(name, []):  # a label that person's photos have
+                out[f"{k}_label"] = label
     found = found_face(fr[out["frame"] - 1], out["main_person"])
     if found:  # the face recognition found, not the model's guess at the box
         out["face"], out["face_found"] = found, True

@@ -247,3 +247,44 @@ def test_one_failing_channel_doesnt_stop_the_rest(cfg, monkeypatch):
     got = cast.channel_pictures(cfg, "Don", {"channels": ["https://kick.com/deadchannel", "https://kick.com/donflurgundy"]},
                                 said.append)
     assert [g["url"] for g in got] == ["https://files.kick.com/pic.jpg"] and "ConnectionError" in said[0]
+
+
+def test_labelled_photos_for_covers_and_known_figures(cfg, monkeypatch):
+    from clipper.prompts import figures
+    from clipper.thumbs.frames import photo_file, photo_labels
+
+    monkeypatch.setattr(cast, "faces_in", lambda img, cfg: [face(unit(RNG.normal(size=128)), px=150)])
+    kinds = ("web", "stream", "commons")                               # "web": image search, a pasted URL
+    ids = [cast.add(cfg, "Jer", jpeg(), {"key": f"k{i}", "kind": k}) for i, k in enumerate(kinds)]
+    cast.set_status(cfg, "Jer", ids, "keep")
+    for pid, label in zip(ids, ("angry", "angry", "laughing"), strict=True):
+        cast.set_label(cfg, "Jer", pid, label)
+    d = cast.person_dir(cfg, "Jer")
+    assert cast.best_photo(d, "angry").name == f"{ids[1]}.jpg"        # a stream photo before a web one
+    assert cast.labels(d) == ["angry", "laughing"]
+    Image.new("RGB", (10, 10)).save(cast.root(cfg) / "Hasan Piker.jpg")
+    tc = {**cfg["thumbnail"]}
+    tc["_photos"] = photos(tc)
+    assert photo_labels(tc) == {"Hasan Piker": [], "Jer": ["angry", "laughing"]}
+    assert photo_file(tc, "jer", "laughing").name == f"{ids[2]}.jpg"
+    assert photo_file(tc, "Jer", "sad") == tc["_photos"]["Jer"]          # no such label: their best
+    assert photo_file(tc, "Hasan Piker", "angry").name == "Hasan Piker.jpg"
+    assert photo_file(tc, "Nobody", "angry") is None
+    from clipper.thumbs.editor import _clean_changes  # the war room's cover editor
+    e = {"frames": [{}], "photo": "Jer", "photo_label": "angry"}
+    assert _clean_changes(cfg, e, {"photo_label": "laughing"}) == {"photo_label": "laughing"}
+    assert _clean_changes(cfg, e, {"photo": "hasan piker"}) == {"photo": "Hasan Piker", "photo_label": ""}
+    with pytest.raises(ClipperError, match="no 'angry' photo of Hasan Piker"):
+        _clean_changes(cfg, e, {"photo": "Hasan Piker", "photo_label": "angry"})
+
+    cast.set_info(cfg, "Jer", ["The Quartering"], None)
+    cast.person_dir(cfg, "Victor").mkdir()                              # no kept photo: not a figure
+    assert cast.figures(cfg) == [("Hasan Piker", []), ("Jer", ["The Quartering"])]
+    assert cast.known_figures("DSP, The Quartering", cast.figures(cfg)) == "DSP, The Quartering, Hasan Piker"
+    assert cast.known_figures("", [("Jer", ["The Quartering"])]) == "Jer (The Quartering)"
+    cfg["scoring"]["known_figures"] = "Jer (The Quartering), Blade"
+    assert figures(cfg) == "Jer (The Quartering), Blade, Hasan Piker"
+    cfg["cast"]["known_figures"] = False
+    assert figures(cfg) == "Jer (The Quartering), Blade"
+    cfg["cast"]["known_figures"], cfg["thumbnail"]["photos"] = True, ""
+    assert figures(cfg) == "Jer (The Quartering), Blade" and cast.figures(cfg) == []

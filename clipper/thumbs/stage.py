@@ -17,7 +17,15 @@ from ..prompts import Prompts
 from ..scoring import load_signals
 from .classic import compose
 from .enquirer import compose_enquirer, compose_vertical, cover_context, enquirer_setup
-from .frames import asset_key, face_frames, frames, grab, photo_name, photos
+from .frames import (
+    asset_key,
+    face_frames,
+    frames,
+    grab,
+    photo_labels,
+    photo_name,
+    photos,
+)
 from .pick import clean_text, pick, unsafe
 
 
@@ -172,6 +180,7 @@ def set_photos(stream_dir: Path, cfg: dict, ids: list[str], photo: str | None = 
                     state[k][field] = on_file
                 else:
                     state[k].pop(field, None)
+                state[k].pop(f"{field}_label", None)  # the model's label was for the last person
                 changed.append(k)
     if changed:
         jsonstate.merge(state_path, state, sorted(set(changed)))
@@ -190,6 +199,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
 
     tc = {**cfg["thumbnail"]}
     tc["_photos"] = photos(tc) if tc["style"] == "enquirer" else {}
+    tc["_photo_labels"] = photo_labels(tc)
     assets = [x for x in load_assets(stream_dir) if not ids or x["id"] in ids]
     if not assets:
         raise ClipperError("no cut assets" + (f" matching {ids}" if ids else "; run `clipper cut` first"))

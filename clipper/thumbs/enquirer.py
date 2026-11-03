@@ -39,7 +39,7 @@ from ..draw import (
     wrap_px,
 )
 from ..errors import ClipperError
-from .frames import grab, photo_name
+from .frames import grab, photo_file
 from .pick import clean_text, enquirer_lines
 
 # Boxes are [x0, y0, x1, y1] unless named otherwise; "room" is what a text's width leaves
@@ -181,7 +181,7 @@ def cover_context(key: str, state: dict, stream_dir: Path, tc: dict, own_band: s
     picks += [ke for ke in others[1:] if ke not in picks]
     side = []
     for k, e in picks[:3]:
-        photo = tc.get("_photos", {}).get(photo_name(tc, e.get("teaser_photo", "")))
+        photo = photo_file(tc, e.get("teaser_photo", ""), e.get("teaser_photo_label", ""))
         path = photo or stream_dir / "thumbs" / k / e["frames"][e["frame"] - 1]["path"]
         side.append({"text": e["teaser"], "topic": e.get("topic") or "", "frame": path,
                      "face": WHOLE if photo else e["face"]})
@@ -354,7 +354,7 @@ def photo_and_inset(img: Image.Image, d: ImageDraw.ImageDraw, tc: dict, c: dict,
     if tc["_channel"]:
         bbox = badge_box(tc, b, px + b["left"], (iy + ih if b["on_inset"] else py + ph) - b["bottom"])
         avoid.append((bbox[0] - px, bbox[1] - py, bbox[2] - px, bbox[3] - py))
-    photo = tc.get("_photos", {}).get(photo_name(tc, e.get("photo", "")))
+    photo = photo_file(tc, e.get("photo", ""), e.get("photo_label", ""))
     img.paste(face_crop(photo, WHOLE, (pw, ph)) if photo
               else face_crop(frame(e["frame"]), e["face"], (pw, ph), max_zoom=c["photo"]["zoom"], avoid=avoid),
               (px, py))

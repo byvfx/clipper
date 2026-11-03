@@ -14,22 +14,36 @@ from ..errors import ClipperError
 from . import style
 
 
+def usable(faces: list[dict]) -> list[dict]:
+    """week.json faces without a photo cover's frame: when a cover used a [thumbnail] photos
+    portrait, its frame was only a fallback and may not show the person (#41)."""
+    return [f for f in faces if not f.get("photo")]
+
+
 class Faces:
     """person -> a square face crop, a frame, or initials; from the week's thumbnails.json."""
 
     def __init__(self, cfg: dict, week: dict, pinned: dict | None = None, here: Path | None = None,
-                 palette=None):
+                 palette=None, labels: dict[str, str] | None = None):
+        """labels: issue.json "photo_labels", {person: label}: which of a person's cast library
+        photos ([thumbnail] photos/<Person>/) pictures them, when no frame does."""
         from ..thumbs import photos as photo_dir
+        from ..thumbs.frames import photo_file
 
         self.P = palette or style.DEFAULT.palette
 
         self.by_person: dict[str, list[dict]] = defaultdict(list)
         for s in week["streams"].values():
-            for f in s["faces"]:
+            for f in usable(s["faces"]):
                 self.by_person[f["person"].lower()].append(f)
         for v in self.by_person.values():
             v.sort(key=lambda f: (not f.get("found"), -f["size"]))  # named by face first, then the biggest
-        self.photos = {k.lower(): v for k, v in photo_dir(cfg["thumbnail"]).items()}
+        tc = {**cfg["thumbnail"]}
+        tc["_photos"] = photo_dir(tc)
+        self.photos = {k.lower(): v for k, v in tc["_photos"].items()}
+        for person, label in (labels if isinstance(labels, dict) else {}).items():
+            if isinstance(label, str) and (p := photo_file(tc, person, label)):
+                self.photos[person.lower()] = p
         root = Path(cfg["paths"]["streams"])
         for person, pin in (pinned or {}).items():
             # issue.json "faces": {"Name": "kick-1/segments/s16_x"} picks that stream's thumbnail

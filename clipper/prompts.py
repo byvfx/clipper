@@ -30,6 +30,18 @@ def cast_names(cfg: dict) -> str:
     return ", ".join(cast[:-1]) + " or " + cast[-1] if len(cast) > 1 else "".join(cast)
 
 
+def figures(cfg: dict) -> str:
+    """{known_figures}: [scoring] known_figures, plus everyone with a kept photo in the cast
+    library ([cast] known_figures, #41) so prompts know the regulars without a hand list."""
+    sc = cfg["scoring"]
+    if not ((cfg.get("cast") or {}).get("known_figures") and (cfg.get("thumbnail") or {}).get("photos")):
+        return sc["known_figures"]
+    from .cast import figures as cast_figures
+    from .cast import known_figures
+
+    return known_figures(sc["known_figures"], cast_figures(cfg))
+
+
 # Prompts that write text viewers see; [scoring] house_style rules are appended to them.
 VIEWER_FACING = {"score_a", "score_b", "meta", "chapters", "segments", "compilation",
                  "thumbnail", "thumbnail_enquirer", "preshow", "oneoff", "pick", "retake",
@@ -51,7 +63,7 @@ class Prompts:
                      "stream_context": sc["stream_context"],
                      "max_source_audio_s": sc["max_source_audio_s"],
                      "scan_max_per_block": sc["scan_max_per_block"],
-                     "known_figures": sc["known_figures"], "cast": cast_names(cfg)}
+                     "known_figures": figures(cfg), "cast": cast_names(cfg)}
         self.vars["cast_note"] = f" ({self.vars['cast']})" if self.vars["cast"] else ""
         # Swappable rule files, <kind>_<mode>_<version>.md, split into "## <section>" parts
         # that fill {<kind>_<section>} placeholders. v3+: third_party; v4+: audience.
