@@ -202,3 +202,11 @@ def test_a_budget_of_0_lets_only_a_pinned_one_go(sc):
     _, skipped, when = plan(items, sc)
     assert skipped == {"s/comp": "over the stream's compilation budget (0)"}
     assert when["t/comp"] == "Sat 14:00"
+
+
+def test_a_pin_that_has_passed_still_goes_at_budget_0(sc):
+    sc = {**sc, "horizon_days": 5, "compilation_days": ["sat"]}
+    items = [item("s/comp", "compilation", segment_keys=[], budget=0, override_text="2026-11-01 14:00")]
+    placed, skipped, when = plan(items, sc)
+    assert skipped == {}
+    assert when["s/comp"] == "Sat 14:00" and placed["s/comp"]["source"] == "auto"
