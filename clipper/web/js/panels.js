@@ -30,7 +30,7 @@ function renderUploads() {
       ? ` · <span style="color:var(--accent)">uploading now (since ${esc(r.running_since.slice(11, 16))})</span>` : ""}${runAt
       ? ` · last run ${ago(runAt.toISOString())}, ${r.exit === "0" ? `<span style="color:var(--green)">ok</span>` : `<span style="color:var(--red)">exit ${esc(r.exit)}</span>`}` : ""}</div>
     ${r.lines?.length ? `<div class="log">${r.lines.map(logLine).join("")}</div>` : ""}
-    ${u.next.length ? `<div class="nx">${u.next.map(e => `<span class="${e.due ? "due" : ""}">${new Date(e.publish_at).toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit" })}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.title)}">${esc(e.title)}</span>`).join("")}</div>` : ""}`;
+    ${u.next.length ? `<div class="nx">${u.next.map(e => `<span class="${e.due ? "due" : ""}">${new Date(e.publish_at).toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit" })}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.last_error ? `${e.title}\nlast upload failed: ${e.last_error}` : e.title)}">${e.last_error ? `<span class="bad">failed</span> ` : ""}${esc(e.title)}</span>`).join("")}</div>` : ""}`;
 }
 
 // ---------- #20 drag and drop on the schedule ----------

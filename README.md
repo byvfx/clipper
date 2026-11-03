@@ -18,7 +18,8 @@ fetch / record -> signals -> transcribe -> score -> segments -> faces -> cut -> 
   `[transcribe] diarize`, speaker turns too, named per show by `clipper speakers` (enrolled voices).
   Once a stream has names, the transcript the model stages read tags each turn (`[PPP] ...`,
   `[?]` for a voice nobody named, `[music]`), and the weekly credits a quote to whoever said it.
-- **score**: Claude reads the transcript and heat curve and proposes moments and picks.
+- **score**: Claude reads the transcript and heat curve and proposes moments and picks. A
+  rerun pays every window again, so it refuses without `--force`.
 - **segments**: Claude splits the stream into topic segments and compilations.
 - **cut**: lossless segment cuts on keyframes, re-encoded picks, bleeps; a few segments at once,
   on the NAS beside the source with `[cut] backend = "nas"`.

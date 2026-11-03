@@ -78,6 +78,9 @@ def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool
     if gather_only:
         return here
     ij = here / "issue.json"
+    if render_only and not ij.exists():
+        raise ClipperError(f"--render: no issue.json in {here} to render; a draft costs model calls, "
+                           "so run without --render (or --week <saturday> for an earlier issue)")
     if redraft or not ij.exists():
         if ij.exists():
             backup = here / f"issue.before_{datetime.now():%Y-%m-%d_%H%M}.json"

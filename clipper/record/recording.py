@@ -34,7 +34,8 @@ class Recording:
         self.lock = threading.Lock()
         self.stop_evt = threading.Event()
         self.threads: list[threading.Thread] = []
-        self.ended = False             # playlist said ENDLIST
+        self.ended = False             # playlist said ENDLIST (or the video thread died: crashed)
+        self.crashed = False
         self.new_part = True           # next segment opens a new part
         (d / "live").mkdir(parents=True, exist_ok=True)
 
@@ -50,6 +51,7 @@ class Recording:
     def start(self) -> None:
         self.stop_evt.clear()
         self.ended = False
+        self.crashed = False
         self.new_part = True
         self.st.status = "recording"
         self.save()
@@ -176,6 +178,7 @@ class Recording:
         except Exception as e:
             log.exception("%s: video thread crashed", self.st.stream_id)
             self.alert(f"{self.st.stream_id}: video thread crashed: {e!r}", logging.ERROR)
+            self.crashed = True
             self.ended = True
         finally:
             if out:

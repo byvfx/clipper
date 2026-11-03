@@ -60,13 +60,19 @@ FAST_LANE = [s.name for s in STAGES if s.fast]
 FAST_TWIN = {s.twin_of: s.name for s in STAGES if s.twin_of}   # slow stage -> its twin
 
 
-def argv(name: str, stream: str, wc: dict) -> list[str]:
-    """The `clipper` arguments that run stage `name` on `stream` ([worker] settings wc)."""
+FORCED = {"score": "--force", "cut": "--force", "clips": "--force"}  # stages that keep paid work unless forced
+
+
+def argv(name: str, stream: str, wc: dict, force: bool = False) -> list[str]:
+    """The `clipper` arguments that run stage `name` on `stream` ([worker] settings wc).
+    force: a redo the user asked for (`clipper run --from`, `--force`)."""
     st = BY_NAME[name]
     cmd = st.fast_cmd if wc["fast_lane"] and st.fast_cmd else st.cmd
     out = [stream if a == S else a for a in cmd]
     if out[:2] == ["review", "publish"] and not wc["notify"]:
         out.append("--no-notify")
+    if force and name in FORCED:
+        out.append(FORCED[name])
     return out
 
 

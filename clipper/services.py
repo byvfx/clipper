@@ -103,10 +103,17 @@ def nas_cuts(cfg: dict) -> list[str]:
             for line in r.stdout.splitlines() if line.strip()]
 
 
-def recorder_compose(action: str) -> int:
-    host = os.environ.get("RECORD_SSH_HOST") or "nas"
-    folder = os.environ.get("RECORD_DIR") or "clipper-record"
-    sudo = os.environ.get("RECORD_SUDO", "")
+def recorder_ssh(cfg: dict) -> tuple[str, str, str]:
+    """(ssh host, compose dir, sudo prefix): [record] ssh_host / compose_dir / sudo, else the
+    RECORD_* variables deploy/record/deploy.sh reads, else its defaults."""
+    rc = cfg["record"]
+    return (rc["ssh_host"] or os.environ.get("RECORD_SSH_HOST") or "nas",
+            rc["compose_dir"] or os.environ.get("RECORD_DIR") or "clipper-record",
+            rc["sudo"] or os.environ.get("RECORD_SUDO", ""))
+
+
+def recorder_compose(cfg: dict, action: str) -> int:
+    host, folder, sudo = recorder_ssh(cfg)
     cmd = f"cd {shlex.quote(folder)} && {sudo} docker compose {action} && {sudo} docker compose ps"
     print(f"recorder: docker compose {action} on {host}", flush=True)
     r = ssh(host, cmd, timeout=120)
@@ -132,7 +139,7 @@ def run(cfg: dict, action: str = "status", which: str = "all", force: bool = Fal
         if live and not force:
             raise ClipperError(f"recording {', '.join(live)} now: a {action} would start a new recording part. "
                                "Wait until the show ends, or pass --force")
-        return recorder_compose(action)
+        return recorder_compose(cfg, action)
     worst = 0
     for name in (["worker", "serve", "bot"] if which == "all" else [which]):
         print(f"===== {name}", flush=True)

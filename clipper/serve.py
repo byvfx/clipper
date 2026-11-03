@@ -143,9 +143,11 @@ class Serve:
                       last_exit=proc.returncode, last_line=(lines[-1] if lines else "")[:200])
             if proc.returncode:  # #22: a background job failing is worth a DM (once per cooldown)
                 last = lines[-1].strip() if lines else ""
+                # Keyed on the last line too, verbatim (item keys carry their digits), so a
+                # different item failing the next hour isn't swallowed by this one's cooldown.
                 alerts.send(self.cfg, "upload" if name in ("upload", "tiktok", "x") else "failure",
                             f"`clipper {' '.join(args)}` failed (exit {proc.returncode}): {last[:400]}",
-                            key=f"bg:{' '.join(args)}")
+                            key=f"bg:{' '.join(args)}:{last[:160]}")
             return proc.returncode
         except Exception as e:
             log.exception(f"{name} run failed")

@@ -100,8 +100,8 @@ def snapshot(data: dict) -> dict:
     return copy.deepcopy(data)
 
 
-def stage_args(stage: str, stream: str, wc: dict) -> list[str]:
-    return stages.argv(stage, stream, wc)
+def stage_args(stage: str, stream: str, wc: dict, force: bool = False) -> list[str]:
+    return stages.argv(stage, stream, wc, force)
 
 
 def keep_awake(on: bool) -> None:
@@ -293,7 +293,7 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
             cmd = [sys.executable, "-m", "clipper.cli"]
             if config_path:
                 cmd += ["--config", str(config_path)]
-            cmd += show_args(cfg) + stage_args(stage, str(stream_dir), wc)  # --show carries over
+            cmd += show_args(cfg) + stage_args(stage, str(stream_dir), wc, force)  # --show carries over
             st = run.data["stages"][stage] = {"status": "running", "started": now_iso(),
                                               "log": log_path.name}
             run.save()

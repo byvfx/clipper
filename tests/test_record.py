@@ -366,3 +366,17 @@ def test_on_finish_problems_are_alerts(tmp_path, monkeypatch):
                         lambda args, check: SimpleNamespace(returncode=2))
     run_on_finish(tmp_path, st, {"on_finish": "notify {stream_id}"}, say)
     assert len(alerts) == 3 and alerts[2] == "kick-1: on_finish exited 2: notify kick-1"
+
+
+def test_finalize_skips_a_chat_line_cut_short(tmp_path, defaults, no_ffprobe):
+    """Audit 11-03 #1: a container killed mid-write leaves a half line in live/chat.jsonl;
+    finalize used to raise on it and leave the stream stuck."""
+    stream(tmp_path, 1)
+    with open(tmp_path / LIVE_CHAT, "ab") as f:
+        f.write('{"id": "m9", "ts": 12, "content": "Ã©'.encode()[:-1])  # cut inside a UTF-8 character
+    cfg = {**defaults, "record": {**defaults["record"], "container": "ts",
+                                  "extract_audio": False, "backfill_chat": False}}
+    alerts = []
+    meta = finalize(tmp_path, cfg, lambda text, *a, **k: alerts.append(text))
+    assert meta and State.load(tmp_path / STATE).status == "done"
+    assert [a for a in alerts if "1 unreadable line" in a]

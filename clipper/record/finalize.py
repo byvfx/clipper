@@ -105,11 +105,18 @@ def gather_chat(d: Path, st: State, parts: list[Part], cfg: dict,
     rc = cfg["record"]
     seen: dict[str, dict] = {}
     live = d / LIVE_CHAT
+    bad = 0
     if live.exists():
-        for line in live.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                m = json.loads(line)
+        for raw in live.read_bytes().splitlines():  # bytes: a cut can land inside a UTF-8 character
+            if not raw.strip():
+                continue
+            try:
+                m = json.loads(raw)
                 seen[m["id"]] = m
+            except (ValueError, KeyError, TypeError):
+                bad += 1  # a line cut short when the container was killed mid-write
+    if bad:  # worth knowing, never worth leaving the stream stuck over
+        alerts(f"{st.stream_id}: {bad} unreadable line(s) in {LIVE_CHAT} skipped")
     holes = [h for p in parts for h in _uncovered(st.chat, p.wall_start,
                                                   p.wall_start + p.duration_s,
                                                   rc["backfill_min_s"])]

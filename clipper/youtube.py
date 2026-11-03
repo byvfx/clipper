@@ -641,10 +641,13 @@ def finish(yt, cfg: dict, e: dict, m: dict, vid: str, playlists: dict, cache_pat
             e.setdefault("playlists", []).append(name)
             note_playlist(sched_path, e["key"], name)
             extras.append(f"playlist {name}")
+    except Exception as ex:  # noqa: BLE001  # the video itself is up; report and move on
+        print(f"  warning: playlist: {type(ex).__name__}: {ex}")
+    try:  # its own try: a playlist refusal mustn't leave the Kitsu "YouTube URL" column empty
         kitsu_url(cfg, m, f"https://youtu.be/{vid}")
         extras.append("Kitsu link")
-    except Exception as ex:  # noqa: BLE001  # the video itself is up; report and move on
-        print(f"  warning: after upload: {type(ex).__name__}: {ex}")
+    except Exception as ex:  # noqa: BLE001
+        print(f"  warning: Kitsu link: {type(ex).__name__}: {ex}")
     if extras:
         print(f"  + {', '.join(extras)}")
 
@@ -869,6 +872,8 @@ def next_up(cfg: dict, n: int) -> None:
     for e in queue(cfg)[:n]:
         when = e["publish_at"][:16].replace("T", " ") or "unslotted"
         print(f"{e['key']}  ({e['kind']}, {when})\n  {e['title']}\n  {e['file']}")
+        if e.get("last_error"):  # the hourly run's failure, otherwise only in the serve log
+            print(f"  last upload failed {e.get('last_error_at', '')[:16].replace('T', ' ')}: {e['last_error']}")
 
 
 def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:

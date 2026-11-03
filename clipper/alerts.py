@@ -108,8 +108,16 @@ def _tz(cfg: dict) -> ZoneInfo:
 
 
 def _hm(s: str) -> tuple[int, int]:
-    h, m = s.strip().split(":")
-    return int(h), int(m)
+    """"HH:MM" -> (h, m); a ClipperError names the setting (config.problems warns at load,
+    doctor fails, and the bot's notify loop logs the reason instead of a traceback)."""
+    try:
+        h, m = s.strip().split(":")
+        h, m = int(h), int(m)
+        if not (0 <= h < 24 and 0 <= m < 60):
+            raise ValueError
+    except ValueError:
+        raise ClipperError(f"[notify] quiet_hours / digest_time: {s.strip()!r} isn't HH:MM") from None
+    return h, m
 
 
 def quiet(cfg: dict, now: datetime) -> bool:
