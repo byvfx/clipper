@@ -103,10 +103,13 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - **Shows:** kino and c404 live through review → schedule; dsp and blade are config-only tests; `trish` is a
   placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI).
 - **Schedule: stay current, no backlog (live 2026-10-29 09:51).** 15/day couldn't keep up (~140
-  approved a week vs 105 slots, newest stream 15 days behind). Now `stream_budget = { segment = 10,
-  short = 8, compilation = 1 }` per 8 h (`budget_hours`; Don ~7/6/1), `stale_days = 3`, slots a day:
-  6 Shorts (09/11/13/15/18/20), 8 segments (08/10/12/14/16/17/19/22), compilation 21:00; `[scoring]
-  max_picks` 14 (was 10). The old backlog's unuploaded slots dropped (backup
+  approved a week vs 105 slots, newest stream 15 days behind). `stale_days = 3`, `[scoring]
+  max_picks` 14 (was 10). **Since the October check-in (2026-11-02, #42):** `stream_budget = { segment
+  = 10, short = 10, compilation = 0 }` per 8 h (`budget_hours`), Channel 404 `segment = 6` (Don ~4/7/0);
+  slots a day: 9 Shorts (09/11/13/15/16/18/19/20/21), 6 segments (08/10/12/14/17/22), compilation 23:00
+  for big-story nights only (`docs/big-story.toml` into the stream's config.toml; compilation = 0 means
+  none unless pinned once PR #120 is merged, until then it counts as 1). Backup
+  backups/clipper.before_october_checkin_2026-11-02.toml. The old backlog's unuploaded slots dropped (backup
   backups/schedule.before_stay_current_2026-10-29.json); the 10-26/27/28 streams fill through 11-01. Items let
   go stay approved in Kitsu (war room filter "Not going out"); pin with "Publish at" to send one anyway.
   Watch the first week: if good items keep going stale while streams overlap, try `stale_days = 4`.
@@ -124,7 +127,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   refs in mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
   (~1,550 credits; 18,457 Runway credits left on 10-24).
 - **Costs:** October ~$200 in model/GPU spend, ~$184 of it the Jer archive; `clipper costs`, war room
-  Costs and Modal panels. Monthly analytics check-in task runs 2026-11-01 09:00 (#42).
+  Costs and Modal panels. Monthly analytics check-in task runs on the 1st at 09:00; October's
+  (`reports/analytics/2026-10-checkin.md`) was gone through 11-02: 1-4 taken, 5 (titles without the
+  show prefix) skipped; its Decisions section is what November's check-in follows up.
 - **Analytics:** YouTube Analytics API enabled 10-28; October so far 12.7k views, 68.5 h watch, +28 subs,
   Shorts feed 80% of views.
 - **Compilation joins fixed 2026-10-28** (user spotted Andy "repeating himself" at 2:18:42 of the H3
@@ -159,8 +164,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
   MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
-- Weekly issue 03: post it by hand (TikTok carousel + two YouTube Posts) from the artifact page (X done). The
-  monthly check-in report on 11-01.
+- Weekly issue 03: post it by hand (TikTok carousel + two YouTube Posts) from the artifact page (X done).
 - YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The 10:30 token was issued while still in Testing and may still lapse 11-06: one more `clipper upload --sign-in` now gives a token that doesn't expire.
 
 ## Open work
