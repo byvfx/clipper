@@ -154,7 +154,10 @@ def watchlist(cfg: dict) -> dict[str, Watch]:
     root = cfg.get("_root") or cfg
     terms((root.get("news") or nc)["watch"])
     for key, show in (cfg.get("shows") or {}).items():
-        terms((show.get("overrides", {}).get("news") or {}).get("watch") or {}, key)
+        # Only shows that set their own terms (inherited ones aren't tied to every show), read
+        # through for_show so clipper.local.toml and $CLIPPER_NEWS_WATCH still win over them.
+        if "watch" in (show.get("overrides", {}).get("news") or {}):
+            terms(for_show(cfg, key)["news"]["watch"], key)
     if not nc["auto_watch"]:
         return out
     for key in cfg.get("shows") or {}:
