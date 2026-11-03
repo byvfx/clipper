@@ -40,6 +40,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "brave_key": "secrets/brave_secret.txt",        # Brave Search API key, if not $BRAVE_API_KEY
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
+        "serve_log": "logs/serve.log",  # `clipper serve` log (rotated); "" = console only
         "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
         "archive": "archive",     # `clipper archive` subjects: <subject>/catalog.json + one dir per item
         "youtube_cookies": "secrets/youtube_cookies.txt",  # optional, Netscape cookies.txt: `archive` age-restricted items, pre-shows on a bot check
@@ -611,12 +612,17 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "digest_time": "09:00",   # daily digest (out today, tomorrow, waiting); "" = none
         "disk_free_gb": 50,       # warn when the streams share has less free than this; 0 = off
     },
+    "serve": {
+        # `clipper serve`: the always-on process (the war room, hourly uploads, pre-show grabs,
+        # retakes, the daily jobs). The bot and `clipper doctor` reach it here.
+        "url": "",                # "" = this machine, http://127.0.0.1:<[warroom] port>/; else e.g. "http://nas:8765/" (needs [warroom] token on both)
+    },
     "warroom": {
-        # `clipper warroom`: the local dashboard (schedule, pipeline, review queue, retakes).
+        # The dashboard (schedule, pipeline, review queue, retakes): `clipper serve` runs it
+        # with the jobs, `clipper warroom` the page alone.
         "host": "127.0.0.1",      # 0.0.0.0 to open it to the LAN (then set token)
         "port": 8765,
         "token": "",              # required off localhost: open it as http://host:port/?key=<token>
-        "with_bot": True,         # `clipper bot` serves it too, so it's up whenever the bot runs
         "lowres_height": 360,     # phones play a copy this tall (short side), in lowres/ beside the preview
         "lowres_prewarm": True,   # make those copies ahead for items waiting for review
         "tailnet": False,         # served on this machine's tailnet (clipper warroom --tailnet on); doctor checks it

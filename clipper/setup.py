@@ -46,7 +46,8 @@ TITLES = {"mode": "Join or start fresh", "roles": "What this machine runs",
 STATE = "setup_state.json"
 EXIT_SYNC = 3                     # packages missing: the bootstrap script syncs and reruns setup
 ROLES = {"worker": "worker: transcribe, score, cut, Shorts, covers (`clipper worker`)",
-         "bot": "bot: Discord review cards, war room, hourly uploads (`clipper bot`, one machine only)",
+         "serve": "serve: the war room, hourly uploads, pre-shows, retakes, daily jobs (`clipper serve`, one machine only)",
+         "bot": "bot: Discord review cards, buttons and DMs (`clipper bot`, one machine only)",
          "recorder": "recorder: records the Kick shows live (Docker on the NAS)"}
 BACKENDS = {"whisperx": "WhisperX on this machine's NVIDIA GPU",
             "mlx": "mlx-whisper on this Mac's Apple GPU",
@@ -159,7 +160,7 @@ def save_state(cfg: dict, st: dict) -> None:
 
 def doctor_role(roles: list[str]) -> str:
     """`clipper doctor --role` for these setup roles."""
-    mapped = {"worker": "gpu", "bot": "bot", "recorder": "nas"}
+    mapped = {"worker": "gpu", "serve": "serve", "bot": "bot", "recorder": "nas"}
     picked = {mapped[r] for r in roles if r != "recorder"}  # the recorder isn't installed here
     return picked.pop() if len(picked) == 1 else "all" if picked else "nas"
 
@@ -317,11 +318,14 @@ def extras_for(roles: list[str], backend: str) -> list[str]:
     if "worker" in roles:
         out.append({"whisperx": "gpu", "mlx": "mac", "modal": "modal"}[backend])
         out.append("faces")  # the default [worker] stages run `clipper faces` (OpenCV, CPU)
+    if "serve" in roles:
+        if "faces" not in out:
+            out.append("faces")  # the war room's Cast window and the daily `cast auto` check faces (OpenCV)
+        extra = {"whisperx": "gpu", "mlx": "mac", "modal": "modal"}[backend]
+        if extra not in out:
+            out.append(extra)  # pre-shows run on serve's machine, transcribe included (and the Modal panel)
     if "bot" in roles:
         out.append("discord")
-        out.append("faces")  # the war room's Cast window and the daily `cast auto` check faces (OpenCV)
-        if backend == "modal" and "modal" not in out:
-            out.append("modal")  # the war room's Modal panel
     return out
 
 
@@ -600,6 +604,9 @@ def step_check(cfg: dict, st: dict, ask: Ask, offline: bool = False) -> int:
         if "worker" in roles:
             say("  worker, unattended: " + (r"deploy\worker\worker-task.ps1 -Install" if win
                                             else "clipper worker (in a terminal or launchd for now)"))
+        if "serve" in roles:
+            say("  serve, unattended:  " + (r"deploy\serve\serve-task.ps1 -Install" if win
+                                            else "clipper serve (in a terminal or launchd for now)"))
         if "bot" in roles:
             say("  bot, unattended:    " + (r"deploy\discord\bot-task.ps1 -Install" if win
                                             else "clipper bot (in a terminal or launchd for now)"))

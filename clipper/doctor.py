@@ -1,14 +1,16 @@
 """`clipper doctor`: check that this machine can run clipper, and say what to fix.
 
 Usage:
-    clipper doctor [--offline] [--role all|gpu|bot|nas]
+    clipper doctor [--offline] [--role all|gpu|serve|bot|nas]
 
 Checks Python, the config and prompt files, ffmpeg (filters and the configured encoders),
 fonts, the GPU stack (torch + WhisperX, only needed where transcribe runs), API keys and
 tokens, and, unless --offline, that Anthropic, Kitsu, Discord and Kick answer. Each line is
 OK, WARN (works, but something is missing or slow) or FAIL (a stage will break); the exit
 code is 1 when anything fails. --role skips what that machine doesn't run: gpu (a worker:
-everything but the bot), bot (the Discord bot + review), nas (the recorder only).
+everything but serve and the bot), serve (`clipper serve`: the war room, uploads, pre-shows,
+retakes, the daily jobs), bot (the Discord bot, which needs serve to answer), nas (the
+recorder only).
 """
 
 from __future__ import annotations
@@ -421,7 +423,7 @@ def check_keys(cfg: dict, role: str) -> None:
         except ImportError:
             (fail if role == "bot" else warn)("keys", "discord.py not installed (needed for `clipper bot`)",
                                               "uv sync --extra discord")
-    if role in ("all", "bot"):
+    if role in ("all", "serve"):
         p = cfg["paths"]
         if p["youtube_token"].exists():
             ok("keys", f"YouTube sign-in token {p['youtube_token'].name}")
@@ -514,7 +516,7 @@ def check_narrate(cfg: dict) -> None:
 def check_online(cfg: dict, role: str) -> None:
     """That the services this role uses answer, in this order."""
     online_elevenlabs(cfg)
-    if role in ("all", "bot"):
+    if role in ("all", "serve"):
         online_youtube(cfg)
     if role != "nas":
         check_llm_online(cfg)
@@ -522,6 +524,8 @@ def check_online(cfg: dict, role: str) -> None:
         online_kitsu(cfg)
     if cfg["discord"]["enabled"] or role == "bot":
         online_discord(cfg)
+    if role in ("all", "bot"):
+        online_serve(cfg, role)
     if role in ("all", "gpu"):
         online_modal(cfg)
         online_nas_cut(cfg)
@@ -614,6 +618,21 @@ def online_discord(cfg: dict) -> None:
                                "" if r.ok else "reset the bot token in the Developer Portal")
     except Exception as e:  # noqa: BLE001
         fail("online", f"Discord: {e}")
+
+
+def online_serve(cfg: dict, role: str) -> None:
+    """That `clipper serve` answers at [serve] url: the bot asks it to replan after a decision
+    and to start a retake (a decision still lands in Kitsu without it)."""
+    from . import serve
+
+    try:
+        serve.health(cfg)
+        ok("online", f"clipper serve answers at {serve.url(cfg)}")
+    except Exception as e:  # noqa: BLE001
+        (fail if role == "bot" else warn)(
+            "online", f"clipper serve isn't answering at {serve.url(cfg)} ({e})",
+            r"start it: clipper serve, or deploy\serve\serve-task.ps1 -Install (set [serve] url when it "
+            "runs on another machine)")
 
 
 def online_modal(cfg: dict) -> None:
@@ -763,13 +782,13 @@ def check_news(cfg: dict, offline: bool) -> None:
            + (", Google News" if nc["google_news"] else ""))
 
 
-def check_cast_bot(cfg: dict) -> None:
-    """The bot's daily `cast auto` and the war room's Cast window check faces with OpenCV."""
+def check_cast_serve(cfg: dict) -> None:
+    """serve's daily `cast auto` and the war room's Cast window check faces with OpenCV."""
     import importlib.util
 
     if cfg["thumbnail"]["photos"] and cfg["cast"]["auto_hours"] > 0 and not importlib.util.find_spec("cv2"):
-        warn("cast", "OpenCV not installed: the bot's daily cast find and the Cast window can't add photos",
-             "uv sync --extra discord --extra faces, or [cast] auto_hours = 0")
+        warn("cast", "OpenCV not installed: serve's daily cast find and the Cast window can't add photos",
+             "uv sync --extra faces, or [cast] auto_hours = 0")
 
 
 def check_faces(cfg: dict) -> None:
@@ -822,7 +841,31 @@ def check_tailnet(cfg: dict, offline: bool) -> None:
         ok("warroom", f"on the tailnet at {st['served']} (answers)")
     except Exception as e:  # noqa: BLE001
         fail("warroom", f"{st['served']} doesn't answer ({type(e).__name__})",
-             "is the bot (or clipper warroom) running here?")
+             "is clipper serve running here?")
+
+
+def serve_elsewhere(cfg: dict) -> bool:
+    """[serve] url names another machine (not this one by a local name)."""
+    from urllib.parse import urlparse
+
+    host = urlparse(cfg["serve"]["url"] or "").hostname or ""
+    return bool(host) and host not in ("localhost", "127.0.0.1", "::1")
+
+
+def check_shared_with_serve(cfg: dict) -> None:
+    """With serve on another machine, the bot still reads what serve writes: schedule.json
+    (cards, /schedule) and the news database (what to post). Both must be on the share."""
+    if not serve_elsewhere(cfg):
+        return
+    streams = Path(cfg["paths"]["streams"]).resolve()
+    for key in ("schedule", "news"):
+        p = Path(cfg["paths"][key]).resolve()
+        shared = streams == p or streams in p.parents
+        where = "on the streams share" if shared else "is local to this checkout"
+        (ok if shared else fail)(
+            "config", f"[paths] {key} {where}: {p}",
+            "" if shared else f"serve on another machine writes it: put [paths] {key} under [paths] streams "
+                              "on both machines (the same path)")
 
 
 def check_role_settings(cfg: dict, role: str) -> None:
@@ -843,6 +886,18 @@ def check_role_settings(cfg: dict, role: str) -> None:
                        ("review_channel_id", "review cards have nowhere to go")):
             (ok if dc[k] else fail)("config", f"[discord] {k}" + (" set" if dc[k] else " not set"),
                                     "" if dc[k] else f"{why}; see SETUP")
+    if role in ("all", "serve"):
+        wc = cfg["warroom"]
+        local = wc["host"] in ("127.0.0.1", "localhost", "::1")
+        from .warroom import token
+        (ok if local or token(cfg) else fail)(
+            "config", f"[warroom] host {wc['host']}" + ("" if local or token(cfg) else " with no token"),
+            "" if local or token(cfg) else "set [warroom] token (serve refuses to start without it off localhost)")
+    if role in ("all", "bot"):
+        u = cfg["serve"]["url"]
+        (ok if not u or u.startswith(("http://", "https://")) else fail)(
+            "config", f"[serve] url {u or '(this machine)'}", "" if not u or u.startswith("http") else "an http(s) URL")
+        check_shared_with_serve(cfg)
     if role in ("all", "nas"):
         chans = cfg["record"].get("channels")
         (ok if chans else warn)("config", "[record] channels " + ("set" if chans else "empty: the recorder has nothing to watch"),
@@ -865,11 +920,11 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     check_keys(cfg, role)
     if role in ("all", "gpu"):
         check_narrate(cfg)
-    if role in ("all", "bot"):
+    if role in ("all", "serve"):
         check_tailnet(cfg, offline)
-    if role == "bot":
-        check_cast_bot(cfg)
-    if role in ("all", "bot"):
+    if role == "serve":
+        check_cast_serve(cfg)
+    if role in ("all", "serve", "bot"):
         check_news(cfg, offline)
     if not offline:
         check_online(cfg, role)

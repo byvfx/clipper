@@ -1,6 +1,7 @@
-# Shared by the scheduled-task scripts of the Discord bot (deploy\discord) and the GPU worker
-# (deploy\worker). Dot-source it, then call Invoke-ClipperTask (the *-task.ps1 scripts) or
-# Start-ClipperSupervisor (the *-supervisor.ps1 scripts). Windows PowerShell 5.1 runs these.
+# Shared by the scheduled-task scripts of clipper serve (deploy\serve), the Discord bot
+# (deploy\discord) and the GPU worker (deploy\worker). Dot-source it, then call
+# Invoke-ClipperTask (the *-task.ps1 scripts) or Start-ClipperSupervisor (the
+# *-supervisor.ps1 scripts). Windows PowerShell 5.1 runs these.
 
 $ClipperRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $ClipperLogs = Join-Path $ClipperRoot 'logs'
@@ -88,7 +89,7 @@ function Start-ClipperSupervisor {
 }
 
 # ---------- scheduled task ----------
-# A task is a hashtable: Name (the scheduled task), Command (bot | worker), Supervisor (its
+# A task is a hashtable: Name (the scheduled task), Command (serve | bot | worker), Supervisor (its
 # script), Script (the task script, for the description), Description, Extra (the uv extra
 # clipper needs), Logs (names in logs\ to tail), Status (optional scriptblock run after).
 

@@ -6,14 +6,16 @@ Usage:
 Serves http://127.0.0.1:<port>/ ([warroom] host/port): which shows are live on Kick, each
 stream's pipeline progress, the review queue with previews and thumbnails (approve, ask for
 changes, reject, hold, pin, edit title / description / hashtags / thumbnail words), the
-release schedule, retakes, the bot's health and who is who on screen (#54: a stream's face
+release schedule, retakes, the services' health and who is who on screen (#54: a stream's face
 groups to name, and a box to draw round a face on a paused video). Decisions go through clipper/actions.py,
 so they land in Kitsu exactly like the CLI's and the Discord bot's (Kitsu stays the
 record); a "changes" decision starts `clipper retake` in the background, like the bot.
 
-It reads the files the pipeline writes (review.json is as fresh as the last sync: the bot
-syncs every few minutes, and the page's Sync button syncs now). Only listens on localhost
-unless [warroom] host is changed, which then needs [warroom] token.
+It reads the files the pipeline writes (review.json is as fresh as the last sync: the bot's
+card refresh and the hourly replan sync, and the page's Sync button syncs now). `clipper
+serve` (clipper/serve.py) runs it together with the background jobs; `clipper warroom` runs
+the page alone. Only listens on localhost unless [warroom] host is changed, which then
+needs [warroom] token.
 """
 
 from __future__ import annotations
@@ -38,7 +40,7 @@ from typing import ClassVar
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from zoneinfo import ZoneInfo
 
-from . import actions, jsonstate, review, schedule, worker
+from . import actions, daemon, jsonstate, review, schedule, worker
 from .config import _root, for_stream
 from .errors import ClipperError
 
@@ -49,6 +51,8 @@ STATIC = {"/manifest.webmanifest": "application/manifest+json", "/icon.svg": "im
 CODE = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}
 LOCK = threading.Lock()  # one Kitsu write / replan at a time
 SYNC = {"running": False, "last": None, "error": ""}
+TAILNET: dict = {"served": ""}   # the https URL tailscale serve gives the war room, found at start
+HOOKS: dict = {"retake": None}   # set by clipper serve: start a retake on its job runner
 LIVE_CACHE: dict = {"at": 0.0, "data": []}
 MAX_POST = 1 << 20  # bytes; decisions, bulk edits, covers and layouts are far smaller
 
@@ -263,24 +267,27 @@ def retakes(cfg: dict, limit: int = 12) -> list[dict]:
 
 
 def health(cfg: dict) -> dict:
+    """The services from their heartbeats (clipper/daemon.py), from any machine."""
     root = cfg["paths"]["streams"]
-    bot_log = cfg["paths"]["bot_log"]
-    last = ""
-    if bot_log and Path(bot_log).exists():
-        with open(bot_log, "rb") as f:
-            f.seek(max(0, Path(bot_log).stat().st_size - 4000))
-            lines = f.read().decode("utf-8", "replace").splitlines()
-        last = lines[-1] if lines else ""
-    return {"bot_lock": (root / ".bot.lock").exists(),
-            "bot_log_age_s": time.time() - Path(bot_log).stat().st_mtime if bot_log and Path(bot_log).exists() else None,
-            "bot_last": last[:200], "retake_running": (root / ".retake.lock").exists(),
-            "auto_upload_minutes": cfg["youtube"]["auto_upload_minutes"],
-            "sync": SYNC}
+    out: dict = {"services": {}, "retake_running": (root / ".retake.lock").exists(),
+                 "auto_upload_minutes": cfg["youtube"]["auto_upload_minutes"],
+                 "sync": SYNC, "tailnet": TAILNET["served"]}
+    for name, label in (("serve", "clipper serve"), ("bot", "Discord bot")):
+        hb = daemon.heartbeat(cfg, name)
+        level, text = daemon.state(hb)
+        jobs = hb["data"].get("jobs") or {}
+        running = sorted(j for j, st in jobs.items() if st.get("running"))
+        out["services"][name] = {"label": label, "level": level, "text": text, "host": hb["host"],
+                                 "age_s": hb["age_s"], "running": running,
+                                 "last": {j: {"at": st.get("last_at"), "exit": st.get("last_exit"),
+                                              "line": st.get("last_line", "")}
+                                          for j, st in jobs.items() if st.get("last_at")}}
+    return out
 
 
 def upload_status(cfg: dict, sched: dict) -> dict:
     """#21: the 24 h cap like `clipper upload` counts it, the last automatic run from the
-    bot log, and what's due next."""
+    serve log, and what's due next."""
     yc, now = cfg["youtube"], datetime.now(UTC)
     recent = sorted(datetime.fromisoformat(e["uploaded_at"]) for e in sched.get("entries", [])
                     if e.get("uploaded_at")
@@ -299,26 +306,26 @@ def upload_status(cfg: dict, sched: dict) -> dict:
 
 
 def last_upload_run(cfg: dict) -> dict:
-    """The bot's last finished `clipper upload` (not the replan before it): when, exit code,
-    what went up and any warnings or errors, from the tail of the bot log (and the rotated
-    one before it). The bot logs a job's output when it ends, so one in progress only shows
+    """serve's last finished `clipper upload` (not the replan before it): when, exit code,
+    what went up and any warnings or errors, from the tail of the serve log (and the rotated
+    one before it). serve logs a job's output when it ends, so one in progress only shows
     as running."""
-    bot_log = cfg["paths"]["bot_log"]
-    if not bot_log or not Path(bot_log).exists():
+    serve_log = cfg["paths"]["serve_log"]
+    if not serve_log or not Path(serve_log).exists():
         return {}
     lines: list[str] = []
-    for p in (Path(f"{bot_log}.1"), Path(bot_log)):  # RotatingFileHandler's previous file first
+    for p in (Path(f"{serve_log}.1"), Path(serve_log)):  # RotatingFileHandler's previous file first
         if p.exists():
             with open(p, "rb") as f:
                 f.seek(max(0, p.stat().st_size - 600_000))
                 lines += f.read().decode("utf-8", "replace").splitlines()
     runs, cur, prev_done = [], None, ""
     for line in lines:
-        if " clipper.bot: upload: " not in line:
+        if " clipper.serve: upload: " not in line:
             continue
-        at, msg = line[:19], line.split(" clipper.bot: upload: ", 1)[1]
+        at, msg = line[:19], line.split(" clipper.serve: upload: ", 1)[1]
         if msg == "starting":
-            # The bot replans, then uploads straight after: a start in the same minute as
+            # serve replans, then uploads straight after: a start in the same minute as
             # the replan's end is the upload, even before its output is in the log.
             cur = {"at": at, "lines": [], "after_replan": prev_done[:16] == at[:16]}
         elif cur is not None and msg.startswith("done (exit"):
@@ -430,10 +437,15 @@ def modal_status(cfg: dict) -> dict:
 
 
 def start_retake(cfg: dict) -> bool:
+    """A retake in the background: on `clipper serve`'s job runner when this page is its
+    (HOOKS), else a detached `clipper retake` (the page run alone)."""
+    if HOOKS["retake"]:
+        HOOKS["retake"]()
+        return True
     if (cfg["paths"]["streams"] / ".retake.lock").exists():
         return False
     cmd = actions.clipper_cmd(cfg)
-    log = Path(cfg["paths"]["bot_log"]).with_name("retake.log") if cfg["paths"]["bot_log"] else Path(os.devnull)
+    log = Path(cfg["paths"]["serve_log"]).with_name("retake.log") if cfg["paths"]["serve_log"] else Path(os.devnull)
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "a", encoding="utf-8") as out:
         out.write(f"\n=== {datetime.now():%Y-%m-%d %H:%M:%S} war room\n")
@@ -1028,8 +1040,9 @@ def _sync(cfg: dict, body: dict) -> dict:
 
 
 def _replan(cfg: dict, body: dict) -> dict:
+    """`clipper schedule` here (serve owns schedule.json); "sync": true reads Kitsu first."""
     with LOCK:
-        schedule.run(cfg, sync_first=False)
+        schedule.run(cfg, sync_first=bool(body.get("sync")))
     return {"ok": True}
 
 
@@ -1093,6 +1106,7 @@ def news_context(cfg: dict, body: dict) -> dict:
 # The API: path -> fn(cfg, query) for GET, fn(cfg, JSON body) for POST; each returns JSON.
 GET_API = {
     "/api/overview": lambda cfg, qs: overview(cfg),
+    "/api/health": lambda cfg, qs: health(cfg),
     "/api/items": lambda cfg, qs: all_rows(cfg),
     "/api/live": lambda cfg, qs: kick_live(cfg),
     "/api/lowres": lambda cfg, qs: lowres_status(cfg, _q(qs, "src")),
@@ -1178,7 +1192,7 @@ class Handler(BaseHTTPRequestHandler):
         """Errors go to the log in full; the page gets the type only (no NAS paths or
         Kitsu replies over the network)."""
         print(f"warroom: {self.command} {urlparse(self.path).path}: {type(e).__name__}: {e}", flush=True)
-        self.send_json({"error": f"{type(e).__name__} (details in the bot log)"}, status)
+        self.send_json({"error": f"{type(e).__name__} (details in the serve log)"}, status)
 
     def send_json(self, data, status=200):
         body = json.dumps(data, default=str).encode("utf-8")
@@ -1448,6 +1462,11 @@ def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
         except Exception as e:  # noqa: BLE001
             print(f"warroom: warm-up: {type(e).__name__}: {e}", flush=True)
         modal_status(cfg)  # billing and the archive folders take seconds the first time
+        if wc["tailnet"]:  # the phone's URL, for Health and the DMs (tailscale status takes a moment)
+            try:
+                TAILNET["served"] = tailnet_status(cfg)["served"]
+            except Exception as e:  # noqa: BLE001
+                print(f"warroom: tailnet status: {type(e).__name__}: {e}", flush=True)
     threading.Thread(target=warm, name="warroom-warm", daemon=True).start()
     threading.Thread(target=_lowres_worker, args=(cfg,), name="warroom-lowres", daemon=True).start()
     if wc["lowres_prewarm"]:
@@ -1545,7 +1564,7 @@ def run(cfg: dict, port: int | None = None, open_browser: bool = False) -> None:
         srv = server(cfg, port)
     except OSError as e:
         raise ClipperError(f"war room: port {port or _root(cfg)['warroom']['port']} is busy ({e}); "
-                         "the Discord bot may already be serving it ([warroom] with_bot)") from None
+                         "clipper serve may already be serving it") from None
     url_ = url(cfg, port)
     print(f"war room on {url_}  (Ctrl+C to stop)", flush=True)
     if open_browser:

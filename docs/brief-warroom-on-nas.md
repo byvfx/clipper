@@ -26,8 +26,8 @@ What's left to gain is cold loads, post-action rebuilds and video seeking, plus 
 
 ## How it works today
 
-- `clipper bot` serves the war room in a thread when `[warroom] with_bot = true`
-  (`bot.py` ~line 551). Defaults: host 127.0.0.1, port 8765. Off localhost,
+- `clipper serve` (clipper/serve.py, since 2026-11-03; before that the bot) serves the war
+  room in a thread. Defaults: host 127.0.0.1, port 8765. Off localhost,
   `warroom.server()` refuses to start without `[warroom] token`.
 - Actions (`/api/action`) go through `clipper/actions.py` (Kitsu is the record). With
   `[discord] replan`, approve/reject/changes/reopen/hold/pin also run

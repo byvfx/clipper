@@ -357,14 +357,22 @@ def decide(cfg: dict, item: Item, action: str, who: str, text: str = "", on: boo
     return fn()
 
 
-def replan(cfg: dict, item: Item, action: str, row: dict) -> tuple[dict, str]:
+def replan(cfg: dict, item: Item, action: str, row: dict, via=None) -> tuple[dict, str]:
     """After an action that moves the schedule ([discord] replan on): `clipper schedule`
-    without a Kitsu sync, then the item's card data again and a note on where it landed."""
+    without a Kitsu sync, then the item's card data again and a note on where it landed.
+    via(cfg): how to run it. The bot passes serve.replan (`clipper serve` owns schedule.json);
+    a serve that isn't up leaves a note instead of failing the decision."""
     from . import schedule
 
     if not (cfg["discord"]["replan"] and action in REPLANS):
         return row, ""
-    schedule.run(cfg, sync_first=False)
+    if via is None:
+        schedule.run(cfg, sync_first=False)
+    else:
+        try:
+            via(cfg)
+        except ClipperError as e:
+            return row, f"not replanned ({e}); the next hourly run will"
     row = describe(cfg, item.stream_dir)[item.key]
     if row["scheduled"]:
         return row, f"scheduled {row['scheduled'][:16].replace('T', ' ')}"
