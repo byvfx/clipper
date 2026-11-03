@@ -59,9 +59,10 @@ def parse_when(text: str, tz: ZoneInfo, first_time: str) -> datetime | None:
 
 
 def budget_for(ssc: dict, hours: float) -> dict[str, int]:
-    """A stream's per-kind release budget, scaled by its length (at least 1 of each)."""
+    """A stream's per-kind release budget, scaled by its length (at least 1 of each kind it
+    has any of; 0 stays 0: none of that kind goes unless pinned)."""
     scale = hours / ssc["budget_hours"]
-    return {k: max(1, round(n * scale)) for k, n in (ssc["stream_budget"] or {}).items()}
+    return {k: max(1, round(n * scale)) if n else 0 for k, n in (ssc["stream_budget"] or {}).items()}
 
 
 def segment_heat(sdir: Path, segments: list[dict]) -> dict[str, float]:

@@ -622,7 +622,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_gap_minutes": 90,    # between any two releases
         "kick_first_hours": 24,   # nothing goes out until this long after the stream ended
         "stream_budget": {},      # most releases per stream by kind, e.g. {segment = 10, short = 8}:
-                                  # the best go (Shorts by score, segments by chat heat); {} = all
+                                  # the best go (Shorts by score, segments by chat heat); {} = all;
+                                  # 0 = none of that kind unless pinned
         "budget_hours": 8.0,      # a stream this long gets the whole budget; others scale with length
         "stale_days": 0,          # an item not out this many days after its first allowed slot
                                   # never goes (keeps releases current); 0 = off
