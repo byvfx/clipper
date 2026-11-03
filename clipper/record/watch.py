@@ -52,6 +52,8 @@ class Watcher:
         self.recs: dict[str, Recording] = {}      # slug -> active or paused recording
         self.paused_at: dict[str, float] = {}
         self.started_at: dict[str, float] = {}
+        self.crashes: dict[str, int] = {}         # video-thread crashes in a row, per channel
+        self.retry_at: dict[str, float] = {}      # ...and when the next restart may happen
         self.finalizing: list[threading.Thread] = []
         self.next_poll: dict[str, float] = {}
         self.adopt()
@@ -158,7 +160,14 @@ class Watcher:
             elif live and not active and rec.ended and ls["id"] in rec.st.sessions \
                     and not self._playable(info):
                 pass  # the playlist ended; Kick's API says live for a minute or two longer
+            elif live and not active and rec.crashed and now < self.retry_at.get(slug, 0):
+                pass  # the video thread died (disk full, a permission); backing off, not a restart loop
             elif live and not active:
+                if rec.crashed:  # 30 s, 60 s, ... 10 min between tries while it keeps dying
+                    n = self.crashes[slug] = self.crashes.get(slug, 0) + 1
+                    self.retry_at[slug] = now + min(30 * 2 ** n, 600)
+                    log.warning("%s: restart %d after a crash; next try in %d s if it dies again",
+                                slug, n, min(30 * 2 ** n, 600))
                 if ls["id"] not in rec.st.sessions:
                     rec.st.sessions.append(ls["id"])
                 rec.st.title = ls.get("session_title") or rec.st.title
@@ -186,6 +195,8 @@ class Watcher:
     def _finish(self, slug: str) -> None:
         if self.once:   # `record now`: one recording per channel
             self.channels = [c for c in self.channels if c["slug"] != slug]
+        self.crashes.pop(slug, None)
+        self.retry_at.pop(slug, None)
         rec = self.recs.pop(slug)
         self.paused_at.pop(slug, None)
         self.started_at.pop(slug, None)

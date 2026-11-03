@@ -44,6 +44,17 @@ RETRY_STATUS = (408, 429, 500, 502, 503, 504, 529)
 MODEL_KEY = re.compile(r"(^|_)model(_[ab])?$")
 
 
+def price_of(prices: dict, model: str) -> tuple[float, float] | None:
+    """[llm] prices entry for a model string: exact, or the longest listed prefix of the
+    provider's own name (a dated id like claude-sonnet-5-5-20260601 costs as its base)."""
+    name = split(model)[1]
+    for key in (model, name):
+        if key in prices:
+            return tuple(prices[key])
+    best = max((k for k in prices if name.startswith(k)), key=len, default=None)
+    return tuple(prices[best]) if best else None
+
+
 def split(model: str) -> tuple[str, str]:
     """("anthropic" | "openai" | "gemini" | "local", the provider's own model name)."""
     prefix, _, name = model.partition(":")
@@ -156,7 +167,7 @@ class LLM:
     def _account(self, model: str, tokens_in: int, tokens_out: int) -> dict:
         from . import costs
 
-        pin, pout = self.prices.get(model) or self.prices.get(split(model)[1]) or (0.0, 0.0)
+        pin, pout = price_of(self.prices, model) or (0.0, 0.0)
         usd = (tokens_in * pin + tokens_out * pout) / 1e6
         with self._lock:
             self.cost += usd

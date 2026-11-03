@@ -335,9 +335,12 @@ def run_pass_b(kept: list[dict], summary: list[dict], words: list[dict], cfg: di
     return {**result, "status": "ok", **out}
 
 
-def run(stream_dir: Path, cfg: dict, dry_run: bool = False) -> dict:
+def run(stream_dir: Path, cfg: dict, dry_run: bool = False, force: bool = False) -> dict:
     cfg = for_stream(cfg, stream_dir)
     sc = cfg["scoring"]
+    if not dry_run and not force and (stream_dir / "candidates.json").exists():
+        raise ClipperError(f"{stream_dir.name} is scored (candidates.json); scoring again pays every Pass A "
+                           "window again: clipper score <stream> --force (or clipper run <stream> --from score)")
     prompts = Prompts(cfg)
     meta = jsonstate.load(stream_dir / "meta.json")
     windows = jsonstate.load(stream_dir / "windows.json")["windows"]

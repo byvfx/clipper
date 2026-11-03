@@ -219,7 +219,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
 
     style = tc["style"]
     todo = [x for x in assets if force or asset_key(x) not in state
-            or state[asset_key(x)].get("video_mtime") != x["video"].stat().st_mtime
+            or cut_changed(state[asset_key(x)], x["video"])
             or state[asset_key(x)].get("style", "classic") != style]
     if compose_only:
         missing = [asset_key(x) for x in todo if asset_key(x) not in state]
@@ -256,7 +256,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
                   f"{choice['text']} ({time.time() - t:.0f}s)", flush=True)
             return asset_key(x), {
                 "kind": x["kind"], "id": x["id"], "video": x["video"].name,
-                "video_mtime": x["video"].stat().st_mtime, "title": info["title"],
+                "video_mtime": x["video"].stat().st_mtime, "cut_key": cut_key(x["video"]),
+                "title": info["title"],
                 "frames": [{**f, "path": f["path"].name} for f in fr], **choice,
                 "style": style, "topic": info["playlist"], "duration_s": round(duration(x), 1),
                 "model": tc["model"], "prompt_version": prompts.version,
@@ -308,3 +309,23 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         from .. import review as kitsu_review
         kitsu_review.attach_thumbnails(stream_dir, cfg)
     return results
+
+
+def cut_key(video: Path) -> str:
+    """What makes a cover stale: the cut's in/out points from its sidecar, not the file's
+    mtime (a re-encode of the same cut used to re-pay every cover and re-attach it in Kitsu).
+    Videos with no in/out in the sidecar (compilations) fall back to the mtime."""
+    try:
+        s = jsonstate.load(video.with_suffix(".json"))
+        if "in_s" in s and "out_s" in s:
+            return f"{s['in_s']}-{s['out_s']}"
+    except (OSError, ValueError):
+        pass
+    return f"mtime:{video.stat().st_mtime}"
+
+
+def cut_changed(entry: dict, video: Path) -> bool:
+    """Against a cover made before cut_key existed, the mtime still decides."""
+    if "cut_key" in entry:
+        return entry["cut_key"] != cut_key(video)
+    return entry.get("video_mtime") != video.stat().st_mtime

@@ -67,6 +67,10 @@ keep_parts = false         # keep live/partNNN.ts after joining them
 extract_audio = true       # audio.wav, so `clipper signals` runs before transcribe
 backfill_chat = true       # fill chat-socket outages from Kick's chat-history API
 backfill_min_s = 5
+# `clipper services stop|restart recorder` (and deploy/record/deploy.sh) reach the NAS by ssh:
+ssh_host = ""                # ssh host alias; "" = $RECORD_SSH_HOST, else "nas"
+compose_dir = ""             # the compose folder there, relative to the ssh user's home; "" = $RECORD_DIR, else "clipper-record"
+sudo = ""                    # prefix for docker there if the ssh user needs it ("sudo"); "" = $RECORD_SUDO
 chat_tail_s = 15           # chat kept past a part's end (chat trails the video)
 on_finish = ""             # command per finished recording, run without a shell: {stream_id} {stream_dir} {channel}
 # Alerts (recording started/finished, video drops, stalls, crashes) always go to the log;

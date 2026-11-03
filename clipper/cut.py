@@ -257,7 +257,20 @@ def cut_compilations(stream_dir: Path, cfg: dict, topics: list[str] | None = Non
         print(f"{topic}: {len(segs)} segments, {t / 60:.0f} min -> {dst.name}")
 
 
-def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None:
+def unchanged_pick(dst: Path, p: dict, c: dict) -> bool:
+    """The clip is there and its sidecar has the same in/out: nothing to redo (a hand
+    `clipper cut` used to re-encode every pick, and `thumbs` then re-paid every cover)."""
+    side = dst.with_suffix(".json")
+    if not dst.exists() or not side.exists():
+        return False
+    try:
+        s = jsonstate.load(side)
+    except (OSError, ValueError):
+        return False
+    return s.get("in_s") == c["in_s"] and s.get("out_s") == c["out_s"] and s.get("id") == p["id"]
+
+
+def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool = False) -> None:
     cfg = for_stream(cfg, stream_dir)
     path = stream_dir / "candidates.json"
     if not path.exists():  # not scored, e.g. a pre-show: no picks by design
@@ -275,6 +288,9 @@ def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None) -> None
             continue
         c = by_id[p["id"]]
         dst = out_dir / f"{i:02d}_{p['id']}_{slug(p['title'])}.mp4"
+        if not force and unchanged_pick(dst, p, c):
+            print(f"{p['id']} unchanged -> {dst.name} kept (--force re-cuts)")
+            continue
         t = time.time()
         n = ffmpeg_cut(src, dst, c["in_s"], c["out_s"], cc["clip_codec"], cc["crf"],
                        keyframe=keyframe_before(stream_dir, src, c["in_s"]), bleep=bleep)

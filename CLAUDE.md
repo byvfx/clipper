@@ -71,7 +71,9 @@ keep README and SETUP true whenever behaviour changes.
   the restart starts a new recording part. The script refuses while `clipper record status`
   shows a recording (exit 3); `--force` overrides it.
 - Model calls cost money. Say what a rerun of `score`, `segments`, `meta` or `thumbs` will
-  cost before doing it on a long stream.
+  cost before doing it on a long stream. `score` refuses a rerun without `--force` (`clipper run
+  --from` passes it), `cut` keeps picks whose in/out points are unchanged, `thumbs` keeps a cover
+  whose cut is unchanged, and `weekly --render` never drafts.
 - Before a hand edit of `schedule.json` or `clipper.toml`, copy it to
   `backups/<file>.before_<what>_<date>` (gitignored), not the repo root.
 

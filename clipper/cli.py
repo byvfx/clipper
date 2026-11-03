@@ -393,7 +393,7 @@ def cmd_signals(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_score(cfg: dict, args: argparse.Namespace) -> None:
     from . import scoring
 
-    scoring.run(stream_dir(cfg, args.stream), cfg, dry_run=args.dry_run)
+    scoring.run(stream_dir(cfg, args.stream), cfg, dry_run=args.dry_run, force=args.force)
 
 
 def cmd_segments(cfg: dict, args: argparse.Namespace) -> None:
@@ -420,7 +420,7 @@ def cmd_cut(cfg: dict, args: argparse.Namespace) -> None:
     if "compilations" in what:
         cut.cut_compilations(d, cfg)
     if "picks" in what:
-        cut.cut_picks(d, cfg)
+        cut.cut_picks(d, cfg, args.items, force=args.force)
 
 
 def cmd_meta(cfg: dict, args: argparse.Namespace) -> None:
@@ -854,6 +854,7 @@ def add_pipeline(sub) -> None:
     p = sub.add_parser("score", help="Claude Pass A + Pass B -> candidates.json")
     add_stream(p)
     p.add_argument("--dry-run", action="store_true", help="write Pass A requests, no API calls")
+    p.add_argument("--force", action="store_true", help="score again although candidates.json exists (pays Pass A again)")
     p.set_defaults(fn=cmd_score)
 
     p = sub.add_parser("segments", help="split the stream into topic segments -> segments.json")
@@ -864,7 +865,8 @@ def add_pipeline(sub) -> None:
     p = sub.add_parser("cut", help="cut segments, topic compilations and Pass B picks")
     add_stream(p)
     p.add_argument("what", nargs="*", help="segments, compilations and/or picks (default: all)")
-    add_items(p, "only these segments, e.g. s03,s07", old=("--ids",))
+    add_items(p, "only these segments or picks, e.g. s03,s07 or t03", old=("--ids",))
+    p.add_argument("--force", action="store_true", help="re-cut picks whose in/out points haven't changed")
     p.set_defaults(fn=cmd_cut)
 
     p = sub.add_parser("meta", help="upload metadata (SEO title, description, chapters, tags) + SRT")

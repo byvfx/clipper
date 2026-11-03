@@ -367,6 +367,18 @@ def check_llm_keys(cfg: dict) -> None:
             fail("keys", f"{what}: {env} not set", "set it as a user environment variable")
 
 
+def check_llm_prices(cfg: dict) -> None:
+    """Every configured model has an [llm] prices entry, else `clipper costs` counts it as $0."""
+    from . import llm
+
+    unpriced = sorted({m for m in llm.configured(cfg).values() if llm.price_of(cfg["llm"]["prices"], m) is None})
+    if unpriced:
+        warn("keys", f"no [llm] prices entry for {', '.join(unpriced)}: costs count them as $0",
+             'add [llm.prices] "<model>" = [<$ per 1M in>, <$ per 1M out>] to clipper.toml')
+    else:
+        ok("keys", "every configured model has a price")
+
+
 def check_llm_online(cfg: dict) -> None:
     """Each non-Claude provider in use lists its models, and has the configured ones."""
     import requests
@@ -402,6 +414,7 @@ def check_keys(cfg: dict, role: str) -> None:
         else:
             fail("keys", "ANTHROPIC_API_KEY not set", "clipper setup --step keys (or set it as a user env var)")
         check_llm_keys(cfg)
+        check_llm_prices(cfg)
         rc = cfg["review"]
         if rc["host"] and "<" not in rc["host"]:
             ok("keys", f"[review] host = {rc['host']}")

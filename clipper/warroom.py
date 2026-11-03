@@ -301,7 +301,7 @@ def upload_status(cfg: dict, sched: dict) -> dict:
             "frees_at": frees.isoformat() if frees else "",
             "auto_minutes": yc["auto_upload_minutes"], "last_run": last_upload_run(cfg),
             "next": [{"key": e["key"], "title": e["title"], "kind": e["kind"],
-                      "publish_at": e["publish_at"],
+                      "publish_at": e["publish_at"], "last_error": e.get("last_error", ""),
                       "due": datetime.fromisoformat(e["publish_at"]) <= horizon} for e in nxt]}
 
 

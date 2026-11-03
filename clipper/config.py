@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -315,6 +316,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "extract_audio": True,    # write audio.wav so `clipper signals` runs before transcribe
         "backfill_chat": True,    # fill chat-socket outages from the chat-history API
         "backfill_min_s": 5,      # ignore outages shorter than this
+        # `clipper services stop|restart recorder` (and deploy/record/deploy.sh) reach the NAS by ssh:
+        "ssh_host": "",           # ssh host alias; "" = $RECORD_SSH_HOST, else "nas"
+        "compose_dir": "",        # the compose folder there, relative to the ssh user's home; "" = $RECORD_DIR, else "clipper-record"
+        "sudo": "",               # prefix for docker there if the ssh user needs it ("sudo"); "" = $RECORD_SUDO
         "chat_tail_s": 15,        # keep chat this long past a part's end (chat trails video)
         "on_finish": "",          # command after a recording is finalized (no shell;
                                   # split like one): {stream_id} {stream_dir} {channel}
@@ -845,7 +850,17 @@ def problems(cfg: dict) -> list[str]:
     names = {f"CLIPPER_{s}_{k}".upper() for s, v in _sections(root) for k in v}
     out += [f"environment variable {n} matches no setting" for n in sorted(os.environ)
             if n.startswith("CLIPPER_") and n not in names and n not in SPECIAL_ENV]
+    # [notify] times: a typo here used to kill the bot's DM loop quietly, every minute.
+    for key, pat, want in (("quiet_hours", _HM + "-" + _HM, "HH:MM-HH:MM"), ("digest_time", _HM, "HH:MM")):
+        v = str((root.get("notify") or {}).get(key, "") or "").strip()
+        if v and not re.fullmatch(pat, v):
+            out.append(f"[notify] {key} = {v!r}: {want} (or empty)")
+    if (root.get("schedule") or {}).get("budget_hours", 1) == 0:
+        out.append("[schedule] budget_hours = 0 would divide by zero in every replan; use a positive number")
     return out
+
+
+_HM = r"(?:[01]?\d|2[0-3]):[0-5]\d"
 
 
 # Keys of a loaded config that aren't [section] tables: "shows" (the [shows.<key>]

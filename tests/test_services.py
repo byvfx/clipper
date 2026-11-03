@@ -50,7 +50,7 @@ def test_recorder_restart_refused_while_live(tmp_path, monkeypatch):
     cfg = cfg_with(tmp_path, {})
     monkeypatch.setattr(services, "recorder", lambda cfg: {"live": ["kino"]})
     called = []
-    monkeypatch.setattr(services, "recorder_compose", lambda action: called.append(action) or 0)
+    monkeypatch.setattr(services, "recorder_compose", lambda cfg, action: called.append(action) or 0)
     with pytest.raises(ClipperError, match="recording kino now"):
         services.run(cfg, "restart", "recorder")
     assert services.run(cfg, "restart", "recorder", force=True) == 0 and called == ["restart"]
@@ -59,7 +59,7 @@ def test_recorder_restart_refused_while_live(tmp_path, monkeypatch):
 def test_all_never_touches_the_recorder(tmp_path, monkeypatch):
     done = []
     monkeypatch.setattr(services, "run_task", lambda name, action: done.append((name, action)) or 0)
-    monkeypatch.setattr(services, "recorder_compose", lambda action: pytest.fail("recorder touched"))
+    monkeypatch.setattr(services, "recorder_compose", lambda cfg, action: pytest.fail("recorder touched"))
     services.run(cfg_with(tmp_path, {}), "stop", "all")
     assert done == [("worker", "stop"), ("serve", "stop"), ("bot", "stop")]
 
