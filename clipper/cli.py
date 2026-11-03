@@ -236,6 +236,34 @@ def cmd_cast(cfg: dict, args: argparse.Namespace) -> None:
     return None
 
 
+def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
+    from . import news
+
+    a = args.news_cmd
+    if a == "check":
+        ids = news.check(cfg, judge=bool(cfg["news"]["judge_model"]) and not args.no_judge)
+        print(f"{len(ids)} story(ies) to post" + (f": {', '.join(map(str, ids))}" if ids else ""))
+    elif a == "list":
+        news.show_list(cfg, args.days, args.person or "", args.all)
+    elif a == "search":
+        for x in news.search(cfg, args.query, args.days):
+            print(f"{(x['published'] or '')[:16]} {x['source']}: {x['title']}\n    {x['url']}")
+    elif a == "feeds":
+        for f in news.feeds(cfg):
+            print(f"{f['name']}: {f['items']} item(s), fetched {f['fetched_at'] or 'never'}"
+                  + (f", {f['error']}" if f["error"] else ""))
+    elif a == "watch":
+        for w in sorted(news.watchlist(cfg).values(), key=lambda w: w.name.lower()):
+            print(f"{w.name}: {', '.join(w.terms)}" + (f" [{', '.join(w.shows)}]" if w.shows else "")
+                  + (" (Google News)" if w.search and cfg["news"]["google_news"] else ""))
+    elif a == "dismiss":
+        news.dismiss(cfg, args.ids)
+        print(f"dismissed {', '.join(map(str, args.ids))}")
+    elif a == "context":
+        e = news.set_context(cfg, args.ids, args.show or "", who="cli")
+        print(f"for {e['show']}'s next stream: {e['text']}")
+
+
 def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
     from . import costs
 
@@ -740,7 +768,7 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'cast', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
+    ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
@@ -1233,6 +1261,27 @@ def add_extras(sub) -> None:
     r.add_argument("--alias", action="append", help="another name (repeatable; replaces the list)")
     r.add_argument("--channel", action="append", metavar="URL", help="https://www.youtube.com/@name or "
                                                                      "https://kick.com/name (repeatable; replaces the list)")
+
+    p = sub.add_parser("news", help="headlines about the shows' people: feeds, Reddit, Google News (#110)")
+    nsub = p.add_subparsers(dest="news_cmd", required=True)
+    p.set_defaults(fn=cmd_news)
+    r = nsub.add_parser("check", help="fetch what's due, match the watchlist, judge the matches "
+                                      "(the bot runs it every [news] check_minutes)")
+    r.add_argument("--no-judge", action="store_true", help="fetch and match only, no model call")
+    r = nsub.add_parser("list", help="recent stories, newest first")
+    r.add_argument("--days", type=float, default=3)
+    r.add_argument("--person", help="only stories about this person")
+    r.add_argument("--all", action="store_true", help="dismissed ones too")
+    r = nsub.add_parser("search", help="Google News now for a query, and the stored headlines")
+    r.add_argument("query", help='e.g. "Ethan Klein"')
+    r.add_argument("--days", type=int, default=7)
+    nsub.add_parser("feeds", help="each source: last fetch, items, error")
+    nsub.add_parser("watch", help="who is watched, under which names, for which shows")
+    r = nsub.add_parser("dismiss", help="never post these stories")
+    r.add_argument("ids", nargs="+", type=int, metavar="STORY")
+    r = nsub.add_parser("context", help="these stories as the show's next stream_context")
+    r.add_argument("ids", nargs="+", type=int, metavar="STORY")
+    r.add_argument("--show", help="the show (default: the story's)")
 
     p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
     p.add_argument("--month", help="YYYY-MM (default: this month, UTC)")
