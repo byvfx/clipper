@@ -187,3 +187,13 @@ def test_photos_by_label_for_people_only_talked_about(cfg, tmp_path):
     user = draft.draft_user({"label": "Oct 25-31", "streams": {}}, stats, "", 4, {"Jer": jer / "a.jpg", "Don": Path("Don.jpg")},
                             {"Jer": ["angry", "neutral"], "Don": []})
     assert user.endswith("Portrait photos on file (also usable): Don, Jer (angry, neutral)")
+
+
+def test_a_photo_covers_fallback_frame_is_not_a_face(cfg):
+    from clipper.weekly.faces import Faces
+
+    real = {"person": "Jer", "key": "s01", "frame": "a.jpg", "face": {}, "size": 0.3, "photo": ""}
+    fallback = {"person": "Bakker", "key": "s02", "frame": "b.jpg", "face": {}, "size": 0.5, "photo": "Bakker"}
+    week = {"label": "Oct 25-31", "streams": {"kick-1": {"faces": [fallback, real]}}}
+    faces = Faces(cfg, week)
+    assert faces.best("Jer") is real and faces.best("Bakker") is None

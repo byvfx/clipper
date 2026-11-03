@@ -14,6 +14,12 @@ from ..errors import ClipperError
 from . import style
 
 
+def usable(faces: list[dict]) -> list[dict]:
+    """week.json faces without a photo cover's frame: when a cover used a [thumbnail] photos
+    portrait, its frame was only a fallback and may not show the person (#41)."""
+    return [f for f in faces if not f.get("photo")]
+
+
 class Faces:
     """person -> a square face crop, a frame, or initials; from the week's thumbnails.json."""
 
@@ -28,7 +34,7 @@ class Faces:
 
         self.by_person: dict[str, list[dict]] = defaultdict(list)
         for s in week["streams"].values():
-            for f in s["faces"]:
+            for f in usable(s["faces"]):
                 self.by_person[f["person"].lower()].append(f)
         for v in self.by_person.values():
             v.sort(key=lambda f: (not f.get("found"), -f["size"]))  # named by face first, then the biggest

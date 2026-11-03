@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..errors import ClipperError
 from ..prompts import Prompts
+from .faces import usable
 from .gather import hm, next_issue_number
 from .render import Renderer
 
@@ -84,7 +85,7 @@ def draft_user(week: dict, stats: dict, headline: str, issue: int, photos: dict[
     lines.append("")
     people = Counter()
     for s in week["streams"].values():
-        for f in s["faces"]:
+        for f in usable(s["faces"]):
             people[f["person"]] += 1
     lines.append("## Faces available (person: frames found). Use these names exactly for `person` fields; "
                  "anyone else gets initials.")

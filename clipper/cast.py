@@ -84,15 +84,15 @@ def kept(data: dict) -> list[dict]:
 
 def best_photo(d: Path, label: str = "") -> Path | None:
     """A person's kept photo for a cover: the label asked for if there is one, else neutral;
-    a stream, Commons or channel photo before an image search one (its licence is unknown),
-    then the biggest face."""
+    a stream, Commons, channel or file photo before one from the web (image search or a
+    pasted address: its licence is unknown), then the biggest face."""
     data = load(d)
     ks = [ph for ph in kept(data) if (d / ph["file"]).exists()]
     if not ks:
         return None
     want = label or "neutral"
     ks.sort(key=lambda ph: (ph.get("label") != want, ph.get("label") != "neutral",
-                            ph.get("source") == "search", -ph.get("px", 0)))
+                            ph.get("source") == "web", -ph.get("px", 0)))
     return d / ks[0]["file"]
 
 

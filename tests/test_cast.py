@@ -254,13 +254,13 @@ def test_labelled_photos_for_covers_and_known_figures(cfg, monkeypatch):
     from clipper.thumbs.frames import photo_file, photo_labels
 
     monkeypatch.setattr(cast, "faces_in", lambda img, cfg: [face(unit(RNG.normal(size=128)), px=150)])
-    kinds = ("search", "stream", "commons")
+    kinds = ("web", "stream", "commons")                               # "web": image search, a pasted URL
     ids = [cast.add(cfg, "Jer", jpeg(), {"key": f"k{i}", "kind": k}) for i, k in enumerate(kinds)]
     cast.set_status(cfg, "Jer", ids, "keep")
     for pid, label in zip(ids, ("angry", "angry", "laughing"), strict=True):
         cast.set_label(cfg, "Jer", pid, label)
     d = cast.person_dir(cfg, "Jer")
-    assert cast.best_photo(d, "angry").name == f"{ids[1]}.jpg"        # a stream photo before a search one
+    assert cast.best_photo(d, "angry").name == f"{ids[1]}.jpg"        # a stream photo before a web one
     assert cast.labels(d) == ["angry", "laughing"]
     Image.new("RGB", (10, 10)).save(cast.root(cfg) / "Hasan Piker.jpg")
     tc = {**cfg["thumbnail"]}
