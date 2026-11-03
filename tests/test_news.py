@@ -289,8 +289,9 @@ def test_show_slots_from_recent_streams(cfg):
     late = datetime.now(tz).replace(hour=23, minute=50) - timedelta(days=2)    # rounds to the next day's 00:00
     stream(cfg, "kick-3", started=late)
     slots = news.show_slots(cfg)
-    assert list(slots) == ["kino"] and slots["kino"][0][1] == 18 * 60
-    assert ((late.weekday() + 1) % 7, 0) in slots["kino"]
+    week_ago = datetime.now(tz) - timedelta(days=7)
+    assert list(slots) == ["kino"]                                              # any folder order
+    assert sorted(slots["kino"]) == sorted([(week_ago.weekday(), 18 * 60), ((late.weekday() + 1) % 7, 0)])
     news._SLOTS.clear()
 
 
