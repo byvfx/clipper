@@ -708,6 +708,27 @@ def check_photos(cfg: dict) -> None:
     from .thumbs import photos
     names = list(photos(tc))
     ok("photos", f"{len(names)} in {d}: {', '.join(names)}" if names else f"none yet in {d}")
+    check_cast(cfg)
+
+
+def check_cast(cfg: dict) -> None:
+    """#41: the cast library: anyone with a folder or an enrolled face and fewer than [cast]
+    min_photos kept photos; the prompt and image search key it uses."""
+    from . import cast
+
+    cc = cfg["cast"]
+    if cc["label_model"] and not (Path(cfg["paths"]["prompts"]) / f"cast_label_{cc['prompt_version']}.md").exists():
+        fail("cast", f"prompts/cast_label_{cc['prompt_version']}.md missing", "set [cast] prompt_version to a version on file")
+    people = cast.overview(cfg)["people"]
+    few = [f"{p['name']} {p['kept']}" for p in people if p["kept"] < cc["min_photos"]]
+    if few:
+        warn("cast", f"fewer than {cc['min_photos']} photos kept: " + ", ".join(few),
+             "war room > Cast (or clipper cast find <Person>, clipper cast grab <stream>)")
+    elif people:
+        ok("cast", f"{len(people)} people, {cc['min_photos']}+ photos each")
+    if not cast.search_key():
+        warn("cast", "no $BRAVE_API_KEY: cast image search is off (Commons, channels and streams still work)",
+             "optional: a Brave Search API key (api-dashboard.search.brave.com) as $BRAVE_API_KEY")
 
 
 def check_faces(cfg: dict) -> None:

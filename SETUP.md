@@ -123,6 +123,22 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    `[thumbnail] photos` to it. The model may then use one for a cover's face or teaser box;
    `clipper thumbs <stream> --items s04 --teaser-photo "Hasan Piker"` sets one by hand.
 
+   **Cast library** (#41, needs the `faces` extra): `photos/<Person>/` folders of several
+   photos each, kept by `clipper cast` beside the single files (a person's best kept photo
+   wins over their `<Person>.jpg`). In the war room press **Cast** (docs/warroom.md), or:
+   `clipper cast grab <stream>` (each named person's sharpest faces in a stream),
+   `clipper cast set Jer --alias "The Quartering" --channel https://www.youtube.com/@TheQuartering`,
+   `clipper cast find Jer` (Wikimedia Commons, the channels' avatars and video thumbnails, image
+   search), `clipper cast add Jer <file|url>`, then `keep`/`drop`/`label` and `clipper cast list`.
+   Every photo is checked for the person's face first (only theirs if they're enrolled in
+   `faces/known.json`), cropped 4:5 and labelled by a Haiku call (`[cast] label_model`,
+   about $0.0002 a photo; `--no-label` or `""` skips it). Image search is Brave's Search API
+   (about $5 per 1,000 searches): make a key at api-dashboard.search.brave.com and set the
+   Windows user environment variable `BRAVE_API_KEY`; without it the other sources still work.
+   It never takes photo agencies' pictures (`[cast] blocked_domains`), but its photos have no
+   known licence, so prefer stream and Commons ones for covers. `clipper doctor` flags anyone
+   with fewer than `[cast] min_photos` (3) kept.
+
 7. **Check**: `clipper doctor --role gpu` (or `--role bot`).
 
 8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed;
@@ -265,6 +281,8 @@ ahead of the thumbnail stage's frames. A machine without the `faces` extra must 
    never made a group. `clipper faces <stream> --at 1:23:45 --box x,y,w,h --person Name` is the
    same from the command line; `clipper faces --forget Name` drops someone.
 5. `clipper doctor --role gpu` lists the known faces.
+6. For covers, keep a few photos of each regular in the cast library (`clipper cast grab
+   <stream>`, or the war room's Cast window; see Photos above).
 
 ## 2b-2. Other model providers (optional)
 

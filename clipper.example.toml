@@ -151,6 +151,28 @@ min_faces = 5              # smaller groups are dropped
 sheets = 60                # contact sheets faces/F01.jpg ... for the biggest groups
 max_refs = 10              # group averages kept per known face (newest win)
 
+[cast]
+# `clipper cast` (#41): a few head-and-shoulders photos of each regular in [thumbnail]
+# photos/<Person>/ (cast.json beside them), from streams and the web; the war room's Cast
+# window keeps or drops them. Needs the `faces` extra; image search also $BRAVE_API_KEY.
+min_px = 100               # faces shorter than this (pixels of the picture) aren't taken
+match = 0.5                # an enrolled person's photo: lowest similarity of its face to theirs
+max_px = 1600              # the longest side a photo is kept at
+per_source = 6             # most new photos one find adds from each source
+videos = 12                # recent videos whose thumbnails a YouTube channel offers
+search_count = 40          # image search results looked at
+min_photos = 3             # doctor flags anyone with fewer kept
+label_model = "claude-haiku-5-5"  # labels each new photo ("" = no labels)
+label_effort = "low"
+prompt_version = "v1"      # prompts/cast_label_<v>.md
+labels = ["neutral", "smiling", "laughing", "angry", "shocked", "smug", "sad", "serious"]
+# Never taken from image search: photo agencies, whose photographers file copyright claims.
+blocked_domains = ["gettyimages.com", "gettyimages.co.uk", "istockphoto.com", "apimages.com",
+                   "ap.org", "alamy.com", "shutterstock.com", "reuters.com", "wireimage.com",
+                   "zumapress.com", "dreamstime.com", "depositphotos.com", "123rf.com",
+                   "stock.adobe.com", "imago-images.com", "newscom.com", "agefotostock.com",
+                   "pond5.com", "eyevine.com", "rexfeatures.com", "photoshelter.com"]
+
 [costs]
 # `clipper costs` / the war room's Costs panel: what the logs can't know.
 # monthly = { "Runway Max" = 95 }   # fixed costs per month

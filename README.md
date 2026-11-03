@@ -26,7 +26,11 @@ fetch / record -> signals -> transcribe -> score -> segments -> faces -> cut -> 
   vertical captioned Shorts. With `[shorts] window = "short"` each Short is the pick's scored hot-take
   moment (15-59 s here, under YouTube's 60 s Content ID block line), ending on a full sentence.
   Picks are also cut as horizontal clips; leave `"picks"` out of `[review] include` to post only their Shorts.
-  Covers can use portraits from a photos folder for people talked about but not on screen.
+  Covers can use portraits from a photos folder for people talked about but not on screen:
+  the cast library (`clipper cast`, #41) keeps a few head-and-shoulders photos of each regular
+  there, from their streams' named faces, Wikimedia Commons, their own channels and image search,
+  each checked against their known face and labelled (neutral, laughing, angry...); the war
+  room's Cast window keeps or drops them.
 - **faces**: who is on screen, by face, over every keyframe (CPU, `clipper faces`): groups named
   against known faces kept for every show; enquirer covers get each named person's best frames and use the found face box,
   and so does the weekly (#54). The worker runs it after the fast lane, before the slow cut.
