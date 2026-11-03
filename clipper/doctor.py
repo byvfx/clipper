@@ -844,6 +844,30 @@ def check_tailnet(cfg: dict, offline: bool) -> None:
              "is clipper serve running here?")
 
 
+def serve_elsewhere(cfg: dict) -> bool:
+    """[serve] url names another machine (not this one by a local name)."""
+    from urllib.parse import urlparse
+
+    host = urlparse(cfg["serve"]["url"] or "").hostname or ""
+    return bool(host) and host not in ("localhost", "127.0.0.1", "::1")
+
+
+def check_shared_with_serve(cfg: dict) -> None:
+    """With serve on another machine, the bot still reads what serve writes: schedule.json
+    (cards, /schedule) and the news database (what to post). Both must be on the share."""
+    if not serve_elsewhere(cfg):
+        return
+    streams = Path(cfg["paths"]["streams"]).resolve()
+    for key in ("schedule", "news"):
+        p = Path(cfg["paths"][key]).resolve()
+        shared = streams == p or streams in p.parents
+        where = "on the streams share" if shared else "is local to this checkout"
+        (ok if shared else fail)(
+            "config", f"[paths] {key} {where}: {p}",
+            "" if shared else f"serve on another machine writes it: put [paths] {key} under [paths] streams "
+                              "on both machines (the same path)")
+
+
 def check_role_settings(cfg: dict, role: str) -> None:
     """Settings whose absence makes a role exit at start (#77 L12)."""
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -873,6 +897,7 @@ def check_role_settings(cfg: dict, role: str) -> None:
         u = cfg["serve"]["url"]
         (ok if not u or u.startswith(("http://", "https://")) else fail)(
             "config", f"[serve] url {u or '(this machine)'}", "" if not u or u.startswith("http") else "an http(s) URL")
+        check_shared_with_serve(cfg)
     if role in ("all", "nas"):
         chans = cfg["record"].get("channels")
         (ok if chans else warn)("config", "[record] channels " + ("set" if chans else "empty: the recorder has nothing to watch"),

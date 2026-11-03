@@ -321,8 +321,9 @@ def extras_for(roles: list[str], backend: str) -> list[str]:
     if "serve" in roles:
         if "faces" not in out:
             out.append("faces")  # the war room's Cast window and the daily `cast auto` check faces (OpenCV)
-        if backend == "modal" and "modal" not in out:
-            out.append("modal")  # the war room's Modal panel
+        extra = {"whisperx": "gpu", "mlx": "mac", "modal": "modal"}[backend]
+        if extra not in out:
+            out.append(extra)  # pre-shows run on serve's machine, transcribe included (and the Modal panel)
     if "bot" in roles:
         out.append("discord")
     return out

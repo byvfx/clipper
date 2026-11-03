@@ -8,8 +8,10 @@ Jobs (`jobs()`; each runs `clipper ...` as a child process; an interval of 0 tur
     upload     every [youtube] auto_upload_minutes: `clipper schedule`, then `clipper upload`
     preshow    every [preshow] poll_minutes: `clipper preshow check --run`, for shows with a
                pre-show channel
-    retake     every 10 min with [retake] auto, when Kitsu has retake notes not acted on; and
-               at once when the war room or the bot asks (POST /api/retake)
+    retake     with [retake] auto: every 10 min when review.json (as last synced) has retake
+               notes not acted on, and every 30 min regardless, since `clipper retake` syncs
+               Kitsu itself and finds notes nothing else synced; at once when the war room or
+               the bot asks (POST /api/retake, which runs even with auto off)
     tiktok     every [tiktok] auto_send_minutes: `clipper tiktok --auto` (when signed in)
     x          every [x] auto_post_minutes: `clipper x --auto` (when signed in)
     analytics  every [analytics] auto_hours, once something is uploaded
@@ -25,6 +27,9 @@ It logs to [paths] serve_log; deploy/serve/serve-task.ps1 runs it at logon.
 The bot reaches it at [serve] url ("" = http://127.0.0.1:<[warroom] port>/) with the war
 room token (the same [warroom] token or secrets file on both machines when they differ):
 `replan` after a decision, `start_retake` after "Changes...", `health` for the tailnet link.
+On different machines the bot still reads schedule.json and the news database that serve
+writes, so [paths] schedule and news must be on the streams share (`clipper doctor --role
+bot` checks).
 """
 
 from __future__ import annotations
@@ -45,7 +50,8 @@ from .errors import ClipperError
 
 log = logging.getLogger("clipper.serve")
 
-RETAKE_EVERY_S = 600   # with [retake] auto: look for new Kitsu notes this often
+RETAKE_EVERY_S = 600   # with [retake] auto: act on notes review.json already has this often
+RETAKE_SYNC_S = 1800   # ...and run `clipper retake` anyway this often: it syncs Kitsu first
 FIRST_PASS_S = 30      # settle (the war room warms up) before the first job
 
 
@@ -77,6 +83,10 @@ class Serve:
         proc = self.procs.get(name)
         return bool(proc and proc.returncode is None)
 
+    def since(self, name: str) -> float:
+        """Seconds since the job last started (infinite if never)."""
+        return time.monotonic() - self.last.get(name, float("-inf"))
+
     def jobs(self) -> list[tuple[str, float, Callable[[], bool], Callable[[], object]]]:
         """(name, every s, ready() -> bool, start()) for the background jobs."""
         cfg, paths = self.cfg, self.cfg["paths"]
@@ -89,9 +99,12 @@ class Serve:
             ("preshow", cfg["preshow"]["poll_minutes"] * 60,
              lambda: not self.running("preshow") and bool(preshow.watched(cfg)),
              lambda: task(self.run_clipper("preshow", ["preshow", "check", "--run"]))),
-            # retake notes made in Kitsu (review.json is synced by the bot's card refresh and the replan)
+            # retake notes made in Kitsu: as review.json has them (the bot's card refresh and the
+            # replan sync it), and every RETAKE_SYNC_S the command's own sync, with or without a bot
             ("retake", RETAKE_EVERY_S if cfg["retake"]["auto"] else 0,
-             lambda: bool(retake.pending(cfg)), self.start_retake),
+             lambda: bool(retake.pending(cfg)) or (self.since("retake") >= RETAKE_SYNC_S
+                                                   and bool(actions.review_dirs(cfg))),
+             self.start_retake),
             ("tiktok", cfg["tiktok"]["auto_send_minutes"] * 60,
              lambda: paths["tiktok_token"].exists() and not self.running("tiktok"),
              lambda: task(self.run_clipper("tiktok", ["tiktok", "--auto"]))),
@@ -149,9 +162,8 @@ class Serve:
 
     def start_retake(self) -> None:
         """`clipper retake` in the background: act on retake notes, republish for review.
-        A request while one runs makes it run once more when it ends."""
-        if not self.cfg["retake"]["auto"]:
-            return
+        A request while one runs makes it run once more when it ends. The timer and the
+        bot check [retake] auto; an explicit POST /api/retake runs either way."""
         if self.running("retake"):
             self.retake_again = True
             return

@@ -92,3 +92,36 @@ def test_the_client_passes_the_war_rooms_checks(running, monkeypatch):
     assert serve.replan(running, sync=True) == {"ok": True} and ran == [True]
     with pytest.raises(ClipperError, match="HTTP 401"):
         serve.call({**running, "warroom": {**running["warroom"], "token": "wrong"}}, "/api/health")
+
+
+def test_retake_runs_on_notes_or_on_its_sync_timer(defaults, tmp_path, monkeypatch):
+    """`clipper retake` syncs Kitsu itself, so without a bot (no card refresh) it still runs
+    every RETAKE_SYNC_S; an explicit request runs even with [retake] auto off."""
+    cfg = cfg_in(defaults, tmp_path, retake={"auto": True})
+    s = serve.Serve(cfg)
+    ready = next(r for name, _e, r, _s in s.jobs() if name == "retake")
+    monkeypatch.setattr(serve.retake, "pending", lambda cfg: [])
+    monkeypatch.setattr(serve.actions, "review_dirs", lambda cfg: [tmp_path])
+    monkeypatch.setattr(serve.time, "monotonic", lambda: 10_000.0)
+    assert ready()  # never ran: the sync run is due
+    s.last["retake"] = 10_000.0 - 60
+    assert not ready()
+    monkeypatch.setattr(serve.retake, "pending", lambda cfg: [("d", "k", {})])
+    assert ready()
+    off = serve.Serve(cfg_in(defaults, tmp_path, retake={"auto": False}))
+    assert next(e for name, e, *_ in off.jobs() if name == "retake") == 0
+    started = []
+    off.loop = type("L", (), {"create_task": lambda self, c: (started.append(c), c.close())})()
+    off.start_retake()
+    assert started  # POST /api/retake works with auto off
+
+
+def test_doctor_wants_schedule_and_news_shared_when_serve_is_elsewhere(defaults, tmp_path):
+    from clipper import doctor
+
+    cfg = {**defaults, "serve": {"url": "http://nas:8765/"},
+           "paths": {**defaults["paths"], "streams": tmp_path / "streams", "schedule": tmp_path / "schedule.json",
+                     "news": tmp_path / "streams" / "news"}}
+    results = doctor.collect(doctor.check_shared_with_serve, cfg)
+    assert [(r[0], r[2].split()[1]) for r in results] == [("FAIL", "schedule"), ("OK", "news")]
+    assert doctor.collect(doctor.check_shared_with_serve, {**cfg, "serve": {"url": ""}}) == []

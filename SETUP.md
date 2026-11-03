@@ -173,8 +173,10 @@ ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
    `clipper services` shows them plus the recorder and any NAS cuts, with serve's and the
    bot's heartbeats from the share; `clipper services restart serve` (or `bot`, `worker`,
    `all`) runs the same scripts. The bot reaches serve at `[serve] url` (empty = this
-   machine); on different machines set it, and give both the same `[warroom] token` (or
-   `secrets/warroom_token.txt`).
+   machine); on different machines set it, give both the same `[warroom] token` (or
+   `secrets/warroom_token.txt`), and put `[paths] schedule` and `[paths] news` under the
+   streams share on both (the bot reads what serve writes there; `clipper doctor --role
+   bot` checks).
 
 ## 2. macOS (Apple Silicon)
 
