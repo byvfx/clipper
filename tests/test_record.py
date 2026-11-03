@@ -372,8 +372,8 @@ def test_finalize_skips_a_chat_line_cut_short(tmp_path, defaults, no_ffprobe):
     """Audit 11-03 #1: a container killed mid-write leaves a half line in live/chat.jsonl;
     finalize used to raise on it and leave the stream stuck."""
     stream(tmp_path, 1)
-    with open(tmp_path / LIVE_CHAT, "a", encoding="utf-8") as f:
-        f.write('{"id": "m9", "ts": 12')  # no newline, no closing brace
+    with open(tmp_path / LIVE_CHAT, "ab") as f:
+        f.write('{"id": "m9", "ts": 12, "content": "Ã©'.encode()[:-1])  # cut inside a UTF-8 character
     cfg = {**defaults, "record": {**defaults["record"], "container": "ts",
                                   "extract_audio": False, "backfill_chat": False}}
     alerts = []

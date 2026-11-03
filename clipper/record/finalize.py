@@ -107,11 +107,11 @@ def gather_chat(d: Path, st: State, parts: list[Part], cfg: dict,
     live = d / LIVE_CHAT
     bad = 0
     if live.exists():
-        for line in live.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
+        for raw in live.read_bytes().splitlines():  # bytes: a cut can land inside a UTF-8 character
+            if not raw.strip():
                 continue
             try:
-                m = json.loads(line)
+                m = json.loads(raw)
                 seen[m["id"]] = m
             except (ValueError, KeyError, TypeError):
                 bad += 1  # a line cut short when the container was killed mid-write

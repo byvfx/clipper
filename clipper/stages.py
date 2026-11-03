@@ -60,7 +60,7 @@ FAST_LANE = [s.name for s in STAGES if s.fast]
 FAST_TWIN = {s.twin_of: s.name for s in STAGES if s.twin_of}   # slow stage -> its twin
 
 
-FORCED = {"score": "--force", "cut": "--force"}  # stages that refuse a paid redo without it
+FORCED = {"score": "--force", "cut": "--force", "clips": "--force"}  # stages that keep paid work unless forced
 
 
 def argv(name: str, stream: str, wc: dict, force: bool = False) -> list[str]:

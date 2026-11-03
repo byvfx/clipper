@@ -62,6 +62,10 @@ def test_a_cover_goes_stale_on_the_cut_not_the_file(tmp_path):
     jsonstate.write(video.with_suffix(".json"), {"in_s": 10.0, "out_s": 40.0})
     key = thumbs_stage.cut_key(video)
     assert key == "10.0-40.0"
+    seg = tmp_path / "s01.mp4"
+    seg.write_bytes(b"x")
+    jsonstate.write(seg.with_suffix(".json"), {"start_s": 100.0, "end_s": 400.0, "cut_start_s": 98.5})
+    assert thumbs_stage.cut_key(seg) == "98.5-400.0"  # a segment's bounds, from its sidecar
     video.write_bytes(b"re-encoded")  # same cut, new file: still fresh
     assert not thumbs_stage.cut_changed({"cut_key": key, "video_mtime": 0}, video)
     jsonstate.write(video.with_suffix(".json"), {"in_s": 12.0, "out_s": 40.0})
@@ -78,3 +82,22 @@ def test_prices_match_the_longest_listed_prefix():
     assert llm.price_of(prices, "claude-sonnet-5-5-fast-1") == (4.0, 20.0)
     assert llm.price_of(prices, "openai:gpt-5-mini") == (1.0, 2.0)
     assert llm.price_of(prices, "claude-opus-5-5") is None
+    assert llm.price_of({"openai:gpt-5-mini": [3.0, 4.0]}, "openai:gpt-5-mini-20260601") == (3.0, 4.0)
+
+
+def test_doctor_prices_the_defaults_like_the_client(defaults):
+    """A [llm.prices] table replaces the nested default in load; the client merges the
+    defaults back, and so does the check."""
+    from clipper import doctor
+
+    cfg = {**defaults, "llm": {**defaults["llm"], "prices": {"openai:gpt-5-mini": [1.0, 2.0]}}}
+    (status, _, what, _), = doctor.collect(doctor.check_llm_prices, cfg)
+    assert status == "OK", what
+
+
+def test_budget_hours_is_checked_per_show(defaults):
+    cfg = {**defaults, "shows": {"c404": {"channels": ["channel404"], "overrides": {"schedule": {"budget_hours": 0}}}}}
+    assert [p for p in config.problems(cfg) if "budget_hours" in p] == \
+        ["[shows.c404.schedule] budget_hours = 0 must be a positive number (it divides in every replan)"]
+    cfg["schedule"] = {**defaults["schedule"], "budget_hours": -1}
+    assert len([p for p in config.problems(cfg) if "budget_hours" in p]) == 2

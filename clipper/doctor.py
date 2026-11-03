@@ -371,7 +371,8 @@ def check_llm_prices(cfg: dict) -> None:
     """Every configured model has an [llm] prices entry, else `clipper costs` counts it as $0."""
     from . import llm
 
-    unpriced = sorted({m for m in llm.configured(cfg).values() if llm.price_of(cfg["llm"]["prices"], m) is None})
+    table = llm.prices(cfg)  # the defaults plus [llm.prices], as the client accounts
+    unpriced = sorted({m for m in llm.configured(cfg).values() if llm.price_of(table, m) is None})
     if unpriced:
         warn("keys", f"no [llm] prices entry for {', '.join(unpriced)}: costs count them as $0",
              'add [llm.prices] "<model>" = [<$ per 1M in>, <$ per 1M out>] to clipper.toml')

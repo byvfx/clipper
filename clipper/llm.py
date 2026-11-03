@@ -44,14 +44,24 @@ RETRY_STATUS = (408, 429, 500, 502, 503, 504, 529)
 MODEL_KEY = re.compile(r"(^|_)model(_[ab])?$")
 
 
+def prices(cfg: dict) -> dict:
+    """The price table the client uses: the built-in defaults plus [llm.prices] (which
+    replaces the nested default when load() merges clipper.toml)."""
+    from .config import DEFAULTS
+
+    return {**DEFAULTS["llm"]["prices"], **(cfg.get("llm") or {}).get("prices", {})}
+
+
 def price_of(prices: dict, model: str) -> tuple[float, float] | None:
-    """[llm] prices entry for a model string: exact, or the longest listed prefix of the
-    provider's own name (a dated id like claude-sonnet-5-5-20260601 costs as its base)."""
+    """[llm] prices entry for a model string: exact, or the most specific listed prefix, keyed
+    with or without the provider ("openai:gpt-5" matches "openai:gpt-5-mini-20260601", and a
+    dated claude-sonnet-5-5-20260601 costs as claude-sonnet-5-5)."""
     name = split(model)[1]
     for key in (model, name):
         if key in prices:
             return tuple(prices[key])
-    best = max((k for k in prices if name.startswith(k)), key=len, default=None)
+    best = max((k for k in prices if model.startswith(k) or name.startswith(split(k)[1])),
+               key=lambda k: len(split(k)[1]), default=None)
     return tuple(prices[best]) if best else None
 
 
@@ -147,7 +157,7 @@ class LLM:
         # Keys not scoped to a workspace must name one on every request.
         self.workspace_id = workspace_id or os.environ.get("ANTHROPIC_WORKSPACE_ID", "")
         self.lc = {**DEFAULTS["llm"], **lc}
-        self.prices = {**DEFAULTS["llm"]["prices"], **lc.get("prices", {})}
+        self.prices = prices(cfg)
         self.cost = 0.0
         self._lock = threading.Lock()
         self._client = None

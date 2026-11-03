@@ -855,8 +855,13 @@ def problems(cfg: dict) -> list[str]:
         v = str((root.get("notify") or {}).get(key, "") or "").strip()
         if v and not re.fullmatch(pat, v):
             out.append(f"[notify] {key} = {v!r}: {want} (or empty)")
-    if (root.get("schedule") or {}).get("budget_hours", 1) == 0:
-        out.append("[schedule] budget_hours = 0 would divide by zero in every replan; use a positive number")
+    # [schedule] budget_hours divides in every replan: the base value and each show's override.
+    budgets = [("[schedule]", (root.get("schedule") or {}).get("budget_hours", 1))]
+    budgets += [(f"[shows.{k}.schedule]", s["overrides"]["schedule"]["budget_hours"])
+                for k, s in (root.get("shows") or {}).items()
+                if "budget_hours" in (s.get("overrides") or {}).get("schedule", {})]
+    out += [f"{where} budget_hours = {v!r} must be a positive number (it divides in every replan)"
+            for where, v in budgets if not (isinstance(v, int | float) and v > 0)]
     return out
 
 

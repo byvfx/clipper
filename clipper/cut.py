@@ -289,7 +289,13 @@ def cut_picks(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: 
         c = by_id[p["id"]]
         dst = out_dir / f"{i:02d}_{p['id']}_{slug(p['title'])}.mp4"
         if not force and unchanged_pick(dst, p, c):
-            print(f"{p['id']} unchanged -> {dst.name} kept (--force re-cuts)")
+            # The video stands; the sidecar's text (hook, reason, category, score) is refreshed
+            # from this score, since meta reads it from here.
+            old = jsonstate.load(dst.with_suffix(".json"))
+            write_sidecar(dst, {**p, "in_s": c["in_s"], "out_s": c["out_s"],
+                                "short_in_s": c["short_in_s"], "short_out_s": c["short_out_s"],
+                                "category": c["category"], "score_a": c["score"], "bleeps": old.get("bleeps", 0)})
+            print(f"{p['id']} unchanged -> {dst.name} kept, sidecar refreshed (--force re-cuts)")
             continue
         t = time.time()
         n = ffmpeg_cut(src, dst, c["in_s"], c["out_s"], cc["clip_codec"], cc["crf"],

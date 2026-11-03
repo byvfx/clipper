@@ -312,13 +312,16 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
 
 
 def cut_key(video: Path) -> str:
-    """What makes a cover stale: the cut's in/out points from its sidecar, not the file's
-    mtime (a re-encode of the same cut used to re-pay every cover and re-attach it in Kitsu).
-    Videos with no in/out in the sidecar (compilations) fall back to the mtime."""
+    """What makes a cover stale: the cut's bounds from its sidecar (picks: in_s/out_s;
+    segments: cut_start_s or start_s, and end_s), not the file's mtime (a re-encode of the
+    same cut used to re-pay every cover and re-attach it in Kitsu). A sidecar with neither
+    (compilations) falls back to the mtime."""
     try:
         s = jsonstate.load(video.with_suffix(".json"))
         if "in_s" in s and "out_s" in s:
             return f"{s['in_s']}-{s['out_s']}"
+        if "end_s" in s and ("cut_start_s" in s or "start_s" in s):
+            return f"{s.get('cut_start_s', s.get('start_s'))}-{s['end_s']}"
     except (OSError, ValueError):
         pass
     return f"mtime:{video.stat().st_mtime}"
