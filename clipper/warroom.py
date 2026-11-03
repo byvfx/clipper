@@ -1049,7 +1049,8 @@ def news_get(cfg: dict, days: str | float = "") -> dict:
     except ValueError:
         d = 3
     return {"stories": news.stories(cfg, d, everything=True), "shows": news.show_names(cfg),
-            "feeds": news.feeds(cfg), "check_minutes": cfg["news"]["check_minutes"]}
+            "feeds": news.feeds(cfg), "check_minutes": cfg["news"]["check_minutes"],
+            "watching": sorted(w.name for w in news.watchlist(cfg).values())}
 
 
 def news_search(cfg: dict, q: str) -> dict:

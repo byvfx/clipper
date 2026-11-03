@@ -14,6 +14,9 @@ TOML = '''
 news = "news"
 streams = "streams"
 
+[news]
+auto_watch = true
+
 [shows.kino]
 channels = ["kinocasino"]
 [shows.kino.meta]
@@ -69,6 +72,29 @@ def test_parse_rss_and_atom():
     a = news.parse_feed(ATOM, "r/LivestreamFail")
     assert a[0]["url"].startswith("https://www.reddit.com/") and a[0]["snippet"] == "submitted by someone"
     assert a[0]["source"] == "r/LivestreamFail" and a[0]["published"] == "2026-11-02T10:00:00+00:00"
+
+
+def test_only_the_terms_are_watched_and_none_means_no_fetching(cfg, monkeypatch):
+    cfg["news"]["auto_watch"] = False
+    cfg["_root"] = None  # the test config is the root
+    monkeypatch.setattr(news, "fetch", lambda *a, **k: pytest.fail("fetched with no terms"))
+    assert news.watchlist(cfg) == {}
+    assert news.check(cfg, judge=False, say=lambda m: None) == []
+    cfg["news"]["watch"] = {"The Quartering": ["Jeremy Hambly"]}
+    cfg["shows"]["kino"]["overrides"]["news"] = {"watch": {"Ethan Ralph": []}}
+    w = news.watchlist(cfg)
+    assert set(w) == {"the quartering", "ethan ralph"} and w["ethan ralph"].shows == ["kino"]
+    assert w["the quartering"].shows == [] and w["the quartering"].search
+
+
+def test_a_local_or_env_watch_clears_a_shows_terms(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "clipper.toml").write_text('[shows.kino]\nchannels = ["kinocasino"]\n'
+                                          '[shows.kino.news]\nwatch = { "Ethan Ralph" = [] }\n', encoding="utf-8")
+    w = news.watchlist(config.load(tmp_path / "clipper.toml", use_local=False))
+    assert set(w) == {"ethan ralph"} and w["ethan ralph"].shows == ["kino"]
+    monkeypatch.setenv("CLIPPER_NEWS_WATCH", "{}")
+    assert news.watchlist(config.load(tmp_path / "clipper.toml", use_local=False)) == {}
 
 
 def test_watchlist_and_matching(cfg):

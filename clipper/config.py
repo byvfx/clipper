@@ -403,7 +403,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
                   {"name": "Dexerto", "url": "https://www.dexerto.com/feed/"}],
         "reddit": ["LivestreamFail"],  # subreddits whose new posts are read (their RSS)
         "google_news": True,      # one Google News search per watched person with a full name
-        "watch": {},              # more people: { "Ethan Klein" = ["H3 Podcast"] } (always searched)
+        # The terms: who to watch, { "Ethan Klein" = ["H3 Podcast"] } (other names in the list;
+        # always searched). [shows.<key>.news] watch ties terms to that show. With none (and
+        # auto_watch off) nothing is fetched or searched at all.
+        "watch": {},
+        "auto_watch": False,      # also watch each show's cast, known figures and name, and the cast library
         "ignore": [],             # names never watched (a cast name that is also a common word)
         "min_fetch_minutes": 20,  # a feed or subreddit at most this often
         "search_minutes": 120,    # each Google News search at most this often

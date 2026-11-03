@@ -196,7 +196,10 @@ feeds = [{ name = "TMZ", url = "https://www.tmz.com/rss.xml" },
          { name = "Dexerto", url = "https://www.dexerto.com/feed/" }]
 reddit = ["LivestreamFail"]
 google_news = true         # one Google News search per watched person with a full name
-watch = {}                 # more people, always searched: { "Ethan Klein" = ["H3 Podcast"] }
+# The terms: only these are watched (other names in the list; always searched); none = nothing
+# is fetched. [shows.<key>.news] watch = {...} ties terms to that show.
+watch = {}                 # e.g. { "Ethan Klein" = ["H3 Podcast"], "The Quartering" = ["Jeremy Hambly"] }
+auto_watch = false         # also watch each show's cast, known figures and name, and the cast library
 ignore = []                # names never watched
 min_fetch_minutes = 20     # a feed or subreddit at most this often
 search_minutes = 120       # each Google News search at most this often

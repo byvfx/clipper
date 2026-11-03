@@ -245,8 +245,8 @@ class Bot(discord.Client):
             ("cast", cfg["cast"]["auto_hours"] * 3600,  # #41: photos for anyone short of them
              lambda: bool(cfg["thumbnail"]["photos"]) and has_opencv() and not self.running("cast"),
              lambda: self.loop.create_task(self._clipper_bg("cast", ["cast", "auto"]))),
-            ("news", cfg["news"]["check_minutes"] * 60,  # #110: headlines about the shows' people
-             lambda: not self.running("news"),
+            ("news", cfg["news"]["check_minutes"] * 60,  # #110: headlines about the watched terms
+             lambda: not self.running("news") and bool(news.watchlist(cfg)),  # no terms: nothing to do
              lambda: self.loop.create_task(self._news())),
             # retake notes made in Kitsu (review.json is synced by the card refresh and the replan)
             ("retake", (cfg["discord"]["refresh_minutes"] or 10) * 60 if cfg["retake"]["auto"] else 0,
