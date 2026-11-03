@@ -30,7 +30,7 @@ import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from . import jsonstate
 from .errors import ClipperError
@@ -137,25 +137,25 @@ def choose_face(found: list[tuple[dict, list[float]]], person: str, known: dict,
     return f, None, ""
 
 
-_ready: list = []  # the face models are loaded once per process
-
-
 def faces_in(img, cfg: dict) -> list[tuple[dict, list[float]]]:
-    """Faces at least [cast] min_px tall in a PIL image, with embeddings."""
+    """Faces at least [cast] min_px tall in a PIL image, with embeddings. The detector is one per
+    process, shared with the war room's "Who's this?" (faces.pick), so under its lock."""
     import numpy as np
     from PIL import ImageOps
 
     from . import faces
 
-    if not _ready:
-        faces._init(str(faces.ensure_models(cfg)), 0)
-        _ready.append(True)
     min_px = cfg["cast"]["min_px"]
     W, H = img.size
     for pad in (0.0, 0.3):  # a face filling a close-up is missed until there's room around it
         p = round(pad * max(W, H))
         work = ImageOps.expand(img.convert("RGB"), p, fill=(128, 128, 128)) if p else img.convert("RGB")
-        found = faces._faces(np.asarray(work)[:, :, ::-1].copy())
+        with faces._PICK:
+            models = str(faces.ensure_models(cfg))
+            if faces._ready != models:
+                faces._init(models, 0)
+                faces._ready = models
+            found = faces._faces(np.asarray(work)[:, :, ::-1].copy())
         out = []
         for f, e in found:
             x, y, w, h = f["box"]
@@ -173,16 +173,23 @@ def faces_in(img, cfg: dict) -> list[tuple[dict, list[float]]]:
 def fetch(url: str, cfg: dict) -> bytes:
     import requests
 
-    host = urlparse(url).hostname or ""
-    if urlparse(url).scheme not in ("http", "https") or not host:
-        raise ClipperError(f"not a web address: {url}")
-    if blocked(host, cfg):
-        raise ClipperError(f"{host} is a photo agency ([cast] blocked_domains)")
-    try:
-        ua = UA if host.endswith(("wikimedia.org", "wikipedia.org")) else cfg["kick"]["user_agent"]
-        r = requests.get(url, timeout=25, stream=True, headers={"User-Agent": ua})
-    except requests.RequestException as e:
-        raise ClipperError(f"{host}: {type(e).__name__}") from e
+    for _ in range(6):  # redirects one at a time: each place is checked like the first
+        host = urlparse(url).hostname or ""
+        if urlparse(url).scheme not in ("http", "https") or not host:
+            raise ClipperError(f"not a web address: {url}")
+        if blocked(host, cfg):
+            raise ClipperError(f"{host} is a photo agency ([cast] blocked_domains)")
+        try:
+            ua = UA if host.endswith(("wikimedia.org", "wikipedia.org")) else cfg["kick"]["user_agent"]
+            r = requests.get(url, timeout=25, stream=True, allow_redirects=False, headers={"User-Agent": ua})
+        except requests.RequestException as e:
+            raise ClipperError(f"{host}: {type(e).__name__}") from e
+        if not r.is_redirect:
+            break
+        url = urljoin(url, r.headers.get("Location", ""))
+        r.close()
+    else:
+        raise ClipperError(f"{host}: too many redirects")
     if not r.ok:
         raise ClipperError(f"{host}: HTTP {r.status_code}")
     data = r.raw.read(MAX_BYTES + 1, decode_content=True)
@@ -196,13 +203,14 @@ def blocked(host: str, cfg: dict) -> bool:
     return any(host == d or host.endswith("." + d) for d in cfg["cast"]["blocked_domains"])
 
 
-def add(cfg: dict, person: str, data: bytes, source: dict, claude=None, say=print) -> str | None:
+def add(cfg: dict, person: str, data: bytes, source: dict, claude=None, say=print,
+        box: list[float] | None = None) -> str | None:
     """One picture as a new photo of person, if a face in it is theirs: its id, or None (why is
     printed). source: {"key" (what makes it this photo), "kind", "url", "page", "licence",
-    "author"}."""
+    "author"}. box [x, y, w, h] (0-1): only the face there (a stream frame's named face)."""
     from PIL import Image, ImageOps
 
-    from .faces import load_known
+    from .faces import inside, load_known
 
     d = person_dir(cfg, person)
     pid = photo_id(source["key"])
@@ -216,6 +224,8 @@ def add(cfg: dict, person: str, data: bytes, source: dict, claude=None, say=prin
         return None
     cc = cfg["cast"]
     found = faces_in(img, cfg)
+    if box:  # the identity checks still apply to it
+        found = [fe for fe in found if inside(fe[0]["box"], box) >= 0.5]
     face, score, why = choose_face(found, person, load_known(cfg)["people"], cc["match"], cfg["faces"]["match"])
     if not face:
         say(f"  {source.get('url') or source['key']}: {why}")
@@ -284,7 +294,9 @@ def add_file(cfg: dict, person: str, src: str, claude=None, say=print) -> str | 
     p = Path(src)
     if not p.is_file():
         raise ClipperError(f"no file {src}")
-    return add(cfg, person, p.read_bytes(), {"key": f"file:{p.name}", "kind": "file"}, claude, say)
+    data = p.read_bytes()  # keyed by content: two photo.jpg files are two photos, one file twice is one
+    return add(cfg, person, data, {"key": f"file:{hashlib.sha1(data).hexdigest()}", "kind": "file",
+                                   "page": p.name}, claude, say)
 
 
 # ---------- from a stream ----------
@@ -311,8 +323,8 @@ def grab(cfg: dict, sdir: Path, person: str | None, n: int, claude=None, say=pri
             for f in faces.best_faces(data, name, n=n, gap=120.0):
                 frame = faces.grab(src, f["t"], Path(tmp) / "frame.jpg")
                 key = f"stream:{sdir.name}@{f['t']}"
-                added += bool(add(cfg, name, frame.read_bytes(), {"key": key, "kind": "stream",
-                                                                  "page": key}, claude, say))
+                added += bool(add(cfg, name, frame.read_bytes(), {"key": key, "kind": "stream", "page": key},
+                                  claude, say, box=f["box"]))
     return added
 
 
@@ -406,43 +418,48 @@ def _commons_pages(js: dict) -> list[dict]:
 
 def channel_pictures(cfg: dict, person: str, data: dict, say=print) -> list[dict]:
     """The person's own channels (cast.json "channels"): the avatar, then recent video
-    thumbnails (YouTube), or the profile picture (Kick)."""
+    thumbnails (YouTube), or the profile picture (Kick). A channel that fails is skipped."""
+    import requests
+
+    if not data["channels"]:
+        raise ClipperError(f'no channels for {person}: clipper cast set "{person}" --channel URL')
+    out = []
+    for ch in data["channels"]:
+        try:
+            out += _channel(cfg, ch, say)
+        except (requests.RequestException, ValueError, AttributeError) as e:
+            say(f"  {ch}: {type(e).__name__}")
+    return out
+
+
+def _channel(cfg: dict, ch: str, say) -> list[dict]:
     import json
 
     import requests
 
     from . import ytdl
 
-    if not data["channels"]:
-        raise ClipperError(f'no channels for {person}: clipper cast set "{person}" --channel URL')
-    out = []
-    for ch in data["channels"]:
-        host = urlparse(ch).hostname or ""
-        if host.endswith("kick.com"):
-            slug = urlparse(ch).path.strip("/").split("/")[0]
-            r = requests.get(f"https://kick.com/api/v2/channels/{slug}", timeout=15,
-                             headers={"User-Agent": cfg["kick"]["user_agent"]})
-            pic = ((r.json() or {}).get("user") or {}).get("profile_pic") if r.ok else None
-            if pic:
-                out.append({"key": pic, "kind": "channel", "url": pic, "page": ch})
-        elif host.endswith(("youtube.com", "youtu.be")):
-            r = ytdl.run("--flat-playlist", "-J", "--playlist-end", str(cfg["cast"]["videos"]),
-                         ch.rstrip("/") + "/videos")
-            if r.returncode:
-                say(f"  {ch}: {ytdl.last_error(r)}")
-                continue
-            info = json.loads(r.stdout)
-            avatar = next((t["url"] for t in info.get("thumbnails") or []
-                           if t.get("id") == "avatar_uncropped"), "")
-            if avatar:
-                out.append({"key": avatar, "kind": "channel", "url": avatar, "page": ch})
-            for e in info.get("entries") or []:
-                if e.get("id"):
-                    url = f"https://i.ytimg.com/vi/{e['id']}/maxresdefault.jpg"
-                    out.append({"key": url, "kind": "channel", "url": url,
-                                "page": f"https://www.youtube.com/watch?v={e['id']}"})
-        else:
-            say(f"  {ch}: only YouTube and Kick channels so far")
+    host = urlparse(ch).hostname or ""
+    if host.endswith("kick.com"):
+        slug = urlparse(ch).path.strip("/").split("/")[0]
+        r = requests.get(f"https://kick.com/api/v2/channels/{slug}", timeout=15,
+                         headers={"User-Agent": cfg["kick"]["user_agent"]})
+        pic = ((r.json() or {}).get("user") or {}).get("profile_pic") if r.ok else None
+        return [{"key": pic, "kind": "channel", "url": pic, "page": ch}] if pic else []
+    if not host.endswith(("youtube.com", "youtu.be")):
+        say(f"  {ch}: only YouTube and Kick channels so far")
+        return []
+    r = ytdl.run("--flat-playlist", "-J", "--playlist-end", str(cfg["cast"]["videos"]), ch.rstrip("/") + "/videos")
+    if r.returncode:
+        say(f"  {ch}: {ytdl.last_error(r)}")
+        return []
+    info = json.loads(r.stdout)
+    out = [{"key": t["url"], "kind": "channel", "url": t["url"], "page": ch}
+           for t in info.get("thumbnails") or [] if t.get("id") == "avatar_uncropped"][:1]
+    for e in info.get("entries") or []:
+        if e.get("id"):
+            url = f"https://i.ytimg.com/vi/{e['id']}/maxresdefault.jpg"
+            out.append({"key": url, "kind": "channel", "url": url, "page": f"https://www.youtube.com/watch?v={e['id']}"})
     return out
 
 
@@ -465,8 +482,12 @@ def image_search(cfg: dict, person: str, data: dict, say=print) -> list[dict]:
         raise ClipperError(f"Brave: {type(e).__name__}") from e
     if not r.ok:
         raise ClipperError(f"Brave: HTTP {r.status_code}")
+    try:
+        results = r.json().get("results") or []
+    except ValueError as e:
+        raise ClipperError("Brave: not JSON") from e
     out = []
-    for res in r.json().get("results") or []:
+    for res in results:
         url = (res.get("properties") or {}).get("url") or ""
         page = res.get("url") or ""
         if not url or blocked(urlparse(url).hostname or "", cfg) or blocked(urlparse(page).hostname or "", cfg):
@@ -480,11 +501,13 @@ def image_search(cfg: dict, person: str, data: dict, say=print) -> list[dict]:
 def set_status(cfg: dict, person: str, ids: list[str], status: str) -> None:
     """keep: status kept; drop: the file deleted and its source remembered."""
     d = person_dir(cfg, person)
+    ids = list(dict.fromkeys(ids))
     with jsonstate.update(d / INDEX, {}) as idx:
         photos = idx.setdefault("photos", {})
+        missing = [pid for pid in ids if pid not in photos]
+        if missing:  # before any file is deleted: a raise here leaves cast.json as it was
+            raise ClipperError(f"{person}: no photo {', '.join(missing)}")
         for pid in ids:
-            if pid not in photos:
-                raise ClipperError(f"{person}: no photo {pid}")
             if status == "drop":
                 ph = photos.pop(pid)
                 idx.setdefault("dropped", []).append(ph["key"])

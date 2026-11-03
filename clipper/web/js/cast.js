@@ -4,6 +4,8 @@
 
 let CS = null;  // {person, data, win}
 let CASTWIN = 0;
+let CASTSHOWN = null;  // whose page is on screen: its typed drafts survive a refresh
+const CASTDRAFTS = ["castNew", "castAka", "castCh", "castUrl", "castStream"];
 const castWin = win => win === CASTWIN && $("#tool").open && $("#tool").dataset.kind === "cast";
 
 async function showCast(person) {
@@ -18,14 +20,24 @@ async function showCast(person) {
     if (!castWin(win)) return;
     CS = { person, data, win };
     renderCast();
-  } catch (e) { if (castWin(win)) d.querySelector(".tbody").innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; }
+  } catch (e) {
+    if (!castWin(win)) return;
+    const box = d.querySelector(".tbody");  // only before the first render
+    if (box) box.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`;
+    else { toast(e.message, true); if (CS?.data.job.running) castPoll(); }
+  }
 }
 function castPoll() {  // while a find runs: its log and the photos it adds
   const win = CS?.win;
   setTimeout(() => { if (CS && castWin(win)) showCast(CS.person); }, 2500);
 }
 function renderCast() {
-  const { data, person } = CS, p = data.person, job = data.job, min = data.min_photos;
+  const { data } = CS, p = data.person, job = data.job, min = data.min_photos;
+  // A refresh while a job runs keeps what was being typed, and where.
+  const same = CASTSHOWN === (p?.name ?? ""), focus = document.activeElement;
+  const drafts = same ? Object.fromEntries(CASTDRAFTS.map(id => [id, $("#" + id)?.value]).filter(([, v]) => v !== undefined)) : {};
+  const at = same && CASTDRAFTS.includes(focus?.id) ? [focus.id, focus.selectionStart, focus.selectionEnd] : null;
+  CASTSHOWN = p?.name ?? "";
   const who = data.people.map(x => `<button class="cpp${x.name === p?.name ? " on" : ""}" data-castp="${esc(x.name)}">
       <b>${esc(x.name)}</b><span class="by">${x.kept} kept${x.new ? ` · ${x.new} new` : ""}</span>${x.kept < min ? `<span class="cwarn" title="fewer than ${min} kept">!</span>` : ""}</button>`).join("");
   const running = job.running ? `<div class="cjob">${esc(job.what)} for ${esc(job.person)}… <span class="by">${esc(job.log.at(-1) || "")}</span></div>`
@@ -58,6 +70,8 @@ function renderCast() {
         <div class="f">Kept (${kept.length + (p.single ? 1 : 0)})</div>
         <div class="cgrid">${kept.map(tile).join("")}${p.single ? `<div class="ct"><img src="${esc(p.single_url)}" alt=""><div class="by">${esc(p.single)} (a single photo file)</div></div>` : ""}${!kept.length && !p.single ? `<div class="empty">None kept yet.</div>` : ""}</div>`}
       </div></div>`;
+  for (const [id, v] of Object.entries(drafts)) { const el = $("#" + id); if (el) el.value = v; }
+  if (at) { const el = $("#" + at[0]); if (el) { el.focus(); el.setSelectionRange(at[1], at[2]); } }
   if (job.running) castPoll();
 }
 async function castPost(path, body, msg) {
@@ -90,7 +104,11 @@ document.addEventListener("click", e => {
     return castPost("/api/cast/set", { aliases, channels }, "Saved");
   }
   if (ds.cfind) return castPost("/api/cast/run", { what: "find", sources: [ds.cfind] });
-  if (t.id === "castUrlBtn") return castPost("/api/cast/run", { what: "add", url: $("#castUrl").value.trim() });
+  if (t.id === "castUrlBtn") {
+    const url = $("#castUrl").value.trim();
+    $("#castUrl").value = "";  // not kept as a draft once it's on its way
+    return castPost("/api/cast/run", { what: "add", url });
+  }
   if (t.id === "castGrab") return castPost("/api/cast/run", { what: "grab", stream: $("#castStream").value.trim() });
 });
 document.addEventListener("change", e => {
@@ -101,4 +119,4 @@ document.addEventListener("keydown", e => {
   if (e.key === "Enter" && e.target.id === "castNew") { e.preventDefault(); $("#castAdd").click(); }
   if (e.key === "Enter" && e.target.id === "castUrl") { e.preventDefault(); $("#castUrlBtn").click(); }
 });
-$("#tool").addEventListener("close", () => { CS = null; CASTWIN++; });
+$("#tool").addEventListener("close", () => { CS = null; CASTSHOWN = null; CASTWIN++; });

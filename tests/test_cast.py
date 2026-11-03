@@ -161,3 +161,89 @@ def test_war_room_cast_refuses_bad_requests(cfg):
     with pytest.raises(ClipperError, match="lists of text"):
         warroom.cast_set(cfg, {"person": "Jer", "aliases": "Jer"})
     assert not warroom.CAST_JOB["running"]
+
+
+def test_a_bad_id_drops_nothing(cfg, monkeypatch):
+    monkeypatch.setattr(cast, "faces_in", lambda img, cfg: [face(unit(RNG.normal(size=128)))])
+    pid = cast.add(cfg, "Don", jpeg(), {"key": "k", "kind": "stream"})
+    with pytest.raises(ClipperError, match="no photo 0000000000"):
+        cast.set_status(cfg, "Don", [pid, "0000000000"], "drop")
+    d = cast.person_dir(cfg, "Don")
+    assert pid in jsonstate.load(d / "cast.json")["photos"] and (d / f"{pid}.jpg").exists()
+    cast.set_status(cfg, "Don", [pid, pid], "drop")                    # twice in one call is once
+    assert jsonstate.load(d / "cast.json")["dropped"] == ["k"]
+
+
+def test_a_streams_named_face_is_the_one_taken(cfg, monkeypatch):
+    other, mine = unit(RNG.normal(size=128)), unit(RNG.normal(size=128))
+    monkeypatch.setattr(cast, "faces_in", lambda img, cfg: [face(other, box=(0.1, 0.1, 0.2, 0.3), px=300),
+                                                            face(mine, box=(0.6, 0.2, 0.1, 0.15), px=110)])
+    pid = cast.add(cfg, "Rich", jpeg(), {"key": "s@1", "kind": "stream"}, box=[0.59, 0.19, 0.12, 0.17])
+    ph = jsonstate.load(cast.person_dir(cfg, "Rich") / "cast.json")["photos"][pid]
+    assert ph["px"] == 110                                             # not the bigger face beside him
+    said = []
+    assert cast.add(cfg, "Rich", jpeg(), {"key": "s@2", "kind": "stream"}, say=said.append,
+                    box=[0.0, 0.8, 0.1, 0.1]) is None and "no face big enough" in said[-1]
+
+
+def test_files_are_keyed_by_content(cfg, monkeypatch, tmp_path):
+    monkeypatch.setattr(cast, "faces_in", lambda img, cfg: [face(unit(RNG.normal(size=128)))])
+    (tmp_path / "a").mkdir(), (tmp_path / "b").mkdir()
+    (tmp_path / "a" / "photo.jpg").write_bytes(jpeg(800, 600))
+    (tmp_path / "b" / "photo.jpg").write_bytes(jpeg(900, 600))
+    one = cast.add_file(cfg, "Geezer", str(tmp_path / "a" / "photo.jpg"))
+    two = cast.add_file(cfg, "Geezer", str(tmp_path / "b" / "photo.jpg"))
+    assert one and two and one != two
+    assert cast.add_file(cfg, "Geezer", str(tmp_path / "a" / "photo.jpg")) is None  # the same file again
+
+
+class Raw(io.BytesIO):
+    def read(self, n=-1, decode_content=False):  # urllib3's raw stream
+        return super().read(n)
+
+
+class Resp:
+    def __init__(self, status=200, location="", body=b"", js=None):
+        self.status_code, self.headers, self._js = status, {"Location": location} if location else {}, js
+        self.is_redirect, self.ok = bool(location), status < 400
+        self.raw = Raw(body)
+
+    def json(self):
+        if self._js is None:
+            raise ValueError("not JSON")
+        return self._js
+
+    def close(self):
+        pass
+
+
+def test_a_redirect_to_an_agency_is_refused(cfg, monkeypatch):
+    import requests
+
+    hops = {"https://img.example/a.jpg": Resp(302, "https://media.gettyimages.com/x.jpg"),
+            "https://img.example/b.jpg": Resp(301, "/c.jpg"), "https://img.example/c.jpg": Resp(body=b"jpeg")}
+    seen = []
+
+    def get(url, **kw):
+        assert kw["allow_redirects"] is False
+        seen.append(url)
+        return hops[url]
+    monkeypatch.setattr(requests, "get", get)
+    with pytest.raises(ClipperError, match="gettyimages.com is a photo agency"):
+        cast.fetch("https://img.example/a.jpg", cfg)
+    assert seen == ["https://img.example/a.jpg"]                       # never asked for
+    assert cast.fetch("https://img.example/b.jpg", cfg) == b"jpeg"
+
+
+def test_one_failing_channel_doesnt_stop_the_rest(cfg, monkeypatch):
+    import requests
+
+    def get(url, **kw):
+        if "deadchannel" in url:
+            raise requests.ConnectionError("down")
+        return Resp(js={"user": {"profile_pic": "https://files.kick.com/pic.jpg"}})
+    monkeypatch.setattr(requests, "get", get)
+    said = []
+    got = cast.channel_pictures(cfg, "Don", {"channels": ["https://kick.com/deadchannel", "https://kick.com/donflurgundy"]},
+                                said.append)
+    assert [g["url"] for g in got] == ["https://files.kick.com/pic.jpg"] and "ConnectionError" in said[0]
