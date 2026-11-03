@@ -157,6 +157,8 @@ def test_budget_scales_with_length(defaults):
     assert schedule.budget_for(ssc, 5.5) == {"segment": 7, "short": 6}
     assert schedule.budget_for(ssc, 0.3) == {"segment": 1, "short": 1}
     assert schedule.budget_for(defaults["schedule"], 8) == {}
+    ssc["stream_budget"] = {"segment": 6, "compilation": 0}
+    assert schedule.budget_for(ssc, 5.5) == {"segment": 4, "compilation": 0}  # 0 = none, not 1
 
 
 def test_budget_keeps_the_best(sc):
@@ -191,3 +193,20 @@ def test_compilation_skips_segments_that_wont_go(sc):
     _, skipped, when = plan(items, sc)
     assert when["s/comp"] == "Sat 14:00"
     assert skipped == {"s/b": "over the stream's segment budget (1)"}
+
+
+def test_a_budget_of_0_lets_only_a_pinned_one_go(sc):
+    sc = {**sc, "horizon_days": 5, "compilation_days": ["sat"]}
+    items = [item("s/a"), item("s/comp", "compilation", segment_keys=["s/a"], budget=0),
+             item("t/comp", "compilation", segment_keys=[], budget=0, override_text="2026-11-07 14:00")]
+    _, skipped, when = plan(items, sc)
+    assert skipped == {"s/comp": "over the stream's compilation budget (0)"}
+    assert when["t/comp"] == "Sat 14:00"
+
+
+def test_a_pin_that_has_passed_still_goes_at_budget_0(sc):
+    sc = {**sc, "horizon_days": 5, "compilation_days": ["sat"]}
+    items = [item("s/comp", "compilation", segment_keys=[], budget=0, override_text="2026-11-01 14:00")]
+    placed, skipped, when = plan(items, sc)
+    assert skipped == {}
+    assert when["s/comp"] == "Sat 14:00" and placed["s/comp"]["source"] == "auto"

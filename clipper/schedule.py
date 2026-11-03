@@ -59,9 +59,10 @@ def parse_when(text: str, tz: ZoneInfo, first_time: str) -> datetime | None:
 
 
 def budget_for(ssc: dict, hours: float) -> dict[str, int]:
-    """A stream's per-kind release budget, scaled by its length (at least 1 of each)."""
+    """A stream's per-kind release budget, scaled by its length (at least 1 of each kind it
+    has any of; 0 stays 0: none of that kind goes unless pinned)."""
     scale = hours / ssc["budget_hours"]
-    return {k: max(1, round(n * scale)) for k, n in (ssc["stream_budget"] or {}).items()}
+    return {k: max(1, round(n * scale)) if n else 0 for k, n in (ssc["stream_budget"] or {}).items()}
 
 
 def segment_heat(sdir: Path, segments: list[dict]) -> dict[str, float]:
@@ -330,15 +331,17 @@ def place_asap(p: Placed, items: list[dict], now: datetime) -> None:
 
 
 def over_budget(p: Placed, items: list[dict], skipped: list[dict]) -> None:
-    """1c. Each stream's budget per kind: the best go; what's placed already counts first.
+    """1c. Each stream's budget per kind: the best go; what's placed already counts first, and
+    so does a pin that has passed (it takes the next free slot even at budget 0).
     The rest are marked "over"."""
     groups: dict[tuple[str, str], list[dict]] = {}
     for it in items:
         if it.get("budget") is not None and not it.get("bad"):
             groups.setdefault((it["stream"], it["kind"]), []).append(it)
     for (_, kind), group in groups.items():
-        room = group[0]["budget"] - sum(it["key"] in p for it in group)
-        rest = sorted((it for it in group if it["key"] not in p),
+        kept = [it for it in group if it["key"] in p or it["override_text"]]
+        room = group[0]["budget"] - len(kept)
+        rest = sorted((it for it in group if it not in kept),
                       key=lambda it: (-it["score"], it["key"]))
         for it in rest[max(room, 0):]:
             it["over"] = True

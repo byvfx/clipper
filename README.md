@@ -183,6 +183,9 @@ context and Shorts layouts. A show's sub-tables override the base sections for t
 One stream can go further with its own `streams/<id>/config.toml` (same sections), for a big
 night: more picks, the breaking story in `[scoring] stream_context`, and `[schedule]
 priority = true` so its items go out ahead of the backlog. Unknown keys there are refused.
+`docs/big-story.toml` is the ready-made one to copy: more picks and Shorts, priority, and the
+night's compilation. A `[schedule] stream_budget` kind at 0 goes only when pinned, so
+`compilation = 0` there keeps compilations for big-story nights.
 `clipper.example.toml` documents every key; `clipper.toml` holds only what differs (`clipper
 setup` starts a new one that way). `clipper.toml` itself is gitignored because it holds your
 Discord ids and Kitsu address.

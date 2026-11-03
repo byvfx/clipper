@@ -95,6 +95,13 @@ def test_example_documents_every_setting():
     assert not unknown, "clipper.example.toml has settings config.py doesn't know: " + ", ".join(unknown)
 
 
+def test_big_story_preset_only_has_known_settings():
+    """docs/big-story.toml is copied to a stream's config.toml, which refuses unknown keys."""
+    preset = tomllib.loads((ROOT / "docs" / "big-story.toml").read_text(encoding="utf-8"))
+    unknown = [f"[{s}] {k}" for s, v in preset.items() for k in v if k not in config.DEFAULTS.get(s, {})]
+    assert not unknown, "docs/big-story.toml: " + ", ".join(unknown)
+
+
 def test_example_loads(tmp_path):
     cfg = config.load(ROOT / "clipper.example.toml", use_local=False)
     for key in cfg["shows"]:
