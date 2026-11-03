@@ -192,7 +192,7 @@ per upload still allowed today), worker takeover under a lock, pick numbers kept
 the issue on "fix". Roadmaps, issues only: NAS hub #14 (#9 war room on
 the NAS, #12 worker/bot on the NAS, #64 single-owner daemon `clipper serve`, #65 Claude Code on the NAS),
 transcript-framed edits #66 (#67-#71), YouTube Posts magazine #30 (#32-#38), cast library #41,
-lore-order playlists #43, archive fun #63, news watcher #110 (live since 2026-11-02 23:07: #124 + #126, `[news] check_minutes = 30` in clipper.toml, the bot made #news itself; backup backups/clipper.before_news_2026-11-02.toml), Udder Truth #58/#59/#60, Modal ideas #53, #55, #56.
+lore-order playlists #43, archive fun #63, news watcher #110 (off since 2026-11-03 at the user's word: `[news] check_minutes = 0` in clipper.toml and no terms; since #127 only `[news] watch` / `[shows.<key>.news] watch` terms are watched, none = nothing fetched, `auto_watch = true` brings back the cast/figures/library list; #news exists), Udder Truth #58/#59/#60, Modal ideas #53, #55, #56.
 **Faces #54 (merged 2026-11-01, PR #117):** `clipper faces <stream>` runs locally on the CPU (no Modal:
 the cost is reading the video, not compute; YuNet + SFace via OpenCV 5, `--extra faces`). Groups each
 stream's keyframe faces into faces.json + faces/F01.jpg sheets, names them against `faces/known.json`
