@@ -37,6 +37,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "x_client": "secrets/x_client.json",            # {"client_id"} (+ "client_secret" for a Web App)
         "x_token": "secrets/x_token.json",              # written by `clipper x --sign-in`
         "warroom_token": "secrets/warroom_token.txt",   # war room token, if not [warroom] token
+        "brave_key": "secrets/brave_secret.txt",        # Brave Search API key, if not $BRAVE_API_KEY
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "layouts": "layouts",     # reference screenshots: <show>/<layout>.jpg (`clipper shorts --save-example`)
@@ -267,8 +268,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # `clipper worker` (GPU machine) runs `clipper run` on each recording finished under
         # paths.streams; `clipper run <stream>` resumes at the first stage not done.
         "poll_s": 300,
-        "stages": ["signals", "transcribe", "score", "segments", "faces", "cut", "meta", "thumbs", "shorts",
-                   "review"],  # faces needs the faces extra (OpenCV); take it out where that isn't installed
+        "stages": ["signals", "transcribe", "score", "segments", "faces", "cast", "cut", "meta", "thumbs",
+                   "shorts", "review"],  # faces and cast need the faces extra (OpenCV); take them out where
+                                         # that isn't installed
         # Clips first: cut, draft, cover and publish the picks and their Shorts, then cut
         # the long segments and compilations (hours of cutting and previews).
         "fast_lane": True,
@@ -369,6 +371,15 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "search_count": 40,       # image search results looked at
         "min_photos": 3,          # doctor flags anyone with fewer kept
         "known_figures": True,    # everyone with a kept photo is added to [scoring] known_figures
+        # Automatic: the worker's `cast` stage grabs each new stream's named faces, and the bot
+        # runs `clipper cast auto` (a find from every source) for anyone short of photos.
+        "target": 6,              # photos (kept + new) the automation gathers per person
+        "auto_keep": 0.65,        # keep a photo without asking when an enrolled face matches this
+                                  # well and the label has no doubt (0 = everything waits for review)
+        "auto_keep_sources": ["stream", "commons", "channel"],  # never "web" (image search, a pasted
+                                  # address): its licence is unknown, so you keep those yourself
+        "auto_hours": 24,         # the bot's `cast auto` this often; 0 = off
+        "retry_days": 7,          # someone a find added nothing for is tried again after this
         "label_model": "claude-haiku-5-5",  # labels each new photo ("" = no labels)
         "label_effort": "low",
         "prompt_version": "v1",   # prompts/cast_label_<v>.md

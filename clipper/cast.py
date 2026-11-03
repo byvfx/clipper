@@ -10,15 +10,20 @@ even when someone is only talked about.
     clipper cast keep|drop <Person> <id> ...   (the war room's Cast window does these too)
     clipper cast label <Person> <id> <label>
     clipper cast set <Person> --alias A --channel URL
+    clipper cast auto                          a find for everyone short of [cast] target photos
+                                               (the bot, every [cast] auto_hours)
 
 Every photo is checked for the face first. With the person enrolled in faces/known.json only a
 face like theirs is taken ([cast] match), and one that looks like someone else enrolled is
 refused; otherwise the biggest face. It is cropped to head and shoulders at full size, labelled
 by a small vision call ([cast] label_model: neutral, laughing, angry, ...) and stays "new" until
-kept or dropped. photos/<Person>/cast.json records each photo's source, licence and face box;
+kept or dropped, unless it is sure: an enrolled person's face matched at [cast] auto_keep or
+better, labelled with no doubt, while they have fewer than [cast] target kept. The worker
+grabs each new stream's named faces (`cast grab --needed`, the `cast` stage).
+photos/<Person>/cast.json records each photo's source, licence and face box;
 a dropped photo's source is remembered so the next find doesn't bring it back. Image search
 skips photo agencies ([cast] blocked_domains: their photographers file claims) and needs
-$BRAVE_API_KEY. A single photos/<Person>.jpg still works as before."""
+$BRAVE_API_KEY or the file [paths] brave_key. A single photos/<Person>.jpg still works as before."""
 
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ import io
 import os
 import re
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -285,11 +290,31 @@ def add(cfg: dict, person: str, data: bytes, source: dict, claude=None, say=prin
              "face": fb, "px": int(face["px"]), "match": score,
              "added": datetime.now(UTC).isoformat(timespec="seconds"),
              "emb": [round(float(v), 4) for v in emb]}
+    single = any((d.parent / f"{d.name}{ext}").exists() for ext in PHOTO_EXT)  # a flat <Person>.jpg
     with jsonstate.update(d / INDEX, {}) as idx:
+        if pid in idx.get("photos", {}) or source["key"] in idx.get("dropped", []):
+            return None  # another find or grab added (or dropped) it meanwhile: leave it as it is
+        if sure(cc, score, entry) and len(kept({"photos": idx.get("photos", {})})) + single < cc["target"]:
+            entry["status"], entry["auto_kept"] = "kept", True
         idx.setdefault("photos", {})[pid] = entry
     say(f"  + {person} {pid} {entry['label'] or ''} ({source['kind']}, face {face['px']} px"
-          f"{f', like them {score:.2f}' if score is not None else ''})")
+          f"{f', like them {score:.2f}' if score is not None else ''})"
+          + (" kept" if entry["status"] == "kept" else ""))
     return pid
+
+
+def sure(cc: dict, score: float | None, entry: dict) -> bool:
+    """A photo to keep without asking: from [cast] auto_keep_sources (not the web: its licence is
+    unknown), an enrolled person's face matched at [cast] auto_keep or better (0 = never), and
+    labelled with no doubt."""
+    return bool(cc["auto_keep"] and entry["source"] in cc["auto_keep_sources"] and score is not None
+                and score >= cc["auto_keep"] and entry["label"] and not entry["flag"])
+
+
+def count(data: dict | None) -> int:
+    """Photos a person has or may soon have: kept, new, and a single file."""
+    data = data or {"photos": {}}
+    return sum(ph["status"] in ("kept", "new") for ph in data["photos"].values()) + bool(data.get("single"))
 
 
 LABEL_SCHEMA = {
@@ -329,15 +354,25 @@ def add_file(cfg: dict, person: str, src: str, claude=None, say=print) -> str | 
 
 # ---------- from a stream ----------
 
-def grab(cfg: dict, sdir: Path, person: str | None, n: int, claude=None, say=print) -> int:
+def grab(cfg: dict, sdir: Path, person: str | None, n: int, claude=None, say=print,
+         needed: bool = False) -> int:
     """Each named person's (or person's) n best faces in the stream's faces.json, the frame at
-    full size from the source."""
+    full size from the source. needed (the worker's `cast` stage): only people with fewer than
+    [cast] target photos and only up to it, and no faces.json or no [thumbnail] photos is not an
+    error; for everyone (no person), what it added goes in the stream's cast_grab.json, the
+    stage's done marker."""
     import tempfile
 
     from . import faces
     from .media import source_file
 
     data = jsonstate.read(sdir / "faces.json", None)
+    marker = needed and not person
+    if needed and not (data and cfg["thumbnail"]["photos"]):
+        say("no faces.json or no [thumbnail] photos: nothing to grab")
+        if marker:
+            jsonstate.write(sdir / "cast_grab.json", {"at": now(), "added": {}})
+        return 0
     if not data:
         raise ClipperError(f"{sdir.name}: no faces.json (clipper faces {sdir.name})")
     names = sorted({g["name"] for g in data["groups"].values() if g.get("name")})
@@ -345,20 +380,64 @@ def grab(cfg: dict, sdir: Path, person: str | None, n: int, claude=None, say=pri
         names = [nm for nm in names if nm.lower() == person.lower()]
         if not names:
             raise ClipperError(f"{sdir.name}: nobody named {person} in faces.json")
-    src, added = source_file(sdir), 0
+    room = {}  # needed: how many more each person may get
+    if needed:
+        everyone = people(cfg)
+        room = {nm: cfg["cast"]["target"] - count(everyone.get(nm)) for nm in names}
+        names = [nm for nm in names if room[nm] > 0]
+    src, added, by = source_file(sdir), 0, {}
     with tempfile.TemporaryDirectory() as tmp:
         for name in names:
             for f in faces.best_faces(data, name, n=n, gap=120.0):
+                if needed and by.get(name, 0) >= room[name]:
+                    break
                 frame = faces.grab(src, f["t"], Path(tmp) / "frame.jpg")
                 key = f"stream:{sdir.name}@{f['t']}"
-                added += bool(add(cfg, name, frame.read_bytes(), {"key": key, "kind": "stream", "page": key},
-                                  claude, say, box=f["box"]))
+                if add(cfg, name, frame.read_bytes(), {"key": key, "kind": "stream", "page": key},
+                       claude, say, box=f["box"]):
+                    added += 1
+                    by[name] = by.get(name, 0) + 1
+    if marker:
+        jsonstate.write(sdir / "cast_grab.json", {"at": now(), "added": by})
+    return added
+
+
+def now() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def auto(cfg: dict, claude=None, say=print) -> int:
+    """`clipper cast auto`: a find from every source for each person (a cast folder or an
+    enrolled face) with fewer than [cast] target photos. Someone whose last automatic find
+    added nothing is tried again only after [cast] retry_days."""
+    from .faces import load_known
+
+    cc, added = cfg["cast"], 0
+    everyone = people(cfg)
+    for name in sorted(set(everyone) | set(load_known(cfg)["people"]), key=str.lower):
+        data = everyone.get(name)
+        if count(data) >= cc["target"]:
+            continue
+        last = (data or {}).get("auto") or {}
+        if last.get("at") and not last.get("added") and \
+                datetime.now(UTC) - datetime.fromisoformat(last["at"]) < timedelta(days=cc["retry_days"]):
+            continue
+        say(f"{name} ({count(data)} of {cc['target']}):")
+        n = find(cfg, name, list(SOURCES), claude, say, limit=cc["target"] - count(data))
+        d = person_dir(cfg, name)
+        d.mkdir(parents=True, exist_ok=True)
+        with jsonstate.update(d / INDEX, {}) as idx:
+            idx["auto"] = {"at": now(), "added": n}
+        added += n
     return added
 
 
 # ---------- from the web ----------
 
-def find(cfg: dict, person: str, sources: list[str], claude=None, say=print) -> int:
+def find(cfg: dict, person: str, sources: list[str], claude=None, say=print,
+         limit: int | None = None) -> int:
+    """New photos of person from these sources, at most [cast] per_source from each and, with
+    limit (`cast auto`: what the person still needs), at most limit in all."""
     d = person_dir(cfg, person)
     data = load(d)
     if not d.exists():
@@ -366,8 +445,10 @@ def find(cfg: dict, person: str, sources: list[str], claude=None, say=print) -> 
     per = cfg["cast"]["per_source"]
     added = 0
     for kind in sources:
-        if kind == "search" and not search_key():
-            say("image search: no $BRAVE_API_KEY, skipped")
+        if limit is not None and added >= limit:
+            break
+        if kind == "search" and not search_key(cfg):
+            say("image search: no $BRAVE_API_KEY or [paths] brave_key file, skipped")
             continue
         try:
             found = {"commons": commons, "channels": channel_pictures, "search": image_search}[kind](
@@ -380,7 +461,7 @@ def find(cfg: dict, person: str, sources: list[str], claude=None, say=print) -> 
         say(f"{kind}: {len(found)} to look at")
         n = 0
         for i, src in enumerate(found):
-            if n >= per:
+            if n >= per or (limit is not None and added + n >= limit):
                 break
             if i and kind == "commons":
                 time.sleep(1.0)  # Wikimedia answers 429 to quick runs of downloads
@@ -491,8 +572,16 @@ def _channel(cfg: dict, ch: str, say) -> list[dict]:
     return out
 
 
-def search_key() -> str:
-    return os.environ.get("BRAVE_API_KEY", "").strip()
+def search_key(cfg: dict | None = None) -> str:
+    """$BRAVE_API_KEY, else the file [paths] brave_key (secrets/brave_secret.txt); "" if neither."""
+    key = os.environ.get("BRAVE_API_KEY", "").strip()
+    path = (cfg or {}).get("paths", {}).get("brave_key")
+    if key or not path:
+        return key
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def image_search(cfg: dict, person: str, data: dict, say=print) -> list[dict]:
@@ -505,7 +594,7 @@ def image_search(cfg: dict, person: str, data: dict, say=print) -> list[dict]:
     try:
         r = requests.get("https://api.search.brave.com/res/v1/images/search", timeout=20,
                          params={"q": q, "count": cc["search_count"], "safesearch": "strict"},
-                         headers={"Accept": "application/json", "X-Subscription-Token": search_key()})
+                         headers={"Accept": "application/json", "X-Subscription-Token": search_key(cfg)})
     except requests.RequestException as e:
         raise ClipperError(f"Brave: {type(e).__name__}") from e
     if not r.ok:
@@ -589,7 +678,7 @@ def overview(cfg: dict, person: str = "") -> dict:
     cc = cfg["cast"]
     known = load_known(cfg)["people"]
     everyone = people(cfg)
-    out = {"labels": cc["labels"], "min_photos": cc["min_photos"], "search": bool(search_key()), "people": []}
+    out = {"labels": cc["labels"], "min_photos": cc["min_photos"], "search": bool(search_key(cfg)), "people": []}
     for name in sorted(set(everyone) | set(known), key=str.lower):
         data = everyone.get(name, {"photos": {}, "aliases": []})
         out["people"].append({"name": name, "kept": len(kept(data)) + bool(data.get("single")),

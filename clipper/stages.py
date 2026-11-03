@@ -43,6 +43,8 @@ STAGES = (
     # Who is on screen (`clipper faces`, CPU, minutes reading the source): before the slow cut,
     # so segment and compilation covers get named faces; the fast lane's covers don't wait.
     Stage("faces", ("faces", S), ("faces.json",)),
+    # The cast library (#41): the named faces of people still short of photos, from the source.
+    Stage("cast", ("cast", "grab", S, "--needed"), ("cast_grab.json",)),
     # Only what has no draft/cover yet with the fast lane: the clips in review keep theirs.
     Stage("cut", ("cut", S), ("segments/*.json",),
           fast_cmd=("cut", S, "segments", "compilations")),

@@ -726,9 +726,19 @@ def check_cast(cfg: dict) -> None:
              "war room > Cast (or clipper cast find <Person>, clipper cast grab <stream>)")
     elif people:
         ok("cast", f"{len(people)} people, {cc['min_photos']}+ photos each")
-    if not cast.search_key():
-        warn("cast", "no $BRAVE_API_KEY: cast image search is off (Commons, channels and streams still work)",
-             "optional: a Brave Search API key (api-dashboard.search.brave.com) as $BRAVE_API_KEY")
+    if not cast.search_key(cfg):
+        warn("cast", f"no $BRAVE_API_KEY or {cfg['paths']['brave_key']}: cast image search is off "
+             "(Commons, channels and streams still work)",
+             "optional: a Brave Search API key (api-dashboard.search.brave.com) in that file or $BRAVE_API_KEY")
+
+
+def check_cast_bot(cfg: dict) -> None:
+    """The bot's daily `cast auto` and the war room's Cast window check faces with OpenCV."""
+    import importlib.util
+
+    if cfg["thumbnail"]["photos"] and cfg["cast"]["auto_hours"] > 0 and not importlib.util.find_spec("cv2"):
+        warn("cast", "OpenCV not installed: the bot's daily cast find and the Cast window can't add photos",
+             "uv sync --extra discord --extra faces, or [cast] auto_hours = 0")
 
 
 def check_faces(cfg: dict) -> None:
@@ -826,6 +836,8 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_narrate(cfg)
     if role in ("all", "bot"):
         check_tailnet(cfg, offline)
+    if role == "bot":
+        check_cast_bot(cfg)
     if not offline:
         check_online(cfg, role)
     n = report(RESULTS)

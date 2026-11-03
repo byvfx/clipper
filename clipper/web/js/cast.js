@@ -62,7 +62,7 @@ function renderCast() {
         <div class="cfind"><span class="f">Find</span>
           <button class="btn" data-cfind="commons" title="Wikimedia Commons: freely licensed">Commons</button>
           <button class="btn" data-cfind="channels" title="Their channels: avatar and recent video thumbnails"${p.channels.length ? "" : " disabled"}>Channels</button>
-          <button class="btn" data-cfind="search" title="${data.search ? "Brave image search (photo agencies skipped)" : "Needs $BRAVE_API_KEY"}"${data.search ? "" : " disabled"}>Image search</button>
+          <button class="btn" data-cfind="search" title="${data.search ? "Brave image search (photo agencies skipped)" : "Needs a Brave key: $BRAVE_API_KEY or secrets/brave_secret.txt"}"${data.search ? "" : " disabled"}>Image search</button>
           <input class="search" id="castUrl" placeholder="or a photo's web address"><button class="btn" id="castUrlBtn">Add</button>
           <input class="search" id="castStream" placeholder="or a stream id" style="width:150px"><button class="btn" id="castGrab" title="That stream's sharpest faces of ${esc(p.name)} (named in its Faces window)">Grab</button></div>
         ${running}

@@ -18,6 +18,7 @@ tiktok_token = "secrets/tiktok_token.json"     # written by clipper tiktok --sig
 x_client = "secrets/x_client.json"             # {"client_id": ...} (+ "client_secret" for a Web App)
 x_token = "secrets/x_token.json"               # written by clipper x --sign-in
 warroom_token = "secrets/warroom_token.txt"    # made by clipper warroom --tailnet on, if [warroom] token is ""
+brave_key = "secrets/brave_secret.txt"        # Brave Search API key for cast image search, if not $BRAVE_API_KEY
 discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 elevenlabs_key = "secrets/elevenlabs_api_key.txt"  # if $ELEVENLABS_API_KEY ([narrate] key_env) is unset
 sync_key = "secrets/sync_api_key.txt"          # sync.so lip-sync key, if $SYNC_API_KEY ([perform] sync_key_env) is unset
@@ -83,7 +84,7 @@ alert_mention = ""         # prepended to warnings, e.g. "<@123456789012345678>"
 poll_s = 300
 # faces (who is on screen, CPU) runs after the fast lane, before the slow cut; it needs
 # `uv sync --extra faces`: drop it from the list on a machine without that.
-stages = ["signals", "transcribe", "score", "segments", "faces", "cut", "meta", "thumbs", "shorts", "review"]
+stages = ["signals", "transcribe", "score", "segments", "faces", "cast", "cut", "meta", "thumbs", "shorts", "review"]
 fast_lane = true           # clips + Shorts to review first, then the long segments and compilations
 notify = true              # review stage posts Discord cards (needs [discord] enabled)
 channels = []              # only recordings of these Kick slugs; [] = all
@@ -163,6 +164,14 @@ videos = 12                # recent videos whose thumbnails a YouTube channel of
 search_count = 40          # image search results looked at
 min_photos = 3             # doctor flags anyone with fewer kept
 known_figures = true       # everyone with a kept photo is added to [scoring] known_figures
+# Automatic: the worker's `cast` stage grabs each new stream's named faces; the bot runs
+# `clipper cast auto` (a find from every source) for anyone short of photos.
+target = 6                 # photos (kept + new) the automation gathers per person
+auto_keep = 0.65           # keep without asking when an enrolled face matches this well and the
+                           # label has no doubt (0 = everything waits for review)
+auto_keep_sources = ["stream", "commons", "channel"]  # not "web": its licence is unknown
+auto_hours = 24            # the bot's `cast auto` this often; 0 = off
+retry_days = 7             # someone a find added nothing for is tried again after this
 label_model = "claude-haiku-5-5"  # labels each new photo ("" = no labels)
 label_effort = "low"
 prompt_version = "v1"      # prompts/cast_label_<v>.md
