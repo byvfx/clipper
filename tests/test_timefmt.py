@@ -1,5 +1,6 @@
 import pytest
 
+from clipper.errors import ClipperError
 from clipper.timefmt import clock, hms, length, parse_time
 
 
@@ -28,5 +29,5 @@ def test_parse_time(text, s):
 
 @pytest.mark.parametrize("text", ["", "abc", "1:2:3:4", "h"])
 def test_parse_time_refuses(text):
-    with pytest.raises(ValueError):
+    with pytest.raises(ClipperError):  # the convention: one line for the user, no traceback
         parse_time(text)

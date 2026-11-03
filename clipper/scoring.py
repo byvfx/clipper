@@ -23,7 +23,7 @@ from .config import for_stream
 from .errors import ClipperError
 from .llm import Claude, preflight
 from .prompts import Prompts
-from .states import carry_numbers, numbered_picks
+from .states import carry_numbers, number_history, numbered_picks
 from .transcript import load_words, snap, transcript_lines
 
 CATEGORIES = ["fail", "win", "joke", "insight", "reaction", "hot_take"]
@@ -332,7 +332,19 @@ def run_pass_b(kept: list[dict], summary: list[dict], words: list[dict], cfg: di
     seen = [p["id"] for p in out["picks"]] + [r["id"] for r in out["rejected"]]
     result["unaccounted"] = sorted(ids - set(seen))
     result["unknown_ids"] = sorted(set(seen) - ids)
-    return {**result, "status": "ok", **out}
+    # Only candidates Pass A kept, each once: B naming a window A rejected (third-party
+    # audio) or an id twice used to reach the cut and the review.
+    picks, had, dropped = [], set(), []
+    for p in out["picks"]:
+        if p["id"] in ids and p["id"] not in had:
+            picks.append(p)
+            had.add(p["id"])
+        else:
+            dropped.append(p["id"] + ("" if p["id"] in ids else " (not a kept candidate)"))
+    if dropped:
+        print(f"Pass B: {len(dropped)} pick(s) dropped: {', '.join(dropped)}")
+        result["dropped"] = dropped
+    return {**result, "status": "ok", **out, "picks": picks}
 
 
 def run(stream_dir: Path, cfg: dict, dry_run: bool = False, force: bool = False) -> dict:
@@ -410,11 +422,19 @@ def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: C
     hand = [r for r in old.get("pass_a", []) if r.get("source") == "hand" and r["id"] not in scored]
     hand_ids = {r["id"] for r in hand}
     results = results + hand
+    windows_sha = file_sha(stream_dir / "windows.json")
+    if old and old.get("windows_sha") not in (None, windows_sha):
+        # Pick ids are positional (t03 = the third transcript window): after a signals rerun
+        # the same id is a different moment, so no id keeps its number. The history stays, so
+        # the new numbers never collide with keys already in Kitsu or schedule.json.
+        print("windows.json changed since the last score: picks get new numbers (old keys keep theirs)")
+        old_b = {"numbers": {f"\0{k}": v for k, v in number_history(old_b).items()}, "picks": []}
     pass_b["picks"], pass_b["numbers"] = carry_numbers(
         old_b, pass_b.get("picks", []) + [p for p in old_b.get("picks", []) if p["id"] in hand_ids])
+    pass_b["numbers"] = {k.lstrip("\0"): v for k, v in pass_b["numbers"].items()}
     out = {"stream_id": stream_dir.name, "title": meta.get("title"),
            "prompt_version": prompts.version, "cost_usd": round(claude.cost, 4),
-           "pass_a": results, "pass_b": pass_b}
+           "windows_sha": windows_sha, "pass_a": results, "pass_b": pass_b}
     jsonstate.write(stream_dir / "candidates.json", out)
     ckpt.unlink(missing_ok=True)
 
@@ -426,3 +446,13 @@ def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: C
         print(f"{i:>2}. {p['id']} {c.get('in_s', 0):8.1f}-{c.get('out_s', 0):8.1f}s "
               f"[{c.get('category')}, A={c.get('score')}] {p['title']}")
     return out
+
+
+def file_sha(path: Path) -> str:
+    """A short digest of a file's bytes ("" if it isn't there)."""
+    import hashlib
+
+    try:
+        return hashlib.sha1(path.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return ""

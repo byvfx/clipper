@@ -45,7 +45,7 @@ def time_arg(s: str) -> float:
 
     try:
         return parse_time(s)
-    except ValueError as e:
+    except (ClipperError, ValueError) as e:
         raise argparse.ArgumentTypeError(str(e)) from None
 
 
@@ -262,7 +262,7 @@ def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
         news.dismiss(cfg, args.ids)
         print(f"dismissed {', '.join(map(str, args.ids))}")
     elif a == "context":
-        e = news.set_context(cfg, args.ids, args.show or "", who="cli")
+        e = news.set_context(cfg, args.ids, args.context_show or "", who="cli")
         print(f"for {e['show']}'s next stream: {e['text']}")
 
 
@@ -1307,7 +1307,7 @@ def add_extras(sub) -> None:
     r.add_argument("ids", nargs="+", type=int, metavar="STORY")
     r = nsub.add_parser("context", help="these stories as the show's next stream_context")
     r.add_argument("ids", nargs="+", type=int, metavar="STORY")
-    r.add_argument("--show", help="the show (default: the story's)")
+    r.add_argument("--show", dest="context_show", help="the show (default: the story's)")
 
     p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
     p.add_argument("--month", help="YYYY-MM (default: this month, UTC)")

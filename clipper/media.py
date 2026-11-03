@@ -9,8 +9,11 @@ from .errors import ClipperError
 
 def _probe(path: Path, entries: str, stream: str | None = None) -> str:
     args = ["ffprobe", "-v", "error"] + (["-select_streams", stream] if stream else [])
-    out = subprocess.run(args + ["-show_entries", entries, "-of", "csv=p=0", str(path)],
-                         capture_output=True, text=True, check=False)
+    try:
+        out = subprocess.run(args + ["-show_entries", entries, "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        raise ClipperError("ffprobe not found: install ffmpeg (SETUP.md) and put it on PATH") from None
     return out.stdout.strip() if out.returncode == 0 else ""
 
 

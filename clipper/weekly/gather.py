@@ -24,7 +24,10 @@ DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
 def week_of(cfg: dict, day: str | None) -> tuple[datetime, datetime]:
     """[start, end) of the Sun-Sat week holding `day` (default today), in [schedule] timezone."""
     tz = ZoneInfo(cfg["schedule"]["timezone"])
-    d = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=tz) if day else datetime.now(tz)
+    try:
+        d = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=tz) if day else datetime.now(tz)
+    except ValueError:
+        raise ClipperError(f"--week {day!r}: a date as YYYY-MM-DD") from None
     d = d.replace(hour=0, minute=0, second=0, microsecond=0)
     start = d - timedelta(days=(d.weekday() + 1) % 7)   # back to Sunday
     return start, start + timedelta(days=7)
@@ -42,6 +45,15 @@ def week_label(start: datetime) -> str:
 
 
 def next_issue_number(cfg: dict, here: Path) -> int:
+    """The next free number, or this week's own if it was drafted before (a redraft keeps
+    its number; the old issue.json is kept beside it as issue.before_*.json)."""
+    for p in sorted(here.glob("issue*.json"), reverse=True):
+        try:
+            n = int(jsonstate.load(p).get("issue") or 0)
+        except (OSError, ValueError):
+            continue
+        if n:
+            return n
     nums = []
     for p in Path(cfg["paths"]["weekly"]).glob("*/issue.json"):
         if p.parent != here:

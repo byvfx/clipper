@@ -26,7 +26,8 @@ does), so nothing goes twice. A run first claims the entry there under the sched
 max_per_24h. X doesn't wait for YouTube (a clip is worth most on X while the topic is
 hot); with [x] after_youtube it does, and asks YouTube that each Short is really public
 (an upload can stay private). --auto tries a failed post again up to MAX_TRIES times, and skips titles that say
-"host(s)". Settings are the Short's show's ([shows.<key>.x]); the allowance is the account's.
+"host(s)". A post call that times out is recorded "unknown" and never retried: X may have
+created it, so check x.com by hand. Settings are the Short's show's ([shows.<key>.x]); the allowance is the account's.
 A failed post makes the command exit non-zero, so the bot DMs it.
 
 Keys: paths.x_client, JSON {"client_id": ...} for a Native App (public client), plus
@@ -401,7 +402,16 @@ def post(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
         try:
             sendable = fit(video, paths["streams"] / e["stream"], xc["max_height"])
             mid = upload_video(paths, sendable)
-            pid = call(paths, "POST", "/tweets", json={"text": text, "media": {"media_ids": [mid]}})["data"]["id"]
+            try:
+                pid = call(paths, "POST", "/tweets", json={"text": text, "media": {"media_ids": [mid]}})["data"]["id"]
+            except requests.Timeout as ex:
+                # X may well have created the post before the answer was lost: never retried
+                # (that posted and billed a Short twice); `clipper x` lists it for a hand check.
+                rumble.save_platform(cfg, {e["key"]: {"status": "unknown", "error": f"timed out: {ex}"[:300],
+                                                      "text": text, "media_id": mid, "failed_at": costs.now_iso()}}, "x")
+                print(f"  {e['key']}: UNKNOWN: the post call timed out; check x.com by hand (not retried)")
+                failed.append(f"{e['key']}: timed out, check x.com")
+                continue
         except (ClipperError, requests.RequestException, subprocess.CalledProcessError) as ex:
             rumble.save_platform(cfg, {e["key"]: {"status": "failed", "error": str(ex)[:300], "text": text,
                                                   "tries": x.get("tries", 0) + 1, "failed_at": costs.now_iso()}}, "x")

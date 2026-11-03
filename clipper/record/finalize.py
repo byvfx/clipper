@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .. import jsonstate, kick, media
 from ..alerts import Alerts
+from ..errors import ClipperError
 from .state import LIVE_CHAT, STATE, Part, State, _iso
 
 log = logging.getLogger("clipper.record")
@@ -129,7 +130,7 @@ def gather_chat(d: Path, st: State, parts: list[Part], cfg: dict,
                     if m["id"] not in seen:
                         seen[m["id"]] = m
                         backfilled += 1
-            except (RuntimeError, OSError) as e:
+            except (ClipperError, RuntimeError, OSError) as e:
                 alerts(f"{st.stream_id}: chat backfill {_iso(a)}..{_iso(b)} failed: {e}")
     return seen, backfilled, holes
 

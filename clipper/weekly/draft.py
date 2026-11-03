@@ -47,6 +47,11 @@ def check_issue(issue: dict) -> list[str]:
         missing += [f"{name}.{k}" for k in ARTICLE if k not in a]
     if len(issue.get("articles") or []) < 2:
         missing.append("articles (needs 2)")
+    # Shapes the renderer indexes into, checked before a paid draft is accepted.
+    for name, a in [("feature", issue.get("feature") or {})] + [(f"articles[{i}]", a) for i, a in enumerate(issue.get("articles") or [])]:
+        h = a.get("headline")
+        if h is not None and not (isinstance(h, list) and 1 <= len(h) <= 2 and all(isinstance(x, str) for x in h)):
+            missing.append(f"{name}.headline (one or two lines)")
     return missing
 
 

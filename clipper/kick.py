@@ -22,6 +22,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .errors import ClipperError
+
 API = "https://kick.com/api/v2"
 PAGE_RETRIES = 8
 CHAT_CHUNK_S = 900  # chat_parts/<epoch start>.jsonl each cover this many seconds
@@ -80,7 +82,7 @@ def _get(url: str, ua: str, limiter: RateLimiter | None = None) -> Any:
                 else:
                     time.sleep(pause)
                 if time.monotonic() - t0 > THROTTLED_MAX_S:  # #77 L8: a ban, not throttling
-                    raise RuntimeError(f"Kick kept answering 429 for {THROTTLED_MAX_S // 60} min: {url}") from None
+                    raise ClipperError(f"Kick kept answering 429 for {THROTTLED_MAX_S // 60} min: {url}") from None
                 continue  # throttling is expected; retry
             if e.code not in (500, 502, 503, 504):
                 raise
@@ -88,7 +90,7 @@ def _get(url: str, ua: str, limiter: RateLimiter | None = None) -> Any:
             pass
         errors += 1
         if errors >= PAGE_RETRIES:
-            raise RuntimeError(f"giving up on {url} after {errors} errors")
+            raise ClipperError(f"giving up on {url} after {errors} errors")
         time.sleep(min(2 ** errors, 60))
 
 
@@ -101,7 +103,7 @@ def _parse_ts(s: str) -> datetime:
 def parse_url(url: str) -> tuple[str, str]:
     m = re.search(r"kick\.com/([^/]+)/videos/([0-9a-f-]{36})", url)
     if not m:
-        raise ValueError(f"not a Kick VOD url: {url}")
+        raise ClipperError(f"not a Kick VOD url: {url} (https://kick.com/<channel>/videos/<id>)")
     return m.group(1), m.group(2)
 
 
@@ -126,7 +128,7 @@ def resolve(url: str, cfg: dict) -> dict:
                 "duration_s": v["duration"] / 1000,
                 "source": v["source"],
             }
-    raise LookupError(f"{vid} not in {channel}'s recent videos ({len(videos)} listed)")
+    raise ClipperError(f"{vid} not in {channel}'s recent videos ({len(videos)} listed)")
 
 
 def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:

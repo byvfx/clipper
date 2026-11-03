@@ -550,7 +550,8 @@ class Renderer:
         p.alpha_composite(rounded(ph, 22), (MX, y + 18))
         self.tag(p, d, MX + 18, y + 36, up(a["watch"]))
         y += 18 + ph_h + (22 if feature else 18)
-        l1, l2 = up(a["headline"][0]), up(a["headline"][1])
+        lines = [*a["headline"], ""][:2] if isinstance(a["headline"], list) else [str(a["headline"]), ""]
+        l1, l2 = up(lines[0]), up(lines[1])  # a one-line headline renders with an empty second line
         hi = up(a.get("highlight") or "")
         cap = 84 if feature else 104
         hf = F.impact(min(cap, fit(l1, F.impact, CW, cap), fit(l2, F.impact, CW, cap)))
@@ -647,7 +648,7 @@ class Renderer:
         cast.sort(key=lambda m: -mins[m["topic"]])
         if not cast:
             cast = [{"person": t, "name": up(t), "topic": t} for t in list(mins)[:6]]
-        top = max(mins[m["topic"]] for m in cast)
+        top = max((mins[m["topic"]] for m in cast), default=1)  # a pre-show-only week has no cast
         rows_y, rh = y + 18, 66
         bx0, bx1 = MX + 300, W - MX - 130
         for i, m in enumerate(cast):

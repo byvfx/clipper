@@ -81,8 +81,15 @@ class Prompts:
 
     def get(self, name: str, **fill) -> str:
         """fill: per-call placeholders on top of vars (e.g. a reviewer's note)."""
-        text = (self.dir / f"{name}_{self.version}.md").read_text(encoding="utf-8")
-        text = text.format(**{**self.vars, **fill})
+        path = self.dir / f"{name}_{self.version}.md"
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise ClipperError(f"no prompt {path.name} in {self.dir} (clipper doctor lists the missing ones)") from None
+        try:
+            text = text.format(**{**self.vars, **fill})
+        except (KeyError, IndexError, ValueError) as e:
+            raise ClipperError(f"{path.name}: placeholder {e} has no value (a literal brace is {{ or }})") from None
         if name in VIEWER_FACING and self.house_style:
             text = (text.rstrip() + "\n\n" + HOUSE_STYLE_HEADERS.get(name, HOUSE_STYLE) + "\n"
                     + "\n".join(f"- {rule}" for rule in self.house_style) + "\n")

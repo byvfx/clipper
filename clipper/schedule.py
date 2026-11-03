@@ -207,7 +207,8 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
     # meanwhile can't be planned back to "scheduled" (and uploaded twice).
     with jsonstate.locked(out_path):
         old, platforms = previous(out_path)
-        placed, skipped = plan(items, skipped, old, platforms, sc, tz, now, start, reshuffle)
+        placed, skipped = plan(items, skipped, old, platforms, sc, tz, now, start, reshuffle,
+                               lead=timedelta(minutes=cfg["youtube"]["min_lead_minutes"]))
         entries = sorted(placed.values(), key=lambda e: e["publish_at"])
         result = {"timezone": sc["timezone"], "generated_at": now.isoformat(timespec="seconds"),
                   "entries": entries, "unscheduled": skipped}
@@ -261,8 +262,10 @@ class Placed:
 
 
 def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc: dict,
-         tz: ZoneInfo, now: datetime, start: date, reshuffle: bool) -> tuple[dict, list]:
-    """Place items into slots: (entries by key, the ones left out)."""
+         tz: ZoneInfo, now: datetime, start: date, reshuffle: bool,
+         lead: timedelta = timedelta(0)) -> tuple[dict, list]:
+    """Place items into slots: (entries by key, the ones left out). lead: no new slot sooner
+    than this ([youtube] min_lead_minutes: `clipper upload` would call it missed)."""
     p = Placed(old, platforms)
     keep_uploaded(p, items)
     place_pinned(p, items, skipped, sc, tz, now)
@@ -273,9 +276,9 @@ def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc:
     # Freed slots can be today's: refill from today then, or they stay empty. With
     # stale_days, today's open slots count too: windows are short.
     all_slots = slots(sc, tz, min(start, now.date()) if jump or sc["stale_days"] else start)
-    fill(p, queue, all_slots, ("clip", "short", "segment"), sc, now)
+    fill(p, queue, all_slots, ("clip", "short", "segment"), sc, now + lead)
     after_segments(p, items, queue, skipped)
-    fill(p, queue, all_slots, ("compilation",), sc, now)
+    fill(p, queue, all_slots, ("compilation",), sc, now + lead)
     for kind, rest in queue.items():
         skipped += [{"key": it["key"], "reason":
                      f"stale: no free {kind} slot by {it['expires'].astimezone(tz):%m-%d %H:%M}"
@@ -286,8 +289,9 @@ def plan(items: list[dict], skipped: list[dict], old: dict, platforms: dict, sc:
 
 
 def current(it: dict, when: datetime) -> bool:
-    """Not past its stale_days cutoff at that time."""
-    return not it.get("expires") or when <= it["expires"]
+    """Not past its stale_days cutoff at that time. An item you pinned (Publish at) is never
+    stale: an explicit time is a decision, even once it has passed and takes the next slot."""
+    return bool(it.get("override_text")) or not it.get("expires") or when <= it["expires"]
 
 
 def keep_uploaded(p: Placed, items: list[dict]) -> None:

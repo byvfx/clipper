@@ -196,8 +196,13 @@ desktop (#46) is still planned and goes with the install work; the day-to-day an
 between Claude and the war room/Discord (#13 chat panel); services going quiet is the failure they
 see. "Let's proceed" (11-03): groups 1 and 2 of the report's order (quiet failures, cost guards:
 #1, #4, #5, #9, #10, #11, #16, #17, #19, #20, #21, #26, #36) merged as 86e04f9 (PR #129; serve and
-the bot restarted 13:22); groups 3-6 (scheduler/upload consistency, input edges, Pass B hygiene, cast and weekly) are next,
-with defaults chosen where a behaviour question was open (said in each PR).
+the bot restarted 13:22); groups 3-6 (scheduler/upload consistency, input edges, Pass B hygiene, cast and
+weekly: #6, #7, #8, #12, #13, #14, #18, #22, #23, #27, #28, #38, #39, #40, #42, #43, #44, #45) are branch
+audit-fixes-2 (PR pending). Defaults taken where a behaviour question was open: a pinned Publish at
+never goes stale; a passed slot never goes public at once from a long run; an X post that times out is
+"unknown" for a hand check, never retried; a cast grab is refused when another enrolled person fits
+better. Left for later: #15 (example toml commented), #24/#25 (lock edges), #29-#35, #37, #41, #46-#50
+(lows), #42's lock part.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
