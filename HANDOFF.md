@@ -195,8 +195,8 @@ are #84 story, #108 investigate, #109 swarm, everything else can wait; the secon
 desktop (#46) is still planned and goes with the install work; the day-to-day annoyance is switching
 between Claude and the war room/Discord (#13 chat panel); services going quiet is the failure they
 see. "Let's proceed" (11-03): groups 1 and 2 of the report's order (quiet failures, cost guards:
-#1, #4, #5, #9, #10, #11, #16, #17, #19, #20, #21, #26, #36) are PR #129 (branch audit-fixes-1);
-groups 3-6 (scheduler/upload consistency, input edges, Pass B hygiene, cast and weekly) are next,
+#1, #4, #5, #9, #10, #11, #16, #17, #19, #20, #21, #26, #36) merged as 86e04f9 (PR #129; serve and
+the bot restarted 13:22); groups 3-6 (scheduler/upload consistency, input edges, Pass B hygiene, cast and weekly) are next,
 with defaults chosen where a behaviour question was open (said in each PR).
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
