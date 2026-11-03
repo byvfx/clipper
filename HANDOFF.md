@@ -165,7 +165,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
   MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
 - Weekly issue 03: post it by hand (TikTok carousel + two YouTube Posts) from the artifact page (X done).
-- YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The 10:30 token was issued while still in Testing and may still lapse 11-06: one more `clipper upload --sign-in` now gives a token that doesn't expire.
+- YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The user signed in again 11-02 16:57 (In production), so the token shouldn't lapse.
 
 ## Open work
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
