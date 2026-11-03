@@ -131,11 +131,22 @@ PHOTO_EXT = (".jpg", ".jpeg", ".png", ".webp")
 
 
 def photos(tc: dict) -> dict[str, Path]:
-    """[thumbnail] photos: {person: path}, named by the file names ("Hasan Piker.jpg")."""
+    """[thumbnail] photos: {person: path}, named by the file names ("Hasan Piker.jpg") or, for
+    the cast library's folders (`clipper cast`, #41), the person's best kept photo."""
+    from ..cast import best_photo
+
     d = Path(tc["photos"]) if tc.get("photos") else None
     if not d or not d.is_dir():
         return {}
-    return {p.stem: p for p in sorted(d.iterdir()) if p.suffix.lower() in PHOTO_EXT}
+    out = {}
+    for p in sorted(d.iterdir()):
+        if p.is_dir():
+            best = best_photo(p)
+            if best:
+                out[p.name] = best  # a folder with kept photos wins over a single file
+        elif p.suffix.lower() in PHOTO_EXT:
+            out.setdefault(p.stem, p)
+    return out
 
 
 def photo_name(tc: dict, name: str) -> str:

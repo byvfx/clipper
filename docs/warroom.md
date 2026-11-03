@@ -60,6 +60,26 @@ Who is who on screen (#54), kept in `[paths] faces/known.json` for every show.
 The command line does the same: `clipper faces <stream> --name F03=Jer --enroll`,
 `clipper faces <stream> --at 1:23:45 --box x,y,w,h --person Jer`, `clipper faces --forget Jer`.
 
+## Cast
+
+The cast library (#41): a few head-and-shoulders photos of each regular in `[thumbnail]
+photos/<Person>/`, for covers and the weekly. **Cast** in the header opens it.
+
+- **The list** is everyone with photos or an enrolled face, with how many are kept and new;
+  "!" marks fewer than `[cast] min_photos`. "Someone new" adds a person.
+- **A person:** other names and channels (YouTube `@name` or Kick addresses), saved with Save;
+  the channels are what Find > Channels reads.
+- **Find:** Commons (Wikimedia, freely licensed), Channels (their avatar and recent video
+  thumbnails), Image search (Brave; needs `$BRAVE_API_KEY`), a photo's web address, or a stream
+  id (that stream's sharpest faces of the person, named in its Faces window). One runs at a
+  time in the background; the window shows its progress and fills in. Each photo is checked
+  against the person's known face, so other people are left out, and labelled by a small model.
+- **New photos** come first, blue-edged; ⚠ is the labeller's doubt (a designed thumbnail with
+  text, a hidden face). Keep or Drop each; fix a label with its menu. A dropped photo is deleted
+  and its source never fetched again. Kept photos are what covers use (neutral first).
+
+The command line: `clipper cast list|grab|find|add|keep|drop|label|set` (SETUP.md, Photos).
+
 ## Schedule and uploads
 
 The schedule shows the open slots of the next two weeks and the approved items with no slot.

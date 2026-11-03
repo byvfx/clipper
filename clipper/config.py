@@ -356,6 +356,29 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "sheets": 60,             # contact sheets for the biggest groups (faces/F01.jpg ...); named ones always
         "max_refs": 10,           # group averages kept per known face (newest win)
     },
+    "cast": {
+        # `clipper cast` (#41): head-and-shoulders photos of each regular in [thumbnail]
+        # photos/<Person>/, from streams and the web. Image search also needs $BRAVE_API_KEY.
+        "min_px": 100,            # faces shorter than this (pixels of the picture) aren't taken
+        "match": 0.5,             # an enrolled person's photo: lowest similarity of its face to
+                                  # theirs (one face, not a group's average, so below [faces] match)
+        "max_px": 1600,           # the longest side a photo is kept at
+        "per_source": 6,          # most new photos one find adds from each source
+        "videos": 12,             # recent videos whose thumbnails a YouTube channel offers
+        "search_count": 40,       # image search results looked at
+        "min_photos": 3,          # doctor flags anyone with fewer kept
+        "label_model": "claude-haiku-5-5",  # labels each new photo ("" = no labels)
+        "label_effort": "low",
+        "prompt_version": "v1",   # prompts/cast_label_<v>.md
+        "labels": ["neutral", "smiling", "laughing", "angry", "shocked", "smug", "sad", "serious"],
+        # Never taken from image search (sites and the pages they're on): photo agencies, whose
+        # photographers file copyright claims against thumbnails and posts.
+        "blocked_domains": ["gettyimages.com", "gettyimages.co.uk", "istockphoto.com", "apimages.com",
+                            "ap.org", "alamy.com", "shutterstock.com", "reuters.com", "wireimage.com",
+                            "zumapress.com", "dreamstime.com", "depositphotos.com", "123rf.com",
+                            "stock.adobe.com", "imago-images.com", "newscom.com", "agefotostock.com",
+                            "pond5.com", "eyevine.com", "rexfeatures.com", "photoshelter.com"],
+    },
     "segments": {
         "model": "claude-opus-5-5",   # one call over the whole transcript
         "effort": "medium",

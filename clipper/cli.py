@@ -203,6 +203,34 @@ def cmd_modal(cfg: dict, args: argparse.Namespace) -> None:
         modalmon.print_status(cfg)
 
 
+def cmd_cast(cfg: dict, args: argparse.Namespace) -> None:
+    from . import cast
+
+    a = args.action
+    if a == "list":
+        return cast.show_list(cfg)
+    if a in ("keep", "drop"):
+        return cast.set_status(cfg, args.person, args.ids, a)
+    if a == "label":
+        return cast.set_label(cfg, args.person, args.id, args.label)
+    if a == "set":
+        return cast.set_info(cfg, args.person, args.alias, args.channel)
+    claude = None
+    if cfg["cast"]["label_model"] and not args.no_label:
+        from .llm import Claude
+
+        claude = Claude(cfg)
+    if a == "add":
+        cast.add_file(cfg, args.person, args.src, claude)
+    elif a == "grab":
+        print(f"{cast.grab(cfg, stream_dir(cfg, args.stream), args.person, args.n, claude)} new photo(s)")
+    elif a == "find":
+        print(f"{cast.find(cfg, args.person, args.source or list(cast.SOURCES), claude)} new photo(s)")
+    if claude and claude.cost:
+        print(f"labels: ${claude.cost:.3f}")
+    return None
+
+
 def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
     from . import costs
 
@@ -707,7 +735,7 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
+    ('Extras', ['weekly', 'cast', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
@@ -1161,6 +1189,40 @@ def add_extras(sub) -> None:
     p.add_argument("--backfill", action="store_true",
                    help="add runs from before the run log (transcript.json cost records), once")
     p.set_defaults(fn=cmd_modal)
+
+    p = sub.add_parser("cast", help="the cast library: a few good photos of each regular, from streams "
+                                    "and the web, for covers and the weekly (#41)")
+    csub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_cast)
+    csub.add_parser("list", help="everyone: photos kept and new, who has fewer than [cast] min_photos")
+    r = csub.add_parser("grab", help="the sharpest faces `clipper faces` named in a stream, as new photos")
+    add_stream(r)
+    r.add_argument("--person", help="only this person (default: everyone named)")
+    r.add_argument("-n", type=int, default=4, help="photos tried per person (default 4)")
+    r.add_argument("--no-label", action="store_true", help="skip the label call")
+    r = csub.add_parser("find", help="new photos from the web: Wikimedia Commons, the person's channels, "
+                                     "image search ($BRAVE_API_KEY)")
+    r.add_argument("person")
+    r.add_argument("--source", action="append", choices=["commons", "channels", "search"],
+                   help="only these (repeatable; default all)")
+    r.add_argument("--no-label", action="store_true", help="skip the label call")
+    r = csub.add_parser("add", help="one photo from a file or a web address")
+    r.add_argument("person")
+    r.add_argument("src", metavar="FILE|URL")
+    r.add_argument("--no-label", action="store_true", help="skip the label call")
+    for act, what in (("keep", "keep these new photos"), ("drop", "delete these photos; their sources aren't fetched again")):
+        r = csub.add_parser(act, help=what)
+        r.add_argument("person")
+        r.add_argument("ids", nargs="+", metavar="ID")
+    r = csub.add_parser("label", help="set a photo's label (see [cast] labels)")
+    r.add_argument("person")
+    r.add_argument("id")
+    r.add_argument("label")
+    r = csub.add_parser("set", help="a person's other names and channels (YouTube, Kick) for find")
+    r.add_argument("person")
+    r.add_argument("--alias", action="append", help="another name (repeatable; replaces the list)")
+    r.add_argument("--channel", action="append", metavar="URL", help="https://www.youtube.com/@name or "
+                                                                     "https://kick.com/name (repeatable; replaces the list)")
 
     p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
     p.add_argument("--month", help="YYYY-MM (default: this month, UTC)")

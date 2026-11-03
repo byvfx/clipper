@@ -264,7 +264,7 @@ def load_user_env(cfg: dict) -> None:
     checks see what a new terminal (and the scheduled tasks) will."""
     for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_WORKSPACE_ID", "OPENAI_API_KEY", "GEMINI_API_KEY",
                  "LOCAL_LLM_API_KEY", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "HF_TOKEN",
-                 "ELEVENLABS_API_KEY", cfg["review"]["token_env"], cfg["discord"]["token_env"]):
+                 "ELEVENLABS_API_KEY", "BRAVE_API_KEY", cfg["review"]["token_env"], cfg["discord"]["token_env"]):
         user_env(name)
 
 
