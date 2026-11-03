@@ -93,7 +93,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - The taste layer is the asset (prompts, clipper.toml show tables, house_style, Kitsu): see "Back up".
 
 ## State now (2026-10-30)
-- **Running on this laptop** as scheduled tasks (since 2026-11-03, branch serve-split): `clipper-serve`
+- **Running on this laptop** as scheduled tasks (since 2026-11-03, PR #128 merged as 71f29f9): `clipper-serve`
   (war room on :8765 and https://thor.taile415cd.ts.net/, hourly replan + upload, pre-show polls every
   5 min, retakes, daily cast / news / analytics jobs; heartbeat `streams/.serve/status.json`),
   `clipper-bot` (Discord cards, buttons, DMs, news posts; asks serve over `[serve] url` to replan and
@@ -183,7 +183,7 @@ time strings never validated, a passed Publish-at pin dropped as stale, upload `
 publish_at, Pass B ids never checked against kept candidates, re-runs of score/cut+thumbs/weekly
 --render that repay model calls, cast auto-keep one-sided for enrolled people, stream ids and effort
 values unvalidated). Proposed order and the user's questions are in the report. **Done: the
-`clipper serve` split (branch serve-split, 2026-11-03; State now), which also fixed audit #2 (tailnet
+`clipper serve` split (PR #128, merged 2026-11-03 as 71f29f9; State now), which also fixed audit #2 (tailnet
 status before the notify loop's try) and #3 (Health from a lock file that never went away: now
 heartbeats). The other findings are not fixed yet.** User's direction answers (2026-11-03): split the
 jobs loop and the war room out of the bot into `clipper serve` so the laptop can sleep (first step of
