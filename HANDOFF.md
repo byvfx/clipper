@@ -158,6 +158,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   A war-room find-and-replace dry run found 14; not applied.
 - Decisions on #66 (transcript-framed edits): which item kinds, replace or sit beside the plain cut,
   sound effects, order after #67. Sloth Beat handle check (@slothbeat).
+- Cast (#41): fill the library in the war room's Cast window (3+ kept each); optionally a Brave Search API
+  key as the Windows user env var `BRAVE_API_KEY` (~$5 per 1,000 searches) for image search.
 - Faces: enroll PPP in his maple-leaf cap from the first non-costume stream the worker scans (kick-135553454
   is named and enrolled: known.json has 12 people, Andy/PPP/Jer 4 samples each).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
@@ -209,6 +211,17 @@ without OpenCV; `clipper setup` installs the faces extra for a worker. The weekl
 `<issue>/faces/`). kick-135553454 (11-01) scanned: F02 Jer and F17 Mel mac auto-named; F01 = Andy (normal
 look first hour, then costume), F04 = PPP in a crocodile mask all night. October was costumes every night,
 so a normal-look PPP sample waits on the first non-costume stream (Waiting on the user).
+**Cast library #41, part one (merged 2026-11-02, PR #121 as 41ddd18):** `clipper cast
+list|grab|find|add|keep|drop|label|set` and the war room's **Cast** button (bot restarted 17:38, live).
+Photos in `[thumbnail] photos/<Person>/` + cast.json (NAS photos share); sources: a stream's named faces,
+Wikimedia Commons, the person's YouTube/Kick channels, Brave image search (`$BRAVE_API_KEY`, not set yet;
+agencies blocked), a file or URL. Face-checked against known.json, duplicates skipped, 4:5, Haiku labels
+(prompts/cast_label_v1.md, ~$0.0002 a photo). `thumbs.photos()` takes a person's best kept photo (neutral
+first), so covers and the weekly use them already. Tried into a scratch folder only: the real folder still
+has just Hasan Piker.jpg and luther morgan.jpg; Jer's YouTube thumbnails are designed graphics (flagged),
+streams are the better source for him, Andy/PPP need a non-costume stream. Commons spells "Candace Owens":
+add it as her alias. **Part two (not started):** covers pick a photo by label for the story (new
+thumbnail_enquirer prompt version), `known_figures` from the cast, #35 slides; then #41 closes.
 Older notes not on an issue: republish the 2026-10-19 re-cut streams to Kitsu (user said not yet);
 Blade compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`);
 a daily "post kit" folder; `clipper setup` walkthrough #78 (phase 1 done 2026-10-28: bootstrap,
