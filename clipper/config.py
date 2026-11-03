@@ -397,7 +397,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # `clipper news` (#110): headlines about the shows' people from feeds, subreddits and
         # Google News; the bot checks every check_minutes and posts what the judge rates.
         "check_minutes": 0,       # the bot's `news check` this often; 0 = off
-        "channel_id": "",         # Discord channel for news posts ("" = [discord] review_channel_id)
+        "channel": "news",        # Discord text channel for news posts, by name: the bot makes it if missing
+        "channel_id": "",         # or this channel by id (wins over channel); both "" = the review channel
         "feeds": [{"name": "TMZ", "url": "https://www.tmz.com/rss.xml"},
                   {"name": "Dexerto", "url": "https://www.dexerto.com/feed/"}],
         "reddit": ["LivestreamFail"],  # subreddits whose new posts are read (their RSS)

@@ -370,11 +370,16 @@ class Bot(discord.Client):
             log.exception("news: posting failed")
 
     async def news_channel(self):
-        """[news] channel_id, else the review channel; in a forum, one "News" post kept for it."""
+        """[news] channel_id; else the text channel named [news] channel, made if missing; else
+        the review channel. In a forum, one "News" post kept for it."""
         nc, dc = self.cfg["news"], self.cfg["discord"]
+        name = str(nc["channel"]).strip().lstrip("#").lower()
+        if not nc["channel_id"] and name:
+            return await self.named_channel(name, "Headlines about the shows' people (clipper news): "
+                                                  "Dismiss what isn't news, Tonight's context for the next stream")
         cid = int(nc["channel_id"] or dc["review_channel_id"] or 0)
         if not cid:
-            raise ClipperError("set [news] channel_id or [discord] review_channel_id")
+            raise ClipperError("set [news] channel (a name), channel_id or [discord] review_channel_id")
         channel = self.get_channel(cid) or await self.fetch_channel(cid)
         if not isinstance(channel, discord.ForumChannel):
             return channel
@@ -388,6 +393,20 @@ class Bot(discord.Client):
                                            "adds a story to the show's next stream.")
         await asyncio.to_thread(news.jsonstate.write, path, {"channel_id": str(cid), "thread_id": str(made.thread.id)})
         return made.thread
+
+    async def named_channel(self, name: str, topic: str) -> discord.TextChannel:
+        """The guild's text channel called name, made (with topic) if there is none."""
+        guild = self.get_guild(self.guild_id) or await self.fetch_guild(self.guild_id)
+        channel = discord.utils.get(guild.text_channels, name=name)
+        if channel:
+            return channel
+        try:
+            channel = await guild.create_text_channel(name, topic=topic[:1024], reason="clipper news")
+        except discord.Forbidden:
+            raise ClipperError(f"couldn't make #{name}: give the bot Manage Channels, or make the channel "
+                               "by hand") from None
+        log.info(f"news: made #{name}")
+        return channel
 
     async def post_news(self) -> None:
         cfg = self.cfg
