@@ -108,7 +108,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   = 10, short = 10, compilation = 0 }` per 8 h (`budget_hours`), Channel 404 `segment = 6` (Don ~4/7/0);
   slots a day: 9 Shorts (09/11/13/15/16/18/19/20/21), 6 segments (08/10/12/14/17/22), compilation 23:00
   for big-story nights only (`docs/big-story.toml` into the stream's config.toml; compilation = 0 means
-  none unless pinned once PR #120 is merged, until then it counts as 1). Backup
+  none unless pinned, PR #120 merged 11-02 as d12beb1). Backup
   backups/clipper.before_october_checkin_2026-11-02.toml. The old backlog's unuploaded slots dropped (backup
   backups/schedule.before_stay_current_2026-10-29.json); the 10-26/27/28 streams fill through 11-01. Items let
   go stay approved in Kitsu (war room filter "Not going out"); pin with "Publish at" to send one anyway.
@@ -178,7 +178,7 @@ changed schedule values only (`schedule --kitsu-all` for everything), doctor che
 faces, style), prompts through Prompts, the look as data in `<paths.weekly>/style.toml` (doctor checks
 it). Issue 04 (11-07) is the first one built from it. Worktree and branch removed (GitHub too).
 Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (provider side-by-side,
-`clipper edit`), #50 (revenue once monetized), #42 (closes after the first check-in). #77 is done
+`clipper edit`), #50 (revenue once monetized); #42 closed 11-02 after the October check-in. #77 is done
 (#106, 10-30): YouTube quota counted per Pacific day in `logs/youtube_quota.json` (each upload run
 ends with the total; link updates and caption retries only spend what's left after `upload_units`
 per upload still allowed today), worker takeover under a lock, pick numbers kept across re-scores
