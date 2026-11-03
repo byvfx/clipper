@@ -642,6 +642,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "replan": True,           # rerun `clipper schedule` after each decision from Discord
         "refresh_minutes": 10,    # bot re-reads Kitsu and updates cards changed elsewhere; 0 = off
         "refresh_days": 30,       # ...for streams started within this many days (0 = all)
+        "weekly_channel": "weekly",  # `clipper weekly --discord` posts the pages here (made if missing)
     },
     "schedule": {
         "timezone": "America/Los_Angeles",

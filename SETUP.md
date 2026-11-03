@@ -500,7 +500,10 @@ cover shows a photo panel instead.
 3. Post by hand: TikTok takes all ten 3:4 pages as one carousel. YouTube Posts show images
    square and take five per post, so use `youtube/01-10` (the same pages on a square canvas) as
    two posts, 01-05 and 06-10, with the captions in `post_text.md`. `--format youtube` renders
-   only the square set.
+   only the square set. `clipper weekly --discord` (with `--week` for an older issue) posts
+   both sets and the captions to the `[discord] weekly_channel` text channel (`weekly`), to
+   save on a phone; it makes the channel if the bot has Manage Channels, else make it by hand.
+   A rerun posts only what is missing (`<issue>/discord.json`).
 
 Issue numbers continue from `[weekly] first_issue` across the folders in `weekly/`.
 

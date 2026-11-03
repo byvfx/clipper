@@ -272,3 +272,68 @@ def post(sdir: Path, cfg: dict, keys: list[str] | None = None, force: bool = Fal
               f"{' excerpt' if excerpt else ''} ({time.time() - t:.0f}s)", flush=True)
     print(f"discord: {posted} cards posted to thread {thread_id}")
     return posted
+
+
+# ---------- weekly issue ----------
+
+def issue_messages(issue: dict, here: Path, pages: list[Path]) -> list[tuple[str, str, list[Path]]]:
+    """(key, text, files) per message: the ten 3:4 pages for the TikTok carousel, then the
+    square pages as the two YouTube Posts with their captions, when youtube/ has all ten."""
+    post = issue.get("post") or {}
+    head = f"**Lolcow Cinema Weekly · issue {int(issue.get('issue') or 0):02d}** · {issue.get('week') or here.name}"
+    out = [("tiktok", f"{head}\nTikTok carousel: pages 01-10 (1080x1440)", pages)]
+    square = [here / "youtube" / p.name for p in pages]
+    if all(p.exists() for p in square):
+        out += [("youtube1", f"YouTube Post part 1 (square 01-05):\n{post.get('part1', '')}", square[:5]),
+                ("youtube2", f"YouTube Post part 2 (square 06-10):\n{post.get('part2', '')}", square[5:])]
+    return [(k, t.strip()[:2000], f) for k, t, f in out]
+
+
+def weekly_channel(api: Rest, dc: dict) -> str:
+    """The id of the text channel named [discord] weekly_channel in guild_id, made if missing."""
+    name = str(dc["weekly_channel"]).strip().lstrip("#").lower()
+    if not name or not dc["guild_id"]:
+        raise ClipperError("set [discord] guild_id and weekly_channel in clipper.toml")
+    for ch in api("GET", f"/guilds/{dc['guild_id']}/channels"):
+        if ch["type"] == 0 and ch["name"] == name:
+            return ch["id"]
+    try:
+        ch = api("POST", f"/guilds/{dc['guild_id']}/channels",
+                 {"name": name, "type": 0, "topic": "Weekly issues' pages, to save on a phone"})
+    except ClipperError as e:
+        raise ClipperError(f"couldn't make #{name} ({e}); give the bot Manage Channels "
+                           f"or make the channel by hand") from e
+    print(f"discord: made #{name}")
+    return ch["id"]
+
+
+def post_issue(cfg: dict, day: str | None = None) -> int:
+    """Post a weekly issue's pages to [discord] weekly_channel, to save them on a phone for
+    posting by hand. <issue>/discord.json keeps each message, so a rerun posts only what's missing."""
+    from .xpost import issue_folder, issue_pages
+
+    dc = cfg["discord"]
+    here = issue_folder(cfg, day)
+    issue = jsonstate.load(here / "issue.json")
+    messages = issue_messages(issue, here, issue_pages(here))
+    limit = dc["max_upload_mb"] * 1e6
+    big = [p.name for _, _, files in messages for p in files if p.stat().st_size > limit]
+    if big:
+        raise ClipperError(f"over [discord] max_upload_mb: {', '.join(big)}")
+    api = Rest(cfg)
+    channel_id = weekly_channel(api, dc)
+    dpath = here / "discord.json"
+    posted = 0
+    for key, text, files in messages:
+        if jsonstate.read(dpath, {}).get("messages", {}).get(key, {}).get("channel_id") == channel_id:
+            continue
+        msg = api("POST", f"/channels/{channel_id}/messages",
+                  {"content": text, "attachments": [{"id": i, "filename": f.name} for i, f in enumerate(files)]},
+                  files=files)
+        with jsonstate.update(dpath, {}) as state:
+            state.setdefault("messages", {})[key] = {"id": msg["id"], "channel_id": channel_id}
+        posted += 1
+        print(f"discord {key}: {len(files)} pages")
+    print(f"discord: issue {here.name}, {posted} of {len(messages)} messages posted"
+          f"{'' if posted == len(messages) else ' (the rest were already there)'}")
+    return posted

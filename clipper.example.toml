@@ -474,6 +474,7 @@ excerpt_s = 60
 replan = true                  # rerun `clipper schedule` after each decision from Discord
 refresh_minutes = 10           # `clipper bot` updates cards for decisions made in Kitsu or the CLI; 0 = off
 refresh_days = 30              # ...on streams started within this many days (0 = all)
+weekly_channel = "weekly"      # `clipper weekly --discord` posts the pages here (made if missing)
 
 [notify]
 # The bot DMs you when something needs you: a stream ready for review, an upload or TikTok

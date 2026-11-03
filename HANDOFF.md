@@ -167,6 +167,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
   MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
 - Weekly issue 03: post it by hand (TikTok carousel + two YouTube Posts) from the artifact page (X done).
+  `clipper weekly --discord` (11-02) put its pages + captions in Discord `#weekly` (the bot made it) for the phone;
+  run it each Saturday after the render. The user gave the bot full permissions 11-02 (could be cut back).
 - YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The user signed in again 11-02 16:57 (In production), so the token shouldn't lapse.
 
 ## Open work

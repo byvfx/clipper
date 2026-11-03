@@ -191,3 +191,19 @@ def test_an_issue_claim_stops_a_second_run_and_counts_against_the_allowance(tmp_
     assert "max_per_24h" in xpost.claim(cfg, "kick-1/v01_t01")
     jsonstate.write(here / "x.json", {"posts": [{"posted_at": datetime.now(UTC).isoformat()}] * 2})
     assert "3 posts needed, 1 of 4 left" in xpost.claim_issue(cfg, here, 3)
+
+
+def test_the_issue_goes_to_discord_as_the_carousel_then_two_square_posts(tmp_path):
+    from clipper import notify
+
+    pages = [tmp_path / f"{n:02d}_p.jpg" for n in range(1, 11)]
+    issue = {"issue": 3, "week": "OCT 25-31, 2026", "post": {"part1": "one", "part2": "two"}}
+    msgs = notify.issue_messages(issue, tmp_path, pages)
+    assert [(k, len(f)) for k, _, f in msgs] == [("tiktok", 10)]
+    assert "issue 03" in msgs[0][1]
+    (tmp_path / "youtube").mkdir()
+    for p in pages:
+        (tmp_path / "youtube" / p.name).write_bytes(b"")
+    msgs = notify.issue_messages(issue, tmp_path, pages)
+    assert [(k, len(f)) for k, _, f in msgs] == [("tiktok", 10), ("youtube1", 5), ("youtube2", 5)]
+    assert msgs[1][1].endswith("one") and msgs[2][2][0].parent.name == "youtube"
