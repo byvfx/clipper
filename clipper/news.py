@@ -124,7 +124,8 @@ def parse_figures(text: str) -> list[tuple[str, list[str]]]:
 
 
 def watchlist(cfg: dict) -> dict[str, Watch]:
-    """{lowercased name: Watch}: the shows' people and names, the cast library and [news] watch."""
+    """{lowercased name: Watch}: the terms in [news] watch and each show's [shows.<key>.news]
+    watch, and with [news] auto_watch the shows' people and names and the cast library too."""
     from . import cast
     from .config import for_show
 
@@ -146,6 +147,16 @@ def watchlist(cfg: dict) -> dict[str, Watch]:
             w.shows.append(show)
         w.search = w.search or search or any(len(t.split()) > 1 for t in w.terms)
 
+    def terms(watch: dict, show: str = "") -> None:
+        for person, aliases in (watch or {}).items():
+            add(person, aliases if isinstance(aliases, list) else [aliases], show=show, search=True)
+
+    root = cfg.get("_root") or cfg
+    terms((root.get("news") or nc)["watch"])
+    for key, show in (cfg.get("shows") or {}).items():
+        terms((show.get("overrides", {}).get("news") or {}).get("watch") or {}, key)
+    if not nc["auto_watch"]:
+        return out
     for key in cfg.get("shows") or {}:
         sc = for_show(cfg, key)
         if sc["meta"]["show_name"]:
@@ -163,8 +174,6 @@ def watchlist(cfg: dict) -> dict[str, Watch]:
     for person, d in library.items():
         if "(" not in person:
             add(person, d.get("aliases") or [])
-    for person, aliases in (nc["watch"] or {}).items():
-        add(person, aliases if isinstance(aliases, list) else [aliases], search=True)
     return out
 
 
@@ -304,6 +313,9 @@ def check(cfg: dict, judge: bool = True, claude=None, say=print) -> list[int]:
     the bot should post (not posted, not dismissed, strong, or maybe with post_maybe)."""
     nc = cfg["news"]
     watch = watchlist(cfg)
+    if not watch:  # no terms: nothing is fetched or searched
+        say("nothing to watch: add terms to [news] watch (or turn on [news] auto_watch)")
+        return []
     match = matcher(watch)
     db = connect(cfg)
     try:

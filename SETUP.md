@@ -608,11 +608,13 @@ Each post's cost is logged like a model call (`clipper costs`, kind `x`).
 to Discord. Only headlines, a short snippet and the link are stored (`[paths] news`,
 `news.sqlite`); articles are never fetched.
 
-1. **Who**: `clipper news watch` lists the watchlist: each show's `[meta] cast`, `[scoring]
-   known_figures` ("Jer (The Quartering)" adds an alias) and show name, the cast library's
-   people with their aliases, and `[news] watch` (`{ "Ethan Klein" = ["H3 Podcast"] }`).
-   One-word names ("Jer", "Don") only match as written; people with a full name or in `watch`
-   also get a Google News search. Put a name that's a common word in `[news] ignore`.
+1. **Who**: only the terms you give: `[news] watch = { "Ethan Klein" = ["H3 Podcast"] }` (other
+   names in the list), or `[shows.<key>.news] watch` to tie them to a show (Tonight's context then
+   goes to it). Every term gets a Google News search. With no terms nothing is fetched or
+   searched at all. `[news] auto_watch = true` also watches each show's `[meta] cast`, `[scoring]
+   known_figures` ("Jer (The Quartering)" adds an alias) and show name, and the cast library; there
+   one-word names ("Jer", "Don") only match as written, and a name that's a common word goes in
+   `[news] ignore`. `clipper news watch` lists what's watched.
 2. **Where**: the bot posts to the text channel `[news] channel` ("news"), and makes it if the server
    has none (it needs Manage Channels for that; otherwise make #news by hand). `channel_id` picks a
    channel by id instead; with both empty, news goes to the review channel (in a forum, one "News" post).

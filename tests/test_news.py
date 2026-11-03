@@ -14,6 +14,9 @@ TOML = '''
 news = "news"
 streams = "streams"
 
+[news]
+auto_watch = true
+
 [shows.kino]
 channels = ["kinocasino"]
 [shows.kino.meta]
@@ -69,6 +72,19 @@ def test_parse_rss_and_atom():
     a = news.parse_feed(ATOM, "r/LivestreamFail")
     assert a[0]["url"].startswith("https://www.reddit.com/") and a[0]["snippet"] == "submitted by someone"
     assert a[0]["source"] == "r/LivestreamFail" and a[0]["published"] == "2026-11-02T10:00:00+00:00"
+
+
+def test_only_the_terms_are_watched_and_none_means_no_fetching(cfg, monkeypatch):
+    cfg["news"]["auto_watch"] = False
+    cfg["_root"] = None  # the test config is the root
+    monkeypatch.setattr(news, "fetch", lambda *a, **k: pytest.fail("fetched with no terms"))
+    assert news.watchlist(cfg) == {}
+    assert news.check(cfg, judge=False, say=lambda m: None) == []
+    cfg["news"]["watch"] = {"The Quartering": ["Jeremy Hambly"]}
+    cfg["shows"]["kino"]["overrides"]["news"] = {"watch": {"Ethan Ralph": []}}
+    w = news.watchlist(cfg)
+    assert set(w) == {"the quartering", "ethan ralph"} and w["ethan ralph"].shows == ["kino"]
+    assert w["the quartering"].shows == [] and w["the quartering"].search
 
 
 def test_watchlist_and_matching(cfg):

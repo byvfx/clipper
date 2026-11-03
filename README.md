@@ -100,9 +100,10 @@ is data, `LAYOUT` in `clipper/thumbs/enquirer.py`; a show changes any of it in
 `[colors] green = "#0b3d91"` or `[cover.inset] size = [200, 180]`, and
 `clipper thumbs <stream> --compose-only` redraws with no model calls. An unknown key is an error.
 
-**News.** `clipper news` (#110) watches the headlines about the shows' people: TMZ, Dexerto,
-r/LivestreamFail and a Google News search for each person with a full name. The watchlist is
-each show's cast, known figures and name, plus the cast library and `[news] watch`. A cheap
+**News.** `clipper news` (#110) watches the headlines for the terms you give it (`[news] watch`,
+or per show): TMZ, Dexerto, r/LivestreamFail and a Google News search for each term. With no
+terms it fetches nothing; `[news] auto_watch` also watches each show's cast, known figures and
+name and the cast library. A cheap
 model (Haiku, well under a cent a check) rates each headline that names someone: about them and
 not a namesake, new, public conduct (never their children or private people), and groups five
 outlets on one event into one story. The bot posts new stories to a #news channel (it makes it if missing) with **Dismiss** and

@@ -253,6 +253,8 @@ def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
             print(f"{f['name']}: {f['items']} item(s), fetched {f['fetched_at'] or 'never'}"
                   + (f", {f['error']}" if f["error"] else ""))
     elif a == "watch":
+        if not news.watchlist(cfg):
+            print("nothing to watch: add terms to [news] watch (or turn on [news] auto_watch)")
         for w in sorted(news.watchlist(cfg).values(), key=lambda w: w.name.lower()):
             print(f"{w.name}: {', '.join(w.terms)}" + (f" [{', '.join(w.shows)}]" if w.shows else "")
                   + (" (Google News)" if w.search and cfg["news"]["google_news"] else ""))
