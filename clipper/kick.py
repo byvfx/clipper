@@ -131,6 +131,24 @@ def resolve(url: str, cfg: dict) -> dict:
     raise ClipperError(f"{vid} not in {channel}'s recent videos ({len(videos)} listed)")
 
 
+def list_videos(channel: str, cfg: dict) -> list[dict]:
+    """A Kick channel's past broadcasts, newest first, as archive items (#84, #109): id,
+    source, url (the VOD page), title, duration_s, channel, date, plus started_at and the
+    HLS master m3u8 (`m3u8`)."""
+    out = []
+    for v in _get(f"{API}/channels/{channel}/videos", cfg["kick"]["user_agent"]) or []:
+        uuid = (v.get("video") or {}).get("uuid")
+        if not uuid or not v.get("start_time"):
+            continue
+        start = _parse_ts(v["start_time"])
+        out.append({"id": f"kick-{v['id']}", "source": "kick", "url": f"https://kick.com/{channel}/videos/{uuid}",
+                    "title": v.get("session_title") or "", "duration_s": (v.get("duration") or 0) / 1000,
+                    "channel": channel, "date": start.date().isoformat(), "started_at": start.isoformat(),
+                    "m3u8": v.get("source") or ""})
+    out.sort(key=lambda it: it["started_at"], reverse=True)
+    return out
+
+
 def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
     out = stream_dir / "source.ts"
     if out.exists() and not (stream_dir / "source.ts.ytdl").exists():

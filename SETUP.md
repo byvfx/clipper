@@ -256,6 +256,11 @@ To get the leads in Discord, set `[investigate] discord = true`: the review bot'
 `[discord] guild_id` are enough, and the bot makes `#investigations` if it has Manage Channels
 (otherwise make the channel by hand; `clipper doctor` checks the settings).
 
+**The search swarm (#109)**, which `clipper story` uses to find footage, needs `ANTHROPIC_API_KEY`
+and yt-dlp (with deno, as for pre-shows). Its web and Reddit searches use the same Brave key; Kick,
+Odysee and YouTube listings need no key. YouTube searches run from this machine's IP, so a bot
+check here affects them too. Per-source request rates are `[swarm] rates`.
+
 **Costs (#50).** Every model call appends its cost to `[paths] costs` (`logs/costs.jsonl`)
 with the command and stream it ran for; `clipper costs` and the war room's Costs panel add
 that to the Modal run log and your fixed costs: put plans and subscriptions in `[costs]

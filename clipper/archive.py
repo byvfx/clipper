@@ -107,7 +107,8 @@ def odysee(method: str, params: dict) -> dict:
     return r.json()["result"]
 
 
-def list_odysee(url: str) -> list[dict]:
+def list_odysee(url: str, limit: int | None = None) -> list[dict]:
+    """A channel's videos, newest first; limit: stop after about that many (a page of 50)."""
     name = "@" + url.split("@", 1)[1].split("/")[0].split(":")[0]
     ch = odysee("resolve", {"urls": [f"lbry://{name}"]})[f"lbry://{name}"]
     if "error" in ch:
@@ -124,8 +125,8 @@ def list_odysee(url: str) -> list[dict]:
                           "channel": (ch.get("value") or {}).get("title") or name,
                           "date": datetime.fromtimestamp(int(v.get("release_time") or c["timestamp"]),
                                                          UTC).date().isoformat()})
-        if page >= r.get("total_pages", 1):
-            return items
+        if page >= r.get("total_pages", 1) or (limit and len(items) >= limit):
+            return items[:limit] if limit else items
         page += 1
 
 
