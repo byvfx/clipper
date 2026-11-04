@@ -66,7 +66,8 @@ so that yt-dlp can't read them. Set it up once, as the Windows user that runs `c
 2. Open it with `& "C:\Program Files\Mozilla Firefox\firefox.exe" -P clipper -no-remote`, sign in
    to YouTube (a spare Google account, not the upload channel's), play any video and close it.
 3. `cookies_from_browser = "firefox:clipper"` under `[youtube]` (yt-dlp's
-   `BROWSER[:PROFILE]`; a profile folder's full path works too).
+   `BROWSER[:PROFILE]`; a profile folder's full path works too, written out: yt-dlp doesn't expand
+   `~` or `%APPDATA%` in it).
 
 `clipper doctor` reads the profile's cookie database (no network) and fails when it has no YouTube
 sign-in. Don't browse with the profile. If YouTube signs it out, open it, sign in again and close
