@@ -28,6 +28,7 @@ deploy/record/env.local
 # run state (upload schedule, analytics, `clipper setup` progress)
 setup_state.json
 schedule*.json
+people.json
 analytics.json
 analytics_channel.json
 

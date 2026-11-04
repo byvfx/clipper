@@ -20,9 +20,10 @@ subject needs `archive transcribe` first (and `archive index` for --confirm).
    kept while the prompt version, model, chunk size and transcript are unchanged: a rerun
    reads only what is new or re-transcribed. --new takes only items newer than the newest
    one read. --dry-run prints the items, hours and estimated cost and stops.
-2. leads: the facts go into facts.sqlite (entities merged across spellings, plus any
-   alias -> name pairs in investigate/aliases.json; a name mapped to "self" is him, like his
-   channels' names), and code finds candidate threads in his own claims (numbers are
+2. leads: the facts go into facts.sqlite (entities merged across spellings, by everyone's
+   names in `clipper people` (the subject's person's are him) and any alias -> name pairs in
+   investigate/aliases.json, which win; a name mapped to "self" is him, like his channels'
+   names), and code finds candidate threads in his own claims (numbers are
    followed for anyone): a trend (a name or topic suddenly talked about far more), a contradiction (the same thing
    affirmed and denied on different dates), a shift (a number that changes), a dropped
    thread (talked about, then silence; a tease never paid off) and a convergence (offhand
@@ -501,10 +502,11 @@ def add_keys(facts: list[dict], aliases: dict[str, str] | None = None) -> None:
         f["keys"] = keys
 
 
-def build_index(d: Path) -> list[dict]:
-    """facts.sqlite from facts/*.json (rebuilt whole; no model calls), and the facts with keys."""
+def build_index(d: Path, people: dict[str, str] | None = None) -> list[dict]:
+    """facts.sqlite from facts/*.json (rebuilt whole; no model calls), and the facts with keys.
+    people: `clipper people` names (people.alias_map); aliases.json wins over them."""
     facts = load_facts(d)
-    add_keys(facts, jsonstate.read(d / "aliases.json", {}))
+    add_keys(facts, {**(people or {}), **jsonstate.read(d / "aliases.json", {})})
     p = d / "facts.sqlite"
     p.unlink(missing_ok=True)
     db = sqlite3.connect(p)
@@ -806,7 +808,9 @@ def run_leads(cfg: dict, subject: str, about: str | None = None, since: str | No
               before: str | None = None, max_leads: int | None = None, confirm: bool = False) -> float:
     ic = cfg["investigate"]
     d = inv_dir(cfg, subject)
-    facts = [f for f in build_index(d) if in_range(f["date"], since, before)]
+    from .people import alias_map
+
+    facts = [f for f in build_index(d, alias_map(cfg, subject)) if in_range(f["date"], since, before)]
     if not facts:
         raise ClipperError(f"no facts for {subject!r} in that range: clipper investigate facts {subject}")
     cands = still_silent(cfg, subject, candidates(facts, ic, about))
@@ -1049,6 +1053,7 @@ def findings(cfg: dict, subject: str, lead: dict, claude=None) -> tuple[list[dic
     every one failed, or when none finished (a swarm stopped by its limits first); a partly
     failed swarm is in its trail."""
     from . import swarm
+    from .people import display_name
 
     ic = cfg["investigate"]
     q, ts = lead["search"] or lead["headline"], terms(lead["search"] or lead["headline"])
@@ -1057,7 +1062,7 @@ def findings(cfg: dict, subject: str, lead: dict, claude=None) -> tuple[list[dic
     why = "the lead's own search words"
     seeds = [{"kind": k, "target": q, "why": why} for k in ("youtube_search", "reddit_search", "web_search",
                                                              "our_streams")]
-    context = (f"The lead is about the YouTuber {subject}; his own videos are not coverage. People: "
+    context = (f"The lead is about the YouTuber {display_name(cfg, subject)}; his own videos are not coverage. People: "
                f"{', '.join(lead['people']) or 'none named'}. His receipts run {lead['first']} to {lead['last']}."
                f"\nThe lead: {lead['story']}")
     days = max(1, (datetime.now(UTC).date() - datetime.fromisoformat(lead["first"]).date()).days)

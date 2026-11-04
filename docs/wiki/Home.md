@@ -77,6 +77,7 @@ flowchart TB
 
 ### 🔎 Research
 [Archives](Archives): other channels' back catalogs, searchable<br>
+[People](People): one record per person, their names and channels<br>
 [Receipts](Receipts) · [Investigations](Investigations)<br>
 [Search swarm](Search-swarm) · [Story dossiers](Story-dossiers)
 

@@ -54,6 +54,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
         "faces": "faces",         # known faces, every show: known.json (`clipper faces --enroll`) + models/
         "streamers": "research_notes/streamers.json",  # people and their channels (`clipper story`)
+        "people": "people.json",  # one record per person (`clipper people`); folds in streamers.json and the cast library
     },
     "modal": {
         # `clipper modal` and the war room's Modal panel (#49): spend is Modal's own billing.

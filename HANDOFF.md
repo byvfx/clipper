@@ -222,7 +222,7 @@ a lower third; one segment s00 with a chapter per part and retimed words.jsonl) 
 asap. Weekly skips stories; a retake trim refuses one (edit story.json, cut again). 4) `investigate
 check` on the swarm (branch `investigate-swarm`): the old four searches are the seeds of a small swarm
 per lead (`[investigate] swarm`), then his own titles; the verdict as before.
-**Investigate anyone (#138, design only, user 11-04):** investigate on a person not yet archived (swarm
+**Investigate anyone (#138, user 11-04; part 1 on branch `people-records`):** investigate on a person not yet archived (swarm
 finds their channels and X handles, the user approves, a sample spread over time is transcribed into a normal
 subject, then `investigate run`), cross-referenced with others' videos and X posts (API, not scraping),
 every fact with a speaker and said/posted dates, one people record across archive/streamers/cast/facts,
@@ -232,6 +232,11 @@ full-archive search first) → vault → watchlist (serve, alert on change only)
 needs a token) → `investigate eval` on known stories (Huck, DSP; build early) → Good/Noise buttons + `tune`.
 Also: a review gate before a lead becomes content, Wayback snapshots of receipts, source reliability
 notes + a never-read list (Kiwi Farms).
+Part 1 (`clipper/people.py`, `clipper people list|show|set|import`): people.json (`[paths] people`,
+gitignored) is the record; streamers.json, `[story] people` and cast folders fold in by name; story's
+roster and investigate's alias merging (subject's names = self, aliases.json wins) read it. Not yet
+imported here: after merge, `clipper people import`, then `people merge channel-404-news don` and
+`people merge melonie-mac "Mel mac"` (those two didn't match by name).
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line
 wedges a stream's finalize; ~15 medium: quiet failures in the bot's notify loop and Health, `[notify]`

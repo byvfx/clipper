@@ -23,5 +23,8 @@ def clean_env(monkeypatch):
 
 @pytest.fixture
 def defaults(tmp_path):
-    """The built-in defaults, as `clipper` loads them with no clipper.toml."""
-    return config.load(tmp_path / "clipper.toml", use_local=False)
+    """The built-in defaults, as `clipper` loads them with no clipper.toml; people.json (which
+    story and investigate read) in tmp_path, never this checkout's own."""
+    cfg = config.load(tmp_path / "clipper.toml", use_local=False)
+    cfg["paths"]["people"] = tmp_path / "people.json"
+    return cfg
