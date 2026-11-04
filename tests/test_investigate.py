@@ -8,17 +8,50 @@ from clipper.investigate import Budget, OverBudget
 WORDS = ["so", "I", "told", "you", "the", "merch", "store", "made", "forty", "thousand", "dollars", "in", "October", "and", "that", "is", "real"]
 
 
-def where_of(words):
-    return investigate.word_index([{"word": w, "start": float(k)} for k, w in enumerate(words)])
+def words_of(words):
+    return investigate.Words([{"word": w, "start": float(k)} for k, w in enumerate(words)])
 
 
 def test_a_quote_is_found_where_it_was_said_and_a_paraphrase_is_not():
-    starts, where = where_of(WORDS)
-    at = investigate.locate(where, "the merch store made forty thousand dollars")
-    assert starts[at] == 4.0
-    assert investigate.locate(where, "the merch store made fourty thousand dollars") == at  # a word off is fine
-    assert investigate.locate(where, "my shop earned a lot of money last month") is None
-    assert investigate.locate(where, "merch store") is None  # too short to tell
+    ws = words_of(WORDS)
+    at = investigate.locate(ws, "the merch store made forty thousand dollars")
+    assert ws.starts[at] == 4.0
+    assert investigate.locate(ws, "the merch shop made forty thousand dollars") == at  # a word off is fine
+    assert ws.text(at, 7) == "the merch store made forty thousand dollars"  # his words, not the model's
+    assert investigate.locate(ws, "my shop earned a lot of money last month") is None
+    assert investigate.locate(ws, "merch store") is None  # too short to tell
+
+
+def test_a_near_match_with_another_number_or_a_negation_is_not_his_claim():
+    ws = words_of(WORDS)
+    assert investigate.locate(ws, "the merch store made ninety thousand dollars") is None
+    assert investigate.locate(ws, "the merch store made forty dollars") is None  # he said thousand
+    assert investigate.locate(ws, "the merch store never made forty thousand dollars") is None
+
+
+def test_a_repeated_line_is_found_in_the_part_it_came_from():
+    ws = words_of(WORDS + WORDS)
+    assert ws.starts[investigate.locate(ws, "the merch store made forty thousand dollars")] == 4.0
+    later = investigate.locate(ws, "the merch store made forty thousand dollars", len(WORDS), None)
+    assert ws.starts[later] == len(WORDS) + 4.0
+    assert investigate.locate(ws, "the merch store made forty thousand dollars", 100, 200) is None
+
+
+def test_a_sampled_thread_keeps_its_first_and_last_mention():
+    fs = [{"date": f"2026-01-{k + 1:02d}", "t": 0.0} for k in range(25)]
+    got = investigate.spread(fs, 6)
+    assert len(got) == 6 and got[0] is fs[0] and got[-1] is fs[-1]
+
+
+def test_an_item_counts_as_transcribed_only_once_its_words_are_written(defaults, tmp_path):
+    d = subject(defaults, tmp_path)
+    (d / "v2").mkdir()
+    jsonstate.write(d / "catalog.json", {"v1": {"id": "v1", "title": "T", "duration_s": 60.0},
+                                         "v2": {"id": "v2", "title": "New", "duration_s": 60.0}})
+    jsonstate.write(d / "v2" / "meta.json", {"date": "2026-10-02"})
+    jsonstate.write(d / "v2" / "transcript.json", {"segments": []})
+    assert [it["id"] for it in investigate.items(defaults, "jer")] == ["v1"]
+    assert [it["id"] for it in investigate.items(defaults, "jer", transcribed=False)] == ["v2", "v1"]
 
 
 def test_numbers_as_said():
@@ -278,3 +311,19 @@ def test_check_labels_coverage_keeps_only_real_matches_and_a_dead_search_is_unch
     assert by["dead one"]["coverage"]["label"] == "unchecked" and model.calls == 1
     trail = jsonstate.read(d / "investigate" / "swarm" / f"{by['covered one']['id']}.json", {})
     assert trail["errors"] == {"reddit": "429"} and len(trail["results"]) == 2
+
+
+def test_a_refused_coverage_judgement_is_unchecked_not_fresh(defaults, tmp_path, monkeypatch):
+    subject(defaults, tmp_path)
+    lead = investigate.make_lead(
+        {"keep": True, "reject": "", "headline": "h", "story": "S", "kind": "shift", "confidence": "low",
+         "confirm_or_kill": "c", "people": [], "timeline": ["a", "b"], "search": "h"},
+        {"why": "w", "facts": [fact("a", "2026-01-01", "v1"), fact("b", "2026-02-01", "v2")]})
+    investigate.save_leads(defaults, "jer", {"subject": "jer", "about": "", "made_at": "2026-11-03T00:00:00+00:00",
+                                             "model": "m", "candidates": 1, "leads": investigate.rank([lead], 5)})
+    monkeypatch.setattr(investigate, "findings", lambda cfg, s, x: (
+        [{"source": "youtube", "channel": "C", "date": "", "title": "t", "url": "u"}], {}))
+    monkeypatch.setattr(investigate, "llm_setup", lambda cfg, m: (Scripted(None), FakePrompts()))
+    investigate.run_check(defaults, "jer")
+    (got,) = investigate.load_leads(defaults, "jer")["leads"]
+    assert got["coverage"]["label"] == "unchecked"

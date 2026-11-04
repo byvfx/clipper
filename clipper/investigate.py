@@ -153,6 +153,11 @@ class Budget:
             self.held -= est
 
 
+def with_budget(cfg: dict, usd: float) -> dict:
+    """cfg with [investigate] budget_usd set to what a later step may still spend."""
+    return {**cfg, "investigate": {**cfg["investigate"], "budget_usd": max(0.0, usd)}}
+
+
 def estimate(cfg: dict, model: str, tokens_in: float, tokens_out: float) -> float:
     from .llm import price_of, prices
 
@@ -180,9 +185,10 @@ def llm_setup(cfg: dict, model: str):
 
 # ---------- items ----------
 
-def items(cfg: dict, subject: str) -> list[dict]:
-    """The subject's transcribed items, newest first: id, date, title, channel, url, source,
-    duration_s (dates from the archive index, else each item's meta.json)."""
+def items(cfg: dict, subject: str, transcribed: bool = True) -> list[dict]:
+    """The subject's items, newest first: id, date, title, channel, url, source, duration_s
+    (dates from the archive index, else each item's meta.json). transcribed: only items with
+    both transcript.json and words.jsonl (transcribe writes the words last)."""
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
     if not cat:
@@ -196,7 +202,7 @@ def items(cfg: dict, subject: str) -> list[dict]:
         db.close()
     out = []
     for i, it in cat.items():
-        if not (d / i / "transcript.json").exists():
+        if transcribed and not ((d / i / "transcript.json").exists() and (d / i / "words.jsonl").exists()):
             continue
         row = known.get(i) or {**it, **jsonstate.read(d / i / "meta.json", {}), "id": i}
         out.append({k: row.get(k) or ("" if k != "duration_s" else 0.0)
@@ -218,31 +224,66 @@ def signature(ic: dict, tp: Path) -> str:
     return hashlib.sha1(sig.encode()).hexdigest()[:16]
 
 
-def word_index(words: list[dict]) -> tuple[list[float], dict[str, list[int]]]:
-    """Every token of the item's words with its start time, and token -> positions."""
-    starts, where = [], defaultdict(list)
-    for w in words:
-        for tok in tokens(w.get("word") or ""):
-            where[tok].append(len(starts))
-            starts.append(w["start"])
-    return starts, where
+class Words:
+    """An item's words as tokens: each token's start time, token -> positions, and the word
+    it came from (to give a receipt his own wording, not the model's)."""
+
+    def __init__(self, words: list[dict]):
+        self.words, self.toks, self.starts, self.src = words, [], [], []
+        self.where: dict[str, list[int]] = defaultdict(list)
+        for n, w in enumerate(words):
+            for tok in tokens(w.get("word") or ""):
+                self.where[tok].append(len(self.toks))
+                self.toks.append(tok)
+                self.starts.append(w["start"])
+                self.src.append(n)
+
+    def text(self, at: int, n: int) -> str:
+        """The words he said for n tokens from token at."""
+        a, b = self.src[at], self.src[min(at + n, len(self.src)) - 1]
+        return " ".join((w.get("word") or "").strip() for w in self.words[a:b + 1])
 
 
-def locate(where: dict[str, list[int]], quote: str) -> int | None:
-    """Where the quote starts among the item's tokens, or None when it isn't really there:
-    at least 3 tokens, and 70% of them in place at one offset (Whisper and the model differ
-    on a word here and there)."""
+NUM_WORDS = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
+             "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+             "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred",
+             "thousand", "million", "billion", "half", "k"}
+NEG = {"not", "no", "never", "nothing", "none", "nobody", "nowhere", "neither", "nor", "dont", "didnt",
+       "doesnt", "isnt", "wasnt", "arent", "werent", "cant", "wont", "couldnt", "wouldnt", "shouldnt",
+       "havent", "hasnt", "hadnt", "aint"}
+
+
+def numbers(toks: list[str]) -> set[str]:
+    return {t for t in toks if t.isdigit() or t in NUM_WORDS}
+
+
+def negated(toks: list[str]) -> bool:
+    return any(t in NEG or t.endswith("n't") for t in toks)
+
+
+def locate(ws: Words, quote: str, lo: float | None = None, hi: float | None = None) -> int | None:
+    """Where the quote starts among the item's tokens between lo and hi seconds, or None when
+    it isn't really there: at least 3 tokens, 70% of them in place at one offset (Whisper and
+    the model differ on a word here and there), and the numbers and any negation unchanged
+    (a near match that says "ninety" where he said "forty" is a different claim)."""
     q = tokens(quote)
     if len(q) < 3:
         return None
     votes: Counter[int] = Counter()
     for j, tok in enumerate(q):
-        for pos in set(where.get(tok, ())):
-            votes[pos - j] += 1
+        for pos in set(ws.where.get(tok, ())):
+            if (lo is None or ws.starts[pos] >= lo) and (hi is None or ws.starts[pos] <= hi):
+                votes[pos - j] += 1
     if not votes:
         return None
     off, n = votes.most_common(1)[0]
-    return max(0, off) if n >= max(3, math.ceil(0.7 * len(q))) else None
+    if n < max(3, math.ceil(0.7 * len(q))):
+        return None
+    at = max(0, off)
+    core, near = ws.toks[at:at + len(q)], ws.toks[max(0, at - 2):at + len(q) + 2]
+    if not (numbers(q) <= numbers(near) and numbers(core) <= numbers(q)) or negated(q) != negated(core):
+        return None
+    return at
 
 
 def read_words(idir: Path) -> list[dict]:
@@ -259,7 +300,7 @@ def item_facts(cfg: dict, subject: str, it: dict, claude, system: str, budget: B
     tp = idir / "transcript.json"
     sig = signature(ic, tp)
     segs = jsonstate.load(tp).get("segments") or []
-    starts, where = word_index(read_words(idir))
+    ws = Words(read_words(idir))
     chunks = windows(segs, ic["chunk_s"])
     kept, dropped, refused = [], 0, 0
     for k, (start, text) in enumerate(chunks):
@@ -276,11 +317,12 @@ def item_facts(cfg: dict, subject: str, it: dict, claude, system: str, budget: B
             refused += 1
             continue
         for f in out.get("facts", []):
-            at = locate(where, f["quote"])
+            at = locate(ws, f["quote"], start - 1, end + 1)  # in this chunk, not an earlier repeat
             if at is None:
                 dropped += 1
                 continue
-            kept.append({**f, "id": f"{it['id']}:{len(kept)}", "t": round(starts[at], 2)})
+            kept.append({**f, "id": f"{it['id']}:{len(kept)}", "t": round(ws.starts[at], 2),
+                         "quote": ws.text(at, len(tokens(f["quote"])))})
     return {"item": it["id"], "key": sig, "model": ic["facts_model"], "prompt_version": ic["prompt_version"],
             "read_at": datetime.now(UTC).isoformat(timespec="seconds"),
             **{k: it[k] for k in ("date", "title", "channel", "url", "source", "duration_s")},
@@ -528,8 +570,9 @@ def spread(fs: list[dict], n: int = MAX_THREAD_FACTS) -> list[dict]:
     fs = sorted(fs, key=lambda f: (f["date"], f["t"]))
     if len(fs) <= n:
         return fs
-    step = len(fs) / n
-    return [fs[int(k * step)] for k in range(n)]
+    if n < 2:
+        return fs[-1:]
+    return [fs[round(k * (len(fs) - 1) / (n - 1))] for k in range(n)]  # first and last always in
 
 
 def label(key: str) -> str:
@@ -847,7 +890,7 @@ def run_leads(cfg: dict, subject: str, about: str | None = None, since: str | No
                 "usd": round(claude.cost, 4), "stopped": why})
     spent = claude.cost
     if confirm and leads:
-        spent += run_confirm(cfg, subject)
+        spent += run_confirm(with_budget(cfg, ic["budget_usd"] - spent), subject)
     show_list(cfg, subject)
     return spent
 
@@ -864,6 +907,7 @@ def run_confirm(cfg: dict, subject: str, only: str | None = None) -> float:
     system = prompts.get("investigate_confirm")
     budget = Budget(ic["budget_usd"], claude)
     root = subject_dir(cfg, subject)
+    window_s = cfg["archive"]["index_window_s"]
     for lead in data["leads"]:
         if not lead["keep"] or (only and lead["id"] != only):
             continue
@@ -880,15 +924,14 @@ def run_confirm(cfg: dict, subject: str, only: str | None = None) -> float:
         seen = {(r["item"], int(r["t"] // 30)) for r in lead["receipts"]}
         evidence = []
         for h in picks:
-            if (h["item"], int(h["start"] // 30)) in seen:
+            ws = Words(read_words(root / h["item"]))
+            at = locate(ws, h["quote"], h["start"] - 1, h["start"] + window_s + 60)  # in its search window
+            if at is None or (h["item"], int(ws.starts[at] // 30)) in seen:
                 continue
-            starts, where = word_index(read_words(root / h["item"]))
-            at = locate(where, h["quote"])
-            if at is None:
-                continue
+            seen.add((h["item"], int(ws.starts[at] // 30)))
             evidence.append({"item": h["item"], "date": h["date"], "title": h["title"], "channel": h["channel"],
-                             "t": round(starts[at], 2), "quote": h["quote"], "why": h["why"],
-                             "link": link(h["url"], h["source"], starts[at])})
+                             "t": round(ws.starts[at], 2), "quote": ws.text(at, len(tokens(h["quote"]))),
+                             "why": h["why"], "link": link(h["url"], h["source"], ws.starts[at])})
         evidence = evidence[:10]
         if not evidence:
             lead["confirm"] = {"verdict": "nothing", "note": "no more in the archive", "evidence": []}
@@ -899,7 +942,16 @@ def run_confirm(cfg: dict, subject: str, only: str | None = None) -> float:
                 f"Confidence so far: {lead['confidence']}\n\n<windows>\n"
                 + "\n\n".join(f"[{n}] {e['date']} | {e['title']}\n\"{e['quote']}\"\n({e['why']})"
                               for n, e in enumerate(evidence)) + "\n</windows>")
-        out, _ = claude.json_call(ic["check_model"], system, user, CONFIRM_SCHEMA, ic["check_effort"])
+        est = estimate(cfg, ic["check_model"], (len(system) + len(user)) / 4, 400)
+        try:
+            budget.reserve(est)
+        except OverBudget as e:
+            print(f"stopping: {e}")
+            break
+        try:
+            out, _ = claude.json_call(ic["check_model"], system, user, CONFIRM_SCHEMA, ic["check_effort"])
+        finally:
+            budget.release(est)
         if not out:
             continue
         used = [evidence[n] for n in out["used"] if 0 <= n < len(evidence)]
@@ -1004,7 +1056,8 @@ def our_streams(cfg: dict, ts: list[str], n: int) -> list[dict]:
 def own_titles(cfg: dict, subject: str, ts: list[str], after: str, n: int) -> list[dict]:
     return [{"source": "his own videos", "title": it["title"], "channel": it["channel"], "url": it["url"],
              "date": it["date"]}
-            for it in items(cfg, subject) if it["date"] >= after and hit(it["title"], ts)][:n]
+            for it in items(cfg, subject, transcribed=False)  # a new upload's title counts before its words
+            if it["date"] >= after and hit(it["title"], ts)][:n]
 
 
 def findings(cfg: dict, subject: str, lead: dict) -> tuple[list[dict], dict[str, str]]:
@@ -1046,13 +1099,17 @@ def run_check(cfg: dict, subject: str, only: str | None = None) -> float:
                     + "\n".join(f"[{k}] {r['source']} | {r['channel']} | {r['date'] or 'undated'} | {r['title']}"
                                 + (f"\n    {r['summary']}" if r.get("summary") else "")
                                 for k, r in enumerate(found)) + "\n</results>")
+            est = estimate(cfg, ic["check_model"], (len(system) + len(user)) / 4, 400)
             try:
-                budget.reserve(estimate(cfg, ic["check_model"], (len(system) + len(user)) / 4, 400))
+                budget.reserve(est)
             except OverBudget as e:
                 print(f"stopping: {e}")
                 break
-            out, _ = claude.json_call(ic["check_model"], system, user, CHECK_SCHEMA, ic["check_effort"])
-            verdict = out or {"coverage": "fresh", "note": "the model declined to judge", "matches": []}
+            try:
+                out, _ = claude.json_call(ic["check_model"], system, user, CHECK_SCHEMA, ic["check_effort"])
+            finally:
+                budget.release(est)
+            verdict = out or {"coverage": "unchecked", "note": "the model declined to judge", "matches": []}
         matched = [found[k] for k in verdict["matches"] if 0 <= k < len(found)]
         if errors and not found:
             verdict = {"coverage": "unchecked", "note": "every search failed", "matches": []}
@@ -1144,7 +1201,7 @@ def run_all(cfg: dict, subject: str, since: str | None = None, before: str | Non
     budget = cfg["investigate"]["budget_usd"]
 
     def left() -> dict:  # each step gets what the steps before it left of the budget
-        return {**cfg, "investigate": {**cfg["investigate"], "budget_usd": max(0.0, budget - spent)}}
+        return with_budget(cfg, budget - spent)
 
     spent, t0 = 0.0, time.time()
     spent += run_facts(left(), subject, since, before, new=not since)

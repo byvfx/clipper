@@ -301,7 +301,8 @@ clipper investigate confirm jer [--lead L03]                  # test leads again
 clipper investigate run jer                                   # facts --new -> leads -> check, total cost
 ```
 
-`facts` keeps only facts whose quote is found in the item's words, so every receipt in a
+`facts` keeps only facts whose quote is found in the item's words (in the part it was read from,
+with its numbers and any negation unchanged), and the receipt keeps his wording, so every receipt in a
 lead is something he said, linked to the moment. Each item's facts are cached
 (`archive/jer/investigate/facts/<item>.json`) until the prompt version or the transcript
 changes, so a rerun reads only new uploads. The whole Jer catalog (2,731 h) is about $14 once;
