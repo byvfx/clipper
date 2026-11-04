@@ -150,8 +150,11 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
-- Story phase 2 (`story-84-cut`): the DSP story's first cut to look at, then whether it goes to Kitsu
-  (`clipper story cut dsp-credit-score-590` without `--no-review` posts the card and the Discord ping).
+- Story phase 2 PR #136 (`story-84-cut`): Copilot's 7 comments fixed (f513f21); merge when the user says.
+  Until it merges, the running serve schedules an approved story in normal slots, not asap, and
+  Saturday's weekly would count story streams as shows.
+- The DSP story video is in Kitsu for review (Kino Casino / "2026-11-04 story-dsp-credit-score-590",
+  Discord card posted, user's go 11-04): "DSP Says the 590 Credit Score Letter Is Fake", 3:14.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
