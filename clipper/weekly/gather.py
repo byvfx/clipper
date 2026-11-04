@@ -210,7 +210,7 @@ def gather(cfg: dict, start: datetime, end: datetime, here: Path) -> tuple[dict,
     streams: dict[str, dict] = {}
     for sdir in sorted(root.iterdir()):
         meta = _load(sdir / "meta.json")
-        if not meta or not meta.get("started_at"):
+        if not meta or not meta.get("started_at") or meta.get("kind") == "story":  # not a show (#84)
             continue
         at = datetime.fromisoformat(meta["started_at"]).astimezone(tz)
         if not start <= at < end:

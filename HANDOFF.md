@@ -150,7 +150,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
-- Story phase 1 PR (`story-84`, #135): merge after Copilot.
+- Story phase 2 (`story-84-cut`): the DSP story's first cut to look at, then whether it goes to Kitsu
+  (`clipper story cut dsp-credit-score-590` without `--no-review` posts the card and the Discord ping).
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
@@ -196,7 +197,7 @@ Odysee, Reddit, web, archive, our streams; `kick.list_videos`; `llm.Budget` now 
 investigate): merged 11-03 (PR #134; X credits PR #133 before it). Live test on Jer's Huck story: 30
 tasks, 109 findings (44 strong), $0.025. YouTube flat listings: `ytsearchdate` is gone from yt-dlp;
 search URL + upload-date filter `sp` + `youtubetab:approximate_date` instead (sort-by-date is ignored).
-2) `story` phase 1 (`clipper/story.py`, branch `story-84`, worktree `.claude/worktrees/story`): brief
+2) `story` phase 1 (`clipper/story.py`, merged 11-03 as PR #135): brief
 (people from `research_notes/streamers.json` + `[story] people`, their channels seed the swarm) →
 swarm → triage (Haiku, `--max-videos`/`--max-hours`; our own streams linked via the catalog's `dir`,
 not re-transcribed) → ingest (archive's Modal path; new Kick VOD branch: smallest HLS variant →
@@ -207,7 +208,15 @@ score is 590": 33 tasks, 92 findings, triage 3 + 5 of our streams linked; the Yo
 the bot check, so the dossier came from our streams alone (7 moments, good timeline and conflicts),
 ~$0.08 in models. Ingest now stops on a failure. After a fresh cookie export the four transcribed signed in
 (Modal ~$0.82: cold starts dominate a story's few items, so `[story] parallel` 2). Kick audio path checked on 2 min of a DSP VOD.
-3) phase 2: edit plan → cut → meta/thumbs/Kitsu → asap. Then `investigate check` onto the swarm.
+3) phase 2 (`clipper/story_edit.py`, branch `story-84-cut`, worktree `.claude/worktrees/story`): `story
+plan` (Sonnet, ~$0.01: moments → ordered parts with chapters; code bounds each around its quote, drops a
+part repeating an earlier one's words, merges overlaps, caps at `[story] max_minutes`) →
+`streams/story-<slug>/story.json` (hand-editable; meta.json kind "story" on the show's Kick channel) →
+`story cut` (our streams from their source on the share, others by yt-dlp section; receipts' renderer with
+a lower third; one segment s00 with a chapter per part and retimed words.jsonl) → meta (sidecar chapters,
+`[story] credit` + a source line per part) → thumbs → Kitsu (episode "<date> story-<slug>"); schedule
+asap. Weekly skips stories; a retake trim refuses one (edit story.json, cut again). Then `investigate
+check` onto the swarm.
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line
 wedges a stream's finalize; ~15 medium: quiet failures in the bot's notify loop and Health, `[notify]`

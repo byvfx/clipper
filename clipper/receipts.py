@@ -422,14 +422,17 @@ def voiced(cfg: dict, sdir: Path, text: str) -> Path | None:
     return out
 
 
-def clip(cfg: dict, adir: Path, r: dict, src: Path, fonts: tuple[Path, Path], bug: str,
-         bleeper: Bleeper, dst: Path) -> int:
+def clip(cfg: dict, idir: Path, r: dict, src: Path, fonts: tuple[Path, Path], bug: str,
+         bleeper: Bleeper, dst: Path, label: str = "THEN: ", seek: bool = False) -> int:
+    """r's clip, from its item's folder (idir: words.jsonl), re-encoded with the lower third
+    ("<label><CHANNEL> · <date>", the title) and bleeped. src is the section r["start"] to
+    r["end"], or with seek the whole source video (a stream of ours on the share, #84)."""
     from .transcript import load_words
 
     rc, work = cfg["receipts"], dst.parent
     big, small = fonts
     when = nice_date(r.get("date"))
-    line1 = text_file(work, f"{r['id']}_l1", f"THEN: {r['channel'].upper()}  ·  {when.upper()}")
+    line1 = text_file(work, f"{r['id']}_l1", f"{label}{r['channel'].upper()}  ·  {when.upper()}")
     line2 = text_file(work, f"{r['id']}_l2", bleeper.mask(r["title"])[:90])
     tag = text_file(work, "bug", bug)
     video = ",".join([
@@ -443,7 +446,7 @@ def clip(cfg: dict, adir: Path, r: dict, src: Path, fonts: tuple[Path, Path], bu
     ]) + "[v]"
     spans = []
     if bleeper.on:
-        spans = bleeper.intervals(load_words(adir / r["item"]), r["start"], r["end"], r["start"])
+        spans = bleeper.intervals(load_words(idir), r["start"], r["end"], r["start"])
     graph = work / f"{r['id']}.filter.txt"
     if spans:
         bleeper.filter_script(spans, r["end"] - r["start"], graph)
@@ -451,9 +454,16 @@ def clip(cfg: dict, adir: Path, r: dict, src: Path, fonts: tuple[Path, Path], bu
     else:
         audio = f"[0:a]{loudnorm(rc)},aresample=48000[a]"
     graph.write_text(video + ";" + audio, encoding="utf-8")
-    ffmpeg("-i", str(src), "-/filter_complex", str(graph), "-map", "[v]", "-map", "[a]",
+    span = ["-ss", f"{r['start']:.3f}", "-t", f"{r['end'] - r['start']:.3f}"] if seek else []
+    ffmpeg(*span, "-i", str(src), "-/filter_complex", str(graph), "-map", "[v]", "-map", "[a]",
            *out_args(rc), str(dst))
     return len(spans)
+
+
+def join(parts: list[Path], lst: Path, dst: Path) -> None:
+    """Parts encoded alike (out_args) into one video, without re-encoding."""
+    lst.write_text("".join(f"file '{p.resolve().as_posix()}'\n" for p in parts), encoding="utf-8")
+    ffmpeg("-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", "-movflags", "+faststart", str(dst))
 
 
 def describe(data: dict, chapters: list[tuple[float, str]]) -> str:
@@ -510,7 +520,7 @@ def cut(sdir: Path, cfg: dict) -> Path:
             print(f"{r['id']} {r['date']} {r['channel']} {clock(r['start'])}-{clock(r['end'])}", flush=True)
             download(cfg, r, src)
             dst = work / f"{r['id']}.mp4"
-            n = clip(cfg, adir, r, src, fonts, bug, bleeper, dst)
+            n = clip(cfg, adir / r["item"], r, src, fonts, bug, bleeper, dst)
             if n:
                 print(f"  {n} bleeped")
             add(dst)
@@ -518,11 +528,8 @@ def cut(sdir: Path, cfg: dict) -> Path:
         still(work, "close", [(big, 150, "0xFFD400", 360, "RECEIPTS"),
                               (small, 48, "white", 560, bug)], rc, bug, work / "close.mp4", vo)
         add(work / "close.mp4")
-    lst = work / "concat.txt"
-    lst.write_text("".join(f"file '{p.resolve().as_posix()}'\n" for p in parts), encoding="utf-8")
     final = out_dir(sdir) / "receipts.mp4"
-    ffmpeg("-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", "-movflags", "+faststart",
-           str(final))
+    join(parts, work / "concat.txt", final)
     desc = describe(data, chapters)
     (out_dir(sdir) / "description.txt").write_text(f"{data['title']}\n\n{desc}\n", encoding="utf-8")
     data.update(cut_at=datetime.now(UTC).isoformat(timespec="seconds"), duration_s=round(t, 1))

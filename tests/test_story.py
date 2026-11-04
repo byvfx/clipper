@@ -291,3 +291,9 @@ def test_a_claim_citing_nothing_is_sent_back():
     out = dossier_answer([])
     assert story.unresolved(out, {"M01", "M02"}, {"M01", "M02"}) == ["no cite: timeline 'banned'"]
     assert story.unresolved(dossier_answer(["M01"]), {"M01", "M02"}, {"M01", "M02"}) == []
+
+
+def test_a_sites_name_is_not_a_channel():
+    f = {"key": "yt:ccccccccccc", "channel": "YouTube", "title": "x"}
+    assert story.as_item(f)["channel"] == ""
+    assert story.as_item({**f, "channel": "DSP Meltdown"})["channel"] == "DSP Meltdown"

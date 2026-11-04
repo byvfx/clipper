@@ -218,6 +218,21 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "prompt_version": "v1",   # prompts/story_{triage,expand,moments,dossier}_<v>.md
         "budget_usd": 2.0,        # triage, find and dossier together (the swarm has its own)
         "swarm": {},              # [swarm] settings for a story's searches, e.g. {max_tasks = 40}
+        # Phase 2: `story plan` (the edit, from the moments) and `story cut` (the video, then meta,
+        # thumbs and the Kitsu card), in paths.streams/story-<slug>/. Rendering is [receipts]'s:
+        # fonts, bug, codec, crf, lufs, and its YouTube format.
+        "show": "",               # the show a story goes out under; "" = `clipper --show <key>`, or the only show
+        "edit_model": "claude-sonnet-5-5",  # orders the moments into the edit, writes the title
+        "edit_effort": "medium",
+        "max_minutes": 12.0,      # the edit stops here; later parts stay in story.json with use = false
+        "lead_s": 6,              # a part starts this much before its quote (at a sentence start)
+        "tail_s": 20,             # and ends this much after it: the rest of the thought
+        "max_clip_s": 90,
+        "kick_format": "best[height<=1080]/best",  # a Kick VOD's section (yt-dlp)
+        "odysee_format": "best[height<=1080]/best",
+        "publish": "asap",        # asap: out as soon as it is approved and uploaded | slots
+        "playlist": "",           # YouTube playlist for every story ({show}); "" = the model's pick
+        "credit": "Sources, in the order they appear:",  # the description's last block, a line per part after it
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.

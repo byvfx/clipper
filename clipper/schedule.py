@@ -92,10 +92,11 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
         started = datetime.fromisoformat(meta["started_at"])
         ssc = for_stream(cfg, sdir)["schedule"]  # a stream's config.toml may change these
         earliest = started + timedelta(seconds=meta["duration_s"], hours=ssc["kick_first_hours"])
-        # A pre-show is already public on the show's own channel: no Kick-first wait.
-        asap = (meta.get("kind") == "preshow"
-                and for_stream(cfg, sdir)["preshow"]["publish"] == "asap")
-        if meta.get("kind") == "preshow":
+        # A pre-show is already public on the show's own channel, and a story (#84) is other
+        # people's videos: no Kick-first wait.
+        stream_kind = meta.get("kind")
+        asap = stream_kind in ("preshow", "story") and for_stream(cfg, sdir)[stream_kind]["publish"] == "asap"
+        if stream_kind in ("preshow", "story"):
             earliest = started
         priority = bool(ssc["priority"])
         budget = budget_for(ssc, meta["duration_s"] / 3600)

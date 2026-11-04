@@ -361,9 +361,11 @@ clipper story run jer-banned-kick-fda-call     # transcribe, find the moments, w
 clipper story show jer-banned-kick-fda-call    # dossier.md again (keeps hand edits)
 clipper story add <slug> <video url>...        # then: clipper story run <slug> --from triage
 clipper story status | trail <slug>
+clipper --show kino story plan <slug>          # the edit: streams/story-<slug>/story.json (~$0.03)
+clipper story cut <slug>                       # render it, meta, thumbs, the Kitsu card
 ```
 
-A brief in, a research dossier out (phase 1; phase 2 cuts the moments into an edit). The people
+A brief in, a research dossier out, then a video of it for review. The people
 the brief names (by name, nickname or slug, from `research_notes/streamers.json` and `[story]
 people`; `--person` adds one) seed the swarm with their YouTube, Kick and Odysee channels. Triage
 (Haiku) picks the videos worth transcribing within `--max-videos` / `--max-hours`, the people's own
@@ -376,7 +378,22 @@ reported / speculation, people, who said what, conflicts, coverage, gaps and ang
 citing moments (M01) or sources (S01); a cite that doesn't resolve is sent back once, then the step
 fails. In `dossier.json`, `notes` and a source's `struck: true` survive a rerun. Each step is skipped
 when done; `--from` reruns one and everything after it. Files are in `paths.archive/story-<slug>/`;
-nothing is uploaded.
+nothing is uploaded until a video of it is approved.
+
+`story plan` (Sonnet) orders the moments into an edit under a show (`--show`, `[story] show`, or
+the only one): a title and description, and the moments as parts with a chapter each. Code bounds
+each part around its quote (`[story] lead_s` / `tail_s` / `max_clip_s`, at sentence edges), drops a
+part that repeats an earlier one's words (a re-upload, our stream playing the video), merges
+overlaps and stops at `[story] max_minutes`; what it left out stays in `story.json` with
+`use: false` and a note. Edit `story.json` by hand (use, order, start/end, chapter, the lower
+third's channel, title), then `story cut` renders it: each part from our own source video on the
+share or a yt-dlp section of the original, re-encoded with the channel and date on a lower third
+and bleeped (the `[receipts]` renderer), joined into one segment of the stream `story-<slug>`
+(meta.json kind "story", on the show's Kick channel). Meta takes its chapters from the parts and
+lists every source with its link in the description (`[story] credit`); then thumbs and the
+Kitsu card, in an episode of its own. A segment retake can't trim a story: edit `story.json` and
+cut again (unchanged parts aren't re-rendered). Approved, it goes out as soon as possible
+(`[story] publish = "asap"`), with the hourly uploads.
 
 ## Character pieces (Mother Moo)
 

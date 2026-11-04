@@ -40,7 +40,8 @@ The steps, each skipped when done (--from reruns one and everything after it):
    Speculation is labelled. dossier.json takes hand edits: `notes` (top level) and a
    source's `struck: true` survive a rerun; `story show` re-renders dossier.md.
 
-Phase 2 (#84) turns the moments into an edit: plan, cut, meta, thumbs, Kitsu, asap.
+Phase 2 (`story plan`, `story cut`: clipper/story_edit.py) turns the moments into a video for
+review: the edit, the render, meta, thumbs, the Kitsu card; approved, it goes out asap.
 """
 
 from __future__ import annotations
@@ -59,6 +60,8 @@ STEPS = ["swarm", "triage", "ingest", "find", "dossier"]
 ROLES = ["event", "reaction", "context"]
 VIDEO = ("yt:", "kick:", "od:")
 SEED_KINDS = {"youtube": "youtube_channel", "kick": "kick_videos", "odysee": "odysee_channel"}
+# a web search gives the site as a video's "channel" (Brave: "YouTube", 11-04): not one
+PLATFORMS = {"", "youtube", "kick", "odysee", "rumble", "twitch"}
 COLD_START_S = 600   # a Modal container's start before its first item (logged 11-03: 10-11 min on L4)
 UNKNOWN_S = 3600   # a video whose length the listing didn't give counts as an hour against --max-hours
 
@@ -244,7 +247,7 @@ def streams_dir(cfg: dict) -> Path:
 def our_stream(cfg: dict, stream_id: str) -> dict | None:
     """One of our recorded streams as a linked item, when it is transcribed."""
     sdir = streams_dir(cfg) / stream_id
-    if not (sdir / "words.jsonl").exists():
+    if stream_id.startswith("story-") or not (sdir / "words.jsonl").exists():  # a story's video isn't a source
         return None
     m = jsonstate.read(sdir / "meta.json", {}) or {}
     return {"id": stream_id, "source": "kick", "url": m.get("url") or "", "title": m.get("title") or "",
@@ -255,7 +258,8 @@ def our_stream(cfg: dict, stream_id: str) -> dict | None:
 def as_item(f: dict) -> dict | None:
     """A swarm finding as an archive item to transcribe, or None when it isn't a video."""
     k = f.get("key") or swarm.finding_key(f)
-    base = {"title": f.get("title") or "", "channel": f.get("channel") or "", "date": f.get("date") or "",
+    channel = "" if (f.get("channel") or "").lower() in PLATFORMS else f["channel"]
+    base = {"title": f.get("title") or "", "channel": channel, "date": f.get("date") or "",
             "duration_s": float(f.get("duration_s") or 0), "via": f.get("why") or "", "key": k}
     if k.startswith("yt:"):
         return {**base, "id": f"yt-{k[3:]}", "source": "youtube", "url": f"https://www.youtube.com/watch?v={k[3:]}"}
