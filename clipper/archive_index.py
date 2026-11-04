@@ -34,7 +34,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import jsonstate
-from .archive import load_catalog, subject_dir
+from .archive import item_dir, load_catalog, subject_dir
 from .errors import ClipperError
 
 SCHEMA = """
@@ -82,15 +82,15 @@ def build(cfg: dict, subject: str, rebuild: bool) -> None:
     size_s = cfg["archive"]["index_window_s"]
     t0, added, n_win = time.time(), 0, 0
     todo = []
-    for i in cat:
-        tp = d / i / "transcript.json"
+    for i, it in cat.items():
+        tp = item_dir(d, it) / "transcript.json"
         if tp.exists() and have.get(i) != tp.stat().st_mtime:
             todo.append((i, tp))
     print(f"{subject}: {len(todo)} items to index ({len(have)} already in index.sqlite)")
     for k, (i, tp) in enumerate(todo, 1):
         segs = jsonstate.load(tp).get("segments") or []
-        mp = d / i / "meta.json"
-        meta = {**cat[i], **jsonstate.read(mp, {})}
+        # a linked stream's meta.json is a stream's (its "source" is the m3u8): the catalog's wins
+        meta = cat[i] if cat[i].get("dir") else {**cat[i], **jsonstate.read(d / i / "meta.json", {})}
         wins = windows(segs, size_s)
         db.execute("DELETE FROM windows WHERE item = ?", (i,))
         db.executemany("INSERT INTO windows (text, item, start) VALUES (?, ?, ?)",

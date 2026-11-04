@@ -30,6 +30,7 @@ archive = "archive"                            # clipper archive subjects (other
 modal_runs = "logs/modal_runs.jsonl"           # every Modal call's start and end (clipper modal, war room)
 voices = "voices"                              # enrolled voices per show (clipper speakers --enroll); the NAS share once it runs everything
 faces = "faces"                                # known faces for every show (clipper faces --enroll) + the face models
+streamers = "research_notes/streamers.json"    # people and their channels by platform (clipper story)
 costs = "logs/costs.jsonl"                     # every model call's cost, one line each (clipper costs, war room)
 warroom_undo = "logs/warroom_undo.json"        # the war room's last 20 actions, for Undo
 warroom_layouts = "logs/warroom_layouts.json"  # the war room's saved panel layouts (Layout button)
@@ -726,6 +727,7 @@ ask_prompt_version = "v1"      # prompts/archive_expand_<v>.md, archive_judge_<v
 ask_max_queries = 8            # searches the model may write per question
 ask_per_query = 25             # best-ranked windows kept per search
 ask_candidates = 80            # pooled windows the model reads (~25k tokens)
+kick_format = "worst"          # a Kick VOD (`clipper story`): its HLS variants carry video too, so the smallest
 
 [receipts]
 # `clipper receipts <stream>`: old clips of the archive subject for the night's stories (#48),
@@ -812,6 +814,33 @@ channel_depth = 200            # a channel task lists this many videos, keeps th
 budget_usd = 1.0               # per run: it stops before a call would go over
 max_wall_s = 600               # per run: no new task starts after this
 rates = { youtube = 0.5, kick = 2.0, odysee = 2.0, reddit = 0.5, web = 1.0 }   # requests a second per source
+
+[story]
+# `clipper story` (#84), phase 1: a news brief -> the swarm -> triage (the videos worth
+# transcribing) -> Modal transcripts -> the moments that tell it (quotes checked against the
+# words) -> a dossier citing every moment and source. Files in paths.archive/story-<slug>/;
+# nothing is uploaded. Cost: models ~$0.20-0.60 a story, Modal L4 ~$0.03-0.07 an audio hour.
+people = {}                    # people beside [paths] streamers: { "Name" = { youtube = "@x", kick = "y" } }
+days = 7                       # the window when --since isn't given
+max_videos = 12                # triage: videos to transcribe, at most (our own streams are linked, free)
+max_hours = 6.0                # ...and hours of audio; a video of unknown length counts as an hour
+min_duration_s = 30            # shorter videos are skipped
+gpu = "L4"                     # Modal GPU for the transcripts
+parallel = 6                   # items at once
+youtube_bot_retry = false      # true: YouTube's bot check is retried signed in (youtube_cookies), as pre-shows do
+triage_model = "claude-haiku-5-5"
+triage_effort = "low"
+find_model = "claude-haiku-5-5"    # writes the searches, then picks the moments
+find_effort = "low"
+max_queries = 10
+per_query = 20                 # best-ranked windows kept per search and subject
+candidates = 120               # pooled windows the find model reads
+dossier_model = "claude-sonnet-5-5"
+dossier_effort = "medium"
+dossier_sources = 80           # swarm findings the dossier may cite, best first
+prompt_version = "v1"          # prompts/story_{triage,expand,moments,dossier}_<v>.md
+budget_usd = 2.0               # triage, find and dossier together (the swarm has its own budget_usd)
+swarm = {}                     # [swarm] settings for a story's searches, e.g. { max_tasks = 40 }
 
 [signals]
 chat_lag_s = 6             # shift chat earlier: stream delay + typing time

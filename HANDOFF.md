@@ -148,6 +148,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
+- Story phase 1 PR (`story-84`): merge after Copilot, and whether `[story] youtube_bot_retry` goes on
+  (YouTube's bot check signed in, as pre-shows; off = the 11-03 test's four YouTube videos all failed).
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
@@ -193,7 +195,16 @@ Odysee, Reddit, web, archive, our streams; `kick.list_videos`; `llm.Budget` now 
 investigate): merged 11-03 (PR #134; X credits PR #133 before it). Live test on Jer's Huck story: 30
 tasks, 109 findings (44 strong), $0.025. YouTube flat listings: `ytsearchdate` is gone from yt-dlp;
 search URL + upload-date filter `sp` + `youtubetab:approximate_date` instead (sort-by-date is ignored).
-2) `story` phase 1: brief → swarm → triage → ingest (Kick audio new) → moments → dossier, stop.
+2) `story` phase 1 (`clipper/story.py`, branch `story-84`, worktree `.claude/worktrees/story`): brief
+(people from `research_notes/streamers.json` + `[story] people`, their channels seed the swarm) →
+swarm → triage (Haiku, `--max-videos`/`--max-hours`; our own streams linked via the catalog's `dir`,
+not re-transcribed) → ingest (archive's Modal path; new Kick VOD branch: smallest HLS variant →
+flac) → find (Haiku queries + judge over `story-<slug>` and archive subjects the swarm hit; quotes
+verified with investigate's `locate`) → dossier (Sonnet; M/S cites must resolve, one retry; `notes`
+and `struck` survive). Files in `paths.archive/story-<slug>/`. Live 11-03 "DSP says his credit
+score is 590": 33 tasks, 92 findings, triage 3 + 5 of our streams linked; the YouTube downloads hit
+the bot check, so the dossier came from our streams alone (7 moments, good timeline and conflicts),
+~$0.08 in models. Ingest now stops on a failure. Kick audio path checked on 2 min of a DSP VOD.
 3) phase 2: edit plan → cut → meta/thumbs/Kitsu → asap. Then `investigate check` onto the swarm.
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line

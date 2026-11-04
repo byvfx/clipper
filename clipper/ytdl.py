@@ -2,8 +2,9 @@
 
 Signed-in requests are kept rare so the account is seen as little as possible: `archive` and
 `receipts` retry only age-restricted videos; pre-shows retry only YouTube's bot check (user,
-2026-10-26: a few videos a week). Not "Sign in to confirm" alone: the bot check ("...you're not
-a bot") says that too, and retrying those signed in would put a whole archive run on the account
+2026-10-26: a few videos a week); `story` retries the bot check too only when [story]
+youtube_bot_retry is on. Not "Sign in to confirm" alone: the bot check ("...you're not a bot")
+says that too, and retrying those signed in would put a whole archive run on the account
 and hide the block."""
 from __future__ import annotations
 
@@ -32,8 +33,8 @@ def run_retrying(cfg: dict, *args: str, retry_on: tuple[str, ...]) -> tuple[subp
     cookies = cookies_file(cfg)
     err = r.stderr.lower()
     if r.returncode and any(s in err for s in retry_on) and cookies.is_file():
-        log.info("YouTube: %s, retrying signed in (%s)", "age-restricted" if retry_on == AGE else "bot check",
-                 cookies.name)
+        log.info("YouTube: %s, retrying signed in (%s)",
+                 "age-restricted" if any(s in err for s in AGE) else "bot check", cookies.name)
         out = cfg["paths"]["youtube_cookies"]
         return run("--cookies", str(netscape_cookies(cookies, out.with_name(f"{out.stem}.netscape.txt"))),
                    *args), True
