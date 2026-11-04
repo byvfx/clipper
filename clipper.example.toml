@@ -621,6 +621,10 @@ max_per_24h = 6                # uploads in any 24 h, all runs together (YouTube
                                # see the wiki, YouTube-channel)
 category_id = "24"             # Entertainment
 language = "en"
+cookies_from_browser = ""      # yt-dlp's signed-in retries (youtube_cookies' uses) read this browser
+                               # profile's cookies live instead, so they can't go stale: "firefox:clipper"
+                               # (BROWSER[:PROFILE], yt-dlp's --cookies-from-browser). Put it in
+                               # clipper.local.toml; wiki: Archives#age-restricted-videos-and-youtube-cookies
 made_for_kids = false
 notify_subscribers = true
 captions = true                # upload the .srt beside each video
