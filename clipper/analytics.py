@@ -17,7 +17,7 @@ video is 7 days old, its first-7-days numbers come from the YouTube Analytics AP
 Scoring (Pass B) gets a short "how past uploads did" block per show once at least
 [analytics] min_videos of that show's uploads have 7-day numbers: the best and worst by
 7-day views, with their category and score, as a hint about what this audience watches.
-`clipper bot` refreshes it every [analytics] auto_hours.
+`clipper serve` refreshes it every [analytics] auto_hours.
 """
 
 from __future__ import annotations
