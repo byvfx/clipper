@@ -52,3 +52,22 @@ does that, so a bulk run doesn't put the account on a blocked IP. Browsers rotat
 cookies within days; when a signed-in retry still hits the bot check, the bot DMs ([notify]
 kind `failure`, once per video per `cooldown_hours`) to export fresh ones. The block is on the
 IP: a PO-token provider (bgutil-ytdlp-pot-provider, tried 2026-10-31) doesn't get past it.
+
+### Signed in through a browser profile
+
+An exported file goes stale when the browser it came from rotates the session (four exports in
+eight days, 2026-10-27 to 11-04). Set `[youtube] cookies_from_browser` (in `clipper.local.toml`)
+and every signed-in retry above reads a browser profile's cookies live instead of the file, so a
+rotation never leaves them behind. Use Firefox: Chrome and Edge on Windows encrypt their cookies
+so that yt-dlp can't read them. Set it up once, as the Windows user that runs `clipper serve`:
+
+1. Install Firefox, then make a profile just for clipper:
+   `& "C:\Program Files\Mozilla Firefox\firefox.exe" -CreateProfile "clipper $env:APPDATA\Mozilla\Firefox\Profiles\clipper"`
+2. Open it with `& "C:\Program Files\Mozilla Firefox\firefox.exe" -P clipper -no-remote`, sign in
+   to YouTube (a spare Google account, not the upload channel's), play any video and close it.
+3. `cookies_from_browser = "firefox:clipper"` under `[youtube]` (yt-dlp's
+   `BROWSER[:PROFILE]`; a profile folder's full path works too).
+
+`clipper doctor` reads the profile's cookie database (no network) and fails when it has no YouTube
+sign-in. Don't browse with the profile. If YouTube signs it out, open it, sign in again and close
+it; the pre-show DM says the same.

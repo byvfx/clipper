@@ -420,6 +420,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   leave the export in secrets/ (the newest `www.youtube.com_*.json` there is used, or copy it over
   that file). A pre-show stuck on the bot check after the signed-in retry DMs once per video. The
   block is on the IP: a PO-token provider (bgutil, tried 10-31) doesn't get past it.
+  `[youtube] cookies_from_browser = "firefox:clipper"` (11-04) reads a dedicated Firefox profile live
+  instead, so rotation can't strand an export (wiki Archives#signed-in-through-a-browser-profile); doctor
+  checks the profile is signed in.
 - A cut killed half way can leave `clipper-cut-<id>` running on the NAS: `ssh nas docker rm -f clipper-cut-<id>`.
 - `uv sync` can't replace the running clipper.exe while the bot is up (`uv pip install` instead, and
   include `--extra modal` later). yt-dlp needs deno for YouTube.

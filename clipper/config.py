@@ -327,6 +327,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
                                   # daily uploads (uploadLimitExceeded); new channels hit it near 8
         "category_id": "24",      # Entertainment
         "language": "en",
+        "cookies_from_browser": "",  # yt-dlp's signed-in retries read this browser profile live
+                                     # ("firefox:clipper") instead of [paths] youtube_cookies
         "made_for_kids": False,
         "notify_subscribers": True,
         "captions": True,         # upload the .srt beside each video

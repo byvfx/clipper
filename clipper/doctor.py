@@ -455,6 +455,29 @@ def check_keys(cfg: dict, role: str) -> None:
         check_x(cfg)
 
 
+def check_youtube_cookies(cfg: dict) -> None:
+    """[youtube] cookies_from_browser, when set: the profile is there and still signed in to
+    YouTube (its cookie database on disk, no network)."""
+    from . import ytdl
+
+    if not (spec := ytdl.browser(cfg)):
+        return
+    hint = wiki.page("Archives", "signed-in-through-a-browser-profile")
+    try:
+        names = ytdl.browser_session(spec)
+    except ClipperError as e:
+        fail("keys", str(e), hint)
+        return
+    except ImportError:
+        warn("keys", "yt-dlp not installed: YouTube browser cookies not checked", "uv sync")
+        return
+    if names:
+        ok("keys", f"YouTube signed in through the browser ({spec})")
+    else:
+        fail("keys", f"the browser profile {spec} isn't signed in to YouTube",
+             "open that profile, sign in to YouTube, close it; " + hint)
+
+
 def check_tiktok(cfg: dict) -> None:
     """Optional: only `clipper tiktok` needs it (parked since 2026-11-01, so a stale sign-in warns)."""
     p = cfg["paths"]
@@ -941,6 +964,8 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_faces(cfg)
         check_gpu(cfg)
     check_keys(cfg, role)
+    if role != "nas":
+        check_youtube_cookies(cfg)
     if role in ("all", "gpu"):
         check_narrate(cfg)
     if role in ("all", "serve"):

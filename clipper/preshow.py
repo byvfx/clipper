@@ -207,6 +207,12 @@ def check(cfg: dict) -> list[Path]:
 def bot_check_alert(cfg: dict, e: dict) -> None:
     """DM that a pre-show is stuck on YouTube's bot check even signed in: the cookies have
     rotated (10-31: an hour went by with only a log line). Once per video per cooldown_hours."""
+    if spec := ytdl.browser(cfg):
+        alerts.send(cfg, "failure", f"Pre-show \"{e['title']}\" is stuck on YouTube's bot check even signed in "
+                    f"through the browser ({spec}): open that profile, check it is still signed in to "
+                    "YouTube and play any video, then close it. The next check picks it up.",
+                    key=f"preshow-bot:{e['video_id']}")
+        return
     p = cfg["paths"]["youtube_cookies"]
     alerts.send(cfg, "failure", f"Pre-show \"{e['title']}\" is stuck on YouTube's bot check: export fresh "
                 f"YouTube cookies into {p.parent} as {ytdl.EXPORT_GLOB.replace('*', '<date>')} (the "
