@@ -219,6 +219,7 @@ def test_a_failed_download_stops_before_the_dossier(cfg, monkeypatch):
             (d / it["id"] / "error.txt").write_text("RuntimeError: Sign in to confirm you're not a bot", encoding="utf-8")
 
     monkeypatch.setattr(archive, "_transcribe_all", fails)
+    cfg["story"]["youtube_bot_retry"] = False
     with pytest.raises(ClipperError, match="1 of 1 failed.*bot check"):
         story.run(cfg, slug, claude=FakeLLM())
     assert seen["retry"] == story.ytdl.AGE and not (d / "moments.json").exists()

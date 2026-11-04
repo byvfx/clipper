@@ -29,7 +29,7 @@ The steps, each skipped when done (--from reruns one and everything after it):
 4. Ingest: `archive` transcription on Modal ([story] gpu, parallel): YouTube audio, Kick
    VOD audio, Odysee; then the subject's search index. A failed item stops the run here (a
    dossier without it would read as the whole story): rerun, or --from find without it.
-   YouTube's bot check is retried signed in only with [story] youtube_bot_retry.
+   YouTube's bot check is retried signed in, as pre-shows do ([story] youtube_bot_retry).
 5. Find ([story] find_model, Haiku): search queries for the story, run over the story's index
    and every archive subject the swarm found something in (inside the window there), then
    the model picks the moments: event (it happening), reaction, context. A moment whose

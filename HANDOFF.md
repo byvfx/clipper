@@ -36,6 +36,8 @@ stream's stories, Mother Moo voice-over), `archive` (back catalogs on Modal: Jer
 pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `warroom`, `doctor`.
 
 ## User decisions (keep)
+- Stories retry YouTube's bot check signed in, as pre-shows do (user 11-03: "Yes, turn it on";
+  `[story] youtube_bot_retry = true`, the default): a story is a handful of videos.
 - Investigations (#108, 11-03): leads go to Discord `#investigations`, a thread per investigation (one
   `leads` run), each lead one short message (user: "shorten it up") edited in place by check/confirm,
   linking to the war room's Investigations window, where the whole dossier reads as rendered markdown
@@ -148,8 +150,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
-- Story phase 1 PR (`story-84`): merge after Copilot, and whether `[story] youtube_bot_retry` goes on
-  (YouTube's bot check signed in, as pre-shows; off = the 11-03 test's four YouTube videos all failed).
+- Story phase 1 PR (`story-84`, #135): merge after Copilot.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;

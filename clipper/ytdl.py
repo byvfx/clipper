@@ -2,9 +2,9 @@
 
 Signed-in requests are kept rare so the account is seen as little as possible: `archive` and
 `receipts` retry only age-restricted videos; pre-shows retry only YouTube's bot check (user,
-2026-10-26: a few videos a week); `story` retries the bot check too only when [story]
-youtube_bot_retry is on. Not "Sign in to confirm" alone: the bot check ("...you're not a bot")
-says that too, and retrying those signed in would put a whole archive run on the account
+2026-10-26: a few videos a week); `story` retries both ([story] youtube_bot_retry, user
+11-03: a handful of videos a story). Not "Sign in to confirm" alone: the bot check ("...you're
+not a bot") says that too, and retrying those signed in would put a whole archive run on the account
 and hide the block."""
 from __future__ import annotations
 

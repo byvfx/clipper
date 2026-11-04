@@ -204,7 +204,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_duration_s": 30,     # shorter videos are skipped
         "gpu": "L4",              # Modal GPU for the transcripts
         "parallel": 6,            # items at once
-        "youtube_bot_retry": False,  # YouTube's bot check: retry signed in ([paths] youtube_cookies), as pre-shows do
+        "youtube_bot_retry": True,  # YouTube's bot check: retry signed in ([paths] youtube_cookies), as pre-shows do (user 11-03)
         "triage_model": "claude-haiku-5-5",
         "triage_effort": "low",
         "find_model": "claude-haiku-5-5",  # writes the searches, then picks the moments
