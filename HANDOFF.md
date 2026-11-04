@@ -151,6 +151,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 
 ## Waiting on the user
 - Story phase 1 PR (`story-84`, #135): merge after Copilot.
+- YouTube cookies (secrets/youtube_cookies.txt, 10-31 export) are stale: 11-03 the signed-in retry also
+  got the bot check. A fresh browser export fixes stories and pre-show grabs; then
+  `clipper story run dsp-credit-score-590` transcribes its four YouTube videos.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
