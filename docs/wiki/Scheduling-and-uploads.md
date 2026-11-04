@@ -5,6 +5,10 @@ bringing a new one up is [YouTube channel](YouTube-channel).
 
 ## Automatic uploads
 
+> [!NOTE]
+> Uploads are automatic: don't run `clipper upload` or `clipper review publish` by hand
+> unless you mean to.
+
 `clipper serve` replans and uploads every `[youtube] auto_upload_minutes` (the default 0 means
 only by hand), at most `[youtube] max_per_24h` in any 24 hours, so hourly runs stay under the
 channel's daily upload limit. Pre-shows and stories set to "asap" go out on the next run,

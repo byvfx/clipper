@@ -25,7 +25,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import jsonstate
+from . import jsonstate, wiki
 from .config import _root, for_show
 from .errors import ClipperError
 
@@ -265,7 +265,8 @@ def check_fonts(cfg: dict) -> None:
             weekly_style.load(cfg)
             ok("fonts", f"weekly look: {look}")
         except ClipperError as e:
-            fail("fonts", str(e), "fix or remove it: its tables and keys are clipper/weekly/style.py's (SETUP.md)")
+            fail("fonts", str(e), "fix or remove it: its tables and keys are clipper/weekly/style.py's; "
+                 + wiki.page("Weekly-issue", "style"))
     sc = cfg["shorts"]
     name = sc["caption_font"].lower().replace(" ", "")
     dirs = [Path(sc["caption_fontsdir"])] if sc["caption_fontsdir"] else font_dirs()
@@ -290,7 +291,7 @@ def check_gpu(cfg: dict) -> None:
             ok("gpu", "HF_TOKEN set for diarization")
         else:
             fail("gpu", f"[transcribe] diarize is on ({', '.join(diarizing(cfg))}) but HF_TOKEN isn't set",
-                 "see SETUP.md (Speaker labels): a Hugging Face read token with the pyannote terms accepted")
+                 "a Hugging Face read token with the pyannote terms accepted; " + wiki.page("Speakers"))
     if tc["backend"] == "mlx":
         try:
             import mlx_whisper  # noqa: F401
@@ -459,7 +460,7 @@ def check_tiktok(cfg: dict) -> None:
     p = cfg["paths"]
     if not p["tiktok_client"].exists():
         warn("keys", "no TikTok client key: `clipper tiktok` won't work here (optional)",
-             f"see SETUP.md (TikTok); save the app's key and secret in {p['tiktok_client']}")
+             f"save the app's key and secret in {p['tiktok_client']}; {wiki.page('TikTok')}")
         return
     try:
         c = json.loads(p["tiktok_client"].read_text(encoding="utf-8-sig"))
@@ -490,7 +491,7 @@ def check_x(cfg: dict) -> None:
     p = cfg["paths"]
     if not p["x_client"].exists():
         warn("keys", "no X client id: `clipper x` won't work here (optional)",
-             f"see SETUP.md (X); save the app's client id in {p['x_client']}")
+             f"save the app's client id in {p['x_client']}; {wiki.page('X-posts')}")
         return
     try:
         c = json.loads(p["x_client"].read_text(encoding="utf-8-sig"))
@@ -520,10 +521,10 @@ def check_narrate(cfg: dict) -> None:
     if not find_key(nc):
         if nc["voice_id"]:
             fail("keys", f"[narrate] voice_id is set but there's no ElevenLabs key ({where})",
-                 "SETUP.md, Narration")
+                 wiki.page("Character-pieces", "narration-voice-elevenlabs"))
         else:
             warn("keys", f"no ElevenLabs key ({where}): `clipper narrate` won't work here (optional)",
-                 "SETUP.md, Narration")
+                 wiki.page("Character-pieces", "narration-voice-elevenlabs"))
         return
     if not nc["voice_id"]:
         warn("keys", "ElevenLabs key found but no [narrate] voice_id", "clipper narrate voices")
@@ -587,7 +588,7 @@ def online_youtube(cfg: dict) -> None:
         youtube.credentials(cfg["paths"], force_refresh=True)
         ok("online", "YouTube sign-in works (token refreshed)")
     except ClipperError as e:
-        fail("online", str(e).split("; run:")[0], "clipper upload --sign-in; see SETUP.md (A new YouTube channel)")
+        fail("online", str(e).split("; run:")[0], "clipper upload --sign-in; " + wiki.page("YouTube-channel"))
     except ImportError as e:
         warn("online", f"YouTube sign-in not checked: {e}", "uv sync")
 
@@ -678,8 +679,8 @@ def online_modal(cfg: dict) -> None:
             pass
         except Exception as e:  # noqa: BLE001
             fail("online", f"diarize is on but the Modal secret {secret!r}: {type(e).__name__}",
-                 "see SETUP.md (Speaker labels): modal secret create huggingface HF_TOKEN=..., "
-                 "then clipper transcribe --deploy")
+                 "modal secret create huggingface HF_TOKEN=..., then clipper transcribe --deploy; "
+                 + wiki.page("Speakers"))
 
 
 def online_nas_cut(cfg: dict) -> None:
@@ -838,7 +839,7 @@ def check_tailnet(cfg: dict, offline: bool) -> None:
         return
     from .warroom import tailnet_status, token
 
-    hint = "SETUP.md, Phone access (Tailscale)"
+    hint = wiki.page("Phone-access")
     st = tailnet_status(cfg)
     if not st["installed"]:
         return fail("warroom", "[warroom] tailnet is on but Tailscale isn't installed", hint)
@@ -903,7 +904,7 @@ def check_role_settings(cfg: dict, role: str) -> None:
                        ("allowed_user_ids", "the bot refuses to start without it"),
                        ("review_channel_id", "review cards have nowhere to go")):
             (ok if dc[k] else fail)("config", f"[discord] {k}" + (" set" if dc[k] else " not set"),
-                                    "" if dc[k] else f"{why}; see SETUP")
+                                    "" if dc[k] else f"{why}; see {wiki.page('Install')}")
     ic = cfg["investigate"]
     if ic["discord"] and not (dc["guild_id"] and str(ic["discord_channel"]).strip()):
         fail("config", "[investigate] discord is on but [discord] guild_id or [investigate] discord_channel "

@@ -22,7 +22,7 @@ caption_channel_id, else the [record] alert webhook/channel) and prints it.
 Parked (user, 2026-11-01): auto-send has been off since 2026-10-28 (TikTok flagged the drafts
 as bot activity) and the user posts by hand. Direct posting (video.publish) is dropped: it
 needs TikTok's app audit, which refuses tools that only post to your own accounts (#62, #116).
-This module still works for hand sends; picking it up again starts from SETUP.md (TikTok).
+This module still works for hand sends; picking it up again starts from the wiki's TikTok page.
 
 TikTok allows at most 5 pending drafts in any 24 hours; [tiktok] max_per_24h (default 3)
 keeps under that. --auto (user, 2026-10-22) sends every scheduled Short in the order YouTube

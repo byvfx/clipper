@@ -40,7 +40,7 @@ from typing import ClassVar
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from zoneinfo import ZoneInfo
 
-from . import actions, daemon, jsonstate, review, schedule, worker
+from . import actions, daemon, jsonstate, review, schedule, wiki, worker
 from .config import _root, for_stream
 from .errors import ClipperError
 
@@ -1548,7 +1548,7 @@ def tailnet(cfg: dict, action: str) -> None:
     st = tailnet_status(cfg)
     if not st["installed"]:
         raise ClipperError("Tailscale isn't installed here: install it from https://tailscale.com/download, "
-                         "sign in, and put the phone on the same tailnet (SETUP.md, Phone access)")
+                         f"sign in, and put the phone on the same tailnet ({wiki.page('Phone-access')})")
     if st["state"] != "Running":
         raise ClipperError(f"Tailscale is {st['state'] or 'not running'}: sign in from its tray icon "
                          "(or `tailscale up`), then run this again")

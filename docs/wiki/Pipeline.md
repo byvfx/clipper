@@ -1,9 +1,25 @@
 One stream in, a reviewed set of videos out:
 
-```
-fetch / record -> signals -> transcribe -> score -> segments -> faces -> cut -> meta -> thumbs -> shorts
-                                                                                    |
-                        upload <- schedule <- review (Kitsu, Discord, war room) <- review publish
+```mermaid
+flowchart TB
+  subgraph find ["① Find the moments"]
+    direction LR
+    rec["fetch / record"] --> sig["signals"] --> tr["transcribe"] --> sc["score"] --> seg["segments"]
+  end
+  subgraph make ["② Make the videos"]
+    direction LR
+    fa["faces"] --> cut["cut"] --> me["meta"] --> th["thumbs"] --> sh["shorts"]
+  end
+  subgraph ship ["③ Ship"]
+    direction LR
+    rv{{"review<br/>Kitsu · Discord · war room"}} -->|approved| sch["schedule"] --> up["upload to YouTube"]
+    rv -. "note" .-> rt["retake<br/>re-cut or re-cover, back to review"]
+  end
+  find --> make --> ship
+  classDef stage fill:#fff4c2,stroke:#ce1126,stroke-width:1.5px,color:#111
+  classDef gate fill:#ce1126,stroke:#111,color:#fff
+  class rec,sig,tr,sc,seg,fa,cut,me,th,sh,sch,up,rt stage
+  class rv gate
 ```
 
 Everything is a `clipper <stage>` subcommand working on one stream's folder, `streams/<id>/`.
@@ -64,10 +80,13 @@ recording's stages.
 
 ## What reruns cost
 
-Model calls cost money. `score` refuses a rerun without `--force` (`clipper run --from` passes
-it), `cut` keeps picks whose in/out points are unchanged, `thumbs` keeps a cover whose cut is
-unchanged, and `weekly --render` never drafts. Check what a rerun of `score`, `segments`,
-`meta` or `thumbs` costs on a long stream first ([Costs](Costs)).
+> [!WARNING]
+> Model calls cost money. Check what a rerun of `score`, `segments`, `meta` or `thumbs` costs
+> on a long stream first ([Costs](Costs)).
+
+`score` refuses a rerun without `--force` (`clipper run --from` passes it), `cut` keeps picks
+whose in/out points are unchanged, `thumbs` keeps a cover whose cut is unchanged, and
+`weekly --render` never drafts.
 
 [Pre-shows](Pre-shows) and one-off YouTube videos take a shorter path: one whole video, no
 clips or Shorts.

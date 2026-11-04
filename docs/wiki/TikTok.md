@@ -1,6 +1,7 @@
-**Parked (2026-11-01).** We post to TikTok by hand. Auto-send is off (TikTok flagged the drafts as
-bot activity), and direct posting is dropped: TikTok's app audit refuses tools that only post to
-your own accounts (issues #62, #116). The steps below still work if this is ever picked up again.
+> [!CAUTION]
+> **Parked (2026-11-01).** We post to TikTok by hand. Auto-send is off (TikTok flagged the drafts as
+> bot activity), and direct posting is dropped: TikTok's app audit refuses tools that only post to
+> your own accounts (issues #62, #116). The steps below still work if this is ever picked up again.
 
 `clipper tiktok` sends scheduled Shorts to the TikTok app's drafts (Content Posting API,
 Upload route). You open the notification on the phone, paste the caption and post. TikTok's

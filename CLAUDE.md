@@ -6,9 +6,9 @@ session diary is `docs/log/<YYYY-MM>.md`: grep it for history, don't read it who
 docs are the GitHub wiki, built from `docs/wiki/` (one flat page per file, `Home.md` first,
 `_Sidebar.md` lists every page); `.github/workflows/wiki.yml` pushes it on every push to main,
 so edit the pages there, never in the wiki itself. Link pages wiki-style (`[Faces](Faces)`,
-`[x](War-room#faces)`); `tests/test_wiki.py` checks the links and the sidebar. README.md is a
-short pointer and SETUP.md maps its old sections to wiki pages (error messages still name
-them). At the end of a session update HANDOFF.md in place (no diaries there) and add a dated
+`[x](War-room#faces)`); `tests/test_wiki.py` checks the links and the sidebar. Messages link a page with
+`wiki.page("Name", "heading")` (`clipper/wiki.py`; the test checks those too). README.md is a
+short pointer and SETUP.md maps its old sections to wiki pages. At the end of a session update HANDOFF.md in place (no diaries there) and add a dated
 entry at the end of the month's log; keep the wiki pages true whenever behaviour changes, in
 the same PR as the change.
 

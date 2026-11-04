@@ -35,7 +35,7 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import config, doctor, jsonstate
+from . import config, doctor, jsonstate, wiki
 from .config import _root
 from .errors import ClipperError
 
@@ -403,7 +403,7 @@ def step_roles(cfg: dict, st: dict, ask: Ask) -> None:
     st["roles"] = roles
     if "recorder" in roles:
         say("The recorder runs in Docker on the NAS, not here: when no show is live, run")
-        say("`bash deploy/record/deploy.sh` from a machine with ssh to the NAS (SETUP.md, section 3).")
+        say("`bash deploy/record/deploy.sh` from a machine with ssh to the NAS: " + wiki.page("NAS-recorder"))
     shared = shared_cfg(cfg)["transcribe"]
     backend = cfg["transcribe"]["backend"]
     if "worker" in roles:
@@ -610,7 +610,7 @@ def step_check(cfg: dict, st: dict, ask: Ask, offline: bool = False) -> int:
         if "bot" in roles:
             say("  bot, unattended:    " + (r"deploy\discord\bot-task.ps1 -Install" if win
                                             else "clipper bot (in a terminal or launchd for now)"))
-        say("  SETUP.md covers what setup doesn't do yet: Discord ids, YouTube sign-in, adding a show.")
+        say("  What setup doesn't do yet (Discord ids, YouTube sign-in, adding a show): " + wiki.page("Install"))
     return code
 
 

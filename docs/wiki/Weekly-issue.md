@@ -42,6 +42,8 @@ cover shows a photo panel instead.
 
 Issue numbers continue from `[weekly] first_issue` across the folders in `weekly/`.
 
+## Style
+
 The look is data: the canvas, the palette, the cover's geometry (teaser strip, kicker,
 headline width, inset, starburst, barcode block, subject height) and the fixed copy
 ("LOLCOW OF THE WEEK", "READERS' POLL", the barcode digits, ...) have defaults in

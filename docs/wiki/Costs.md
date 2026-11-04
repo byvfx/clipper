@@ -15,7 +15,9 @@ the bot DMs each time the month passes a multiple of `[modal] alert_every_usd`.
 
 ## What things cost
 
-Rough figures from the other pages, to check before a big run:
+> [!NOTE]
+> Rough figures measured on our own runs; `--dry-run` gives the real estimate where a
+> command offers it.
 
 | Job | Cost |
 |---|---|

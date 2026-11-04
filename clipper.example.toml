@@ -122,7 +122,7 @@ playlist = "{show} Pre-shows"   # one playlist for all of them; "" = the model's
 credit = "The {show} pre-show from {date}, first posted on their YouTube channel: {url}"
 
 [transcribe]
-# backend = "modal"        # cloud GPU instead of local CUDA; see SETUP.md "Transcribe on Modal"
+# backend = "modal"        # cloud GPU instead of local CUDA; see the wiki, Transcribe-on-Modal
 model = "large-v3"
 language = "en"
 compute_type = "float16"   # int8_float16 if VRAM is tight
@@ -136,7 +136,7 @@ modal_gpu = "L40S"         # T4 | L4 | A10 | L40S | A100 | H100; "" = the app's 
 modal_audio = "flac"       # flac (lossless, ~60 MB/h) | opus (48 kbps, smaller upload)
 mlx_model = "mlx-community/whisper-large-v3-turbo"  # Hugging Face repo for the mlx backend
 mlx_align = true           # refine mlx word times with WhisperX alignment if installed
-# diarize = true           # speaker turns too (pyannote); needs the Hugging Face token: SETUP.md
+# diarize = true           # speaker turns too (pyannote); needs the Hugging Face token: wiki, Speakers
                            # "Speaker labels". Usually per show: [shows.kino.transcribe] diarize = true
 diarize = false            # speaker turns (whisperx or modal backend); see the note above
 diarize_model = "pyannote/speaker-diarization-community-1"
@@ -228,7 +228,7 @@ monthly = {}               # fixed costs per month, as above
 credits = {}               # monthly credits per provider, as above
 
 [llm]
-# Any stage's model key can name another provider by prefix (see SETUP "Other model
+# Any stage's model key can name another provider by prefix (see the wiki, "Model
 # providers"): "openai:<model>" (OPENAI_API_KEY), "gemini:<model>" (GEMINI_API_KEY),
 # "local:<model>" (the OpenAI-compatible server below). Bare names are Claude.
 local_base_url = ""        # e.g. "http://<host>:11434/v1" (Ollama); only for local: models
@@ -305,7 +305,7 @@ clip_codec = "libx264"          # picks: libx264 | h264_qsv | h264_nvenc (driver
 crf = 20                       # quality for re-encodes
 parallel = 3                   # segments cut at once
 # "nas": segments and compilations cut on the NAS beside the source, in a one-off container
-# of the recorder image over ssh (SETUP.md, section 3); picks stay on this machine.
+# of the recorder image over ssh (wiki, NAS-recorder); picks stay on this machine.
 backend = "local"              # local | nas
 nas_host = ""                   # ssh alias of the NAS, key login
 nas_data = ""                   # the recorder's CLIPPER_DATA, e.g. /volume1/docker/clipper
@@ -548,7 +548,7 @@ lowres_height = 360
 lowres_prewarm = true
 # The phone, away from home: `clipper warroom --tailnet on` serves it at
 # https://<this machine>.<tailnet>.ts.net/ through Tailscale (tailnet devices only). Set true
-# afterwards so `clipper doctor` checks it. See SETUP.md, Phone access.
+# afterwards so `clipper doctor` checks it. See the wiki, Phone-access.
 tailnet = false
 
 [retake]
@@ -618,7 +618,7 @@ manual_publish = false         # true: every upload stays private (no publishAt,
                                # you make it public in YouTube Studio at its slot
 max_per_run = 6                # quota guard per run
 max_per_24h = 6                # uploads in any 24 h, all runs together (YouTube's daily upload cap;
-                               # see SETUP.md "A new YouTube channel")
+                               # see the wiki, YouTube-channel)
 category_id = "24"             # Entertainment
 language = "en"
 made_for_kids = false
@@ -691,7 +691,7 @@ caption_channel_id = ""        # Discord channel for captions; empty = [record] 
 # The text is the title plus hashtags, never a link (X bills a post with a URL at $0.20, $0.015
 # without). One-time: clipper x --sign-in (app at console.x.com, callback URL
 # http://127.0.0.1:<redirect_port>/callback, scopes tweet.read tweet.write users.read media.write
-# offline.access). See SETUP.md (X).
+# offline.access). See the wiki, X-posts.
 kinds = ["short"]
 max_per_24h = 6
 auto_post_minutes = 0          # the bot runs `clipper x --auto` this often; 0 = only by hand
@@ -899,7 +899,7 @@ formats = ["tiktok", "youtube"]  # tiktok: 1080x1440 pages | youtube: the same p
 masthead = ["LOLCOW", "CINEMA"]  # red word, chrome word (then "WEEKLY")
 byline = "BY THE LOLCOW DESK"
 price = "$1.39 US"             # on the cover's barcode block
-# Colours, the cover's geometry and the fixed copy: <paths.weekly>/style.toml (SETUP.md).
+# Colours, the cover's geometry and the fixed copy: <paths.weekly>/style.toml (wiki, Weekly-issue).
 # Fonts, first that exists: the cover headline (Impact), a condensed family with named
 # styles (Bahnschrift), a serif italic and bold italic (Georgia), a black and a bold sans
 # for the masthead and barcode.

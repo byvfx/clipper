@@ -44,10 +44,14 @@ first. Before merging a PR, wait for Copilot's automatic review and handle each 
 
 ## Editing these docs
 
-The wiki is built from `docs/wiki/` in the repo: edit the pages there, in the same PR as the
-code they describe, and the `wiki` workflow (`.github/workflows/wiki.yml`) pushes them to the
-wiki when the change lands on main. Edits made in the wiki's web editor are overwritten by the
-next push.
+> [!IMPORTANT]
+> The wiki is built from `docs/wiki/` in the repo: edit the pages there, in the same PR as the
+> code they describe. Edits made in the wiki's web editor are overwritten by the next push.
+
+The `wiki` workflow (`.github/workflows/wiki.yml`) pushes the pages to the wiki when a change
+lands on main. Images go in `docs/wiki/images/` and are linked by their full wiki address
+(`https://github.com/byvfx/clipper/wiki/images/<file>`). Callouts (`> [!TIP]`, `> [!WARNING]`),
+Mermaid diagrams and `<kbd>` keys all render.
 
 - One file per page, flat: `Install-Windows.md` is the page "Install Windows". `_Sidebar.md`
   and `_Footer.md` are on every page.

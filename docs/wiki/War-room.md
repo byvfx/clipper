@@ -2,7 +2,7 @@ A web page for running the review and the schedule. `clipper serve` serves it to
 with the background jobs (`http://localhost:8765`, `[warroom] port`); `clipper warroom
 --open` runs the page on its own. It
 shows what is live, where each stream is in the pipeline, the review queue and the upload
-schedule. Press `?` on the page for every keyboard shortcut.
+schedule. Press <kbd>?</kbd> on the page for every keyboard shortcut.
 
 ## Live shows
 
@@ -11,8 +11,18 @@ the chip also says whether the NAS is recording it.
 
 ## Review queue
 
-It works from the keyboard: J/K to move, A approve, R reject, C retake note, H hold,
-Space/arrows for the video, O to pop it out into its own window.
+It works from the keyboard:
+
+| Key | Does |
+|---|---|
+| <kbd>J</kbd> / <kbd>K</kbd> | next / previous item |
+| <kbd>A</kbd> | approve |
+| <kbd>R</kbd> | reject |
+| <kbd>C</kbd> | retake note |
+| <kbd>H</kbd> | hold |
+| <kbd>Space</kbd>, arrows | play, seek the video |
+| <kbd>O</kbd> | pop the video out into its own window |
+| <kbd>B</kbd> | Who's this? (a face on the paused video) |
 
 The search box looks through every stream's titles, descriptions, topics and hashtags, and
 what is said in each video (its captions). Status, date and show filters combine with it, and
