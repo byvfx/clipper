@@ -28,6 +28,8 @@ def test_post_text_takes_links_out():
     """X bills a post with a URL at $0.20, not $0.015."""
     assert xpost.post_text("DSP reacts to https://example.com/x?y=1 live", [], 280, 2) == "DSP reacts to live"
     assert xpost.post_text("see www.example.com", ["#a"], 280, 2) == "see\n\n#a"
+    assert xpost.post_text("Hook", [], 280, 2, "From Kino Casino: @Andywarski https://kick.com/kinocasinogaming") == \
+        "Hook\n\nFrom Kino Casino: @Andywarski"   # the credit line too
 
 
 def test_posts_and_live_claims_count_against_the_24h_allowance():

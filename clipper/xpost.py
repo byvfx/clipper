@@ -221,7 +221,10 @@ def post_text(title: str, tags: list[str], limit: int, max_tags: int, credit: st
     end, then the title is shortened to leave room. The show tag and then the credit go only
     if they can't fit beside a readable title. Links are taken out: X bills a post with a
     URL at $0.20."""
-    title = re.sub(r"\s+", " ", re.sub(r"(https?://|www\.)\S+", "", title)).strip()
+    def no_links(s: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"(https?://|www\.)\S+", "", s)).strip()
+
+    title, credit = no_links(title), no_links(credit)  # a link in [x] credit would bill the post too
     keep = list(dict.fromkeys(keep))[:max_tags]
     seen, own = {t.lower() for t in keep}, []
     for t in tags:  # #KinoCasino from the draft and the show's #KinoCasino are one tag
