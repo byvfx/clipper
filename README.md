@@ -283,6 +283,43 @@ edit any line in receipts.json and `cut` re-voices only that one. Every part is 
 script. Nothing is scheduled or made public: the
 upload stays private until someone changes it in Studio, and sending it on is up to you.
 
+### Investigating a channel (#108)
+
+`receipts` starts from a story and finds his old clips; `clipper investigate` starts from the
+person and looks for the story. It reads an archive subject's own transcripts and comes back
+with leads: claims that changed, numbers that moved, teases never paid off, topics that
+suddenly took over. Leads are research for you, never uploaded or posted.
+
+```bash
+clipper investigate facts jer --since 2026-09-01 --dry-run   # items, hours, estimated cost
+clipper investigate facts jer --since 2026-09-01             # Haiku reads each item for checkable facts (~$0.20 for 43 h)
+clipper investigate leads jer [--about "lawsuit"] [--confirm] # threads found in code, Sonnet writes the leads (~$0.10)
+clipper investigate check jer [--lead L03] [--trail]          # is anyone else on it? YouTube, web, Reddit, our streams
+clipper investigate list jer                                  # kind, confidence, coverage, receipts
+clipper investigate show jer L03                              # the story and the timeline, quote and link per receipt
+clipper investigate confirm jer [--lead L03]                  # test leads against more of the archive (`archive ask`)
+clipper investigate run jer                                   # facts --new -> leads -> check, total cost
+```
+
+`facts` keeps only facts whose quote is found in the item's words (in the part it was read from,
+with its numbers and any negation unchanged), and the receipt keeps his wording, so every receipt in a
+lead is something he said, linked to the moment. Each item's facts are cached
+(`archive/jer/investigate/facts/<item>.json`) until the prompt version or the transcript
+changes, so a rerun reads only new uploads. The whole Jer catalog (2,731 h) is about $14 once;
+quote the `--dry-run` figure before running it. `leads` builds `facts.sqlite` and finds
+candidate threads with no model call: a trend, a contradiction (affirmed, then denied), a
+shift (a number that changes), a dropped thread (checked against the full transcripts) and a
+convergence (personal remarks from several videos close together); Sonnet reads each one and
+writes the lead or rejects it, and the rejected ones and why are kept in `leads.json` too.
+`check` searches YouTube (yt-dlp, titles only), the web and Reddit (Brave, the `clipper cast`
+key; without one, Reddit's own feed, which often refuses) and our own streams' segments, and
+labels each lead fresh, partly covered or covered; the searches are in
+`investigate/swarm/<lead>.json`. Edit `leads.json` to flip `keep`, change a headline or add
+`notes`; `leads.md` is the readable dossier. Put spellings Whisper gets wrong, or other names
+for him, in `investigate/aliases.json` (`{"Jeremy": "self", "Hassan Piker": "Hasan Piker"}`).
+A run stops before it would spend more than `[investigate] budget_usd`. Whisper can mishear a
+number, so a "shift" is worth a listen at the link before you use it.
+
 ## Character pieces (Mother Moo)
 
 The Udder Truth's host is performed to playback: a script read in her voice, the performer
