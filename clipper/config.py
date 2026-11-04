@@ -172,6 +172,26 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "discord": False,         # leads, check and confirm post to discord_channel when done
         "discord_channel": "investigations",  # by name, made if missing (a forum works too): a thread per leads run
     },
+    "swarm": {
+        # The search swarm (#109, clipper/swarm.py) that `story` (#84) and `investigate` (#108)
+        # use: a planner writes the first searches, workers run them in parallel and follow up
+        # on what they find. Finds and ranks only; nothing is downloaded.
+        "planner_model": "claude-sonnet-5-5",  # one call: the first tasks
+        "planner_effort": "low",
+        "worker_model": "claude-haiku-5-5",    # one call per task: findings and follow-ups
+        "worker_effort": "low",
+        "prompt_version": "v1",   # prompts/swarm_{plan,worker}_<v>.md
+        "workers": 8,             # tasks at once (the sources' rates bound it too)
+        "first_tasks": 16,        # the planner's tasks, at most
+        "max_rounds": 3,          # follow-up rounds per run
+        "max_tasks": 60,          # tasks per run
+        "followups_per_task": 3,
+        "results_per_task": 20,   # search results / channel videos a worker reads
+        "channel_depth": 200,     # a channel task lists this many, keeps the run's dates, ranks by the goal's words
+        "budget_usd": 1.0,        # per run; it stops before a call would go over
+        "max_wall_s": 600,        # per run; no new task starts after this
+        "rates": {"youtube": 0.5, "kick": 2.0, "odysee": 2.0, "reddit": 0.5, "web": 1.0},  # requests/s per source
+    },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.
         "upload_url": "https://rumble.com/upload.php",

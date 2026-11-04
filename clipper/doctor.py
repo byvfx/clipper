@@ -174,6 +174,7 @@ def prompt_files(cfg: dict) -> list[str]:
               f"weekly_{wc['prompt_version']}", f"weekly_article_{wc['article_prompt_version']}"]
     iv = cfg["investigate"]["prompt_version"]
     names += [f"investigate_{step}_{iv}" for step in ("facts", "leads", "check", "confirm")]
+    names += [f"swarm_{step}_{cfg['swarm']['prompt_version']}" for step in ("plan", "worker")]
     return [f"{n}.md" for n in names] + [wc["article_example"]]
 
 

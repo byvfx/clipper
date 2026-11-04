@@ -67,6 +67,7 @@ from pathlib import Path
 from . import jsonstate
 from .archive import load_catalog, subject_dir
 from .errors import ClipperError
+from .llm import Budget, OverBudget, estimate  # [investigate] budget_usd
 from .receipts import tokens
 
 TYPES = ["claim", "money", "number", "plan", "promise", "tease", "legal", "business", "health",
@@ -129,40 +130,9 @@ def inv_dir(cfg: dict, subject: str) -> Path:
     return subject_dir(cfg, subject) / "investigate"
 
 
-class OverBudget(Exception):
-    pass
-
-
-class Budget:
-    """[investigate] budget_usd across threads: a call goes ahead only if what is spent, what
-    is in flight and its own estimate fit."""
-
-    def __init__(self, limit: float, claude):
-        self.limit, self.claude, self.held = limit, claude, 0.0
-        self._lock = threading.Lock()
-
-    def reserve(self, est: float) -> None:
-        with self._lock:
-            if self.claude.cost + self.held + est > self.limit:
-                raise OverBudget(f"budget ${self.limit:.2f}: ${self.claude.cost:.2f} spent, "
-                                 f"next call ~${est:.3f}")
-            self.held += est
-
-    def release(self, est: float) -> None:
-        with self._lock:
-            self.held -= est
-
-
 def with_budget(cfg: dict, usd: float) -> dict:
     """cfg with [investigate] budget_usd set to what a later step may still spend."""
     return {**cfg, "investigate": {**cfg["investigate"], "budget_usd": max(0.0, usd)}}
-
-
-def estimate(cfg: dict, model: str, tokens_in: float, tokens_out: float) -> float:
-    from .llm import price_of, prices
-
-    pin, pout = price_of(prices(cfg), model) or (0.0, 0.0)
-    return (tokens_in * pin + tokens_out * pout) / 1e6
 
 
 def log_run(d: Path, rec: dict) -> None:

@@ -187,6 +187,14 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The user signed in again 11-02 16:57 (In production), so the token shouldn't lapse.
 
 ## Open work
+**Story (#84) + swarm (#109), user 11-03: three PRs.** 1) `clipper/swarm.py` (library: planner →
+Haiku workers in rounds → merged findings, trail `swarm.json`; tools YouTube search/channel, Kick,
+Odysee, Reddit, web, archive, our streams; `kick.list_videos`; `llm.Budget` now shared with
+investigate): merged 11-03 (PR #134; X credits PR #133 before it). Live test on Jer's Huck story: 30
+tasks, 109 findings (44 strong), $0.025. YouTube flat listings: `ytsearchdate` is gone from yt-dlp;
+search URL + upload-date filter `sp` + `youtubetab:approximate_date` instead (sort-by-date is ignored).
+2) `story` phase 1: brief → swarm → triage → ingest (Kick audio new) → moments → dossier, stop.
+3) phase 2: edit plan → cut → meta/thumbs/Kitsu → asap. Then `investigate check` onto the swarm.
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line
 wedges a stream's finalize; ~15 medium: quiet failures in the bot's notify loop and Health, `[notify]`

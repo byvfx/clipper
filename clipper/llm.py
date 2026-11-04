@@ -391,3 +391,39 @@ Claude = LLM
 def preflight(claude: LLM, model: str) -> None:
     """One tiny call so account problems stop the run with one clear line."""
     claude.preflight(model)
+
+
+# ---------- budgets ----------
+
+class OverBudget(Exception):
+    pass
+
+
+class Budget:
+    """A spending cap across threads: a call goes ahead only if what is spent, what is in
+    flight and its own estimate fit. `spent_before` is what the client had spent before this
+    budget began (a caller's client shared with the swarm)."""
+
+    def __init__(self, limit: float, claude, spent_before: float = 0.0):
+        self.limit, self.claude, self.held, self.before = limit, claude, 0.0, spent_before
+        self._lock = threading.Lock()
+
+    @property
+    def spent(self) -> float:
+        return self.claude.cost - self.before
+
+    def reserve(self, est: float) -> None:
+        with self._lock:
+            if self.spent + self.held + est > self.limit:
+                raise OverBudget(f"budget ${self.limit:.2f}: ${self.spent:.2f} spent, "
+                                 f"next call ~${est:.3f}")
+            self.held += est
+
+    def release(self, est: float) -> None:
+        with self._lock:
+            self.held -= est
+
+
+def estimate(cfg: dict, model: str, tokens_in: float, tokens_out: float) -> float:
+    pin, pout = price_of(prices(cfg), model) or (0.0, 0.0)
+    return (tokens_in * pin + tokens_out * pout) / 1e6
