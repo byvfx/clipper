@@ -169,6 +169,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "window_days": 60,        # convergence: personal facts from several videos within this
         "check_results": 10,      # check: results per source (YouTube search, Reddit search)
         "budget_usd": 10.0,       # a run stops before it would spend more and says what's left
+        "discord": False,         # leads, check and confirm post to discord_channel when done
+        "discord_channel": "investigations",  # by name, made if missing (a forum works too): a thread per leads run
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.

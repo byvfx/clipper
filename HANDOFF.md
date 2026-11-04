@@ -36,6 +36,10 @@ stream's stories, Mother Moo voice-over), `archive` (back catalogs on Modal: Jer
 pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `warroom`, `doctor`.
 
 ## User decisions (keep)
+- Investigations (#108, 11-03): leads go to Discord `#investigations`, a thread per investigation (one
+  `leads` run), each lead one short message (user: "shorten it up") edited in place by check/confirm,
+  linking to the war room's Investigations window, where the whole dossier reads as rendered markdown
+  (`[investigate] discord = true` in clipper.toml). First thread: jer · 2026-11-03.
 - Titles/descriptions/cut points approved as-is; fun descriptions are liked.
 - Long video per recurring topic (compilations, e.g. "The Quartering" 3h13m) plus segments plus short picks.
 - `third_party_audio = "allow_reactions"`, `audience_knowledge = "fans"`, Victor/blackjack segments stay.
@@ -165,12 +169,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   (drop wrong or costume photos; image search photos always wait for you). Check Jer f868aa21db.
 - Faces: enroll PPP in his maple-leaf cap from the first non-costume stream the worker scans (kick-135553454
   is named and enrolled: known.json has 12 people, Andy/PPP/Jer 4 samples each).
-- `clipper investigate` (#108, built 11-03, PR open): read jer's leads in
-  `archive/jer/investigate/leads.md` (3 leads from Sept-Oct 2026: Clancy retrial predictions, Ilhan Omar
-  claims escalating, the poker prize pool said as $8,000 once vs $1,000; that one may be Whisper hearing
-  "a thousand") and the rejected threads in leads.json; say which are real and whether the coverage labels
-  are right. Open from the issue: first subject (jer assumed), whole catalog (~$14 for facts, quote first)
-  or months at a time, whether a lead may ever become content, Discord posting (later).
+- `clipper investigate` (#108, merged 11-03 as 343a062, PR #131): jer Sept-Oct was a test; the user
+  found all 3 leads good (L03's $8,000 is Whisper: he said $1,000, noted on the lead). Still open: the
+  whole catalog (~$14 for facts, quote first) or months at a time, and whether a lead may ever become content.
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the

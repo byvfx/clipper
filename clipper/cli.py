@@ -641,6 +641,8 @@ def cmd_investigate(cfg: dict, args: argparse.Namespace) -> None:
         investigate.run_check(cfg, args.subject, args.lead)
     elif a == "show":
         investigate.show_lead(cfg, args.subject, args.lead)
+    elif a == "post":
+        investigate.post_discord(cfg, args.subject, args.new_thread)
     elif a == "run":
         investigate.run_all(cfg, args.subject, args.since, args.before, args.about, args.max)
     else:
@@ -1264,6 +1266,10 @@ def add_extras(sub) -> None:
     r = rsub.add_parser("show", help="one lead's story and timeline with quotes and links")
     r.add_argument("subject")
     r.add_argument("lead", help="e.g. L03")
+    r = rsub.add_parser("post", help="post the kept leads to [investigate] discord_channel: a thread per "
+                                     "leads run, edited in place after check or confirm")
+    r.add_argument("subject")
+    r.add_argument("--new-thread", action="store_true", help="a fresh thread even if this run has one")
     r = rsub.add_parser("run", help="facts (--new unless --since) -> leads -> check; prints the total cost")
     r.add_argument("subject")
     span(r)

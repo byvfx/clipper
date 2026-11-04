@@ -70,6 +70,11 @@ def user_ids(dc: dict) -> set[int]:
     return {int(i) for i in ids}
 
 
+class Missing(ClipperError):
+    """Discord says the channel, thread or message isn't there (404): deleted, safe to remake.
+    Any other failure may be passing, so the ids are kept."""
+
+
 class Rest:
     def __init__(self, cfg: dict):
         self.s = requests.Session()
@@ -93,6 +98,8 @@ class Rest:
             if r.status_code == 429:
                 time.sleep(float(r.json().get("retry_after", 1)) + 0.2)
                 continue
+            if r.status_code == 404:
+                raise Missing(f"Discord {method} {path}: 404 {r.text[:300]}")
             if r.status_code >= 400:
                 raise ClipperError(f"Discord {method} {path}: {r.status_code} {r.text[:300]}")
             return r.json() if r.content else {}
@@ -216,6 +223,13 @@ def ensure_thread(api: Rest, cfg: dict, sdir: Path, dstate: dict, rows: list[dic
     header = {"content": (f"**{name}** · {meta.get('title', '')}\n"
                           f"{n_seg} segments and {n_clip} clips for review. "
                           f"Kitsu: <{rows[0]['episode_url']}>")[:2000]}
+    thread_id = open_thread(api, channel_id, name, header)
+    dstate.update({"channel_id": channel_id, "thread_id": thread_id, "messages": {}})
+    return thread_id
+
+
+def open_thread(api: Rest, channel_id: str, name: str, header: dict) -> str:
+    """A new thread under header in a text channel, or a post in a forum; its id."""
     channel = api("GET", f"/channels/{channel_id}")
     if channel["type"] == 15:  # forum: the header is the post's first message
         thread = api("POST", f"/channels/{channel_id}/threads",
@@ -224,7 +238,6 @@ def ensure_thread(api: Rest, cfg: dict, sdir: Path, dstate: dict, rows: list[dic
         msg = api("POST", f"/channels/{channel_id}/messages", header)
         thread = api("POST", f"/channels/{channel_id}/messages/{msg['id']}/threads",
                      {"name": name, "auto_archive_duration": 10080})
-    dstate.update({"channel_id": channel_id, "thread_id": thread["id"], "messages": {}})
     return thread["id"]
 
 
@@ -299,15 +312,22 @@ def issue_messages(issue: dict, here: Path, pages: list[Path]) -> list[tuple[str
 
 def weekly_channel(api: Rest, dc: dict) -> str:
     """The id of the text channel named [discord] weekly_channel in guild_id, made if missing."""
-    name = str(dc["weekly_channel"]).strip().lstrip("#").lower()
-    if not name or not dc["guild_id"]:
+    if not str(dc["weekly_channel"]).strip() or not dc["guild_id"]:
         raise ClipperError("set [discord] guild_id and weekly_channel in clipper.toml")
+    return named_channel(api, dc, dc["weekly_channel"], "Weekly issues' pages, to save on a phone")
+
+
+def named_channel(api: Rest, dc: dict, name: str, topic: str, kinds: tuple[int, ...] = (0,)) -> str:
+    """The id of guild_id's channel called name of one of kinds (0 text, 15 forum), or a new
+    text channel with that name and topic."""
+    name = str(name).strip().lstrip("#").lower()
+    if not name or not dc["guild_id"]:
+        raise ClipperError("set [discord] guild_id and the channel's name in clipper.toml")
     for ch in api("GET", f"/guilds/{dc['guild_id']}/channels"):
-        if ch["type"] == 0 and ch["name"] == name:
+        if ch["type"] in kinds and ch["name"] == name:
             return ch["id"]
     try:
-        ch = api("POST", f"/guilds/{dc['guild_id']}/channels",
-                 {"name": name, "type": 0, "topic": "Weekly issues' pages, to save on a phone"})
+        ch = api("POST", f"/guilds/{dc['guild_id']}/channels", {"name": name, "type": 0, "topic": topic[:1024]})
     except ClipperError as e:
         raise ClipperError(f"couldn't make #{name} ({e}); give the bot Manage Channels "
                            f"or make the channel by hand") from e
