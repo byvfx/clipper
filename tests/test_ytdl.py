@@ -1,7 +1,12 @@
 import json
 import subprocess
+import time
+from http.cookiejar import Cookie, CookieJar
+
+import pytest
 
 from clipper import ytdl
+from clipper.errors import ClipperError
 
 
 def fake_run(monkeypatch, stderr):
@@ -9,7 +14,7 @@ def fake_run(monkeypatch, stderr):
 
     def run(*args):
         calls.append(args)
-        signed_in = args[:1] == ("--cookies",)
+        signed_in = args[:1] in (("--cookies",), ("--cookies-from-browser",))
         return subprocess.CompletedProcess(args, 0 if signed_in else 1, "", "" if signed_in else stderr)
     monkeypatch.setattr(ytdl, "run", run)
     return calls
@@ -80,3 +85,43 @@ def test_signed_in_retry_converts_an_export_to_one_fixed_file(monkeypatch, tmp_p
     cfg = {"paths": {"youtube_cookies": tmp_path / "youtube_cookies.txt"}}
     _, signed_in = ytdl.run_retrying(cfg, "URL", retry_on=ytdl.BOT)
     assert signed_in and calls[1][1] == str(tmp_path / "youtube_cookies.netscape.txt")
+
+
+def test_a_browser_profile_is_read_live_instead_of_the_cookies_file(monkeypatch, tmp_path):
+    calls = fake_run(monkeypatch, "ERROR: Sign in to confirm you're not a bot")
+    cfg = {"paths": {"youtube_cookies": tmp_path / "none.txt"}, "youtube": {"cookies_from_browser": "firefox:clipper"}}
+    _, signed_in = ytdl.run_retrying(cfg, "URL", retry_on=ytdl.BOT)
+    assert signed_in and calls[1] == ("--cookies-from-browser", "firefox:clipper", "URL")
+    assert ytdl.signed_in_args({"paths": {"youtube_cookies": tmp_path / "none.txt"}}) == []
+
+
+def cookie(name, domain=".youtube.com", expires=None):
+    return Cookie(0, name, "v", None, False, domain, True, True, "/", True, True, expires, False,
+                  None, None, {})
+
+
+def test_browser_session_names_only_live_youtube_sign_in_cookies(monkeypatch):
+    seen = []
+
+    def extract(name, profile, logger, keyring=None, container=None):
+        seen.append((name, profile, keyring, container))
+        jar = CookieJar()
+        for c in (cookie("SID"), cookie("__Secure-3PSID", expires=int(time.time()) + 60),
+                  cookie("__Secure-1PSID", expires=1), cookie("SID", domain=".google.com"), cookie("PREF")):
+            jar.set_cookie(c)
+        return jar
+    import yt_dlp.cookies
+    monkeypatch.setattr(yt_dlp.cookies, "extract_cookies_from_browser", extract)
+    assert ytdl.browser_session("Firefox:clipper") == ["SID", "__Secure-3PSID"]
+    assert seen == [("firefox", "clipper", None, None)]
+
+
+def test_browser_session_errors_name_the_setting(monkeypatch):
+    def extract(*a, **k):
+        raise FileNotFoundError("could not find firefox cookies database")
+    import yt_dlp.cookies
+    monkeypatch.setattr(yt_dlp.cookies, "extract_cookies_from_browser", extract)
+    with pytest.raises(ClipperError, match="cookies_from_browser 'firefox:nope': could not find"):
+        ytdl.browser_session("firefox:nope")
+    with pytest.raises(ClipperError, match="not BROWSER"):
+        ytdl.browser_session(":x")

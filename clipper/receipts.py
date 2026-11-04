@@ -415,7 +415,10 @@ def voiced(cfg: dict, sdir: Path, text: str) -> Path | None:
         return None
     nc = narrate.settings(cfg)
     sig = json.dumps([text, nc["voice_id"], nc["tts_model"], nc["tts_settings"]], sort_keys=True)
-    out = out_dir(sdir) / "vo" / f"{hashlib.sha1(sig.encode()).hexdigest()[:12]}.{nc['output_format'].split('_')[0]}"
+    name = hashlib.sha1(sig.encode()).hexdigest()[:12]
+    # a read voiced before the format changed is still that read: reuse it rather than pay again
+    old = sorted((out_dir(sdir) / "vo").glob(f"{name}.*"))
+    out = old[0] if old else out_dir(sdir) / "vo" / f"{name}.{narrate.ext(nc['output_format'])}"
     if not out.exists():
         out.parent.mkdir(exist_ok=True)
         narrate.speak(text, nc, out)

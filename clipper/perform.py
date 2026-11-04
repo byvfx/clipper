@@ -1,7 +1,7 @@
 """`clipper perform`: a lip-sync take to a script read, cut for the character model (#58).
 
 Usage:
-    clipper perform prepare <recording> --read <read.mp3> [--take N] [--out DIR]
+    clipper perform prepare <recording> --read <read.wav> [--take N] [--out DIR]
     clipper perform status <dir>
     clipper perform stitch <dir>
     clipper perform lipsync <dir> [--engine latentsync|sync|both]   (--deploy: the Modal app)

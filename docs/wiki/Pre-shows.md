@@ -8,7 +8,8 @@ meta, thumbs, review. No clips and no Shorts. Once approved, `clipper schedule` 
 `clipper preshow list` shows the feed; `clipper preshow fetch <url>` grabs an older one.
 
 When YouTube's bot check stops a grab, `clipper preshow` retries it signed in with the YouTube
-cookies file ([Archives](Archives#age-restricted-videos-and-youtube-cookies)).
+cookies file, or with a browser profile's cookies when `[youtube] cookies_from_browser` is set
+([Archives](Archives#signed-in-through-a-browser-profile)).
 
 ## One-offs
 

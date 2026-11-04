@@ -9,7 +9,7 @@ Usage:
 (speech-to-speech): the words, timing and delivery stay the performer's, the voice becomes
 [narrate] voice_id. A video comes back as <take>.voiced.mp4 with the picture untouched, so
 lip sync made from the original take (e.g. by the Mother Moo video models, #58) still lines
-up; an audio file comes back as <take>.voiced.mp3. The performer's accent carries through:
+up; an audio file comes back as <take>.voiced.wav (the [narrate] output_format's type). The performer's accent carries through:
 for a British character, perform it British.
 
 `speak` reads a script in the character's voice (text to speech, [narrate] tts_model, with
@@ -24,9 +24,11 @@ options, to pick a voice_id. The key is the ELEVENLABS_API_KEY user environment 
 
 from __future__ import annotations
 
+import io
 import os
 import subprocess
 import tempfile
+import wave
 from pathlib import Path
 
 import requests
@@ -36,6 +38,60 @@ from .errors import ClipperError
 
 API = "https://api.elevenlabs.io"
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".m4v", ".webm"}
+FALLBACK_FORMAT = "mp3_44100_128"   # every plan has it; used when the plan refuses [narrate] output_format
+
+
+def ext(fmt: str) -> str:
+    """File extension for an ElevenLabs output_format: raw pcm_<rate> is saved as .wav."""
+    return "wav" if fmt.startswith("pcm_") else fmt.split("_")[0]
+
+
+def wav_from_pcm(data: bytes, fmt: str) -> bytes:
+    """ElevenLabs pcm_<rate> is headerless 16-bit little-endian mono; wrap it as a WAV file."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(int(fmt.split("_")[1]))
+        w.writeframes(data[: len(data) // 2 * 2])
+    return buf.getvalue()
+
+
+def refused_format(status: int, body: str) -> bool:
+    """The account's plan doesn't allow the requested output_format."""
+    return status == 403 and "output_format_not_allowed" in body
+
+
+def post_audio(url: str, nc: dict, what: str, **kw) -> tuple[bytes, str]:
+    """POST for audio in [narrate] output_format; if the plan refuses that format, once more in
+    FALLBACK_FORMAT. Returns (audio, the format it came in)."""
+    fmt = nc["output_format"]
+    r = requests.post(url, params={"output_format": fmt}, headers={"xi-api-key": key(nc)}, **kw)
+    if not r.ok and fmt != FALLBACK_FORMAT and refused_format(r.status_code, r.text):
+        print(f"ElevenLabs: this plan doesn't allow output_format {fmt}; using {FALLBACK_FORMAT} "
+              f"(set [narrate] output_format to skip the retry)")
+        fmt = FALLBACK_FORMAT
+        for f in (kw.get("files") or {}).values():
+            f[1].seek(0)
+        r = requests.post(url, params={"output_format": fmt}, headers={"xi-api-key": key(nc)}, **kw)
+    if not r.ok:
+        raise ClipperError(f"ElevenLabs {what}: HTTP {r.status_code}: {r.text[:300]}")
+    return r.content, fmt
+
+
+def save(data: bytes, fmt: str, out: Path) -> Path:
+    """Write audio that came in `fmt` to `out`: PCM wrapped as WAV, converted by ffmpeg when the
+    format doesn't match out's extension (after a fallback, or an -o of another type)."""
+    if fmt.startswith("pcm_"):
+        data = wav_from_pcm(data, fmt)
+    if out.suffix.lstrip(".").lower() == ext(fmt):
+        out.write_bytes(data)
+        return out
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td) / f"audio.{ext(fmt)}"
+        tmp.write_bytes(data)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(tmp), str(out)], check=True)
+    return out
 
 
 def settings(cfg: dict) -> dict:
@@ -61,18 +117,13 @@ def key(nc: dict) -> str:
     return k
 
 
-def convert(audio: Path, nc: dict, voice_id: str) -> bytes:
-    """One speech-to-speech call; returns the encoded audio in nc['output_format']."""
+def convert(audio: Path, nc: dict, voice_id: str) -> tuple[bytes, str]:
+    """One speech-to-speech call; returns (audio, its format), normally [narrate] output_format."""
     with open(audio, "rb") as f:
-        r = requests.post(f"{API}/v1/voice-changer/{voice_id}",
-                          params={"output_format": nc["output_format"]},
-                          headers={"xi-api-key": key(nc)},
+        return post_audio(f"{API}/v1/voice-changer/{voice_id}", nc, "voice changer",
                           data={"model_id": nc["model_id"],
                                 "remove_background_noise": str(nc["remove_background_noise"]).lower()},
                           files={"audio": (audio.name, f, "audio/wav")}, timeout=600)
-    if not r.ok:
-        raise ClipperError(f"ElevenLabs voice changer: HTTP {r.status_code}: {r.text[:300]}")
-    return r.content
 
 
 def voice(take: Path, nc: dict, voice_id: str = "", out: Path | None = None) -> Path:
@@ -84,21 +135,20 @@ def voice(take: Path, nc: dict, voice_id: str = "", out: Path | None = None) -> 
         raise ClipperError(f"{take.name} is {dur:.0f} s; split takes longer than [narrate] max_s "
                          f"({nc['max_s']} s) at pauses first")
     is_video = take.suffix.lower() in VIDEO_EXT
-    ext = nc["output_format"].split("_")[0]
-    out = out or take.with_name(f"{take.stem}.voiced{'.mp4' if is_video else '.' + ext}")
+    out = out or take.with_name(f"{take.stem}.voiced{'.mp4' if is_video else '.' + ext(nc['output_format'])}")
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / "take.wav"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(take), "-vn", "-ac", "1", "-ar", "44100",
                         str(src)], check=True)
-        voiced = Path(td) / f"voiced.{ext}"
-        voiced.write_bytes(convert(src, nc, voice_id))
+        data, fmt = convert(src, nc, voice_id)
+        voiced = save(data, fmt, Path(td) / f"voiced.{ext(fmt)}")
         if is_video:
             # Picture copied untouched; the new voice replaces the take's audio, same start.
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(take), "-i", str(voiced),
                             "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                             "-shortest", "-movflags", "+faststart", str(out)], check=True)
         else:
-            out.write_bytes(voiced.read_bytes())
+            save(data, fmt, out)
     print(f"{out}  ({dur:.1f} s, voice {voice_id})")
     return out
 
@@ -116,11 +166,7 @@ def speak(text: str, nc: dict, out: Path, voice_id: str = "", overrides: dict | 
     body = {"text": text, "model_id": nc["tts_model"]}
     if settings_ := {**nc["tts_settings"], **(overrides or {})}:
         body["voice_settings"] = settings_
-    r = requests.post(f"{API}/v1/text-to-speech/{voice_id}", params={"output_format": nc["output_format"]},
-                      headers={"xi-api-key": key(nc)}, json=body, timeout=600)
-    if not r.ok:
-        raise ClipperError(f"ElevenLabs text to speech: HTTP {r.status_code}: {r.text[:300]}")
-    out.write_bytes(r.content)
+    save(*post_audio(f"{API}/v1/text-to-speech/{voice_id}", nc, "text to speech", json=body, timeout=600), out)
     print(f"{out}  ({media.duration(out):.1f} s, voice {voice_id}, {len(text)} characters, "
           f"settings {body.get('voice_settings', 'voice default')})")
     return out
