@@ -53,6 +53,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
         "faces": "faces",         # known faces, every show: known.json (`clipper faces --enroll`) + models/
+        "streamers": "research_notes/streamers.json",  # people and their channels (`clipper story`)
     },
     "modal": {
         # `clipper modal` and the war room's Modal panel (#49): spend is Modal's own billing.
@@ -107,6 +108,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "ask_max_queries": 8,
         "ask_per_query": 25,      # best-ranked windows kept per query
         "ask_candidates": 80,     # pooled windows the model reads (~25k tokens)
+        "kick_format": "worst",   # a Kick VOD (`clipper story`): HLS variants are muxed, so the smallest one
     },
     "receipts": {
         # `clipper receipts`: a stream's stories about an archive subject -> old clips of him
@@ -191,6 +193,31 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "budget_usd": 1.0,        # per run; it stops before a call would go over
         "max_wall_s": 600,        # per run; no new task starts after this
         "rates": {"youtube": 0.5, "kick": 2.0, "odysee": 2.0, "reddit": 0.5, "web": 1.0},  # requests/s per source
+    },
+    "story": {
+        # `clipper story` (#84), phase 1: a brief -> the swarm -> the videos worth transcribing ->
+        # the moments that tell it -> a dossier. Files in paths.archive/story-<slug>/.
+        "people": {},             # {name = {youtube = "@x", kick = "y", odysee = "@z"}}, beside streamers.json
+        "days": 7,                # the window when --since isn't given
+        "max_videos": 12,         # triage: videos to transcribe, at most (our own streams don't count)
+        "max_hours": 6.0,         # ...and hours of audio (a video of unknown length counts as one)
+        "min_duration_s": 30,     # shorter videos are skipped
+        "gpu": "L4",              # Modal GPU for the transcripts
+        "parallel": 2,            # containers at once: each cold start costs ~10 min of GPU, a story has few items
+        "youtube_bot_retry": True,  # YouTube's bot check: retry signed in ([paths] youtube_cookies), as pre-shows do (user 11-03)
+        "triage_model": "claude-haiku-5-5",
+        "triage_effort": "low",
+        "find_model": "claude-haiku-5-5",  # writes the searches, then picks the moments
+        "find_effort": "low",
+        "max_queries": 10,
+        "per_query": 20,          # best-ranked windows kept per search and subject
+        "candidates": 120,        # pooled windows the find model reads
+        "dossier_model": "claude-sonnet-5-5",
+        "dossier_effort": "medium",
+        "dossier_sources": 80,    # swarm findings the dossier may cite, best first
+        "prompt_version": "v1",   # prompts/story_{triage,expand,moments,dossier}_<v>.md
+        "budget_usd": 2.0,        # triage, find and dossier together (the swarm has its own)
+        "swarm": {},              # [swarm] settings for a story's searches, e.g. {max_tasks = 40}
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.

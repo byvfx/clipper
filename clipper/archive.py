@@ -20,6 +20,8 @@ Sources:
         Modal untouched (YouTube blocks downloads from datacenter IPs).
     Odysee channels (https://odysee.com/@name): listed with the Odysee API; Modal fetches the
         media itself (WhisperX.transcribe_url), so nothing passes through this machine.
+    Kick VODs (a `clipper story` item, #84, with its HLS `m3u8`): the smallest variant
+        ([archive] kick_format) is downloaded here, its audio sent as flac.
 Items shorter than [archive] min_duration_s are skipped. Catalog order is newest first.
 `transcribe` logs progress and failures to <subject>/transcribe.log as well as the console,
 and a failed item leaves <subject>/<id>/error.txt until a rerun succeeds.
@@ -36,6 +38,7 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -72,6 +75,12 @@ def save_json(d: Path, name: str, data: dict) -> None:
 
 def save_catalog(d: Path, cat: dict[str, dict]) -> None:
     save_json(d, "catalog.json", cat)
+
+
+def item_dir(d: Path, it: dict) -> Path:
+    """Where an item's transcript is: its own folder, or `dir` for one transcribed elsewhere
+    (a `clipper story` item that is one of our own streams)."""
+    return Path(it["dir"]) if it.get("dir") else d / it["id"]
 
 
 def load_links(d: Path) -> dict[str, dict]:
@@ -159,8 +168,9 @@ def estimate_usd(hours: float, gpu: str, diarize: bool = False) -> float:
     return gpu_h * GPU_PRICES.get(gpu, 0.0)
 
 
-def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
-    """One item: words.jsonl and transcript.json in idir; returns the cost record."""
+def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[str, ...] = ytdl.AGE) -> dict:
+    """One item: words.jsonl and transcript.json in idir; returns the cost record. retry_on: the
+    YouTube errors retried signed in (ytdl.AGE; a story adds ytdl.BOT when [story] allows it)."""
     tc = dict(cfg["transcribe"], backend="modal", diarize=cfg["archive"]["diarize"])
     settings = transcribe.modal_settings(tc, diarize=tc["diarize"])
     idir.mkdir(parents=True, exist_ok=True)
@@ -181,7 +191,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
     if it["source"] == "youtube":
         args = ["-f", cfg["archive"]["youtube_format"], "--write-info-json", "--no-playlist",
                 "-o", str(idir / "audio.%(ext)s"), it["url"]]
-        r, signed_in = ytdl.run_retrying(cfg, *args, retry_on=ytdl.AGE)  # see ytdl's docstring
+        r, signed_in = ytdl.run_retrying(cfg, *args, retry_on=retry_on)  # see ytdl's docstring
         audio = [p for p in idir.glob("audio.*") if p.suffix not in (".json", ".part")]
         if r.returncode or not audio:
             raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
@@ -190,11 +200,28 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str) -> dict:
         info_path.unlink()
         ts = info.get("timestamp") or info.get("release_timestamp")
         meta.update(title=info.get("title") or it["title"], description=info.get("description") or "",
+                    channel=info.get("channel") or info.get("uploader") or it.get("channel") or "",
                     duration_s=float(info.get("duration") or it["duration_s"]),
                     date=datetime.fromtimestamp(ts, UTC).date().isoformat() if ts else None)
         data = audio[0].read_bytes()
         out, cost = call(worker.transcribe, data, audio[0].suffix, settings)
         audio[0].unlink()
+    elif it["source"] == "kick":
+        # Kick's HLS variants carry video and audio together, so there is no audio-only format:
+        # the smallest variant, its audio as flac (as a stream's goes to Modal)
+        src = idir / "source.ts"
+        r = ytdl.run("--referer", "https://kick.com/", "-f", cfg["archive"]["kick_format"], "--hls-use-mpegts",
+                     "--no-part", "-N", "4", "-o", str(src), it["m3u8"])
+        if r.returncode or not src.exists():
+            raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
+        wav = transcribe.extract_audio(idir)
+        src.unlink()
+        enc = idir / "audio.flac"
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(wav), "-c:a", "flac",
+                        str(enc)], check=True)
+        wav.unlink()
+        out, cost = call(worker.transcribe, enc.read_bytes(), ".flac", settings)
+        enc.unlink()
     else:
         media = odysee("get", {"uri": it["url"]})["streaming_url"]
         out, cost = call(worker.transcribe_url, media, settings)
@@ -241,12 +268,13 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
         fh.close()
 
 
-def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str, parallel: int) -> None:
+def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str, parallel: int,
+                    retry_on: tuple[str, ...] = ytdl.AGE) -> None:
     log.info("%s: started, %d items on %s x%d", subject, len(todo), gpu, parallel)
     spent, done, failed, streak, signed_in = 0.0, 0, 0, 0, 0
     stop_after = cfg["archive"]["stop_after_failures"]
     with ThreadPoolExecutor(parallel) as pool:
-        jobs = {pool.submit(transcribe_item, cfg, d / it["id"], it, gpu): it for it in todo}
+        jobs = {pool.submit(transcribe_item, cfg, d / it["id"], it, gpu, retry_on): it for it in todo}
         for job in as_completed(jobs):
             it = jobs[job]
             if job.cancelled():
@@ -270,7 +298,7 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
                 log.warning("%d failures in a row: stopping (rerun to resume)", streak)
                 pool.shutdown(wait=True, cancel_futures=True)
                 break
-    log.info("%s: %d transcribed (%d signed in, age-restricted), %d failed, ~$%.2f",
+    log.info("%s: %d transcribed (%d signed in), %d failed, ~$%.2f",
              subject, done, signed_in, failed, spent)
 
 

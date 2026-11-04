@@ -649,6 +649,34 @@ def cmd_investigate(cfg: dict, args: argparse.Namespace) -> None:
         investigate.show_list(cfg, args.subject)
 
 
+def cmd_story(cfg: dict, args: argparse.Namespace) -> None:
+    from . import costs, story
+
+    a = args.action
+    if a in ("new", "run"):
+        over = {k: v for k, v in (("max_videos", args.max_videos), ("max_hours", args.max_hours)) if v is not None}
+        cfg = {**cfg, "story": {**cfg["story"], **over}}
+    if a == "new":
+        if args.days is not None and args.since:
+            raise ClipperError("--days or --since, not both")
+        slug = story.new(cfg, args.brief, args.slug, args.days, args.since, args.before, args.person, args.url)
+        costs.set_context("story new", f"story-{slug}")
+        story.run(cfg, slug, dry_run=args.dry_run)
+        return
+    if a == "status":
+        story.status(cfg, args.slug)
+        return
+    costs.set_context(f"story {a}", f"story-{args.slug}")
+    if a == "run":
+        story.run(cfg, args.slug, args.start, args.dry_run)
+    elif a == "add":
+        story.add(cfg, args.slug, args.urls)
+    elif a == "trail":
+        story.trail(cfg, args.slug)
+    else:
+        story.show(cfg, args.slug)
+
+
 def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
     from . import weekly
 
@@ -812,7 +840,7 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'investigate', 'narrate', 'perform', 'modal',
+    ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
@@ -1275,6 +1303,42 @@ def add_extras(sub) -> None:
     span(r)
     r.add_argument("--about", help="narrow the leads to a focus")
     r.add_argument("--max", type=int, help="leads kept")
+
+    p = sub.add_parser("story", help="a news brief -> the swarm -> transcripts -> the moments -> a dossier "
+                                     "(#84 phase 1; research only, nothing is uploaded)")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_story)
+
+    def limits(r) -> None:
+        r.add_argument("--max-videos", type=int, help="videos to transcribe (default [story] max_videos)")
+        r.add_argument("--max-hours", type=float, help="hours of audio to transcribe (default [story] max_hours)")
+        r.add_argument("--dry-run", action="store_true", help="stop after triage: the list and the Modal estimate")
+
+    r = rsub.add_parser("new", help="start a story from a brief and run every step")
+    r.add_argument("brief", help='e.g. "Jer banned from Kick after the FDA call"')
+    r.add_argument("--slug", help="the story's name (default: from the brief's words)")
+    r.add_argument("--days", type=int, help="the window: the last N days (default [story] days)")
+    r.add_argument("--since", help="the window starts YYYY-MM-DD")
+    r.add_argument("--before", help="the window ends before YYYY-MM-DD")
+    r.add_argument("--person", action="append", default=[], help="someone the brief doesn't name, by name or "
+                   "nickname in streamers.json or [story] people (repeatable)")
+    r.add_argument("--url", action="append", default=[], help="a video to transcribe whatever triage says "
+                   "(YouTube, Kick VOD, Odysee; repeatable)")
+    limits(r)
+    r = rsub.add_parser("run", help="the steps not done yet (swarm, triage, ingest, find, dossier)")
+    r.add_argument("slug")
+    r.add_argument("--from", dest="start", choices=["swarm", "triage", "ingest", "find", "dossier"],
+                   help="rerun this step and every one after it")
+    limits(r)
+    r = rsub.add_parser("add", help="videos to transcribe whatever triage says; then run --from triage")
+    r.add_argument("slug")
+    r.add_argument("urls", nargs="+")
+    r = rsub.add_parser("status", help="each story's steps, transcripts, moments and model cost")
+    r.add_argument("slug", nargs="?")
+    r = rsub.add_parser("trail", help="the swarm's task tree: who found what, from which search")
+    r.add_argument("slug")
+    r = rsub.add_parser("show", help="the dossier, re-rendered from dossier.json (keeps hand edits; no model call)")
+    r.add_argument("slug")
 
     p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
     rsub = p.add_subparsers(dest="action", required=True)

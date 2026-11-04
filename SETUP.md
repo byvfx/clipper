@@ -261,6 +261,12 @@ and yt-dlp (with deno, as for pre-shows). Its web and Reddit searches use the sa
 Odysee and YouTube listings need no key. YouTube searches run from this machine's IP, so a bot
 check here affects them too. Per-source request rates are `[swarm] rates`.
 
+**Story dossiers (#84)**, `clipper story`, need the swarm's keys plus Modal (as for `clipper
+archive`): the videos it picks are transcribed there, on `[story] gpu` (L4). Kick VODs are
+downloaded here at their smallest variant (`[archive] kick_format`) for their audio; YouTube audio
+uses the archive's cookies retry. People and their channels come from `[paths] streamers`
+(`research_notes/streamers.json`) and `[story] people` for anyone not in it.
+
 **Costs (#50).** Every model call appends its cost to `[paths] costs` (`logs/costs.jsonl`)
 with the command and stream it ran for; `clipper costs` and the war room's Costs panel add
 that to the Modal run log and your fixed costs: put plans and subscriptions in `[costs]

@@ -353,6 +353,31 @@ whereabouts or private details are dropped. The trail is the caller's `swarm.jso
 its parent, results, findings, cost); a rerun resumes it. A 30-task run on Jer's Huck story found
 109 results (44 strong) across Kick, YouTube clip channels, Odysee, Reddit and the web for ~$0.03.
 
+### Story dossiers from outside footage (#84)
+
+```bash
+clipper story new "Jer banned from Kick after the FDA call" --days 7 --dry-run   # swarm + triage, the cost
+clipper story run jer-banned-kick-fda-call     # transcribe, find the moments, write the dossier
+clipper story show jer-banned-kick-fda-call    # dossier.md again (keeps hand edits)
+clipper story add <slug> <video url>...        # then: clipper story run <slug> --from triage
+clipper story status | trail <slug>
+```
+
+A brief in, a research dossier out (phase 1; phase 2 cuts the moments into an edit). The people
+the brief names (by name, nickname or slug, from `research_notes/streamers.json` and `[story]
+people`; `--person` adds one) seed the swarm with their YouTube, Kick and Odysee channels. Triage
+(Haiku) picks the videos worth transcribing within `--max-videos` / `--max-hours`, the people's own
+uploads first, and prints the Modal estimate; our own recorded streams are linked, not transcribed
+again. Ingest transcribes on Modal (YouTube audio, Kick VOD audio, Odysee) into the archive subject
+`story-<slug>` and indexes it. Find (Haiku) searches that index and any archive subject the swarm
+found something in, picks the moments (event, reaction, context) and keeps only quotes that are in
+the transcript, in its own wording. The dossier (Sonnet) is a summary, a timeline marked shown /
+reported / speculation, people, who said what, conflicts, coverage, gaps and angles, every line
+citing moments (M01) or sources (S01); a cite that doesn't resolve is sent back once, then the step
+fails. In `dossier.json`, `notes` and a source's `struck: true` survive a rerun. Each step is skipped
+when done; `--from` reruns one and everything after it. Files are in `paths.archive/story-<slug>/`;
+nothing is uploaded.
+
 ## Character pieces (Mother Moo)
 
 The Udder Truth's host is performed to playback: a script read in her voice, the performer
