@@ -131,12 +131,12 @@ def resolve(url: str, cfg: dict) -> dict:
     raise ClipperError(f"{vid} not in {channel}'s recent videos ({len(videos)} listed)")
 
 
-def list_videos(channel: str, cfg: dict) -> list[dict]:
+def list_videos(channel: str, cfg: dict, limiter: RateLimiter | None = None) -> list[dict]:
     """A Kick channel's past broadcasts, newest first, as archive items (#84, #109): id,
     source, url (the VOD page), title, duration_s, channel, date, plus started_at and the
-    HLS master m3u8 (`m3u8`)."""
+    HLS master m3u8 (`m3u8`). limiter spaces each attempt, retries included."""
     out = []
-    for v in _get(f"{API}/channels/{channel}/videos", cfg["kick"]["user_agent"]) or []:
+    for v in _get(f"{API}/channels/{channel}/videos", cfg["kick"]["user_agent"], limiter) or []:
         uuid = (v.get("video") or {}).get("uuid")
         if not uuid or not v.get("start_time"):
             continue

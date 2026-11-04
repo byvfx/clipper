@@ -30,8 +30,9 @@ Guardrails (#108's rule, for every task):
   searches for addresses, whereabouts or private people's details: the prompts say so, and
   `private` drops a target that asks for them.
 - No downloads: the swarm finds and ranks; the caller ingests within its own budget.
-Each source has its own rate ([swarm] rates, requests a second; 0 = no limit), so the real
-concurrency is the sources', not only `workers`.
+Each source has its own rate ([swarm] rates, requests a second; 0 = no limit), waited on
+before every request (each YouTube tab, Odysee page, Kick retry), so the real concurrency is
+the sources', not only `workers`.
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from . import jsonstate, ytdl
 from .errors import ClipperError
@@ -63,9 +64,6 @@ KINDS = {
                       "(target: '<subject>: <words>')",
     "our_streams": "whether our own shows covered it: segment titles and summaries (target: a few words)",
 }
-SOURCE = {"youtube_search": "youtube", "youtube_channel": "youtube", "kick_videos": "kick",
-          "odysee_channel": "odysee", "reddit_search": "reddit", "web_search": "web",
-          "archive_search": "local", "our_streams": "local"}
 RELEVANCE = {"strong": 0, "maybe": 1}
 
 PLAN_SCHEMA = {
@@ -106,8 +104,11 @@ YT_CHANNEL = re.compile(r"(?:https?://)?(?:www\.|m\.)?youtube\.com/(@[\w.-]+|cha
                         re.IGNORECASE)
 KICK_CHANNEL = re.compile(r"(?:https?://)?(?:www\.)?(?:kick\.com/)?@?([A-Za-z0-9_-]{2,30})/?")
 ODYSEE_CHANNEL = re.compile(r"(?:https?://)?(?:odysee\.com/)?(@[\w.-]+)(?::\w+)?/?")
-PRIVATE = re.compile(r"\b(home address|street address|email address|phone numbers?|cell numbers?|lives at|"
-                     r"where (?:does|do|did) \S+(?: \S+)? (?:live|stay|sleep)|whereabouts|doxx?(?:ed|ing)?|"
+PRIVATE = re.compile(r"\b((?:home|house|street|residential|mailing|physical|postal|email|ip) address(?:es)?|"
+                     r"address (?:of|for) (?:his|her|their)|phone numbers?|cell numbers?|lives at|lives in|"
+                     r"where (?:does|do|did) \S+(?: \S+)? (?:live|stay|sleep)|"
+                     r"where (?:is|are|was) \S+(?: \S+)? (?:right now|now|today|tonight|staying|living|located|based)|"
+                     r"(?:current|exact|live|gps) location|located at|whereabouts|doxx?(?:ed|ing)?|"
                      r"license plates?|ssn|social security|zip ?codes?|workplace|employer|"
                      r"(?:kids?|children|son|daughter)'?s? school)\b", re.IGNORECASE)
 
@@ -171,9 +172,17 @@ def yt_filter(days: int) -> str:
     return "EgQIAxAB" if days <= 7 else "EgQIBBAB" if days <= 31 else "EgQIBRAB" if days <= 366 else ""
 
 
-def flat_youtube(url: str, n: int) -> list[dict]:
+Pace = Callable[[], None]   # waits for the source's next request slot ([swarm] rates)
+
+
+def no_wait() -> None:
+    pass
+
+
+def flat_youtube(url: str, n: int, pace: Pace = no_wait) -> list[dict]:
     """Up to n videos of a YouTube search or channel tab: titles, channels and approximate
     dates (YouTube's "3 days ago", which yt-dlp turns into a day), no download."""
+    pace()
     r = ytdl.run("--flat-playlist", "--playlist-end", str(n), "--extractor-args", "youtubetab:approximate_date",
                  "-J", url)
     if r.returncode:
@@ -194,17 +203,17 @@ def flat_youtube(url: str, n: int) -> list[dict]:
     return out
 
 
-def youtube_search(query: str, n: int, days: int = 0) -> list[dict]:
+def youtube_search(query: str, n: int, days: int = 0, pace: Pace = no_wait) -> list[dict]:
     params = {"search_query": query} | ({"sp": sp} if (sp := yt_filter(days)) else {})
-    return flat_youtube("https://www.youtube.com/results?" + urlencode(params), n)
+    return flat_youtube("https://www.youtube.com/results?" + urlencode(params), n, pace)
 
 
-def youtube_channel(url: str, n: int) -> list[dict]:
+def youtube_channel(url: str, n: int, pace: Pace = no_wait) -> list[dict]:
     """The channel's newest uploads and streams (its /videos and /streams tabs), newest first."""
     out, errors = [], []
     for tab in ("videos", "streams"):
         try:
-            out += [{**r, "kind": tab} for r in flat_youtube(f"{url}/{tab}", n)]
+            out += [{**r, "kind": tab} for r in flat_youtube(f"{url}/{tab}", n, pace)]
         except RuntimeError as e:
             errors.append(str(e))  # e.g. no streams tab
     if not out and errors:
@@ -213,17 +222,17 @@ def youtube_channel(url: str, n: int) -> list[dict]:
     return out[:n]
 
 
-def kick_videos(cfg: dict, channel: str, n: int) -> list[dict]:
+def kick_videos(cfg: dict, channel: str, n: int, limiter: RateLimiter | None = None) -> list[dict]:
     from .kick import list_videos
 
-    return [{**it, "source": "kick"} for it in list_videos(channel, cfg)[:n]]
+    return [{**it, "source": "kick"} for it in list_videos(channel, cfg, limiter)[:n]]
 
 
-def odysee_channel(name: str, n: int) -> list[dict]:
+def odysee_channel(name: str, n: int, pace: Pace = no_wait) -> list[dict]:
     from .archive import list_odysee
 
     return [{**it, "url": f"https://odysee.com/{it['url'].removeprefix('lbry://').replace('#', ':')}",
-             "lbry": it["url"]} for it in list_odysee(name, limit=n)]
+             "lbry": it["url"]} for it in list_odysee(name, limit=n, pace=pace)]
 
 
 def archive_search(cfg: dict, target: str, n: int, since: str | None, before: str | None) -> list[dict]:
@@ -259,29 +268,48 @@ def focus(results: list[dict], words: list[str], n: int) -> list[dict]:
     return [results[k] for k in sorted(k for _, k in sorted(score)[:n])]
 
 
+def limiters(rates: dict[str, float]) -> dict[str, RateLimiter]:
+    """One limiter per source with a rate ([swarm] rates; 0 = none), shared by every task."""
+    return {src: RateLimiter(rps) for src, rps in rates.items() if rps}
+
+
 def default_tools(cfg: dict, days: int = 0, since: str | None = None, before: str | None = None,
-                  depth: int = 200) -> dict[str, Callable[[str, int], list[dict]]]:
+                  depth: int = 200, limits: dict[str, RateLimiter] | None = None
+                  ) -> dict[str, Callable[[str, int], list[dict]]]:
     """kind -> tool(target, n). days bounds YouTube searches (and is since when since isn't
-    given); since/before bound the channel listings, which read up to depth videos, and the
-    archive."""
+    given); since/before bound every dated result (the channel listings read up to depth
+    videos) and the archive. limits: each source's limiter, waited on before every request
+    (each YouTube tab, each Odysee page, each Kick retry)."""
     from datetime import timedelta
 
     from . import investigate
 
+    limits = limits or {}
+
+    def pace(src: str) -> Pace:
+        return limits[src].wait if src in limits else no_wait
+
+    def paced(src: str, fn: Callable[[], list[dict]]) -> list[dict]:
+        pace(src)()
+        return fn()
+
     since = since or ((datetime.now(UTC) - timedelta(days=days)).date().isoformat() if days else None)
     return {
-        "youtube_search": lambda q, n: youtube_search(q, n, days),
-        "youtube_channel": lambda u, n: in_window(youtube_channel(u, depth), since, before),
-        "kick_videos": lambda ch, n: in_window(kick_videos(cfg, ch, depth), since, before),
-        "odysee_channel": lambda name, n: in_window(odysee_channel(name, depth), since, before),
-        "reddit_search": lambda q, n: investigate.reddit_search(cfg, q, n),
-        "web_search": lambda q, n: investigate.brave_search(cfg, q, n, "web"),
+        "youtube_search": lambda q, n: in_window(youtube_search(q, n, days, pace("youtube")), since, before),
+        "youtube_channel": lambda u, n: in_window(youtube_channel(u, depth, pace("youtube")), since, before),
+        "kick_videos": lambda ch, n: in_window(kick_videos(cfg, ch, depth, limits.get("kick")), since, before),
+        "odysee_channel": lambda name, n: in_window(odysee_channel(name, depth, pace("odysee")), since, before),
+        "reddit_search": lambda q, n: paced("reddit", lambda: investigate.reddit_search(cfg, q, n)),
+        "web_search": lambda q, n: paced("web", lambda: investigate.brave_search(cfg, q, n, "web")),
         "archive_search": lambda t, n: archive_search(cfg, t, n, since, before),
         "our_streams": lambda q, n: investigate.our_streams(cfg, investigate.terms(q), n),
     }
 
 
 # ---------- findings ----------
+
+TRACKING_PREFIX = ("utm_",)
+TRACKING = {"fbclid", "gclid", "igshid", "si", "ref", "ref_src", "ref_url", "feature", "share_id", "context"}
 
 def finding_key(r: dict) -> str:
     """One video, VOD, thread or archive moment is one finding however it was found."""
@@ -294,8 +322,15 @@ def finding_key(r: dict) -> str:
         return f"kick:{m.group(1)}"
     if m := re.search(r"odysee\.com/.*[:#]([0-9a-f]{40})", u):
         return f"od:{m.group(1)}"
-    u = re.sub(r"[?#].*$", "", u.lower()).removeprefix("https://").removeprefix("http://").removeprefix("www.")
-    return u.rstrip("/") or f"title:{(r.get('title') or '').lower()}"
+    p = urlsplit(u)
+    if not p.netloc:  # not a url (e.g. "kick-135553454 s08", one of our segments)
+        return u.strip() or f"title:{(r.get('title') or '').lower()}"
+    # Host case and tracking parameters don't make another page; the path's case and the
+    # other parameters (viewtopic.php?t=123) can.
+    query = urlencode([(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
+                       if not k.lower().startswith(TRACKING_PREFIX) and k.lower() not in TRACKING])
+    host = p.netloc.lower().removeprefix("www.")
+    return f"{host}{p.path.rstrip('/')}" + (f"?{query}" if query else "")
 
 
 def merge(found: dict[str, dict], task_id: str, result: dict, relevance: str, why: str) -> bool:
@@ -327,6 +362,8 @@ def listing(results: list[dict]) -> str:
         when = (r.get("date") or "undated") + ("~" if r.get("date_approx") else "")
         dur = f" | {r['duration_s'] / 60:.0f} min" if r.get("duration_s") else ""
         lines.append(f"[{k}] {r.get('source', '')} | {r.get('channel') or '?'} | {when}{dur} | {r.get('title', '')}")
+        # the real ids, so a follow-up names the channel found, not a guess from its display name
+        lines.append(f"    {r.get('url', '')}" + (f" | channel {r['channel_url']}" if r.get("channel_url") else ""))
         if r.get("summary"):
             lines.append(f"    {r['summary'][:300]}")
     return "\n".join(lines)
@@ -349,7 +386,6 @@ class Run:
         self.budget = Budget(s["budget_usd"], claude, spent_before=claude.cost)
         self.t0, self.ran, self.stopped = time.monotonic(), 0, ""
         self.lock = threading.Lock()
-        self.limiters = {src: RateLimiter(rps) for src, rps in s["rates"].items() if rps}
         self.found = {f["key"]: f for f in trail["findings"]}
         self.words = terms(goal)
         self.seen = {task_key(t["kind"], t["target"]) for t in trail["tasks"]}
@@ -424,7 +460,7 @@ class Run:
             self.stop(str(e))
             return
         out = out or {"tasks": []}
-        self.trail["planner_usd"] = round(usd, 5)
+        self.trail.update(planned=True, planner_usd=round(usd, 5))
         dropped: list[dict] = []
         made = [t for x in out["tasks"][:s["first_tasks"]]
                 if (t := self.add_task(x["kind"], x["target"], x["why"], None, 0, dropped))]
@@ -457,8 +493,7 @@ class Run:
             return []
         t0, usd = time.monotonic(), 0.0
         try:
-            if lim := self.limiters.get(SOURCE[t["kind"]]):
-                lim.wait()
+            # the tools wait on their source's rate before each request
             results = focus(self.tools[t["kind"]](t["target"], s["results_per_task"]),
                             self.words + terms(f"{t['target']} {t['why']}"), s["results_per_task"])
         except Exception as e:  # noqa: BLE001  # one source down doesn't stop the swarm
@@ -504,10 +539,9 @@ class Run:
     # -- the rounds --
 
     def go(self) -> None:
-        todo = [t for t in self.trail["tasks"] if t["status"] != "done"]
-        if not self.trail["tasks"]:
+        if not self.trail.get("planned"):  # once per trail; the caller's seeds run beside the plan
             self.plan()
-            todo = list(self.trail["tasks"])
+        todo = [t for t in self.trail["tasks"] if t["status"] != "done"]
         for t in todo:
             t["status"] = "pending"
         rounds = 0
@@ -544,7 +578,7 @@ def run(cfg: dict, goal: str, trail_path: Path, context: str = "", seeds: list[d
         claude = Claude(cfg)
         quiet_http()
         preflight(claude, s["worker_model"])
-    tools = tools or default_tools(cfg, days, since, before, s["channel_depth"])
+    tools = tools or default_tools(cfg, days, since, before, s["channel_depth"], limiters(s["rates"]))
     archives = archives_on_file(cfg) if archives is None else archives
     trail = jsonstate.read(trail_path, None) or new_trail(goal, s)
     trail_path.parent.mkdir(parents=True, exist_ok=True)

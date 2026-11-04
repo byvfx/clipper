@@ -63,7 +63,11 @@ def test_private_details_are_never_searched():
     assert swarm.target_of("youtube_search", "jer home address", []) is None
     assert swarm.target_of("web_search", "where does jer live", []) is None
     assert swarm.target_of("reddit_search", "Jer's kids school", []) is None
+    for q in ("where is jer right now", "jer residential address", "jer current location", "where is jer staying",
+              "jer lives in which town"):
+        assert swarm.target_of("web_search", q, []) is None, q
     assert swarm.target_of("youtube_search", "jer addresses the lawsuit", []) == "jer addresses the lawsuit"
+    assert swarm.target_of("youtube_search", "where is jer going with this", []) == "where is jer going with this"
 
 
 def test_one_video_is_one_finding_however_it_was_found():
@@ -72,7 +76,10 @@ def test_one_video_is_one_finding_however_it_was_found():
     assert k({"url": "https://www.youtube.com/shorts/abcdefghijk"}) == "yt:abcdefghijk"
     a = {"source": "archive jer", "item": "yt-x", "t": 10.0, "url": "https://www.youtube.com/watch?v=abcdefghijk"}
     assert k(a) != k({**a, "t": 300.0}) != k({"url": a["url"]})   # two moments of one video are two findings
-    assert k({"url": "https://www.Reddit.com/r/x/comments/1/t/?utm=1"}) == "reddit.com/r/x/comments/1/t"
+    assert k({"url": "https://www.Reddit.com/r/x/comments/1/t/?utm_source=share&context=3"}) == "reddit.com/r/x/comments/1/t"
+    assert k({"url": "https://forum.example/viewtopic.php?t=123"}) != k({"url": "https://forum.example/viewtopic.php?t=456"})
+    assert k({"url": "https://example.com/Story"}) != k({"url": "https://example.com/story"})   # paths keep their case
+    assert k({"url": "kick-135553454 s08"}) == "kick-135553454 s08"   # one of our segments
 
 
 def test_findings_merge_and_follow_ups_run_as_the_next_round(cfg, tmp_path):
@@ -156,6 +163,7 @@ def test_seeds_and_known_findings(cfg, tmp_path):
     out = swarm.run(cfg, "goal", tmp_path / "s.json", claude=llm, tools={"kick_videos": lambda c, n: [vid(1)],
                     "youtube_search": lambda q, n: [vid(2)]}, archives=[], seeds=seeds, known=known, log=lambda s: None)
     trail = jsonstate.load(tmp_path / "s.json")
+    assert ("plan", "") in llm.calls and trail["planned"]   # seeds run beside the plan, not instead of it
     assert [t["target"] for t in trail["tasks"]] == ["jer", "jer huck"]   # the planner's repeat isn't queued
     assert out["findings"][0]["found_by"] == ["given"]
 
@@ -184,6 +192,42 @@ def test_a_busy_channel_is_cut_to_the_dates_and_the_goals_words():
     assert [r["title"] for r in kept] == ["Huck MRI update", "Coffee for Huck", "Untitled stream"]  # undated stays
     assert [r["title"] for r in swarm.focus(rs, ["huck", "mri"], 2)] == ["Huck MRI update", "Coffee for Huck"]
     assert swarm.focus(rs, ["huck"], 9) is rs
+
+
+def test_every_request_waits_on_its_source_and_searches_keep_the_dates(cfg, monkeypatch):
+    from clipper import archive
+
+    waits = []
+
+    class Lim:
+        def __init__(self, src):
+            self.src = src
+
+        def wait(self):
+            waits.append(self.src)
+
+    def flat(url, n, pace):
+        pace()
+        return [{**vid(1), "date": "2026-10-30"}, {**vid(2), "date": "2026-09-01"}]
+
+    def odysee(method, params):
+        if method == "resolve":
+            return {"lbry://@jer": {"claim_id": "c" * 40, "value": {"title": "Jer"}}}
+        return {"items": [{"claim_id": f"{params['page']:040d}", "name": "v", "timestamp": 1793750400, "value": {}}],
+                "total_pages": 3}
+
+    monkeypatch.setattr(swarm, "flat_youtube", flat)
+    monkeypatch.setattr(archive, "odysee", odysee)
+    tools = swarm.default_tools(cfg, days=7, since="2026-10-01", limits={s: Lim(s) for s in ("youtube", "odysee")})
+    assert [r["date"] for r in tools["youtube_search"]("jer huck", 20)] == ["2026-10-30"]   # since, not just "this week"
+    tools["youtube_channel"]("https://www.youtube.com/@x", 20)
+    tools["odysee_channel"]("@jer", 20)
+    assert waits == ["youtube"] * 3 + ["odysee"] * 4   # search, both channel tabs; resolve + 3 pages
+
+
+def test_the_worker_sees_each_results_link_and_channel():
+    text = swarm.listing([{**vid(1), "channel_url": "https://www.youtube.com/channel/UCabc"}])
+    assert "https://www.youtube.com/watch?v=00000000001 | channel https://www.youtube.com/channel/UCabc" in text
 
 
 def test_youtube_window_filters():
