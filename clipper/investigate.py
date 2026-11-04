@@ -1016,6 +1016,8 @@ def reddit_search(cfg: dict, query: str, n: int) -> list[dict]:
 def our_streams(cfg: dict, ts: list[str], n: int) -> list[dict]:
     out = []
     for sp in sorted(Path(cfg["paths"]["streams"]).glob("*/segments.json"), reverse=True):
+        if sp.parent.name.startswith("story-"):  # our edit of other people's videos (#84), not a show
+            continue
         for s in (jsonstate.read(sp, {}) or {}).get("segments", []):
             text = " ".join([s.get("title") or "", s.get("summary") or "", s.get("topic") or "",
                              *(s.get("figures") or [])])

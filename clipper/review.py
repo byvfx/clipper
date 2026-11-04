@@ -308,6 +308,8 @@ def episode_name(stream_dir: Path, rc: dict, tz: str = "America/Los_Angeles") ->
 
     meta = jsonstate.load(stream_dir / "meta.json")
     aired = datetime.fromisoformat(meta["started_at"]).astimezone(ZoneInfo(tz))
+    if meta.get("kind") == "story":  # its own episode, not the show's that day (#84)
+        return f"{aired:%Y-%m-%d} {stream_dir.name}"
     return rc["episode_name"].format(date=f"{aired:%Y-%m-%d}", stream_id=stream_dir.name,
                                      title=meta.get("title", ""))
 

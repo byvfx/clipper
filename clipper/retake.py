@@ -261,6 +261,10 @@ def trim_segment(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> list[st
     Returns the compilation item keys that changed."""
     from .cut import cut_compilations, cut_segments
 
+    if (load(sdir / "meta.json", {}) or {}).get("kind") == "story":
+        story = sdir.name.removeprefix("story-")
+        raise ClipperError(f"a story's video is an edit of other videos: trim its parts in {sdir.name}/story.json, "
+                           f"then clipper story cut {story}")
     with jsonstate.update(sdir / "segments.json", {}) as data:
         seg = next(s for s in data["segments"] if s["id"] == st["id"])
         delta = a - seg["start_s"]

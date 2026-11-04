@@ -24,7 +24,7 @@ from .config import for_stream
 from .errors import ClipperError
 from .llm import Claude, preflight
 from .prompts import Prompts
-from .timefmt import hms
+from .timefmt import clock, hms
 from .transcript import load_words, snap, transcript_lines
 
 META_SCHEMA = {
@@ -89,7 +89,7 @@ def load_assets(stream_dir: Path) -> list[dict]:
         out.append({"kind": "segment", "id": d["id"], "video": side.with_suffix(".mp4"),
                     "title": d["title"], "body": d["description"], "summary": d["summary"],
                     "topic": d["topic"], "figures": d.get("figures", []),
-                    "parts": [(a, d["end_s"], 0.0)]})
+                    "parts": [(a, d["end_s"], 0.0)], "chapters": d.get("chapters") or []})
     for side in sorted((stream_dir / "compilations").glob("*.json")):
         d = jsonstate.load(side)
         offsets = {c["id"]: c["start_s"] for c in d["chapters"]}
@@ -181,6 +181,11 @@ def credit_line(meta: dict, mc: dict, cfg: dict) -> str:
         date = f"{dt:%b} {dt.day}, {dt.year}"
     except ValueError:
         date = ""
+    if meta.get("kind") == "story":  # other people's videos (#84): each one, at its moment
+        # the time last: a line starting with one would read to YouTube as a second chapter list
+        lines = [f"- {s['channel']}{', ' + s['date'] if s['date'] else ''}: {s['link']} (at {clock(s['t'])})"
+                 for s in meta.get("sources", [])]
+        return "\n".join([cfg["story"]["credit"].format(show=mc["show_name"], date=date), *lines])
     fmt = cfg["preshow"]["credit"] if meta.get("kind") == "preshow" else mc["credit"]
     return fmt.format(show=mc["show_name"], date=date, channel=cfg["kick"]["channel"],
                       url=meta.get("url", ""))
@@ -351,14 +356,17 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
     preflight(claude, mc["model"])
 
     lines = asset_lines(assets, words, drafted)
-    long_segs = [x for x in assets if x["kind"] == "segment" and duration(x) >= mc["chapters_min_s"]]
+    # a story's segment has its chapters already (a part each, #84): no transcript call for it
+    long_segs = [x for x in assets if x["kind"] == "segment" and duration(x) >= mc["chapters_min_s"]
+                 and not x.get("chapters")]
     gen, chapters, ckpt = generate(stream_dir, mc, assets, lines, long_segs, words, claude, prompts)
+    chapters.update({x["id"]: x["chapters"] for x in assets if x.get("chapters")})
     by_id = {g["id"]: g for g in gen["assets"]}
     compilation_chapters(assets, chapters, drafted)
 
     credit = credit_line(meta, mc, cfg)
-    playlist = (cfg["preshow"]["playlist"].format(show=mc["show_name"])
-                if meta.get("kind") == "preshow" else "")
+    fixed = {"preshow": cfg["preshow"]["playlist"], "story": cfg["story"]["playlist"]}.get(meta.get("kind"), "")
+    playlist = fixed.format(show=mc["show_name"])
     results = []
     for x in assets:
         g = by_id.get(x["id"])

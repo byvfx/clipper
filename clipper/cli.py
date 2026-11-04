@@ -673,6 +673,14 @@ def cmd_story(cfg: dict, args: argparse.Namespace) -> None:
         story.add(cfg, args.slug, args.urls)
     elif a == "trail":
         story.trail(cfg, args.slug)
+    elif a == "plan":
+        from . import story_edit
+
+        story_edit.plan(cfg, args.slug, args.force)
+    elif a == "cut":
+        from . import story_edit
+
+        story_edit.cut(cfg, args.slug, args.force, review=not args.no_review)
     else:
         story.show(cfg, args.slug)
 
@@ -1304,8 +1312,8 @@ def add_extras(sub) -> None:
     r.add_argument("--about", help="narrow the leads to a focus")
     r.add_argument("--max", type=int, help="leads kept")
 
-    p = sub.add_parser("story", help="a news brief -> the swarm -> transcripts -> the moments -> a dossier "
-                                     "(#84 phase 1; research only, nothing is uploaded)")
+    p = sub.add_parser("story", help="a news brief -> the swarm -> transcripts -> the moments -> a dossier; "
+                                     "then plan and cut a video of it for review (#84)")
     rsub = p.add_subparsers(dest="action", required=True)
     p.set_defaults(fn=cmd_story)
 
@@ -1339,6 +1347,15 @@ def add_extras(sub) -> None:
     r.add_argument("slug")
     r = rsub.add_parser("show", help="the dossier, re-rendered from dossier.json (keeps hand edits; no model call)")
     r.add_argument("slug")
+    r = rsub.add_parser("plan", help="the edit from the moments -> streams/story-<slug>/story.json (~$0.03; "
+                                     "clipper --show <key> story plan ... picks the show)")
+    r.add_argument("slug")
+    r.add_argument("--force", action="store_true", help="plan again (the old edit is kept as story.<time>.json)")
+    r = rsub.add_parser("cut", help="render story.json, then meta, thumbs and the Kitsu card; "
+                                    "approved, it goes out asap")
+    r.add_argument("slug")
+    r.add_argument("--force", action="store_true", help="re-render every part and redo meta and thumbs")
+    r.add_argument("--no-review", action="store_true", help="only the video: no meta, thumbs or Kitsu")
 
     p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
     rsub = p.add_subparsers(dest="action", required=True)

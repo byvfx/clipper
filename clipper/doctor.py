@@ -175,7 +175,7 @@ def prompt_files(cfg: dict) -> list[str]:
     iv = cfg["investigate"]["prompt_version"]
     names += [f"investigate_{step}_{iv}" for step in ("facts", "leads", "check", "confirm")]
     names += [f"swarm_{step}_{cfg['swarm']['prompt_version']}" for step in ("plan", "worker")]
-    names += [f"story_{step}_{cfg['story']['prompt_version']}" for step in ("triage", "expand", "moments", "dossier")]
+    names += [f"story_{step}_{cfg['story']['prompt_version']}" for step in ("triage", "expand", "moments", "dossier", "edit")]
     return [f"{n}.md" for n in names] + [wc["article_example"]]
 
 

@@ -265,7 +265,10 @@ check here affects them too. Per-source request rates are `[swarm] rates`.
 archive`): the videos it picks are transcribed there, on `[story] gpu` (L4). Kick VODs are
 downloaded here at their smallest variant (`[archive] kick_format`) for their audio; YouTube audio
 uses the archive's cookies retry. People and their channels come from `[paths] streamers`
-(`research_notes/streamers.json`) and `[story] people` for anyone not in it.
+(`research_notes/streamers.json`) and `[story] people` for anyone not in it. `story cut` renders
+with `[receipts]`'s fonts (Impact and Arial Bold, as receipts need) and reads our own streams'
+source videos from `paths.streams`, so it runs on a machine that sees the share; with several
+shows, set `[story] show` or pass `clipper --show <key>` to `story plan`.
 
 **Costs (#50).** Every model call appends its cost to `[paths] costs` (`logs/costs.jsonl`)
 with the command and stream it ran for; `clipper costs` and the war room's Costs panel add
