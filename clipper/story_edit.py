@@ -22,16 +22,19 @@ title or the description. `plan` again keeps the old one as story.<time>.json.
 share; YouTube, Kick VODs and Odysee by section with yt-dlp, cached in work/ by item and
 range, so a trim downloads again), re-encodes it to 1920x1080 30 fps with the channel and date
 on a lower third and the corner bug, bleeps it from its item's words (receipts' renderer and
-[receipts] settings), and joins them into segments/s00_<topic>.mp4: one segment, with a
+[receipts] settings), and joins them into segments/s00_<slug>.mp4: one segment, with a
 chapter per part in its sidecar, and the parts' words on the video's own timeline in
 words.jsonl for the captions. Then meta (the sidecar's chapters, [story] credit and a source
 line per part), thumbs and the Kitsu card, as a pre-show's. Approved, it goes out as soon as
-possible ([story] publish = "asap"). Unchanged parts and an unchanged edit aren't redone
-(--force redoes them).
+possible ([story] publish = "asap"). A part is rendered again when its bounds or its lower
+third change, meta when the edit's text, chapters or video change, and the cover whenever the
+video does; each is marked done (story_state.json) only once it ran (--force redoes them all).
+A source struck in dossier.json keeps its moments out of the plan.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import UTC, datetime
@@ -104,8 +107,12 @@ def shape(parts: list[dict], max_s: float) -> list[dict]:
     total = 0.0
     for p in parts:
         prev = kept[-1] if kept else None
-        if prev and (prev["subject"], prev["item"]) == (p["subject"], p["item"]) \
-                and p["start"] < prev["end"] and prev["start"] < p["end"]:
+        overlap = bool(prev) and (prev["subject"], prev["item"]) == (p["subject"], p["item"]) \
+            and p["start"] < prev["end"] and prev["start"] < p["end"]
+        merged = (max(prev["end"], p["end"]) - min(prev["start"], p["start"])) if overlap else 0.0
+        if overlap and total - (prev["end"] - prev["start"]) + merged > max_s:
+            p.update(use=False, note="past [story] max_minutes")
+        elif overlap:
             total -= prev["end"] - prev["start"]
             prev["start"], prev["end"] = min(prev["start"], p["start"]), max(prev["end"], p["end"])
             prev["moments"] += p["moments"]
@@ -142,7 +149,23 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
     moments = (jsonstate.read(d / "moments.json", {}) or {}).get("moments", [])
     if not moments:
         raise ClipperError(f"story {slug}: no moments yet (clipper story run {slug})")
-    dossier = (jsonstate.read(d / "dossier.json", {}) or {}).get("dossier") or {}
+    dj = jsonstate.read(d / "dossier.json", {}) or {}
+    dossier = dj.get("dossier") or {}
+    cats: dict[str, dict] = {}
+
+    def item_of(m: dict) -> dict:
+        if m["subject"] not in cats:
+            cats[m["subject"]] = load_catalog(subject_dir(cfg, m["subject"]))
+        return cats[m["subject"]].get(m["item"]) or {"id": m["item"]}
+
+    # a source struck in dossier.json is out of the edit too: its moments aren't offered
+    struck = {x["key"] for x in dj.get("sources", []) if x.get("struck") and x.get("key")}
+    kept = [m for m in moments if item_of(m).get("key") not in struck]
+    if len(kept) < len(moments):
+        print(f"  {len(moments) - len(kept)} moments left out: their source is struck in dossier.json")
+    moments = kept
+    if not moments:
+        raise ClipperError(f"story {slug}: every moment's source is struck in dossier.json")
     if claude is None:
         claude = Claude(cfg)
         preflight(claude, sc["edit_model"])
@@ -162,15 +185,13 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
                     user, PLAN_SCHEMA, 2000)
     if out is None:
         raise ClipperError("the edit model declined to plan one")
-    by_id, cats, parts = {m["id"]: m for m in moments}, {}, []
+    by_id, parts = {m["id"]: m for m in moments}, []
     for x in out["parts"]:
         m = by_id.get(x["moment"])
         if not m:
             print(f"  skip {x['moment']}: not a moment id")
             continue
-        if m["subject"] not in cats:
-            cats[m["subject"]] = load_catalog(subject_dir(cfg, m["subject"]))
-        it = cats[m["subject"]].get(m["item"]) or {"id": m["item"]}
+        it = item_of(m)
         idir = item_dir(subject_dir(cfg, m["subject"]), it)
         a, z, found = clip_bounds(idir, m["t"], m["quote"], sc)
         parts.append({"id": f"P{len(parts) + 1:02d}", "use": True, "moments": [m["id"]], "chapter": x["chapter"],
@@ -287,14 +308,16 @@ def part_words(p: dict, at: float, seg0: int) -> tuple[list[dict], int]:
     return out, seg0 + len(segs)
 
 
-def chapters_of(parts: list[dict], starts: list[float]) -> list[dict]:
-    """A chapter per part, the first at 0, none shorter than YouTube's 10 s; fewer than three
-    is none at all (YouTube's rule)."""
+def chapters_of(parts: list[dict], starts: list[float], total: float) -> list[dict]:
+    """A chapter per part, the first at 0, none shorter than YouTube's 10 s (the last one
+    included: a short last part folds into the one before); fewer than three is none at all."""
     out: list[dict] = []
     for p, t in zip(parts, starts):
         if out and t - out[-1]["t"] < CHAPTER_MIN_S:
             continue
         out.append({"t": round(t, 1), "title": p["chapter"]})
+    if len(out) > 1 and total - out[-1]["t"] < CHAPTER_MIN_S:
+        out.pop()
     return out if len(out) >= 3 else []
 
 
@@ -316,6 +339,22 @@ def source_line(p: dict, t: float) -> dict:
 
 def signature(data: dict, used: list[dict]) -> list:
     return [[p["item"], p["start"], p["end"], p["channel"], p["date"], p["title"]] for p in used]
+
+
+def part_file(work: Path, p: dict) -> Path:
+    """A part's render, named by its bounds and its lower third's text: a changed channel,
+    date or title renders it again."""
+    h = hashlib.sha1(json.dumps([p["channel"], p["date"], p["title"]]).encode()).hexdigest()[:8]
+    return work / f"{p['id']}_{p['item']}_{p['start']:.2f}-{p['end']:.2f}_{h}.mp4"
+
+
+def retire(sdir: Path, keep: str) -> None:
+    """An older s00 (a story planned before under another name) leaves segments/ and its
+    draft: meta, thumbs and review read every sidecar there."""
+    for d in (sdir / "segments", sdir / "metadata" / "segments"):
+        for f in d.glob("s00_*"):
+            if f.stem.split(".")[0] != keep:
+                f.unlink()
 
 
 def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
@@ -340,10 +379,11 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     work = sdir / "work"
     work.mkdir(parents=True, exist_ok=True)
     (sdir / "segments").mkdir(exist_ok=True)
-    final = sdir / "segments" / f"s00_{file_slug(data['topic'] or slug)}.mp4"
+    final = sdir / "segments" / f"s00_{file_slug(slug)}.mp4"   # one name, whatever the topic
+    retire(sdir, final.stem)
     old = jsonstate.read(final.with_suffix(".json"), {}) or {}
     same = final.exists() and old.get("signature") == signature(data, used) and not force
-    bleeps = old.get("bleeps", 0) if same else 0
+    bleeps = jsonstate.read(work / "bleeps.json", {}) or {}   # by part render, kept or new
     if same:
         print(f"{final.name}: the edit's parts are unchanged, video kept (--force re-cuts)")
     else:
@@ -352,31 +392,32 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
         bleeper = Bleeper(cfg["bleep"])
         rendered = []
         for p in used:
-            dst = work / f"{p['id']}_{p['item']}_{p['start']:.2f}-{p['end']:.2f}.mp4"
             print(f"{p['id']} {p['date'] or 'undated'} {p['channel']} {clock(p['start'])}-{clock(p['end'])}",
                   flush=True)
+            src = work / f"{p['item']}_{p['start']:.2f}-{p['end']:.2f}.src.mp4"
+            if not p["ours"]:
+                seen = fetch(cfg, p, src)
+                if seen and p["channel"].lower() in PLATFORMS | {"?"}:  # the search's "YouTube"
+                    print(f"  channel: {p['channel']} -> {seen} (kept in story.json)")
+                    for x in data["parts"]:
+                        if x["item"] == p["item"] and x["channel"].lower() in PLATFORMS | {"?"}:
+                            x["channel"] = seen
+                    jsonstate.write(sdir / "story.json", data)
+            dst = part_file(work, p)
             if force or not dst.exists():
                 if p["ours"]:  # our own stream: its source video on the share, read from start
-                    bleeps += clip(cfg, Path(p["dir"]), p, media.source_file(Path(p["dir"])), fonts, bug,
-                                   bleeper, dst, label="", seek=True)
+                    bleeps[dst.name] = clip(cfg, Path(p["dir"]), p, media.source_file(Path(p["dir"])), fonts,
+                                            bug, bleeper, dst, label="", seek=True)
                 else:
-                    src = work / f"{p['item']}_{p['start']:.2f}-{p['end']:.2f}.src.mp4"
-                    seen = fetch(cfg, p, src)
-                    if seen and p["channel"].lower() in PLATFORMS | {"?"}:  # the search's "YouTube"
-                        print(f"  channel: {p['channel']} -> {seen} (kept in story.json)")
-                        p["channel"] = seen
-                        for s in data["parts"]:
-                            if s["item"] == p["item"] and s["channel"].lower() in PLATFORMS | {"?"}:
-                                s["channel"] = seen
-                        jsonstate.write(sdir / "story.json", data)
-                    bleeps += clip(cfg, Path(p["dir"]), p, src, fonts, bug, bleeper, dst, label="")
+                    bleeps[dst.name] = clip(cfg, Path(p["dir"]), p, src, fonts, bug, bleeper, dst, label="")
+                jsonstate.write(work / "bleeps.json", bleeps)
             rendered.append(dst)
         join(rendered, work / "concat.txt", final)
     # where each part starts in the video, from the rendered parts' own lengths
     starts, t = [], 0.0
     for p in used:
         starts.append(t)
-        t += media.duration(work / f"{p['id']}_{p['item']}_{p['start']:.2f}-{p['end']:.2f}.mp4")
+        t += media.duration(part_file(work, p))
     words, seg0 = [], 0
     for p, at in zip(used, starts):
         w, seg0 = part_words(p, at, seg0)
@@ -386,10 +427,9 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
            "summary": data["summary"], "description": data["description"], "figures": data["figures"],
            "source_share": "most", "standalone": True, "start_s": 0.0, "end_s": round(t, 3),
            "duration_s": round(t, 1), "file": final.name, "cut": True, "skip_reasons": [],
-           "chapters": chapters_of(used, starts), "bleeps": bleeps,
+           "chapters": chapters_of(used, starts, t),
+           "bleeps": sum(bleeps.get(part_file(work, p).name, 0) for p in used),
            "signature": signature(data, used)}
-    # the drafts stand only when the video and everything meta reads from the edit are the same
-    fresh = same and all(old.get(k) == seg[k] for k in ("title", "description", "summary", "figures", "chapters"))
     write_sidecar(final, seg)
     jsonstate.write(sdir / "segments.json", {"stream_id": sdir.name, "story": slug, "gaps": [],
                                              "segments": [{k: v for k, v in seg.items() if k != "signature"}],
@@ -400,8 +440,18 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     if not review:
         print(f"--no-review: meta, thumbs and Kitsu not run (clipper story cut {slug} again to do them)")
         return final
-    meta_stage.run(sdir, cfg, missing=fresh)
-    thumbs.run(sdir, cfg, missing=same)
+    # each stage is marked done for this edit only once it has run, so --no-review or a failure
+    # leaves it to do next time; thumbs are picked again whenever the video changed
+    video = seg["signature"]
+    text = [video, *(seg[k] for k in ("title", "description", "summary", "figures", "chapters"))]
+    done = jsonstate.read(sdir / "story_state.json", {}) or {}
+    meta_stage.run(sdir, cfg, missing=done.get("meta") == text)
+    done["meta"] = text
+    jsonstate.write(sdir / "story_state.json", done)
+    fresh = done.get("thumbs") == video
+    thumbs.run(sdir, cfg, force=not fresh, missing=fresh)
+    done["thumbs"] = video
+    jsonstate.write(sdir / "story_state.json", done)
     review_stage.publish(sdir, cfg, only=["segments"])
     return final
 

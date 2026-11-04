@@ -117,13 +117,19 @@ def test_shape_merges_overlaps_and_stops_at_the_length():
     assert [p["use"] for p in parts] == [True, False, True, False]
     assert (parts[0]["start"], parts[0]["end"], parts[0]["moments"]) == (0, 50, ["M01", "M02"])
     assert parts[1]["note"] == "merged into P01" and parts[3]["note"] == "past [story] max_minutes"
+    # a merge that would pass the length leaves the part out instead
+    parts = [part(1, "a", 0, 30, "one two three four five six"), part(2, "a", 25, 50, "seven eight")]
+    story_edit.shape(parts, 40)
+    assert (parts[0]["end"], parts[1]["use"], parts[1]["note"]) == (30, False, "past [story] max_minutes")
 
 
 def test_chapters_are_a_part_each_at_least_ten_seconds_apart():
     parts = [{"chapter": c} for c in "ABCD"]
-    assert story_edit.chapters_of(parts, [0, 5, 40, 80]) == \
+    assert story_edit.chapters_of(parts, [0, 5, 40, 80], 120) == \
         [{"t": 0, "title": "A"}, {"t": 40, "title": "C"}, {"t": 80, "title": "D"}]
-    assert story_edit.chapters_of(parts[:2], [0, 40]) == []
+    assert story_edit.chapters_of(parts[:2], [0, 40], 80) == []
+    assert story_edit.chapters_of(parts, [0, 20, 40, 60], 65) == \
+        [{"t": 0, "title": "A"}, {"t": 20, "title": "B"}, {"t": 40, "title": "C"}]  # a 5 s last part folds in
 
 
 def test_cut_writes_one_segment_with_its_words_chapters_and_sources(cfg, planned, monkeypatch):
@@ -162,6 +168,46 @@ def test_cut_writes_one_segment_with_its_words_chapters_and_sources(cfg, planned
     made.clear()
     story_edit.cut(cfg, planned, review=False)      # nothing changed: nothing rendered
     assert made == []
+    calls = []
+    monkeypatch.setattr(meta, "run", lambda sdir, cfg, missing=False: calls.append(("meta", missing)))
+    from clipper import thumbs
+    monkeypatch.setattr(thumbs, "run", lambda sdir, cfg, force=False, missing=False:
+                        calls.append(("thumbs", force, missing)))
+    monkeypatch.setattr(review, "publish", lambda sdir, cfg, only=None: calls.append(("review",)))
+    story_edit.cut(cfg, planned)      # after --no-review: meta and thumbs still to do
+    assert calls == [("meta", False), ("thumbs", True, False), ("review",)]
+    calls.clear()
+    story_edit.cut(cfg, planned)
+    assert calls == [("meta", True), ("thumbs", False, True), ("review",)]
+    # reordered by hand: the same length, a new video: rendered parts kept, meta and the cover redone
+    data = jsonstate.load(sdir / "story.json")
+    data["parts"][0], data["parts"][1] = data["parts"][1], data["parts"][0]
+    data["parts"][2]["channel"] = "Channel 404 News"   # a new lower third renders that part again
+    jsonstate.write(sdir / "story.json", data)
+    made.clear()
+    calls.clear()
+    story_edit.cut(cfg, planned)
+    assert [i for i, _, _ in made] == ["P03"]
+    assert jsonstate.load(final.with_suffix(".json"))["bleeps"] == 3   # the kept parts' bleeps still count
+    assert calls == [("meta", False), ("thumbs", True, False), ("review",)]
+    # planned again under another topic: still one s00, the old one's files gone
+    (sdir / "segments" / "s00_old-topic.json").write_text("{}", encoding="utf-8")
+    story_edit.cut(cfg, planned, review=False)
+    assert sorted(f.name for f in (sdir / "segments").iterdir()) == [final.with_suffix(".json").name, final.name]
+
+
+def test_a_struck_sources_moments_are_left_out(cfg, planned):
+    cfg["story"]["show"] = "kino"
+    d = story.story_dir(cfg, planned)
+    cat = jsonstate.load(d / "catalog.json")
+    cat["yt-bbbbbbbbbbb"]["key"] = "yt:bbbbbbbbbbb"
+    save_catalog(d, cat)
+    dj = jsonstate.load(d / "dossier.json")
+    dj["sources"] = [{"id": "S01", "key": "yt:bbbbbbbbbbb", "struck": True}]
+    jsonstate.write(d / "dossier.json", dj)
+    llm = EditLLM(["M01", "M03"])
+    data = story_edit.plan(cfg, planned, claude=llm)
+    assert "M03" not in llm.user and [p["moments"] for p in data["parts"]] == [["M01"]]
 
 
 def test_check_parts():
