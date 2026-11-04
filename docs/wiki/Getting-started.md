@@ -1,3 +1,6 @@
+> [!TIP]
+> Try anything risky on the test stream `kick-131151926` before a real one.
+
 ## Install a machine
 
 From the clipper folder on a new machine (keep the folder path short on Windows, e.g. `C:\clipper`):

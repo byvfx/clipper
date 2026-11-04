@@ -6,6 +6,7 @@ from conftest import ROOT
 
 WIKI = ROOT / "docs" / "wiki"
 LINK = re.compile(r"\]\(([^)\s]+)\)")
+HREF = re.compile(r'href="([^"]+)"')
 
 
 def _pages():
@@ -32,7 +33,7 @@ def test_page_links_resolve():
     assert "Home" in pages
     bad = []
     for name, text in pages.items():
-        for target in LINK.findall(_prose(text)):
+        for target in LINK.findall(_prose(text)) + HREF.findall(text):
             if re.match(r"(https?|mailto):", target):
                 continue
             page, _, anchor = target.partition("#")

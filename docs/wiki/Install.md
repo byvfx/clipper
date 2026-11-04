@@ -56,10 +56,11 @@ timezone = "America/Los_Angeles"
 kitsu = "http://<nas>:8090"
 ```
 
-**Windows path length.** With Windows long paths off (the default), keep the clipper folder
-under ~80 characters (`C:\clipper` is fine): the anthropic package has files ~160 characters
-deep inside `.venv`, and past 260 in total Python can't import them. The bootstrap refuses a
-longer folder and doctor warns.
+> [!IMPORTANT]
+> **Windows path length.** With Windows long paths off (the default), keep the clipper folder
+> under ~80 characters (`C:\clipper` is fine): the anthropic package has files ~160 characters
+> deep inside `.venv`, and past 260 in total Python can't import them. The bootstrap refuses a
+> longer folder and doctor warns.
 
 Not in the walkthrough yet (the pages above, and #78 phases 2-4): creating the Discord app and its
 ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.

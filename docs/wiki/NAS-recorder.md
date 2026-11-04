@@ -1,3 +1,11 @@
+The recorder is `clipper record watch` in a Docker container on the NAS: it records each show
+live, with chat, into the streams share, and the worker takes each recording from there.
+
+> [!WARNING]
+> Deploy only when no show is live: a restart starts a new recording part.
+
+## Deploy
+
 `bash deploy/record/deploy.sh` from the repo root (ssh alias `nas`). It copies clipper.toml
 to the NAS; the recorder only reads `[record]` and `[kick]`. Re-run it after changing
 `[record] channels`. It refuses while a show is being recorded (the restart would start a

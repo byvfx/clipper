@@ -4,7 +4,7 @@ The setup docs are in the [wiki](https://github.com/byvfx/clipper/wiki/Install) 
 [docs/wiki/](docs/wiki/). Start with `deploy\bootstrap.ps1` (Windows) or `bash deploy/bootstrap.sh`,
 which runs `clipper setup` and then `clipper doctor`.
 
-Where each section went (messages from `clipper doctor` and others still name these):
+Where each section went, for old links:
 
 | Section | Wiki page |
 |---|---|
