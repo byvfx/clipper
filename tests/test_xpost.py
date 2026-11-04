@@ -28,6 +28,8 @@ def test_post_text_takes_links_out():
     """X bills a post with a URL at $0.20, not $0.015."""
     assert xpost.post_text("DSP reacts to https://example.com/x?y=1 live", [], 280, 2) == "DSP reacts to live"
     assert xpost.post_text("see www.example.com", ["#a"], 280, 2) == "see\n\n#a"
+    assert xpost.post_text("Hook", [], 280, 2, "From Kino Casino: @Andywarski https://kick.com/kinocasinogaming") == \
+        "Hook\n\nFrom Kino Casino: @Andywarski"   # the credit line too
 
 
 def test_posts_and_live_claims_count_against_the_24h_allowance():
@@ -81,15 +83,41 @@ def test_hook_first_text_and_mentions():
     assert bare_title(cfg, "Joe turned down $1,000") == "Joe turned down $1,000"
     assert bare_title({"meta": {}}, "KINO CASINO | x") == "KINO CASINO | x"
     assert bare_title(cfg, "KINO CASINO | -$1,000 in donations") == "-$1,000 in donations"   # hook kept whole
-    assert xpost.post_text("Hook", ["#Kino", "#B"], 280, 1, ["Andywarski", "@PoweroftheTruth"]) == \
-        "Hook\n\n#Kino @Andywarski @PoweroftheTruth"
+    assert xpost.post_text("Hook", ["#DSP", "#B"], 280, 1, "From Kino Casino: @Andywarski") == \
+        "Hook\n\n#DSP\nFrom Kino Casino: @Andywarski"
 
 
-def test_a_long_title_is_shortened_around_the_mentions():
-    ats = ["@Andywarski", "@PoweroftheTruth"]
-    text = xpost.post_text("x" * 80, ["#Kino"], 100, 1, ats)
-    assert len(text) <= 100 and text.endswith("\n\n@Andywarski @PoweroftheTruth") and "…" in text
-    assert xpost.post_text("x" * 80, [], 30, 1, ats) == "x" * 29 + "…"   # mentions alone would fill it
+def test_the_show_tag_comes_last_and_stays():
+    assert xpost.show_tag("Channel 404 News") == "#Channel404News" and xpost.show_tag("") == ""
+    keep = ["#KinoCasino"]
+    assert xpost.post_text("Hook", ["#DSP", "#kinocasino", "#Lolcow", "#More"], 280, 3, "", keep) == \
+        "Hook\n\n#DSP #Lolcow #KinoCasino"                      # the draft's copy of it isn't counted twice
+    assert xpost.post_text("x" * 30, ["#DSP", "#Lolcow"], 50, 3, "", keep) == "x" * 30 + "\n\n#DSP #KinoCasino"
+    assert xpost.post_text("Hook", ["#DSP"], 280, 0, "", keep) == "Hook"   # max_hashtags 0: none at all
+
+
+def test_a_long_title_is_shortened_around_the_credit():
+    credit = "From Kino Casino: @Andywarski @PoweroftheTruth"
+    text = xpost.post_text("x" * 200, ["#DSP", "#Lolcow"], 200, 3, credit, ["#KinoCasino"])
+    assert len(text) <= 200 and "…" in text
+    assert text.endswith("\n\n#KinoCasino\n" + credit)        # subject tags go before the title is cut
+    assert xpost.post_text("x" * 80, [], 30, 1, "@Andywarski @PoweroftheTruth") == "x" * 29 + "…"
+    text = xpost.post_text("x" * 80, [], 75, 1, credit, ["#KinoCasino"])   # the show tag goes before the credit
+    assert len(text) == 75 and text.endswith("…\n\n" + credit)
+
+
+def test_text_for_credits_the_show(tmp_path, monkeypatch):
+    cfg = {"paths": {"streams": tmp_path},
+           "meta": {"show_name": "Kino Casino", "title_format": "{SHOW} | {title}"},
+           "x": {"hook_first": True, "max_chars": 280, "max_hashtags": 3, "show_hashtag": True,
+                 "mentions": ["Andywarski", "@PoweroftheTruth"], "credit": "From {show}: {mentions}"}}
+    monkeypatch.setattr(xpost, "for_stream", lambda cfg, sdir: cfg)
+    monkeypatch.setattr(xpost.rumble, "title_and_tags",
+                        lambda e, cfg, section: ("KINO CASINO | PPP on DSP", ["#DSP", "#StreamerDrama"]))
+    assert xpost.text_for(entry("v01_t01"), cfg) == (
+        "PPP on DSP\n\n#DSP #StreamerDrama #KinoCasino\nFrom Kino Casino: @Andywarski @PoweroftheTruth")
+    cfg["x"]["mentions"] = []
+    assert xpost.text_for(entry("v01_t01"), cfg) == "PPP on DSP\n\n#DSP #StreamerDrama #KinoCasino"
 
 
 def test_auto_skips_uploads_no_longer_approved():

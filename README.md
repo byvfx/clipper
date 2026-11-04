@@ -67,8 +67,8 @@ fetch / record -> signals -> transcribe -> score -> segments -> faces -> cut -> 
   sends the next ones in YouTube-schedule order up to `max_per_24h` (TikTok is parked: we post by hand,
   auto-send off, no direct posting; SETUP.md says why). `clipper rumble` prepares folders
   for Rumble's upload form.
-- **x**: `clipper x --items ...` posts Shorts to X as native video (hook-first title + one hashtag, no
-  link: X bills a link post at $0.20 against $0.015); `--auto`, which `clipper serve` runs every
+- **x**: `clipper x --items ...` posts Shorts to X as native video (hook-first title, up to 3 hashtags
+  ending with the show's, a "From <show>: @owners" credit line, no link: X bills a link post at $0.20 against $0.015); `--auto`, which `clipper serve` runs every
   `[x] auto_post_minutes` (off by default), posts approved Shorts from streams of the last
   `max_age_hours`, newest stream first, without waiting for YouTube. `clipper x --issue [DAY]`
   posts a weekly issue's ten pages as a thread of 4 + 4 + 2 images (text from issue.json `post`,
