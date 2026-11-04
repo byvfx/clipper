@@ -697,9 +697,12 @@ auto_post_minutes = 0          # the bot runs `clipper x --auto` this often; 0 =
 after_youtube = false          # true: --auto waits until a Short is public on YouTube
 max_age_hours = 72             # --auto skips Shorts from streams older than this (--items still posts them)
 hashtags = []                  # added after the Short's own, e.g. ["lolcowcinema"]
-max_hashtags = 1               # hashtags barely matter on X; one names the topic
+max_hashtags = 3               # the Short's subject tags, then the show's
+show_hashtag = true            # end the hashtags with the show's name (#KinoCasino), kept when others are cut
 hook_first = true              # drop the "KINO CASINO | " prefix: the feed shows the first words
-mentions = []                  # @handles ending every post (per show: [shows.<key>.x]); each gets notified
+mentions = []                  # @handles of whose footage it is, per show in [shows.<key>.x]
+                               # (e.g. ["Andywarski", "PoweroftheTruth"]); each gets notified
+credit = "From {show}: {mentions}"   # the post's last line, when the show has mentions
 max_chars = 280
 max_height = 1280              # taller Shorts are re-encoded to 720x1280 first; 0 = send as is
 post_usd = 0.015               # logged to paths.costs per post (`clipper costs`)
