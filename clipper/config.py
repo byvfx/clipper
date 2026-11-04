@@ -147,6 +147,29 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "text_fonts": ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
                        "/Library/Fonts/Arial Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"],
     },
+    "investigate": {
+        # `clipper investigate <subject>` (#108): read an archive subject's own videos for
+        # checkable facts, find threads across them in code, write leads, check coverage.
+        # Research files under paths.archive/<subject>/investigate/; nothing is uploaded or posted.
+        "facts_model": "claude-haiku-5-5",  # reads every chunk of every item (the bulk of the cost)
+        "facts_effort": "low",
+        "leads_model": "claude-sonnet-5-5",  # reads one candidate thread at a time, writes the lead
+        "leads_effort": "medium",
+        "check_model": "claude-haiku-5-5",  # coverage labels and --confirm verdicts
+        "check_effort": "low",
+        "prompt_version": "v1",   # prompts/investigate_{facts,leads,check,confirm}_<v>.md
+        "parallel": 8,            # model calls at once
+        "chunk_s": 1200,          # transcript seconds per facts call
+        "since_days": 0,          # facts: items from the last N days when --since isn't given; 0 = all
+        "max_leads": 10,          # leads kept per `leads` run (--max)
+        "max_candidates": 30,     # candidate threads the leads model reads (one call each)
+        "min_facts_per_thread": 3,  # a thread needs this many facts from different videos
+        "trend_weeks": 4,         # trend: these recent weeks against the 26 before them
+        "dropped_weeks": 8,       # dropped thread: silent this long after being talked about
+        "window_days": 60,        # convergence: personal facts from several videos within this
+        "check_results": 10,      # check: results per source (YouTube search, Reddit search)
+        "budget_usd": 10.0,       # a run stops before it would spend more and says what's left
+    },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.
         "upload_url": "https://rumble.com/upload.php",

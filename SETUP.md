@@ -247,6 +247,12 @@ kind `failure`, once per video per `cooldown_hours`) to export fresh ones. The b
 IP: a PO-token provider (bgutil-ytdlp-pot-provider, tried 2026-10-31) doesn't get past it.
 On a new install, `clipper modal --backfill` adds the runs from before the log, once.
 
+**Investigating an archive subject (#108).** `clipper investigate` needs nothing new beyond a
+transcribed archive and `ANTHROPIC_API_KEY`; `clipper archive index <subject>` (free) lets it
+check dropped threads against the full transcripts and is needed for `--confirm`. Its coverage
+check searches the web and Reddit through the Brave key `clipper cast` uses (see the cast
+library above); without one it tries Reddit's own feed, which often turns unsigned clients away.
+
 **Costs (#50).** Every model call appends its cost to `[paths] costs` (`logs/costs.jsonl`)
 with the command and stream it ran for; `clipper costs` and the war room's Costs panel add
 that to the Modal run log and your fixed costs: put plans and subscriptions in `[costs]

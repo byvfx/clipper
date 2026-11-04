@@ -624,6 +624,29 @@ def cmd_receipts(cfg: dict, args: argparse.Namespace) -> None:
         receipts.show(d)
 
 
+def cmd_investigate(cfg: dict, args: argparse.Namespace) -> None:
+    from . import costs, investigate
+
+    costs.set_context(f"investigate {args.action}", f"investigate-{args.subject}")
+    a = args.action
+    if a == "facts":
+        investigate.run_facts(cfg, args.subject, args.since, args.before, args.limit, args.new, args.dry_run)
+    elif a == "leads":
+        investigate.run_leads(cfg, args.subject, args.about, args.since, args.before, args.max, args.confirm)
+    elif a == "confirm":
+        investigate.run_confirm(cfg, args.subject, args.lead)
+    elif a == "check" and args.trail:
+        investigate.show_trail(cfg, args.subject, args.lead)
+    elif a == "check":
+        investigate.run_check(cfg, args.subject, args.lead)
+    elif a == "show":
+        investigate.show_lead(cfg, args.subject, args.lead)
+    elif a == "run":
+        investigate.run_all(cfg, args.subject, args.since, args.before, args.about, args.max)
+    else:
+        investigate.show_list(cfg, args.subject)
+
+
 def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
     from . import weekly
 
@@ -787,7 +810,8 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'narrate', 'perform', 'modal', 'costs']),
+    ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'investigate', 'narrate', 'perform', 'modal',
+                'costs']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
@@ -1206,6 +1230,45 @@ def add_extras(sub) -> None:
     r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
     r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
     r.add_argument("--limit", type=int, default=15, help="options shown")
+
+    p = sub.add_parser("investigate", help="an archive subject's own videos -> facts -> leads nobody has "
+                                           "picked up (#108; research only, never uploaded)")
+    rsub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_investigate)
+
+    def span(r) -> None:
+        r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
+        r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
+
+    r = rsub.add_parser("facts", help="read items for checkable facts, quotes verified (cached per item)")
+    r.add_argument("subject")
+    span(r)
+    r.add_argument("--limit", type=int, help="at most this many items, newest first")
+    r.add_argument("--new", action="store_true", help="only items newer than the newest one read")
+    r.add_argument("--dry-run", action="store_true", help="say how many items and hours and the estimated cost")
+    r = rsub.add_parser("leads", help="candidate threads in code, then the leads model writes them up")
+    r.add_argument("subject")
+    r.add_argument("--about", help='narrow to a focus, e.g. "lawsuit" or a name')
+    span(r)
+    r.add_argument("--max", type=int, help="leads kept (default [investigate] max_leads)")
+    r.add_argument("--confirm", action="store_true", help="then test each lead against more of the archive")
+    r = rsub.add_parser("confirm", help="test the leads against more of the archive (archive ask)")
+    r.add_argument("subject")
+    r.add_argument("--lead", help="just this lead, e.g. L03")
+    r = rsub.add_parser("check", help="is anyone else on it? YouTube, web, Reddit, our streams, his own titles")
+    r.add_argument("subject")
+    r.add_argument("--lead", help="just this lead, e.g. L03")
+    r.add_argument("--trail", action="store_true", help="print the last check's searches and results")
+    r = rsub.add_parser("list", help="the leads: kind, confidence, coverage, receipts")
+    r.add_argument("subject")
+    r = rsub.add_parser("show", help="one lead's story and timeline with quotes and links")
+    r.add_argument("subject")
+    r.add_argument("lead", help="e.g. L03")
+    r = rsub.add_parser("run", help="facts (--new unless --since) -> leads -> check; prints the total cost")
+    r.add_argument("subject")
+    span(r)
+    r.add_argument("--about", help="narrow the leads to a focus")
+    r.add_argument("--max", type=int, help="leads kept")
 
     p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
     rsub = p.add_subparsers(dest="action", required=True)

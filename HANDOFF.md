@@ -32,7 +32,7 @@ layouts, 15-59 s), `retake` (Kitsu notes → re-cut/re-cover automatically), `pr
 pre-show whole; also one-offs with `--from/--to/--about`), `pick` (Shorts from a stretch you name),
 `weekly` (ten-page tabloid issue, Saturdays), `receipts` (old clips of an archive subject for a
 stream's stories, Mother Moo voice-over), `archive` (back catalogs on Modal: Jer complete, FTS index,
-`ask`), `speakers` (diarization names), `narrate` / `perform` (Mother Moo: ElevenLabs read, lip-sync
+`ask`), `investigate` (an archive subject's own videos -> verified facts -> leads + coverage check, #108), `speakers` (diarization names), `narrate` / `perform` (Mother Moo: ElevenLabs read, lip-sync
 pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`, `warroom`, `doctor`.
 
 ## User decisions (keep)
@@ -165,6 +165,12 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   (drop wrong or costume photos; image search photos always wait for you). Check Jer f868aa21db.
 - Faces: enroll PPP in his maple-leaf cap from the first non-costume stream the worker scans (kick-135553454
   is named and enrolled: known.json has 12 people, Andy/PPP/Jer 4 samples each).
+- `clipper investigate` (#108, built 11-03, PR open): read jer's leads in
+  `archive/jer/investigate/leads.md` (3 leads from Sept-Oct 2026: Clancy retrial predictions, Ilhan Omar
+  claims escalating, the poker prize pool said as $8,000 once vs $1,000; that one may be Whisper hearing
+  "a thousand") and the rejected threads in leads.json; say which are real and whether the coverage labels
+  are right. Open from the issue: first subject (jer assumed), whole catalog (~$14 for facts, quote first)
+  or months at a time, whether a lead may ever become content, Discord posting (later).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the

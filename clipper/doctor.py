@@ -172,6 +172,8 @@ def prompt_files(cfg: dict) -> list[str]:
               f"receipts_stories_{rc['prompt_version']}", f"receipts_script_{rc['script_prompt_version']}",
               f"archive_expand_{ac['ask_prompt_version']}", f"archive_judge_{ac['ask_prompt_version']}",
               f"weekly_{wc['prompt_version']}", f"weekly_article_{wc['article_prompt_version']}"]
+    iv = cfg["investigate"]["prompt_version"]
+    names += [f"investigate_{step}_{iv}" for step in ("facts", "leads", "check", "confirm")]
     return [f"{n}.md" for n in names] + [wc["article_example"]]
 
 
