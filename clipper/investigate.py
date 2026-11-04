@@ -32,13 +32,15 @@ subject needs `archive transcribe` first (and `archive index` for --confirm).
    its quote and a link at the moment; a lead with fewer than two is dropped. --confirm runs
    `archive ask` on each lead's "what would confirm or kill this" and has check_model weigh
    the windows it finds (quotes verified the same way) and adjust the confidence.
-3. check: "is anyone else on this?" One search per source for each kept lead: YouTube
-   (yt-dlp search, titles and channels only), the web and Reddit (Brave search, the key
-   `clipper cast` uses; Reddit's own feed without one), our own streams' segments, and the
-   subject's own video titles. check_model reads the results and labels
-   the lead fresh / partly covered / covered with the links that match. The trail is
-   investigate/swarm/<lead>.json (--trail prints it). The search swarm (#109) will replace the
-   fixed searches with planned rounds and follow-ups.
+3. check: "is anyone else on this?" The search swarm (#109) for each kept lead, seeded with
+   one search per source on the lead's search words: YouTube (titles and channels only), the
+   web and Reddit (Brave search, the key `clipper cast` uses; Reddit's own feed without one)
+   and our own streams' segments. Its planner adds searches and its workers follow up on what
+   they find, within [investigate] swarm (a small run: ~$0.01-0.03 a lead). Then the subject's
+   own video titles. check_model reads what it found and labels the lead fresh / partly covered
+   / covered with the links that match. investigate/swarm/<lead>.json has the results and the
+   verdict, <lead>.trail.json the swarm's task tree (--trail prints both). Each check searches
+   afresh.
 
 Files, all in paths.archive/<subject>/investigate/: facts/<item>.json, facts.sqlite,
 leads.json (the edit: flip `keep`, change a headline, add `notes`; `leads` again keeps the
@@ -1035,19 +1037,40 @@ def own_titles(cfg: dict, subject: str, ts: list[str], after: str, n: int) -> li
             if it["date"] >= after and hit(it["title"], ts)][:n]
 
 
-def findings(cfg: dict, subject: str, lead: dict) -> tuple[list[dict], dict[str, str]]:
-    n = cfg["investigate"]["check_results"]
+def trail_path(cfg: dict, subject: str, lead_id: str) -> Path:
+    return inv_dir(cfg, subject) / "swarm" / f"{lead_id}.trail.json"
+
+
+def findings(cfg: dict, subject: str, lead: dict, claude=None) -> tuple[list[dict], dict[str, str]]:
+    """The swarm (#109) on the lead: the old fixed searches (YouTube, Reddit, the web, our
+    streams, with the lead's search words) are its seeds, and its planner and workers add and
+    follow up on others, within [investigate] swarm. Then his own video titles (code). Each
+    check searches afresh (the old trail is replaced). errors: the failed searches, only when
+    every one failed (a partly failed swarm is in its trail)."""
+    from . import swarm
+
+    ic = cfg["investigate"]
     q, ts = lead["search"] or lead["headline"], terms(lead["search"] or lead["headline"])
-    sources = {"youtube": lambda: youtube_search(q, n), "reddit": lambda: reddit_search(cfg, q, n),
-               "web": lambda: brave_search(cfg, q, n, "web"),
-               "our streams": lambda: our_streams(cfg, ts, n),
-               "his own videos": lambda: own_titles(cfg, subject, ts, lead["first"], n)}
-    found, errors = [], {}
-    for name, fn in sources.items():
-        try:
-            found += fn()
-        except Exception as e:  # noqa: BLE001  # one source down doesn't stop the others
-            errors[name] = str(e)[:200]
+    path = trail_path(cfg, subject, lead["id"])
+    path.unlink(missing_ok=True)
+    why = "the lead's own search words"
+    seeds = [{"kind": k, "target": q, "why": why} for k in ("youtube_search", "reddit_search", "web_search",
+                                                             "our_streams")]
+    context = (f"The lead is about the YouTuber {subject}; his own videos are not coverage. People: "
+               f"{', '.join(lead['people']) or 'none named'}. His receipts run {lead['first']} to {lead['last']}."
+               f"\nThe lead: {lead['story']}")
+    days = max(1, (datetime.now(UTC).date() - datetime.fromisoformat(lead["first"]).date()).days)
+    out = swarm.run(cfg, f"Is anyone already covering this, about {subject}? {lead['headline']}", path,
+                    context=context, seeds=seeds, overrides=ic["swarm"], claude=claude, days=days,
+                    since=lead["first"], archives=[])   # his own transcripts are where the lead came from, not coverage
+    found = out["findings"][:ic["check_findings"]]
+    tasks = (jsonstate.read(path, {}) or {}).get("tasks", [])
+    failed = {f"{t['kind']} {t['target']}": str(t.get("error", ""))[:200] for t in tasks if t["status"] == "failed"}
+    errors = failed if tasks and len(failed) == len(tasks) else {}
+    try:
+        found += own_titles(cfg, subject, ts, lead["first"], ic["check_results"])
+    except Exception as e:  # noqa: BLE001  # the catalog unreadable doesn't stop the check
+        errors["his own videos"] = str(e)[:200]
     return found, errors
 
 
@@ -1063,8 +1086,13 @@ def run_check(cfg: dict, subject: str, only: str | None = None) -> float:
     system = prompts.get("investigate_check")
     budget = Budget(ic["budget_usd"], claude)
     (d / "swarm").mkdir(parents=True, exist_ok=True)
+    per_swarm = {**cfg["swarm"], **ic["swarm"]}["budget_usd"]
     for lead in todo:
-        found, errors = findings(cfg, subject, lead)
+        if budget.spent + per_swarm > ic["budget_usd"]:  # the swarm shares the client, so the budget sees it
+            print(f"stopping: budget ${ic['budget_usd']:.2f}: ${budget.spent:.2f} spent, a lead's swarm "
+                  f"may take ${per_swarm:.2f}")
+            break
+        found, errors = findings(cfg, subject, lead, claude)
         print(f"{lead['id']} {lead['headline']}: {len(found)} results"
               + (f" ({', '.join(f'{k} failed' for k in errors)})" if errors else ""), flush=True)
         verdict = {"coverage": "fresh", "note": "nothing found", "matches": []}
@@ -1073,6 +1101,7 @@ def run_check(cfg: dict, subject: str, only: str | None = None) -> float:
                     f"His receipts run {lead['first']} to {lead['last']}.\n\n<results>\n"
                     + "\n".join(f"[{k}] {r['source']} | {r['channel']} | {r['date'] or 'undated'} | {r['title']}"
                                 + (f"\n    {r['summary']}" if r.get("summary") else "")
+                                + (f"\n    found as {r['relevance']}: {r['why']}" if r.get("why") else "")
                                 for k, r in enumerate(found)) + "\n</results>")
             est = estimate(cfg, ic["check_model"], (len(system) + len(user)) / 4, 400)
             try:
@@ -1104,11 +1133,17 @@ def run_check(cfg: dict, subject: str, only: str | None = None) -> float:
 
 
 def show_trail(cfg: dict, subject: str, only: str | None = None) -> None:
-    for p in sorted((inv_dir(cfg, subject) / "swarm").glob("*.json")):
+    from . import swarm
+
+    for p in sorted((inv_dir(cfg, subject) / "swarm").glob("L*.json")):
+        if p.name.endswith(".trail.json"):
+            continue
         t = jsonstate.load(p)
         if only and t["lead"] != only:
             continue
         print(f"{t['lead']} {t['headline']}\n  query {t['query']!r} at {t['at']}")
+        if trail_path(cfg, subject, t["lead"]).exists():
+            swarm.print_trail(trail_path(cfg, subject, t["lead"]), log=lambda s: print("  " + s))
         for k, err in t["errors"].items():
             print(f"  {k}: failed ({err})")
         picked = set(t["verdict"]["matches"])

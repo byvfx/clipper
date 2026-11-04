@@ -294,7 +294,7 @@ suddenly took over. Leads are research for you, never uploaded or posted.
 clipper investigate facts jer --since 2026-09-01 --dry-run   # items, hours, estimated cost
 clipper investigate facts jer --since 2026-09-01             # Haiku reads each item for checkable facts (~$0.20 for 43 h)
 clipper investigate leads jer [--about "lawsuit"] [--confirm] # threads found in code, Sonnet writes the leads (~$0.10)
-clipper investigate check jer [--lead L03] [--trail]          # is anyone else on it? YouTube, web, Reddit, our streams
+clipper investigate check jer [--lead L03] [--trail]          # is anyone else on it? the search swarm, per lead
 clipper investigate list jer                                  # kind, confidence, coverage, receipts
 clipper investigate show jer L03                              # the story and the timeline, quote and link per receipt
 clipper investigate confirm jer [--lead L03]                  # test leads against more of the archive (`archive ask`)
@@ -312,10 +312,12 @@ candidate threads with no model call: a trend, a contradiction (affirmed, then d
 shift (a number that changes), a dropped thread (checked against the full transcripts) and a
 convergence (personal remarks from several videos close together); Sonnet reads each one and
 writes the lead or rejects it, and the rejected ones and why are kept in `leads.json` too.
-`check` searches YouTube (yt-dlp, titles only), the web and Reddit (Brave, the `clipper cast`
-key; without one, Reddit's own feed, which often refuses) and our own streams' segments, and
-labels each lead fresh, partly covered or covered; the searches are in
-`investigate/swarm/<lead>.json`. Edit `leads.json` to flip `keep`, change a headline or add
+`check` runs the search swarm on each kept lead, seeded with the lead's search words on YouTube
+(titles only), the web and Reddit (Brave, the `clipper cast` key; without one, Reddit's own feed,
+which often refuses) and our own streams' segments; its planner adds searches and its workers
+follow up, within `[investigate] swarm` (small: ~$0.01-0.03 a lead). With his own video titles,
+Haiku labels each lead fresh, partly covered or covered. The results and verdict are in
+`investigate/swarm/<lead>.json`, the task tree in `<lead>.trail.json` (`--trail` prints both). Edit `leads.json` to flip `keep`, change a headline or add
 `notes`; `leads.md` is the readable dossier. Put spellings Whisper gets wrong, or other names
 for him, in `investigate/aliases.json` (`{"Jeremy": "self", "Hassan Piker": "Hasan Piker"}`).
 A run stops before it would spend more than `[investigate] budget_usd`. Whisper can mishear a
@@ -336,7 +338,7 @@ kept is marked withdrawn in Discord; a thread or message is only remade when Dis
 
 ### The search swarm (#109)
 
-`clipper/swarm.py` is the search `clipper story` (#84) and, later, `investigate check` use: many
+`clipper/swarm.py` is the search `clipper story` (#84) and `investigate check` use: many
 small searches at once, each free to follow up on what it finds. It is library code, not a command.
 A planner (Sonnet) turns the goal (a story brief, a lead) into up to 16 first tasks; workers (Haiku,
 8 at a time) each run one tool in code and read its numbered results: YouTube search (bounded to

@@ -169,7 +169,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "trend_weeks": 4,         # trend: these recent weeks against the 26 before them
         "dropped_weeks": 8,       # dropped thread: silent this long after being talked about
         "window_days": 60,        # convergence: personal facts from several videos within this
-        "check_results": 10,      # check: results per source (YouTube search, Reddit search)
+        "check_results": 10,      # check: his own video titles that match, at most
+        "check_findings": 40,     # check: the swarm's findings the check model reads, best first
+        # check: [swarm] settings for a lead's search (#109), small: a lead is one question
+        "swarm": {"first_tasks": 8, "max_tasks": 20, "max_rounds": 2, "budget_usd": 0.1, "max_wall_s": 300},
         "budget_usd": 10.0,       # a run stops before it would spend more and says what's left
         "discord": False,         # leads, check and confirm post to discord_channel when done
         "discord_channel": "investigations",  # by name, made if missing (a forum works too): a thread per leads run
