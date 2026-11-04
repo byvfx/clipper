@@ -53,7 +53,7 @@ from pathlib import Path
 
 import requests
 
-from . import costs, jsonstate, media, oauth, rumble
+from . import costs, jsonstate, media, oauth, rumble, wiki
 from .config import for_stream
 from .errors import ClipperError
 from .states import split_key
@@ -79,7 +79,7 @@ class XError(ClipperError):
 def client(paths: dict) -> dict:
     p: Path = paths["x_client"]
     if not p.exists():
-        raise ClipperError(f"no X client id; put {{\"client_id\": ...}} in {p} (see SETUP.md, X)")
+        raise ClipperError(f"no X client id; put {{\"client_id\": ...}} in {p} ({wiki.page('X-posts')})")
     c = json.loads(p.read_text(encoding="utf-8-sig"))
     if not c.get("client_id"):
         raise ClipperError(f"{p} needs client_id (and client_secret for a Web App)")

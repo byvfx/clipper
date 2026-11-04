@@ -31,7 +31,7 @@ from pathlib import Path
 
 import requests
 
-from . import media
+from . import media, wiki
 from .errors import ClipperError
 
 API = "https://api.elevenlabs.io"
@@ -57,7 +57,7 @@ def key(nc: dict) -> str:
     if not k:
         path = nc["key_file"]
         raise ClipperError(f"no ElevenLabs API key: set ${nc['key_env']} or put it in {path} "
-                         "(SETUP.md, Narration)")
+                         f"({wiki.page('Character-pieces', 'narration-voice-elevenlabs')})")
     return k
 
 

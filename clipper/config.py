@@ -435,7 +435,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "batch_size": 8,
         "device": "cuda",
         "diarize": False,         # speaker turns too (pyannote, issue #52): whisperx or modal backend,
-                                  # needs a Hugging Face token (SETUP); `clipper speakers` names them
+                                  # needs a Hugging Face token (wiki: Speakers); `clipper speakers` names them
         "diarize_model": "pyannote/speaker-diarization-community-1",
         "min_speakers": 0,        # 0 = let pyannote decide
         "max_speakers": 0,

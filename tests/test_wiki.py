@@ -54,3 +54,18 @@ def test_sidebar_lists_every_page():
 def test_anchor_slugs():
     text = "## Cut on the NAS (#51)\n## The walkthrough: `clipper setup`\n```bash\n# a comment\n```\n"
     assert _anchors(text) == {"cut-on-the-nas-51", "the-walkthrough-clipper-setup"}
+
+
+def test_code_links_resolve():
+    """Every `wiki.page("Name", "heading")` in clipper/ names a page and heading that exist."""
+    pages = _pages()
+    call = re.compile(r"""wiki\.page\(\s*["']([^"']+)["'](?:\s*,\s*["']([^"']*)["'])?\s*\)""")
+    bad, seen = [], 0
+    for path in (ROOT / "clipper").rglob("*.py"):
+        for name, section in call.findall(path.read_text(encoding="utf-8")):
+            seen += 1
+            if name not in pages:
+                bad.append(f"{path.name}: no page {name}")
+            elif section and section not in _anchors(pages[name]):
+                bad.append(f"{path.name}: no heading #{section} in {name}")
+    assert seen and not bad, "\n".join(bad)

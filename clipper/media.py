@@ -4,6 +4,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from . import wiki
 from .errors import ClipperError
 
 
@@ -13,7 +14,8 @@ def _probe(path: Path, entries: str, stream: str | None = None) -> str:
         out = subprocess.run(args + ["-show_entries", entries, "-of", "csv=p=0", str(path)],
                              capture_output=True, text=True, check=False)
     except FileNotFoundError:
-        raise ClipperError("ffprobe not found: install ffmpeg (SETUP.md) and put it on PATH") from None
+        raise ClipperError("ffprobe not found: install ffmpeg and put it on PATH ("
+                           + wiki.page("Install") + ")") from None
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
