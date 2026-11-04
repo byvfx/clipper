@@ -110,7 +110,51 @@ def test_a_shared_name_is_a_conflict_and_ambiguous(cfg):
     with pytest.raises(ClipperError, match="could be"):
         people.find(cfg, "Phil")
     assert people.find(cfg, "Phil Collins")[0] == "phil-collins"
-    assert "phil" not in people.alias_map(cfg, "jer")      # a shared name merges nothing
+    m = people.alias_map(cfg, "jer")
+    assert m["phil"] == "phil"                    # a shared name means itself, nobody's
+    facts = [{"entities": [e], "channel": "", "item": i, "about": "other", "type": "claim", "measure": "",
+              "value": ""} for i, e in (("a", "Phil Collins"), ("b", "Phil"))]
+    investigate.add_keys(facts, m)
+    assert [f["names"] for f in facts] == [["phil collins"], ["phil"]]   # not the surname guess's merge
+
+
+def test_a_shared_short_name_goes_by_the_full_name(cfg):
+    people.set_person(cfg, "Phil (Burnell)")
+    people.set_person(cfg, "Phil (Collins)")
+    m = people.alias_map(cfg, "jer")
+    assert (m["burnell"], m["collins"]) == ("phil burnell", "phil collins")
+    facts = [{"entities": [e], "channel": "", "item": i, "about": "other", "type": "claim", "measure": "",
+              "value": ""} for i, e in (("a", "Burnell"), ("b", "Collins"))]
+    investigate.add_keys(facts, m)
+    assert [f["names"] for f in facts] == [["phil burnell"], ["phil collins"]]
+
+
+def test_an_empty_link_in_people_json_stays_unlinked(cfg):
+    people.set_person(cfg, "Jer", subject="", cast="")
+    jer = people.load(cfg)["the-quartering"]
+    assert (jer["subject"], jer["cast"]) == ("", "")
+    assert people.alias_map(cfg, "jer").get("jeremy") != "self"
+    people.set_person(cfg, "Jer", notes="x")       # a later set keeps them unlinked
+    assert people.stored(cfg)["the-quartering"]["subject"] == ""
+    people.set_person(cfg, "dsp", notes="y")        # nobody else's empty link is written
+    assert "subject" not in people.stored(cfg)["dsp"] and "cast" not in people.stored(cfg)["dsp"]
+    people.set_person(cfg, "Jer", subject="jer")
+    assert people.load(cfg)["the-quartering"]["subject"] == "jer"
+
+
+def test_merge_folds_one_record_into_another(cfg):
+    people.import_all(cfg)
+    assert {"hasan-piker", "don-flurgundy"} <= set(people.stored(cfg))
+    pid = people.merge_people(cfg, "Don Flurgundy", "Hasan Piker")
+    assert pid == "don-flurgundy" and "hasan-piker" not in people.stored(cfg)
+    everyone = people.load(cfg)
+    assert "hasan-piker" not in everyone                       # the cast folder folds into Don now
+    don = everyone["don-flurgundy"]
+    assert "Hasan Piker" in don["aliases"] and don["cast"] == "Hasan Piker"
+    with pytest.raises(ClipperError, match="already one record"):
+        people.merge_people(cfg, "Don Flurgundy", "Hasan Piker")
+    with pytest.raises(ClipperError, match="nobody called"):
+        people.merge_people(cfg, "Don Flurgundy", "nobody")
 
 
 def test_story_roster_and_seeds_use_people(cfg):

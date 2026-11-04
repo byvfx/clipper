@@ -213,6 +213,8 @@ def cmd_people(cfg: dict, args: argparse.Namespace) -> None:
         return people.show_person(cfg, args.name)
     if a == "import":
         return people.import_all(cfg, args.dry_run)
+    if a == "merge":
+        return people.show_person(cfg, people.merge_people(cfg, args.keep, args.other))
     pid = people.set_person(cfg, args.name, args.new_name, args.alias, args.unalias, args.channel,
                             args.unchannel, args.subject, args.cast, args.notes)
     people.show_person(cfg, pid)
@@ -1479,6 +1481,10 @@ def add_extras(sub) -> None:
     r = psub.add_parser("import", help="write everyone from streamers.json, [story] people and the cast library "
                                        "into people.json")
     r.add_argument("--dry-run", action="store_true", help="say who and what clashes, write nothing")
+    r = psub.add_parser("merge", help="two records of one person: the other's names, channels and links "
+                                      "go to the first, and the other's record is removed")
+    r.add_argument("keep", help="the record to keep (a name, alias or id)")
+    r.add_argument("other", help="the record to fold into it")
 
     p = sub.add_parser("news", help="headlines about the shows' people: feeds, Reddit, Google News (#110)")
     nsub = p.add_subparsers(dest="news_cmd", required=True)

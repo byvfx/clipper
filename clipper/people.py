@@ -5,6 +5,8 @@
     clipper people set <name> [--name N] [--alias A]... [--unalias A]... [--channel PLATFORM=ID]...
                               [--unchannel PLATFORM=ID]... [--subject S] [--cast NAME] [--notes TEXT]
     clipper people import [--dry-run]         write the merged view of everyone into people.json
+    clipper people merge <keep> <other>       two records of one person: other's names and channels
+                                              go to keep, and other's record is removed
 
 A record is {name, aliases, channels: {platform: [id, ...]}, subject, cast, notes}, keyed by a
 slug. The platforms are PLATFORMS ("youtube_live" and "youtube_2" in streamers.json are YouTube).
@@ -17,12 +19,14 @@ uploads_only), [story] people and the cast library's folders ([thumbnail] photos
 channels, the folder as `cast`). Entries are one person when any of their names match (names():
 the name, the words in its brackets, the slug and the aliases, compared by investigate's
 canon()); a field people.json sets wins, and lists are joined. An archive subject named like
-one of a person's names is theirs unless a record's `subject` says otherwise.
+one of a person's names, and a cast folder of theirs, are linked unless their record in
+people.json has `subject` / `cast`: an empty one there means no link, on purpose.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
 from pathlib import Path
 
 from . import jsonstate
@@ -30,6 +34,7 @@ from .errors import ClipperError
 
 PLATFORMS = ("youtube", "kick", "twitch", "rumble", "odysee", "x")
 FIELDS = ("name", "aliases", "channels", "subject", "cast", "notes")
+LINKS = ("subject", "cast")   # in people.json, empty = unlinked on purpose; absent = linked by name
 HOSTS = {"youtube.com": "youtube", "youtu.be": "youtube", "kick.com": "kick", "twitch.tv": "twitch",
          "rumble.com": "rumble", "odysee.com": "odysee", "x.com": "x", "twitter.com": "x"}
 
@@ -176,11 +181,13 @@ def subjects(cfg: dict) -> list[str]:
         return []
 
 
-def load(cfg: dict) -> dict[str, dict]:
+def load(cfg: dict, own: dict[str, dict] | None = None) -> dict[str, dict]:
     """Everyone, {id: record + "from" (the lists it came from)}: people.json, then the older
-    lists folded in by name, then archive subjects matched to the names."""
+    lists folded in by name, then archive subjects matched to the names. own: people.json's
+    records, when the caller holds them (under its lock)."""
+    own = stored(cfg) if own is None else own
     out: dict[str, dict] = {}
-    for pid, r in stored(cfg).items():
+    for pid, r in own.items():
         rec = {**blank(r.get("name") or pid), **{k: r[k] for k in FIELDS if k in r}, "from": ["people.json"]}
         rec["aliases"], rec["channels"] = list(rec["aliases"]), {p: list(v) for p, v in rec["channels"].items()}
         out[pid] = rec
@@ -202,7 +209,7 @@ def load(cfg: dict) -> dict[str, dict]:
         rec = out[pid]
         add_aliases(rec, [e["name"], *e["aliases"]])
         add_channels(rec, e["channels"])
-        if e.get("cast") and not rec["cast"]:
+        if e.get("cast") and not rec["cast"] and "cast" not in own.get(pid, {}):
             rec["cast"] = e["cast"]
         if source not in rec["from"]:
             rec["from"].append(source)
@@ -212,7 +219,7 @@ def load(cfg: dict) -> dict[str, dict]:
         if s in claimed:
             continue
         for pid, rec in out.items():
-            if not rec["subject"] and canon(s) in names(rec, pid):
+            if not rec["subject"] and "subject" not in own.get(pid, {}) and canon(s) in names(rec, pid):
                 rec["subject"] = s
                 break
     return out
@@ -228,15 +235,17 @@ def conflicts(people: dict[str, dict]) -> dict[str, list[str]]:
 
 
 def find(cfg: dict, name: str, people: dict[str, dict] | None = None) -> tuple[str, dict] | None:
-    """(id, record) for a name, nickname, alias or id; None when nobody answers to it."""
+    """(id, record) for a name, nickname, alias or id; None when nobody answers to it. The whole
+    name first, then the words in its brackets ("Someone (Jer)" is Jer), never the name without
+    them: "Phil (Collins)" isn't whoever answers to Phil."""
     people = load(cfg) if people is None else people
     if name in people:
         return name, people[name]
-    want = names({"name": name})
-    hits = [pid for pid, rec in people.items() if want & names(rec, pid)]
-    if len(hits) > 1:
-        exact = [pid for pid in hits if canon(name) in names(people[pid], pid)]
-        hits = exact if len(exact) == 1 else hits
+    hits = [pid for pid, rec in people.items() if canon(name) in names(rec, pid)]
+    if not hits:
+        inner = {canon(x) for part in re.findall(r"\((.*?)\)", name) for x in re.split(r"[/,]", part)}
+        inner = {x for x in inner if len(x) >= 3}
+        hits = [pid for pid, rec in people.items() if inner & names(rec, pid)]
     if len(hits) > 1:
         raise ClipperError(f"{name!r} could be {', '.join(hits)}: use the id")
     return (hits[0], people[hits[0]]) if hits else None
@@ -249,12 +258,22 @@ def by_subject(cfg: dict, subject: str, people: dict[str, dict] | None = None) -
 
 def alias_map(cfg: dict, subject: str) -> dict[str, str]:
     """For investigate: {name: what it means} for everyone's names, the subject's own as "self"
-    (him, not a thread) and anyone else's as their short name, so spellings merge."""
+    (him, not a thread) and anyone else's as their short name, so spellings merge. A name two
+    people share means itself, and a person whose short name is shared (Phil (Burnell), Phil
+    (Collins)) goes by their full name or id; both are kept from investigate's own spelling and
+    surname guesses (merge_aliases skips a name already mapped), so neither person gets the
+    other's facts."""
     people = load(cfg)
     bad = set(conflicts(people))
-    out = {}
+    shorts = Counter(short_name(r) for r in people.values())
+    fulls = Counter(canon(r["name"]) for r in people.values())
+    out = {n: n for n in bad}
     for pid, rec in people.items():
         to = "self" if rec["subject"] == subject else short_name(rec)
+        if to != "self" and (shorts[to] > 1 or to in bad):
+            full = canon(rec["name"])
+            to = full if full != to and fulls[full] == 1 and full not in bad else canon(pid.replace("-", " "))
+            out[to] = to
         for n in names(rec, pid) - bad:
             if n != to:
                 out[n] = to
@@ -269,8 +288,10 @@ def display_name(cfg: dict, subject: str) -> str:
 
 # ---------- changes ----------
 
-def clean(rec: dict) -> dict:
-    out = {k: rec[k] for k in FIELDS if k in rec}
+def clean(rec: dict, keep=()) -> dict:
+    """A record as people.json keeps it; an empty subject or cast only when in keep (set or
+    cleared on purpose), else it is left out and linked by name."""
+    out = {k: rec[k] for k in FIELDS if k in rec and (k not in LINKS or rec[k] or k in keep)}
     out["channels"] = {p: v for p, v in rec.get("channels", {}).items() if v}
     return out
 
@@ -288,18 +309,20 @@ def set_person(cfg: dict, name: str, new_name: str | None = None, aliases: list[
                unaliases: list[str] = (), channels: list[str] = (), unchannels: list[str] = (),
                subject: str | None = None, cast: str | None = None, notes: str | None = None) -> str:
     """Change (or add) a person in people.json; returns the id. A person known only from the
-    older lists is written whole, so people.json holds the full record from then on."""
-    people = load(cfg)
-    hit = find(cfg, name, people)
+    older lists is written whole, so people.json holds the full record from then on. subject
+    or cast "" unlinks them for good (an empty one in people.json isn't linked by name)."""
     if subject and not (Path(cfg["paths"]["archive"]) / subject).is_dir():
         raise ClipperError(f"no archive subject {subject!r} (clipper archive add {subject} <url>)")
     with jsonstate.update(path(cfg), {"people": {}}) as data:
         own = data.setdefault("people", {})
+        people = load(cfg, own)   # under the lock: a set at the same time can't be lost
+        hit = find(cfg, name, people)
         if hit:
-            pid, rec = hit[0], clean(hit[1])
+            pid, rec = hit
         else:
-            pid = free_id(slugify(name), {*people, *own})
-            rec = clean(blank(name))
+            pid = free_id(slugify(name), people)
+            rec = blank(name)
+        keep = {k for k in LINKS if k in own.get(pid, {})}
         if new_name:
             old, rec["name"] = rec["name"], new_name.strip()
             add_aliases(rec, [old])
@@ -315,24 +338,57 @@ def set_person(cfg: dict, name: str, new_name: str | None = None, aliases: list[
         for key, val in (("subject", subject), ("cast", cast), ("notes", notes)):
             if val is not None:
                 rec[key] = val.strip()
-        own[pid] = clean(rec)
+                keep.add(key)
+        own[pid] = clean(rec, keep)
+    return pid
+
+
+def merge_people(cfg: dict, keep: str, other: str) -> str:
+    """Two records of one person (after `import`, say): other's name, aliases and channels join
+    keep's, its subject, cast and notes fill keep's empty ones, and other's record goes. Its
+    name becomes keep's alias, so a list it came from folds into keep from then on."""
+    with jsonstate.update(path(cfg), {"people": {}}) as data:
+        own = data.setdefault("people", {})
+        people = load(cfg, own)
+        a, b = find(cfg, keep, people), find(cfg, other, people)
+        for name, hit in ((keep, a), (other, b)):
+            if not hit:
+                raise ClipperError(f"nobody called {name!r} (clipper people list)")
+        (pid, rec), (gone, rb) = a, b
+        if pid == gone:
+            raise ClipperError(f"{keep!r} and {other!r} are already one record ({pid})")
+        add_aliases(rec, [rb["name"], *rb["aliases"]])
+        add_channels(rec, rb["channels"])
+        keeps = {k for k in LINKS if k in own.get(pid, {})}
+        for k in (*LINKS, "notes"):
+            if not rec[k] and rb[k]:
+                rec[k] = rb[k]
+                keeps.discard(k)
+        own[pid] = clean(rec, keeps)
+        own.pop(gone, None)
     return pid
 
 
 def import_all(cfg: dict, dry_run: bool = False) -> None:
     """Write everyone in the merged view into people.json (its own fields are kept)."""
-    people = load(cfg)
-    own = stored(cfg)
+    if dry_run:
+        report_import(load(cfg), stored(cfg))
+        return
+    with jsonstate.update(path(cfg), {"people": {}}) as data:
+        own = data.setdefault("people", {})
+        people = load(cfg, own)   # under the lock: a set at the same time isn't lost
+        report_import(people, own)
+        data["people"] = {pid: clean(rec, [k for k in LINKS if k in own.get(pid, {})])
+                          for pid, rec in people.items()}
+    print(f"wrote {path(cfg)}")
+
+
+def report_import(people: dict[str, dict], own: dict[str, dict]) -> None:
     new = [pid for pid in people if pid not in own]
     print(f"{len(people)} people: {len(own)} in people.json, {len(new)} only in the older lists"
           + (f" ({', '.join(new)})" if new else ""))
     for n, ids in conflicts(people).items():
         print(f"  {n!r} is a name of {', '.join(ids)}: an alias to fix")
-    if dry_run or not people:
-        return
-    with jsonstate.update(path(cfg), {"people": {}}) as data:
-        data["people"] = {pid: clean(rec) for pid, rec in people.items()}
-    print(f"wrote {path(cfg)}")
 
 
 # ---------- printing ----------

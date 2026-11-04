@@ -18,7 +18,9 @@ people` also folds in the older lists, so nothing has to move at once:
 Entries are one person when any of their names match: the name, the words in its brackets
 ("The Quartering (Jer)" answers to Jer), the id and the aliases, ignoring case, punctuation and
 a leading "the". A field `people.json` sets wins, and lists are joined. An archive subject named
-like one of a person's names (`archive/jer`) is theirs unless a record says another.
+like one of a person's names (`archive/jer`) and a cast folder of theirs are linked, unless their
+record in `people.json` has `subject` / `cast`: an empty one there means unlinked, on purpose
+(`people set jer --subject ""`).
 
 Channels are confirmed ones only: typed by hand or from a hand-kept list, never guessed by a
 model. The platforms are `youtube`, `kick`, `twitch`, `rumble`, `odysee` and `x`.
@@ -30,14 +32,18 @@ clipper people list                         # everyone, and which lists each rec
 clipper people show jer                     # one record, by any of their names
 clipper people import --dry-run             # who would be written, and names two people share
 clipper people import                       # write everyone into people.json
-clipper people set Don --alias "Don Flurgundy"           # makes two entries one person
+clipper people merge channel-404-news don                # two records of one person: one goes
 clipper people set jer --alias Jeremy --channel x=TheQuartering --channel https://odysee.com/@TheQuartering
 clipper people set "Ben Avery" --channel youtube=@BenAvery   # a new person
 clipper people set jer --subject jer --cast Jer --notes "Rumble first"
 ```
 
 `set` writes the person's whole merged record into `people.json` (adding them if nobody has that
-name); `--name` renames and keeps the old name as an alias. `--unalias` drops an alias, but a
+name); `--name` renames and keeps the old name as an alias. A lookup matches the whole name, then
+the words in its brackets: "Phil (Collins)" is never whoever answers to Phil. `merge` moves the
+second record's names, channels and links to the first and removes it; its name stays an alias,
+so the list it came from folds into the first from then on. `--unalias` drops an alias, but a
 name that comes from `streamers.json` or a cast folder comes back from there: fix it at the
 source. `clipper doctor` (all and serve roles) warns when two people share a name, since a lookup
-by it is then ambiguous and investigate won't merge on it.
+by it is then ambiguous; investigate keeps that name apart from both of them, and two people
+whose short names match (Phil (Burnell), Phil (Collins)) go by their full names there.

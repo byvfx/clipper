@@ -235,8 +235,8 @@ notes + a never-read list (Kiwi Farms).
 Part 1 (`clipper/people.py`, `clipper people list|show|set|import`): people.json (`[paths] people`,
 gitignored) is the record; streamers.json, `[story] people` and cast folders fold in by name; story's
 roster and investigate's alias merging (subject's names = self, aliases.json wins) read it. Not yet
-imported here: after merge, `clipper people import`, then `people set channel-404-news --alias Don` and
-`people set melonie-mac --alias "Mel mac"` (those two didn't match by name).
+imported here: after merge, `clipper people import`, then `people merge channel-404-news don` and
+`people merge melonie-mac "Mel mac"` (those two didn't match by name).
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line
 wedges a stream's finalize; ~15 medium: quiet failures in the bot's notify loop and Health, `[notify]`
