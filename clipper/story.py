@@ -312,6 +312,14 @@ def candidates(cfg: dict, findings: list[dict], have: dict[str, dict]) -> tuple[
     return ours, cands
 
 
+def unique(items: list[dict]) -> list[dict]:
+    """The first of each id, in order."""
+    out: dict[str, dict] = {}
+    for it in items:
+        out.setdefault(it["id"], it)
+    return list(out.values())
+
+
 def fit(picked: list[dict], max_videos: int, max_hours: float) -> tuple[list[dict], list[dict]]:
     """The picks, in order, that fit the limits; and the ones that didn't."""
     keep, left, hours = [], [], 0.0
@@ -345,8 +353,15 @@ def triage(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict
             given.append(given_item(cfg, u))
         except ClipperError as e:
             print(f"  skip {e}")
-    given = [it for it in given if it["id"] not in done]
-    ours, cands = candidates(cfg, trail.get("findings", []), {**done, **{it["id"]: it for it in given}})
+    given = unique([it for it in given if it["id"] not in done])  # one video, however its url was written
+    linked = []
+    for it in given:  # a Kick VOD we recorded ourselves is linked, outside the limits, as a found one is
+        if it["source"] == "kick" and (o := our_stream(cfg, it["id"])):
+            linked.append({**o, "url": it["url"], "key": it.get("key") or ""})
+    given = [it for it in given if it["id"] not in {o["id"] for o in linked}]
+    ours, cands = candidates(cfg, trail.get("findings", []),
+                             {**done, **{it["id"]: it for it in given + linked}})
+    ours = linked + ours
     picks = []
     if cands:
         user = (f"Story: {b['brief']}\n\n{context(b)}\n\nLimits: {sc['max_videos']} videos, "
@@ -354,9 +369,10 @@ def triage(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict
         out = ask(cfg, claude, budget, sc["triage_model"], sc["triage_effort"], prompts.get("story_triage"),
                   user, TRIAGE_SCHEMA, 800)
         for p in (out or {}).get("picks", []):
-            if 0 <= p["n"] < len(cands) and cands[p["n"]] not in picks:
+            if 0 <= p["n"] < len(cands):
                 picks.append({**cands[p["n"]], "why": p["why"]})
-    keep, left = fit(given + picks, sc["max_videos"], sc["max_hours"])
+    # the limits count each video once (the model may pick one twice, or pick one given by hand)
+    keep, left = fit(unique(given + picks), sc["max_videos"], sc["max_hours"])
     # a rerun replaces the earlier picks still waiting; what is transcribed stays
     cat = {**done, **{it["id"]: it for it in [*ours, *keep]}}
     save_catalog(d, cat)
@@ -485,12 +501,12 @@ def find(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> list[d
         db.close()
     cands = list(pool.values())[:sc["candidates"]]
     print(f"find: {len(queries)} queries over {', '.join(subs)}: {len(cands)} windows")
-    if not cands:
-        return []
-    lst = "\n\n".join(f"[{n}] {h['date'] or 'undated'} | {h['channel'] or '?'} | {h['title']}\n{h['text']}"
-                      for n, h in enumerate(cands))
-    out = ask(cfg, claude, budget, sc["find_model"], sc["find_effort"], prompts.get("story_moments"),
-              f"Story: {b['brief']}\nPeople: {who}\n\n<windows>\n{lst}\n</windows>", MOMENTS_SCHEMA, 3000)
+    out = None
+    if cands:  # none: moments.json still says so, so a dossier never reads an older run's
+        lst = "\n\n".join(f"[{n}] {h['date'] or 'undated'} | {h['channel'] or '?'} | {h['title']}\n{h['text']}"
+                          for n, h in enumerate(cands))
+        out = ask(cfg, claude, budget, sc["find_model"], sc["find_effort"], prompts.get("story_moments"),
+                  f"Story: {b['brief']}\nPeople: {who}\n\n<windows>\n{lst}\n</windows>", MOMENTS_SCHEMA, 3000)
     ts, moments, dropped = Transcripts(cfg), [], 0
     for p in (out or {}).get("picks", []):
         if not 0 <= p["n"] < len(cands):
@@ -551,9 +567,12 @@ def sources(trail: dict, n: int) -> list[dict]:
 
 
 def unresolved(out: dict, ids: set[str], moment_ids: set[str]) -> list[str]:
+    """Cites that aren't listed ids, and claims that cite nothing."""
     bad = [c for x in out["timeline"] + out["conflicts"] for c in x["cites"] if c not in ids]
     bad += [x["moment"] for x in out["who_said_what"] if x["moment"] not in moment_ids]
     bad += [c for x in out["angles"] for c in x["moments"] if c not in moment_ids]
+    bad += [f"no cite: {part} {x.get('what') or x.get('angle')!r}"[:90] for part in ("timeline", "conflicts", "angles")
+            for x in out[part] if not x.get("cites" if part != "angles" else "moments")]
     return sorted(set(bad))
 
 
@@ -566,7 +585,9 @@ def dossier(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dic
     struck = {s["key"] for s in old.get("sources", []) if s.get("struck")}
     for s in srcs:
         s["struck"] = s["key"] in struck
-    ingested = {it.get("key") for it in load_catalog(d).values()} - {"", None}
+    # transcribed, not only picked: a failed download stays in the catalog (--from find goes on without it)
+    ingested = {it.get("key") for it in load_catalog(d).values()
+                if (item_dir(d, it) / "words.jsonl").exists()} - {"", None}
     ms = "\n".join(f"{m['id']} | {m['role']}, {m['fit']} | {m['date'] or 'undated'} | {m['channel'] or '?'}"
                    f"{' (our show)' if m['ours'] else ''} | {m['title']}\n    \"{m['quote']}\"\n    {m['why']}"
                    for m in moments)
@@ -582,12 +603,13 @@ def dossier(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dic
     if out is None:
         raise ClipperError("the dossier model declined to write one")
     if bad := unresolved(out, ids, {m["id"] for m in moments}):
-        print(f"dossier: {len(bad)} cites don't resolve ({', '.join(bad)}); asking once more")
+        print(f"dossier: {len(bad)} cites don't resolve ({'; '.join(bad)}); asking once more")
         out = ask(cfg, claude, budget, sc["dossier_model"], sc["dossier_effort"], system,
-                  user + f"\n\nYour last answer cited ids that aren't listed: {', '.join(bad)}. "
-                         "Cite only the M and S ids above.", DOSSIER_SCHEMA, 4000)
+                  user + f"\n\nYour last answer had cites that aren't listed ids, or claims citing nothing: "
+                         f"{'; '.join(bad)}. Cite only the M and S ids above, and leave out a claim nothing "
+                         "above supports.", DOSSIER_SCHEMA, 4000)
         if out is None or (bad := unresolved(out, ids, {m["id"] for m in moments})):
-            raise ClipperError(f"dossier: cites still don't resolve: {', '.join(bad) if out else 'declined'}")
+            raise ClipperError(f"dossier: cites still don't resolve: {'; '.join(bad) if out else 'declined'}")
     data = {"slug": b["slug"], "brief": b["brief"], "since": b["since"], "before": b["before"],
             "people": [p["name"] for p in b["people"]], "made_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "model": sc["dossier_model"], "notes": old.get("notes", ""), "dossier": out,

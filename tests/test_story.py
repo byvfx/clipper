@@ -158,6 +158,7 @@ def test_a_story_from_findings_to_dossier(cfg, tmp_path, capsys):
     users = llm.users[id(story.DOSSIER_SCHEMA)]
     assert len(users) == 2 and "S99" in users[1]   # sent back once
     assert "S01 | video (transcribed)" in users[0]
+    assert "S03 | our streams (transcribed)" in users[0]
     md = (d / "dossier.md").read_text(encoding="utf-8")
     assert "- 2026-11-01 [shown] banned (M01, S01)" in md and "> jer got banned again chat" in md
 
@@ -167,9 +168,11 @@ def test_a_story_from_findings_to_dossier(cfg, tmp_path, capsys):
         x["sources"][1]["struck"] = True
     with pytest.raises(ClipperError, match="S02"):   # a struck source can't be cited
         story.run(cfg, slug, start="dossier", claude=FakeLLM([dossier_answer(["S02"]), dossier_answer(["S02"])]))
+    (d / "yt-aaaaaaaaaaa" / "words.jsonl").unlink()   # as if its download had failed
     llm = FakeLLM([dossier_answer(["S01"])])
     story.run(cfg, slug, start="dossier", claude=llm)
     assert "S02" not in llm.users[id(story.DOSSIER_SCHEMA)][0]
+    assert "S01 | video |" in llm.users[id(story.DOSSIER_SCHEMA)][0]   # picked, not transcribed
     x = jsonstate.load(d / "dossier.json")
     assert x["notes"] == "ask Don" and x["sources"][1]["struck"]
     story.show(cfg, slug)
@@ -240,3 +243,50 @@ def test_a_triage_rerun_replaces_the_picks_still_waiting(cfg, tmp_path):
     jsonstate.write(d / "swarm.json", {"runs": [{}], "findings": found[1:]})
     story.run(cfg, slug, start="triage", dry_run=True, claude=FakeLLM())
     assert set(jsonstate.load(d / "catalog.json")) == {"zz", "yt-bbbbbbbbbbb"}
+
+
+def test_each_video_counts_once_against_the_limits():
+    its = [{"id": "a", "duration_s": 3600}, {"id": "a", "duration_s": 3600, "why": "again"}, {"id": "b", "duration_s": 3600}]
+    assert [i["id"] for i in story.fit(story.unique(its), max_videos=2, max_hours=2)[0]] == ["a", "b"]
+
+
+def test_a_kick_vod_given_by_hand_that_we_recorded_is_linked(cfg, tmp_path, monkeypatch):
+    transcribed(tmp_path / "streams" / "kick-9", "jer got banned", title="Kino", started_at="2026-11-01T01:00:00+00:00")
+    slug = story.new(cfg, "Jer banned from Kick", since="2026-10-28", urls=["https://kick.com/x/videos/1"])
+    d = story.story_dir(cfg, slug)
+    jsonstate.write(d / "swarm.json", {"runs": [{}], "findings": []})
+    monkeypatch.setattr(story, "given_item", lambda cfg, u: {"id": "kick-9", "source": "kick", "url": u,
+                                                             "duration_s": 99999, "m3u8": "m"})
+    cfg["story"]["max_hours"] = 1
+    story.run(cfg, slug, dry_run=True, claude=FakeLLM())
+    t = jsonstate.load(d / "triage.json")
+    assert (t["linked"], t["picked"], t["over_limits"]) == (["kick-9"], [], [])
+    assert jsonstate.load(d / "catalog.json")["kick-9"]["url"] == "https://kick.com/x/videos/1"
+
+
+def test_no_windows_still_replaces_the_moments(cfg):
+    slug = story.new(cfg, "Jer banned from Kick", since="2026-10-28")
+    d = story.story_dir(cfg, slug)
+    from clipper import archive
+
+    transcribed(d / "yt-x", "nothing about it here")
+    archive.save_catalog(d, {"yt-x": {"id": "yt-x", "source": "youtube", "url": "u"}})
+    archive_index.build(cfg, d.name, rebuild=False)
+    jsonstate.write(d / "moments.json", {"moments": [{"id": "M01"}]})   # an older run's
+    assert story.find(cfg, story.load_brief(cfg, slug), d, FakeLLM(), story.Budget(1, FakeLLM()), _prompts(cfg)) == []
+    m = jsonstate.load(d / "moments.json")
+    assert m["moments"] == [] and m["queries"] == ["banned"]
+
+
+def _prompts(cfg):
+    from clipper.prompts import Prompts
+
+    p = Prompts(cfg)
+    p.version = cfg["story"]["prompt_version"]
+    return p
+
+
+def test_a_claim_citing_nothing_is_sent_back():
+    out = dossier_answer([])
+    assert story.unresolved(out, {"M01", "M02"}, {"M01", "M02"}) == ["no cite: timeline 'banned'"]
+    assert story.unresolved(dossier_answer(["M01"]), {"M01", "M02"}, {"M01", "M02"}) == []
