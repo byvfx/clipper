@@ -330,7 +330,9 @@ link to the lead in the war room. A later `check` or `confirm` edits those messa
 posting again; a new `leads` run starts a new thread. The ids are in `investigate/discord.json`.
 A post that fails says so and leaves leads.json as it is; `clipper investigate post jer` retries.
 The war room's **Investigations** window shows each subject's dossier (leads.md, rendered),
-newest first; a Discord link (`#inv=jer&lead=L03`) opens it at that lead.
+newest first; a Discord link (`#inv=jer&run=<made_at digits>&lead=L03`) opens it at that lead
+of that run (an earlier run is read from its `leads.<time>.json` backup). A lead that stops being
+kept is marked withdrawn in Discord; a thread or message is only remade when Discord says it is gone.
 
 ## Character pieces (Mother Moo)
 

@@ -194,6 +194,8 @@ function searchTranscripts() {
 function saveHash() {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries({ tab: TAB === "waiting" ? "" : TAB, show: SHOW, kind: KINDF, q: Q, st: ST, from: FROM, to: TO })) if (v) p.set(k, v);
+  const was = new URLSearchParams(location.hash.slice(1));  // an investigation link (investigate.js) stays
+  for (const k of ["inv", "run", "lead"]) if (was.get(k)) p.set(k, was.get(k));
   const h = p.toString();
   if (h !== location.hash.slice(1)) history.replaceState(null, "", location.pathname + location.search + (h ? "#" + h : ""));
 }

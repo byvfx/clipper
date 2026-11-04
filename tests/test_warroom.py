@@ -174,3 +174,6 @@ def test_investigations_list_newest_first_and_render_the_one_asked_for(defaults,
     assert [s["subject"] for s in got["subjects"]] == ["dsp", "jer"] and got["subject"] == "dsp"
     assert warroom.investigations_get(defaults, "jer")["markdown"].startswith("# Leads: jer")
     assert warroom.investigations_get(defaults, "../etc")["subject"] == "dsp"  # only subjects on file
+    gone = warroom.investigations_get(defaults, "jer", "20200101000000")
+    assert gone["missing_run"] and gone["markdown"] == ""
+    assert warroom.investigations_get(defaults, "jer", "20261103000000")["run"] == "20261103000000"

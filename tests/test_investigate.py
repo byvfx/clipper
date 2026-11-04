@@ -333,10 +333,14 @@ class FakeDiscord:
     """Discord's REST API as `notify.Rest` calls it: one text channel, ids counted up."""
 
     def __init__(self):
-        self.calls, self.n = [], 0
+        self.calls, self.n, self.fail, self.sent = [], 0, {}, {}
 
     def __call__(self, method, path, payload=None, files=None):
         self.calls.append((method, path))
+        if (method, path) in self.fail:
+            raise self.fail[(method, path)]
+        if payload and "content" in payload:
+            self.sent[path] = payload["content"]
         if method == "GET" and path.startswith("/guilds/"):
             return [{"id": "c1", "type": 0, "name": "investigations"}]
         if method == "GET":
@@ -397,3 +401,66 @@ def test_a_lead_message_is_short_and_links_to_the_war_room():
     assert investigate.lead_message(x).endswith("The whole lead: leads.md")
     title = investigate.thread_title({"subject": "jer", "about": "lawsuit", "made_at": "2026-11-03T01:00"})
     assert title == "jer · lawsuit · 2026-11-03"
+
+
+def posted_leads(defaults, tmp_path, monkeypatch, keeps=(True,)):
+    from clipper import notify
+
+    subject(defaults, tmp_path)
+    defaults["discord"]["guild_id"] = "g"
+    api = FakeDiscord()
+    monkeypatch.setattr(notify, "Rest", lambda cfg: api)
+    monkeypatch.setattr(investigate, "war_room_link", lambda cfg: "https://wr")
+    leads = []
+    for k, keep in enumerate(keeps):
+        cand = {"why": f"w{k}", "facts": [fact(f"a{k}", "2026-01-01", f"v{k}a"), fact(f"b{k}", "2026-02-01", f"v{k}b")]}
+        lead = investigate.make_lead({"keep": True, "reject": "", "headline": f"H{k}", "story": "S", "kind": "shift",
+                                      "confidence": "low", "confirm_or_kill": "c", "people": [],
+                                      "timeline": [f"a{k}", f"b{k}"], "search": "q"}, cand)
+        leads.append({**lead, "keep": keep})
+    data = {"subject": "jer", "about": "", "made_at": "2026-11-03T00:00:00+00:00", "model": "m",
+            "candidates": 1, "leads": investigate.rank(leads, 5)}
+    investigate.save_leads(defaults, "jer", data)
+    investigate.post_discord(defaults, "jer")
+    return api, data
+
+
+def test_a_lead_no_longer_kept_is_marked_withdrawn_even_when_none_are_left(defaults, tmp_path, monkeypatch):
+    api, data = posted_leads(defaults, tmp_path, monkeypatch, (True, True))
+    assert "&run=20261103000000&lead=L0" in api.sent["/channels/m2/messages"]  # links name the run
+    for x in data["leads"]:
+        x["keep"] = False
+    investigate.save_leads(defaults, "jer", data)
+    api.calls.clear()
+    investigate.post_discord(defaults, "jer")
+    assert sorted(c for c in api.calls if c[0] == "PATCH") == [("PATCH", "/channels/m2/messages/m3"),
+                                                              ("PATCH", "/channels/m2/messages/m4")]
+    assert all("Withdrawn" in api.sent[c[1]] for c in api.calls if c[0] == "PATCH")
+
+
+def test_only_a_missing_thread_is_remade_and_a_passing_failure_keeps_the_ids(defaults, tmp_path, monkeypatch):
+    from clipper.errors import ClipperError
+    from clipper.notify import Missing
+
+    api, data = posted_leads(defaults, tmp_path, monkeypatch)
+    state = jsonstate.read(tmp_path / "jer" / "investigate" / "discord.json", {})
+    data["leads"][0]["notes"] = "changed"
+    investigate.save_leads(defaults, "jer", data)
+    api.fail[("GET", "/channels/m2")] = ClipperError("Discord GET /channels/m2: 503")
+    with pytest.raises(ClipperError):
+        investigate.post_discord(defaults, "jer")
+    assert jsonstate.read(tmp_path / "jer" / "investigate" / "discord.json", {}) == state
+    api.fail = {("GET", "/channels/m2"): Missing("404")}
+    investigate.post_discord(defaults, "jer")
+    assert jsonstate.read(tmp_path / "jer" / "investigate" / "discord.json", {})["thread_id"] != "m2"
+
+
+def test_an_earlier_run_is_found_among_the_backups(defaults, tmp_path):
+    subject(defaults, tmp_path)
+    d = tmp_path / "jer" / "investigate"
+    d.mkdir(parents=True)
+    jsonstate.write(d / "leads.json", {"made_at": "2026-11-04T00:00:00+00:00", "leads": []})
+    jsonstate.write(d / "leads.20261104-000000.json", {"made_at": "2026-11-03T00:00:00+00:00", "leads": []})
+    assert investigate.load_run(defaults, "jer", "20261103000000")["made_at"].startswith("2026-11-03")
+    assert investigate.load_run(defaults, "jer", "20261104000000")["made_at"].startswith("2026-11-04")
+    assert investigate.load_run(defaults, "jer", "20250101000000") is None

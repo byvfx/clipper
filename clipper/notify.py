@@ -70,6 +70,11 @@ def user_ids(dc: dict) -> set[int]:
     return {int(i) for i in ids}
 
 
+class Missing(ClipperError):
+    """Discord says the channel, thread or message isn't there (404): deleted, safe to remake.
+    Any other failure may be passing, so the ids are kept."""
+
+
 class Rest:
     def __init__(self, cfg: dict):
         self.s = requests.Session()
@@ -93,6 +98,8 @@ class Rest:
             if r.status_code == 429:
                 time.sleep(float(r.json().get("retry_after", 1)) + 0.2)
                 continue
+            if r.status_code == 404:
+                raise Missing(f"Discord {method} {path}: 404 {r.text[:300]}")
             if r.status_code >= 400:
                 raise ClipperError(f"Discord {method} {path}: {r.status_code} {r.text[:300]}")
             return r.json() if r.content else {}

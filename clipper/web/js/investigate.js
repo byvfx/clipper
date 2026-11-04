@@ -1,7 +1,8 @@
 // War room: investigations (#108). Each archive subject's leads dossier (`clipper investigate`),
-// the same markdown as leads.md, rendered to read. Discord's lead posts link here: #inv=jer&lead=L03.
+// the same markdown as leads.md, rendered to read. Discord's lead posts link here:
+// #inv=jer&run=<made_at digits>&lead=L03 (lead ids repeat across runs; the run says which).
 
-let INV = null;  // {subject, lead}
+let INV = null;  // {subject, run, lead}
 let INVWIN = 0;
 
 // The dossier's markdown: # and ## headings, paragraphs, "- " items with indented "> " quotes
@@ -39,7 +40,7 @@ function mdRender(md) {
   return out.join("");
 }
 
-async function showInvestigations(subject, lead) {
+async function showInvestigations(subject, lead, run) {
   const d = $("#tool");
   const win = ++INVWIN;
   d.dataset.kind = "inv"; d.classList.remove("cover"); d.classList.add("facesw");
@@ -48,12 +49,17 @@ async function showInvestigations(subject, lead) {
     d.showModal();
   }
   try {
-    const r = await api("/api/investigations" + (subject ? "?subject=" + encodeURIComponent(subject) : ""));
+    const q = new URLSearchParams();
+    if (subject) q.set("subject", subject);
+    if (run) q.set("run", run);
+    const r = await api("/api/investigations?" + q);
     if (win !== INVWIN || !d.open || d.dataset.kind !== "inv") return;
-    INV = { subject: r.subject, lead };
+    INV = { subject: r.subject, run: r.run, lead };
     const opts = r.subjects.map(s => `<option value="${esc(s.subject)}"${s.subject === r.subject ? " selected" : ""}>${esc(s.subject)}${s.about ? " · " + esc(s.about) : ""} · ${esc(s.made_at.slice(0, 10))} · ${s.kept} leads</option>`).join("");
     d.innerHTML = `<div class="m-head"><b>Investigations</b>${r.subjects.length ? `<select id="invSubject" title="Research only, never uploaded: leads.md">${opts}</select>` : ""}<button class="x" data-close>×</button></div>
-      <div class="md">${r.markdown ? mdRender(r.markdown) : `<div class="empty">No investigations yet: clipper investigate run &lt;subject&gt;.</div>`}</div>`;
+      <div class="md">${r.missing_run ? `<p class="old">That run of ${esc(r.subject)}'s leads isn't on file any more. <button class="btn" data-invnow>Open the current one</button></p>`
+        : r.markdown ? (r.run !== r.current ? `<p class="old">An earlier run of these leads (the link's). <button class="btn" data-invnow>Open the current one</button></p>` : "") + mdRender(r.markdown)
+        : `<div class="empty">No investigations yet: clipper investigate run &lt;subject&gt;.</div>`}</div>`;
     if (lead) d.querySelector("#inv-" + CSS.escape(lead))?.scrollIntoView({ block: "start" });
   } catch (e) {
     const box = d.querySelector(".tbody");
@@ -64,14 +70,23 @@ async function showInvestigations(subject, lead) {
 
 document.addEventListener("click", e => {
   if (e.target.closest?.("#invBtn")) showInvestigations(INV?.subject);
+  if (e.target.closest?.("[data-invnow]")) { invHash(null); showInvestigations(INV?.subject); }
 });
+// The link's place in the hash (core.js's saveHash keeps inv/run/lead), dropped once the window closes.
+function invHash(p) {
+  const h = new URLSearchParams(location.hash.slice(1));
+  for (const k of ["inv", "run", "lead"]) h.delete(k);
+  if (p) for (const [k, v] of Object.entries(p)) if (v) h.set(k, v);
+  const s = h.toString();
+  history.replaceState(null, "", location.pathname + location.search + (s ? "#" + s : ""));
+}
 document.addEventListener("change", e => {
-  if (e.target.id === "invSubject") showInvestigations(e.target.value);
+  if (e.target.id === "invSubject") { invHash(null); showInvestigations(e.target.value); }
 });
-$("#tool").addEventListener("close", () => { if ($("#tool").dataset.kind === "inv") { INV = null; INVWIN++; } });
+$("#tool").addEventListener("close", () => { if ($("#tool").dataset.kind === "inv") { INV = null; INVWIN++; invHash(null); } });
 function invFromHash() {  // a link from Discord: open the window at that lead
   const p = new URLSearchParams(location.hash.slice(1));
-  if (p.get("inv")) showInvestigations(p.get("inv"), p.get("lead") || "");
+  if (p.get("inv")) showInvestigations(p.get("inv"), p.get("lead") || "", p.get("run") || "");
 }
 window.addEventListener("hashchange", invFromHash);
 invFromHash();

@@ -1242,54 +1242,81 @@ def war_room_link(cfg: dict) -> str:
     return (base or str(cfg["serve"]["url"] or "")).rstrip("/")
 
 
+def run_id(data: dict) -> str:
+    """A leads run's id for links: its made_at as digits (lead ids like L01 repeat across runs)."""
+    return re.sub(r"\D", "", data.get("made_at") or "")[:14]
+
+
+def load_run(cfg: dict, subject: str, run: str = "") -> dict | None:
+    """leads.json, or the earlier run with that id among its backups (leads.<time>.json); None
+    when that run isn't on file any more."""
+    d = inv_dir(cfg, subject)
+    data = jsonstate.read(d / "leads.json", {})
+    if not run or run_id(data) == run:
+        return data or None
+    for p in sorted(d.glob("leads.*.json"), reverse=True):
+        old = jsonstate.read(p, {})
+        if run_id(old) == run:
+            return old
+    return None
+
+
 def post_discord(cfg: dict, subject: str, new_thread: bool = False) -> str:
     """Post the kept leads to [investigate] discord_channel: a thread per leads run, a message
-    per lead, edited in place when check or confirm changes a lead. Returns the thread's link."""
-    from .notify import Rest, named_channel, open_thread
+    per lead, edited in place when check or confirm changes a lead, and marked withdrawn when a
+    lead stops being kept. Returns the thread's link."""
+    from .notify import Missing, Rest, named_channel, open_thread
 
     ic, dc = cfg["investigate"], cfg["discord"]
     data = load_leads(cfg, subject)
     leads = [x for x in data["leads"] if x["keep"]]
-    if not leads:
+    dpath = inv_dir(cfg, subject) / "discord.json"
+    state = jsonstate.read(dpath, {})
+    this_run = state.get("made_at") == data["made_at"] and not new_thread
+    if not leads and not (this_run and state.get("messages")):
         raise ClipperError(f"no kept leads for {subject!r} to post")
     api = Rest(cfg)
     channel_id = named_channel(api, dc, ic["discord_channel"],
                                "Investigations: a thread per run of `clipper investigate leads`", kinds=(0, 15))
-    dpath = inv_dir(cfg, subject) / "discord.json"
-    state = jsonstate.read(dpath, {})
-    thread_id = state.get("thread_id") if (state.get("made_at") == data["made_at"]
-                                           and state.get("channel_id") == channel_id and not new_thread) else None
+    thread_id = state.get("thread_id") if this_run and state.get("channel_id") == channel_id else None
     if thread_id:
         try:
             api("GET", f"/channels/{thread_id}")
-        except ClipperError:
-            thread_id = None  # deleted: a new one
+        except Missing:
+            thread_id = None  # deleted: a new one (any other failure stops here, ids kept)
     if not thread_id:
         thread_id = open_thread(api, channel_id, thread_title(data), {"content": header_message(data)})
         state = {"made_at": data["made_at"], "channel_id": channel_id, "thread_id": thread_id, "messages": {}}
         jsonstate.write(dpath, state)
-    posted = edited = 0
     base = war_room_link(cfg)
-    for x in leads:
-        text = lead_message(x, f"{base}/#inv={subject}&lead={x['id']}" if base else "")
+    by_id = {x["id"]: x for x in data["leads"]}
+    texts = {x["id"]: lead_message(x, f"{base}/#inv={subject}&run={run_id(data)}&lead={x['id']}" if base else "")
+             for x in leads}
+    for lid in state["messages"]:  # posted, and no longer kept: say so rather than leave it standing
+        if lid not in texts:
+            x = by_id.get(lid)
+            texts[lid] = f"~~{lid} · {x['headline'][:200]}~~" if x else f"~~{lid}~~"
+            texts[lid] += "\nWithdrawn: no longer kept in leads.json."
+    posted = edited = 0
+    for lid, text in texts.items():
         sha = hashlib.sha1(text.encode()).hexdigest()[:12]
-        old = state["messages"].get(x["id"])
+        old = state["messages"].get(lid)
         if old and old["sha"] == sha:
             continue
         if old:
             try:
                 api("PATCH", f"/channels/{thread_id}/messages/{old['id']}", {"content": text})
                 edited += 1
-            except ClipperError:
+            except Missing:
                 old = None  # deleted by hand: post it again
         if not old:
             msg = api("POST", f"/channels/{thread_id}/messages", {"content": text})
             old = {"id": msg["id"]}
             posted += 1
-        state["messages"][x["id"]] = {"id": old["id"], "sha": sha}
+        state["messages"][lid] = {"id": old["id"], "sha": sha}
         jsonstate.write(dpath, state)
     url = f"https://discord.com/channels/{dc['guild_id']}/{thread_id}"
-    print(f"discord: {posted} posted, {edited} edited, {len(leads) - posted - edited} unchanged: {url}")
+    print(f"discord: {posted} posted, {edited} edited, {len(texts) - posted - edited} unchanged: {url}")
     return url
 
 

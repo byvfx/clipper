@@ -1053,9 +1053,10 @@ def _check(cfg: dict, body: dict) -> dict:  # #19: style warnings while typing
 
 # ---------- #108 investigations: the leads dossiers, to read ----------
 
-def investigations_get(cfg: dict, subject: str = "") -> dict:
+def investigations_get(cfg: dict, subject: str = "", run: str = "") -> dict:
     """Every archive subject with leads, and one subject's dossier (leads.md's markdown, built
-    fresh from leads.json); the newest investigation when subject isn't one of them."""
+    fresh from leads.json); the newest investigation when subject isn't one of them. run (from
+    a Discord link): that leads run's dossier, from its backup when a later run replaced it."""
     from . import investigate
 
     found = []
@@ -1067,8 +1068,14 @@ def investigations_get(cfg: dict, subject: str = "") -> dict:
     subjects = [{"subject": s, "made_at": d.get("made_at", ""), "about": d.get("about", ""),
                  "kept": sum(x["keep"] for x in d["leads"])} for s, d in found]
     pick = next((sd for sd in found if sd[0] == subject), found[0] if found else None)
-    return {"subjects": subjects, "subject": pick[0] if pick else "",
-            "markdown": investigate.dossier(pick[1]) if pick else ""}
+    if not pick:
+        return {"subjects": subjects, "subject": "", "run": "", "markdown": "", "missing_run": False}
+    data = pick[1]
+    if run and run != investigate.run_id(data):
+        data = investigate.load_run(cfg, pick[0], run)
+    return {"subjects": subjects, "subject": pick[0], "run": investigate.run_id(data) if data else run,
+            "current": investigate.run_id(pick[1]), "markdown": investigate.dossier(data) if data else "",
+            "missing_run": data is None}
 
 
 # ---------- #110 news: stories about the shows' people ----------
@@ -1142,7 +1149,7 @@ GET_API = {
     "/api/cast": lambda cfg, qs: cast_get(cfg, _q(qs, "person")),
     "/api/news": lambda cfg, qs: news_get(cfg, _q(qs, "days")),
     "/api/news/search": lambda cfg, qs: news_search(cfg, _q(qs, "q")),
-    "/api/investigations": lambda cfg, qs: investigations_get(cfg, _q(qs, "subject")),
+    "/api/investigations": lambda cfg, qs: investigations_get(cfg, _q(qs, "subject"), _q(qs, "run")),
 }
 POST_API = {
     "/api/check": _check,
