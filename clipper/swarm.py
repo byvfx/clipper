@@ -510,7 +510,8 @@ class Run:
             try:
                 out, usd = self.call(s["worker_model"], s["worker_effort"], self.prompts.get("swarm_worker"), user,
                                      WORKER_SCHEMA, WORKER_OUT_TOKENS)
-                out = out or {"findings": [], "followups": []}
+                if out is None:  # results nobody judged: failed, so a rerun tries again and callers can tell
+                    raise RuntimeError("the worker model declined to judge the results")
             except OverBudget as e:
                 self.stop(str(e))
                 with self.lock:

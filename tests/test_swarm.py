@@ -249,3 +249,10 @@ def test_the_trail_prints_as_a_tree(cfg, tmp_path):
     text = "\n".join(lines)
     assert "  t001 youtube_search 'jer huck'" in text and "    t002 youtube_channel" in text
     assert text.index("video 1") < text.index("t002") < text.index("video 2")
+
+
+def test_a_refused_judgement_fails_the_task(cfg, tmp_path):
+    plan = [{"kind": "youtube_search", "target": "jer a", "why": "w"}]
+    out = run(cfg, tmp_path, FakeLLM(plan, lambda kind, target: None), {"youtube_search": lambda q, n: [vid(1)]})
+    (t,) = jsonstate.load(tmp_path / "swarm.json")["tasks"]
+    assert t["status"] == "failed" and "declined" in t["error"] and out["findings"] == []

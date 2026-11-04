@@ -491,4 +491,7 @@ def test_check_searches_with_the_swarm_seeded_by_the_old_searches(defaults, tmp_
     assert got["archives"] == []   # his own transcripts: where the lead came from, not coverage
     assert found[0]["why"] == "same claim" and errors == {}   # one search down of two: in the trail only
     tasks = [{**tasks[0]}]
-    assert investigate.findings(defaults, "jer", lead)[1] == {"web_search x": "429"}   # every one failed
+    assert investigate.findings(defaults, "jer", lead)[1] == {"web_search x": "429",   # every one failed
+                                                              "swarm": "no search finished (stopped: ?)"}
+    tasks = [{**tasks[0], "status": "pending"}]   # stopped by a limit before any search ran
+    assert "swarm" in investigate.findings(defaults, "jer", lead)[1]

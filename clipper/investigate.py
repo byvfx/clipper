@@ -1046,7 +1046,8 @@ def findings(cfg: dict, subject: str, lead: dict, claude=None) -> tuple[list[dic
     streams, with the lead's search words) are its seeds, and its planner and workers add and
     follow up on others, within [investigate] swarm. Then his own video titles (code). Each
     check searches afresh (the old trail is replaced). errors: the failed searches, only when
-    every one failed (a partly failed swarm is in its trail)."""
+    every one failed, or when none finished (a swarm stopped by its limits first); a partly
+    failed swarm is in its trail."""
     from . import swarm
 
     ic = cfg["investigate"]
@@ -1066,7 +1067,9 @@ def findings(cfg: dict, subject: str, lead: dict, claude=None) -> tuple[list[dic
     found = out["findings"][:ic["check_findings"]]
     tasks = (jsonstate.read(path, {}) or {}).get("tasks", [])
     failed = {f"{t['kind']} {t['target']}": str(t.get("error", ""))[:200] for t in tasks if t["status"] == "failed"}
-    errors = failed if tasks and len(failed) == len(tasks) else {}
+    # coverage was looked at only if a search finished: else the lead stays unchecked, not fresh
+    errors = {} if any(t["status"] == "done" for t in tasks) else \
+        {**failed, "swarm": f"no search finished (stopped: {out.get('stopped') or '?'})"}
     try:
         found += own_titles(cfg, subject, ts, lead["first"], ic["check_results"])
     except Exception as e:  # noqa: BLE001  # the catalog unreadable doesn't stop the check
