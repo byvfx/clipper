@@ -477,7 +477,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
                                   # well and the label has no doubt (0 = everything waits for review)
         "auto_keep_sources": ["stream", "commons", "channel"],  # never "web" (image search, a pasted
                                   # address): its licence is unknown, so you keep those yourself
-        "auto_hours": 24,         # the bot's `cast auto` this often; 0 = off
+        "auto_hours": 24,         # serve's `cast auto` this often; 0 = off
         "retry_days": 7,          # someone a find added nothing for is tried again after this
         "label_model": "claude-haiku-5-5",  # labels each new photo ("" = no labels)
         "label_effort": "low",
@@ -695,7 +695,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     },
     "analytics": {
         # `clipper analytics`: YouTube stats of uploads -> analytics.json -> a hint in Pass B.
-        "auto_hours": 24,         # `clipper bot` refreshes it this often (once there are uploads); 0 = off
+        "auto_hours": 24,         # `clipper serve` refreshes it this often (once there are uploads); 0 = off
         "min_videos": 5,          # a show needs this many uploads with 7-day numbers first
         "examples": 4,            # best and worst shown to Pass B
     },

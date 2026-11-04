@@ -9,7 +9,8 @@ session: fix what changed here, then add a dated entry at the end of the log.
 Stream clipper for Kino Casino (Kick channel `kinocasinogaming`) and Channel 404 News → YouTube
 channel **Lolcow Cinema**. Repo `C:\clipper`, remote https://github.com/byvfx/clipper (private).
 Python package `clipper/`, config `clipper.toml` (gitignored; `clipper.example.toml` is tracked),
-prompts `prompts/`. README.md says what it is, SETUP.md how to install it, CLAUDE.md the conventions.
+prompts `prompts/`. The user docs are the GitHub wiki, built from `docs/wiki/` (`.github/workflows/wiki.yml`
+pushes it on every push to main; 2026-11-04); README.md and SETUP.md are short pointers; CLAUDE.md the conventions.
 Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds durable preferences.
 - Plan doc: https://claude.ai/code/artifact/a9bb9e38-ced0-4455-8d8e-18a78122f45f
 - Walkthrough (usage, for presenting; Claude Docs, updated 2026-10-27): https://claude.ai/code/artifact/0d0e04da-54f6-4f15-bad0-2df72a286383
@@ -26,7 +27,7 @@ Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds 
 `schedule` → `upload` (YouTube). Always on: `clipper serve` (task `clipper-serve`: the war room, hourly
 replan + upload, pre-show grabs, retakes, daily jobs) and the Discord bot (`clipper bot`, task `clipper-bot`).
 
-Around it (each a subcommand; details in README and the log): `record` (NAS Docker recorder),
+Around it (each a subcommand; details in the wiki pages and the log): `record` (NAS Docker recorder),
 `worker` (GPU machine: fast lane clips/Shorts first, then segments), `shorts` (vertical, scene-aware
 layouts, 15-59 s), `retake` (Kitsu notes → re-cut/re-cover automatically), `preshow` (Kino's YouTube
 pre-show whole; also one-offs with `--from/--to/--about`), `pick` (Shorts from a stretch you name),
@@ -110,8 +111,11 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Restart serve after scheduler/war-room Python changes, the bot after Discord changes (see Gotchas);
   stages run as fresh processes, so most other changes need no restart.
 - **NAS** (192.168.0.155): recorder container (`deploy/record`, redeployed 2026-10-30 15:09 at 1e4f724,
-  watching kinocasinogaming + donflurgundy), Kitsu :8090, the streams share, photos share, cut container.
-- **Shows:** kino and c404 live through review → schedule; dsp and blade are config-only tests; `trish` is a
+  watching kinocasinogaming + donflurgundy + chudlogic since 2026-11-04 09:55), Kitsu :8090, the streams share, photos share, cut container.
+- **Shows:** kino and c404 live through review → schedule; `chud` (ChudLogic, Kick `chudlogic`; user
+  2026-11-04: "we have the clear to clip him") added 11-04: daily ~10 h from ~00:00-02:00 PT, budget
+  segment 3 / short 5 per 8 h, 8-Bit Guy moments ranked up; first recording not yet run or reviewed;
+  layouts `watch` and `cam` measured from a VOD (reports/chudlogic-2026-10-28.md has the background); dsp and blade are config-only tests; `trish` is a
   placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI).
 - **Schedule: stay current, no backlog (live 2026-10-29 09:51).** 15/day couldn't keep up (~140
   approved a week vs 105 slots, newest stream 15 days behind). `stale_days = 3`, `[scoring]
@@ -150,6 +154,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
+- Wiki (2026-11-04): pages in `docs/wiki/` on branch `wiki-docs` (PR open); the user saved the first wiki
+  page. Next: Copilot's review, merge, then check the `wiki` workflow run published it.
 - The DSP story video is in Kitsu for review (Kino Casino / "2026-11-04 story-dsp-credit-score-590",
   Discord card posted, user's go 11-04): "DSP Says the 590 Credit Score Letter Is Fake", 3:14.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
@@ -218,6 +224,16 @@ a lower third; one segment s00 with a chapter per part and retimed words.jsonl) 
 asap. Weekly skips stories; a retake trim refuses one (edit story.json, cut again). 4) `investigate
 check` on the swarm (branch `investigate-swarm`): the old four searches are the seeds of a small swarm
 per lead (`[investigate] swarm`), then his own titles; the verdict as before.
+**Investigate anyone (#138, design only, user 11-04):** investigate on a person not yet archived (swarm
+finds their channels and X handles, the user approves, a sample spread over time is transcribed into a normal
+subject, then `investigate run`), cross-referenced with others' videos and X posts (API, not scraping),
+every fact with a speaker and said/posted dates, one people record across archive/streamers/cast/facts,
+and an Obsidian vault export. Order in the issue: people records → speaker attribution (needs #53
+embeddings, new facts prompt) → `investigate start` → X reads (check pay-per-use read price and
+full-archive search first) → vault → watchlist (serve, alert on change only) → public records (CourtListener,
+needs a token) → `investigate eval` on known stories (Huck, DSP; build early) → Good/Noise buttons + `tune`.
+Also: a review gate before a lead becomes content, Wayback snapshots of receipts, source reliability
+notes + a never-read list (Kiwi Farms).
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line
 wedges a stream's finalize; ~15 medium: quiet failures in the bot's notify loop and Health, `[notify]`
@@ -248,7 +264,7 @@ better. Left for later: #15 (example toml commented), #24/#25 (lock edges), #29-
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
-`draw.py`, war room split into `web/warroom.css` + `web/js/*.js` (docs/warroom.md), `clipper services
+`draw.py`, war room split into `web/warroom.css` + `web/js/*.js` (wiki War-room page), `clipper services
 status|stop|restart`, `deploy/common.ps1` for both task scripts, per-show `[meta] cast`, Kitsu push of
 changed schedule values only (`schedule --kitsu-all` for everything), doctor checks every show's prompts.
 **#101 (weekly split) merged 2026-11-02** as d9e1477: `clipper/weekly/` package (gather, draft, render,

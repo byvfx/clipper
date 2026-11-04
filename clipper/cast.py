@@ -11,7 +11,7 @@ even when someone is only talked about.
     clipper cast label <Person> <id> <label>
     clipper cast set <Person> --alias A --channel URL
     clipper cast auto                          a find for everyone short of [cast] target photos
-                                               (the bot, every [cast] auto_hours)
+                                               (serve, every [cast] auto_hours)
 
 Every photo is checked for the face first. With the person enrolled in faces/known.json only a
 face like theirs is taken ([cast] match), and one that looks like someone else enrolled is

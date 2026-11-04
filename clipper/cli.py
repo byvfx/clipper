@@ -1426,7 +1426,7 @@ def add_extras(sub) -> None:
     r.add_argument("src", metavar="FILE|URL")
     r.add_argument("--no-label", action="store_true", help="skip the label call")
     r = csub.add_parser("auto", help="a find from every source for everyone with fewer than [cast] target "
-                                     "photos (the bot runs it every [cast] auto_hours)")
+                                     "photos (serve runs it every [cast] auto_hours)")
     r.add_argument("--no-label", action="store_true", help="skip the label call")
     for act, what in (("keep", "keep these new photos"), ("drop", "delete these photos; their sources aren't fetched again")):
         r = csub.add_parser(act, help=what)

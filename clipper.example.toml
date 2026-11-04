@@ -177,7 +177,7 @@ target = 6                 # photos (kept + new) the automation gathers per pers
 auto_keep = 0.65           # keep without asking when an enrolled face matches this well and the
                            # label has no doubt (0 = everything waits for review)
 auto_keep_sources = ["stream", "commons", "channel"]  # not "web": its licence is unknown
-auto_hours = 24            # the bot's `cast auto` this often; 0 = off
+auto_hours = 24            # serve's `cast auto` this often; 0 = off
 retry_days = 7             # someone a find added nothing for is tried again after this
 label_model = "claude-haiku-5-5"  # labels each new photo ("" = no labels)
 label_effort = "low"
@@ -644,7 +644,7 @@ upload_units = 600             # kept back per upload still allowed today; link 
 
 [analytics]
 # `clipper analytics`: YouTube stats of uploads -> analytics.json -> a hint in scoring's Pass B.
-auto_hours = 24                # `clipper bot` refreshes it this often (once there are uploads); 0 = off
+auto_hours = 24                # `clipper serve` refreshes it this often (once there are uploads); 0 = off
 min_videos = 5                 # a show needs this many uploads with 7-day numbers first
 examples = 4                   # this many best and worst shown to Pass B
 

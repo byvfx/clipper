@@ -2,10 +2,15 @@
 
 Read HANDOFF.md first: the current state between sessions (what runs where, what the user
 decided, what is waiting on them, open work, recipes, gotchas), kept under ~300 lines. The
-session diary is `docs/log/<YYYY-MM>.md`: grep it for history, don't read it whole. README.md
-says what the project is, SETUP.md how to install it. At the end of a session update
-HANDOFF.md in place (no diaries there) and add a dated entry at the end of the month's log;
-keep README and SETUP true whenever behaviour changes.
+session diary is `docs/log/<YYYY-MM>.md`: grep it for history, don't read it whole. The user
+docs are the GitHub wiki, built from `docs/wiki/` (one flat page per file, `Home.md` first,
+`_Sidebar.md` lists every page); `.github/workflows/wiki.yml` pushes it on every push to main,
+so edit the pages there, never in the wiki itself. Link pages wiki-style (`[Faces](Faces)`,
+`[x](War-room#faces)`); `tests/test_wiki.py` checks the links and the sidebar. README.md is a
+short pointer and SETUP.md maps its old sections to wiki pages (error messages still name
+them). At the end of a session update HANDOFF.md in place (no diaries there) and add a dated
+entry at the end of the month's log; keep the wiki pages true whenever behaviour changes, in
+the same PR as the change.
 
 ## Shape
 
@@ -44,7 +49,7 @@ keep README and SETUP true whenever behaviour changes.
   `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`, `ELEVENLABS_API_KEY`, `BRAVE_API_KEY` for cast image
   search, and `OPENAI_API_KEY` / `GEMINI_API_KEY` if a stage uses those providers) or files
   under `secrets/`. Never write them into tracked files, logs, or messages.
-- Anything a new check or install step needs belongs in `clipper doctor` and SETUP.md, not
+- Anything a new check or install step needs belongs in `clipper doctor` and its wiki page, not
   only in a chat answer (and in `clipper setup`, `clipper/setup.py`, when a new user would
   have to do it).
 - Kitsu is the record for review decisions. Bot buttons and the war room act through
