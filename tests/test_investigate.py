@@ -327,3 +327,73 @@ def test_a_refused_coverage_judgement_is_unchecked_not_fresh(defaults, tmp_path,
     investigate.run_check(defaults, "jer")
     (got,) = investigate.load_leads(defaults, "jer")["leads"]
     assert got["coverage"]["label"] == "unchecked"
+
+
+class FakeDiscord:
+    """Discord's REST API as `notify.Rest` calls it: one text channel, ids counted up."""
+
+    def __init__(self):
+        self.calls, self.n = [], 0
+
+    def __call__(self, method, path, payload=None, files=None):
+        self.calls.append((method, path))
+        if method == "GET" and path.startswith("/guilds/"):
+            return [{"id": "c1", "type": 0, "name": "investigations"}]
+        if method == "GET":
+            return {"id": path.split("/")[2], "type": 0}
+        if method == "POST":
+            self.n += 1
+            return {"id": f"m{self.n}"}
+        return {}
+
+
+def test_leads_post_as_a_thread_per_run_and_are_edited_not_reposted(defaults, tmp_path, monkeypatch):
+    from clipper import notify
+
+    subject(defaults, tmp_path)
+    defaults["discord"]["guild_id"] = "g"
+    api = FakeDiscord()
+    monkeypatch.setattr(notify, "Rest", lambda cfg: api)
+    monkeypatch.setattr(investigate, "war_room_link", lambda cfg: "https://wr")
+    cand = {"why": "w", "facts": [fact("a", "2026-01-01", "v1"), fact("b", "2026-02-01", "v2")]}
+    out = {"keep": True, "reject": "", "headline": "H", "story": "S", "kind": "shift", "confidence": "low",
+           "confirm_or_kill": "c", "people": [], "timeline": ["a", "b"], "search": "q"}
+    data = {"subject": "jer", "about": "", "made_at": "2026-11-03T00:00:00+00:00", "model": "m",
+            "candidates": 1, "leads": investigate.rank([investigate.make_lead(out, cand)], 5)}
+    investigate.save_leads(defaults, "jer", data)
+
+    url = investigate.post_discord(defaults, "jer")
+    writes = [c for c in api.calls if c[0] != "GET"]
+    assert writes == [("POST", "/channels/c1/messages"), ("POST", "/channels/c1/messages/m1/threads"),
+                      ("POST", "/channels/m2/messages")]  # header, its thread, one lead
+    assert url == "https://discord.com/channels/g/m2"
+
+    api.calls.clear()
+    investigate.post_discord(defaults, "jer")
+    assert [c for c in api.calls if c[0] != "GET"] == []  # nothing changed
+
+    data["leads"][0]["coverage"] = {"label": "covered", "note": "n", "links": []}
+    investigate.save_leads(defaults, "jer", data)
+    investigate.post_discord(defaults, "jer")
+    assert [c for c in api.calls if c[0] != "GET"] == [("PATCH", "/channels/m2/messages/m3")]
+
+    api.calls.clear()
+    investigate.save_leads(defaults, "jer", {**data, "made_at": "2026-11-04T00:00:00+00:00"})
+    investigate.post_discord(defaults, "jer")
+    assert ("POST", "/channels/c1/messages") in api.calls  # a new leads run is a new thread
+
+
+def test_a_lead_message_is_short_and_links_to_the_war_room():
+    receipts = [{"date": "2026-01-01", "quote": "q" * 190, "link": "https://youtu.be/x?t=1"},
+                {"date": "2026-03-01", "quote": "q", "link": ""}] * 20
+    x = {"id": "L01", "headline": "H", "kind": "shift", "confidence": "low", "coverage": {"label": "fresh"},
+         "story": "He said one thing. Then another. " + "s" * 3000, "receipts": receipts}
+    text = investigate.lead_message(x, "https://wr/#inv=jer&lead=L01")
+    assert text.splitlines() == [
+        "**L01 · H**",
+        "shift · confidence low · coverage fresh · 40 receipts, 2026-01-01 to 2026-03-01",
+        "He said one thing.",
+        "<https://wr/#inv=jer&lead=L01>"]
+    assert investigate.lead_message(x).endswith("The whole lead: leads.md")
+    title = investigate.thread_title({"subject": "jer", "about": "lawsuit", "made_at": "2026-11-03T01:00"})
+    assert title == "jer · lawsuit · 2026-11-03"

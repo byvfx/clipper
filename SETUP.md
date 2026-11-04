@@ -252,6 +252,9 @@ transcribed archive and `ANTHROPIC_API_KEY`; `clipper archive index <subject>` (
 check dropped threads against the full transcripts and is needed for `--confirm`. Its coverage
 check searches the web and Reddit through the Brave key `clipper cast` uses (see the cast
 library above); without one it tries Reddit's own feed, which often turns unsigned clients away.
+To get the leads in Discord, set `[investigate] discord = true`: the review bot's token and
+`[discord] guild_id` are enough, and the bot makes `#investigations` if it has Manage Channels
+(otherwise make the channel by hand; `clipper doctor` checks the settings).
 
 **Costs (#50).** Every model call appends its cost to `[paths] costs` (`logs/costs.jsonl`)
 with the command and stream it ran for; `clipper costs` and the war room's Costs panel add

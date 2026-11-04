@@ -160,3 +160,17 @@ def test_face_pick_grabs_the_cut_or_a_compilations_preview(tmp_path, defaults, m
     assert grabbed == [sdir / "clips/01_t20.mp4", sdir / "review" / "comp-x.mp4"]
     with pytest.raises(ClipperError):
         warroom.faces_pick(cfg, {"ref": "kick-1/c01_t20", "t": "soon", "box": box})
+
+
+def test_investigations_list_newest_first_and_render_the_one_asked_for(defaults, tmp_path):
+    from clipper import jsonstate
+
+    defaults["paths"]["archive"] = tmp_path
+    for subject, made in (("jer", "2026-11-03T00:00:00+00:00"), ("dsp", "2026-11-04T00:00:00+00:00")):
+        (tmp_path / subject / "investigate").mkdir(parents=True)
+        jsonstate.write(tmp_path / subject / "investigate" / "leads.json",
+                        {"subject": subject, "about": "", "made_at": made, "model": "m", "candidates": 0, "leads": []})
+    got = warroom.investigations_get(defaults)
+    assert [s["subject"] for s in got["subjects"]] == ["dsp", "jer"] and got["subject"] == "dsp"
+    assert warroom.investigations_get(defaults, "jer")["markdown"].startswith("# Leads: jer")
+    assert warroom.investigations_get(defaults, "../etc")["subject"] == "dsp"  # only subjects on file

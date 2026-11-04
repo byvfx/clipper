@@ -783,6 +783,8 @@ dropped_weeks = 8              # dropped thread: silent this long after being ta
 window_days = 60               # convergence: personal facts from several videos this close together
 check_results = 10             # check: results per source (YouTube search, Reddit search)
 budget_usd = 10.0              # a run stops before it would spend more
+discord = false                # true: leads, check and confirm post to discord_channel when done
+discord_channel = "investigations"   # by name, made if missing (or a forum by that name): a thread per leads run
 
 [signals]
 chat_lag_s = 6             # shift chat earlier: stream delay + typing time

@@ -902,6 +902,10 @@ def check_role_settings(cfg: dict, role: str) -> None:
                        ("review_channel_id", "review cards have nowhere to go")):
             (ok if dc[k] else fail)("config", f"[discord] {k}" + (" set" if dc[k] else " not set"),
                                     "" if dc[k] else f"{why}; see SETUP")
+    ic = cfg["investigate"]
+    if ic["discord"] and not (dc["guild_id"] and str(ic["discord_channel"]).strip()):
+        fail("config", "[investigate] discord is on but [discord] guild_id or [investigate] discord_channel "
+             "is empty", "set both, or [investigate] discord = false")
     if role in ("all", "serve"):
         wc = cfg["warroom"]
         local = wc["host"] in ("127.0.0.1", "localhost", "::1")

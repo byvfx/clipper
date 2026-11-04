@@ -1051,6 +1051,26 @@ def _check(cfg: dict, body: dict) -> dict:  # #19: style warnings while typing
     return {"issues": actions.style_issues(for_stream(cfg, item.stream_dir), body.get("values") or {})}
 
 
+# ---------- #108 investigations: the leads dossiers, to read ----------
+
+def investigations_get(cfg: dict, subject: str = "") -> dict:
+    """Every archive subject with leads, and one subject's dossier (leads.md's markdown, built
+    fresh from leads.json); the newest investigation when subject isn't one of them."""
+    from . import investigate
+
+    found = []
+    for p in sorted(Path(cfg["paths"]["archive"]).glob("*/investigate/leads.json")):
+        data = jsonstate.read(p, {})
+        if data.get("leads") is not None:
+            found.append((p.parent.parent.name, data))
+    found.sort(key=lambda sd: sd[1].get("made_at", ""), reverse=True)
+    subjects = [{"subject": s, "made_at": d.get("made_at", ""), "about": d.get("about", ""),
+                 "kept": sum(x["keep"] for x in d["leads"])} for s, d in found]
+    pick = next((sd for sd in found if sd[0] == subject), found[0] if found else None)
+    return {"subjects": subjects, "subject": pick[0] if pick else "",
+            "markdown": investigate.dossier(pick[1]) if pick else ""}
+
+
 # ---------- #110 news: stories about the shows' people ----------
 
 def news_get(cfg: dict, days: str | float = "") -> dict:
@@ -1122,6 +1142,7 @@ GET_API = {
     "/api/cast": lambda cfg, qs: cast_get(cfg, _q(qs, "person")),
     "/api/news": lambda cfg, qs: news_get(cfg, _q(qs, "days")),
     "/api/news/search": lambda cfg, qs: news_search(cfg, _q(qs, "q")),
+    "/api/investigations": lambda cfg, qs: investigations_get(cfg, _q(qs, "subject")),
 }
 POST_API = {
     "/api/check": _check,

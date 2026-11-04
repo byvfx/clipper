@@ -890,7 +890,9 @@ def run_leads(cfg: dict, subject: str, about: str | None = None, since: str | No
                 "usd": round(claude.cost, 4), "stopped": why})
     spent = claude.cost
     if confirm and leads:
-        spent += run_confirm(with_budget(cfg, ic["budget_usd"] - spent), subject)
+        spent += run_confirm(with_budget(cfg, ic["budget_usd"] - spent), subject)  # posts when done
+    elif leads:
+        maybe_post(cfg, subject)
     show_list(cfg, subject)
     return spent
 
@@ -962,6 +964,7 @@ def run_confirm(cfg: dict, subject: str, only: str | None = None) -> float:
     save_leads(cfg, subject, data)
     log_run(inv_dir(cfg, subject), {"step": "confirm", "lead": only or "", "usd": round(claude.cost, 4)})
     print(f"\nconfirm ~${claude.cost:.2f}")
+    maybe_post(cfg, subject)
     return claude.cost
 
 
@@ -1124,6 +1127,7 @@ def run_check(cfg: dict, subject: str, only: str | None = None) -> float:
     save_leads(cfg, subject, data)
     log_run(d, {"step": "check", "lead": only or "", "usd": round(claude.cost, 4)})
     print(f"check ~${claude.cost:.3f}")
+    maybe_post(cfg, subject)
     return claude.cost
 
 
@@ -1194,6 +1198,110 @@ def dossier(data: dict) -> str:
              "Research, not content: every quote links to the moment it was said; the story around "
              "the quotes is the lead's, not his."), ""]
     return "\n".join(head) + "\n".join(lead_md(x) for x in data["leads"])
+
+
+# ---------- discord: a thread per investigation ----------
+
+def thread_title(data: dict) -> str:
+    """One investigation = one leads run: subject, focus, the day it was made."""
+    return " · ".join(filter(None, [data["subject"], data.get("about"), data["made_at"][:10]]))[:100]
+
+
+def header_message(data: dict) -> str:
+    kept = sum(x["keep"] for x in data["leads"])
+    span = (f", videos {data.get('since') or 'from the start'} to {data.get('before') or 'now'}"
+            if data.get("since") or data.get("before") else "")
+    return (f"**Investigation: {data['subject']}**" + (f" (about {data['about']})" if data.get("about") else "")
+            + f"\n{kept} leads from {data['candidates']} candidate threads{span}, made {data['made_at'][:16]}. "
+            "Research, not content: each quote links to the moment he said it.")[:2000]
+
+
+def lead_message(x: dict, link: str = "") -> str:
+    """A lead as a short Discord message: headline, labels, the story's first sentence and a
+    link to the whole lead in the war room (the receipts are there and in leads.md)."""
+    rs = x["receipts"]
+    first = re.split(r"(?<=[.!?])\s+", x["story"].strip(), maxsplit=1)[0]
+    lines = [f"**{x['id']} · {x['headline'][:200]}**",
+             f"{x['kind']} · confidence {x['confidence']} · coverage {x['coverage']['label']} · "
+             f"{len(rs)} receipts" + (f", {rs[0]['date']} to {rs[-1]['date']}" if rs else ""),
+             first[:400] + ("…" if len(first) > 400 else "")]
+    if x.get("notes"):
+        lines.append(f"Notes: {x['notes'][:300]}")
+    lines.append(f"<{link}>" if link else "The whole lead: leads.md")
+    return "\n".join(lines)
+
+
+def war_room_link(cfg: dict) -> str:
+    """The war room's base URL for links in Discord: its tailnet address, else [serve] url, else ""."""
+    from .serve import tailnet_link
+
+    try:
+        base = tailnet_link(cfg) if cfg["warroom"]["tailnet"] else ""
+    except Exception:  # noqa: BLE001  # serve down: the link is a nicety
+        base = ""
+    return (base or str(cfg["serve"]["url"] or "")).rstrip("/")
+
+
+def post_discord(cfg: dict, subject: str, new_thread: bool = False) -> str:
+    """Post the kept leads to [investigate] discord_channel: a thread per leads run, a message
+    per lead, edited in place when check or confirm changes a lead. Returns the thread's link."""
+    from .notify import Rest, named_channel, open_thread
+
+    ic, dc = cfg["investigate"], cfg["discord"]
+    data = load_leads(cfg, subject)
+    leads = [x for x in data["leads"] if x["keep"]]
+    if not leads:
+        raise ClipperError(f"no kept leads for {subject!r} to post")
+    api = Rest(cfg)
+    channel_id = named_channel(api, dc, ic["discord_channel"],
+                               "Investigations: a thread per run of `clipper investigate leads`", kinds=(0, 15))
+    dpath = inv_dir(cfg, subject) / "discord.json"
+    state = jsonstate.read(dpath, {})
+    thread_id = state.get("thread_id") if (state.get("made_at") == data["made_at"]
+                                           and state.get("channel_id") == channel_id and not new_thread) else None
+    if thread_id:
+        try:
+            api("GET", f"/channels/{thread_id}")
+        except ClipperError:
+            thread_id = None  # deleted: a new one
+    if not thread_id:
+        thread_id = open_thread(api, channel_id, thread_title(data), {"content": header_message(data)})
+        state = {"made_at": data["made_at"], "channel_id": channel_id, "thread_id": thread_id, "messages": {}}
+        jsonstate.write(dpath, state)
+    posted = edited = 0
+    base = war_room_link(cfg)
+    for x in leads:
+        text = lead_message(x, f"{base}/#inv={subject}&lead={x['id']}" if base else "")
+        sha = hashlib.sha1(text.encode()).hexdigest()[:12]
+        old = state["messages"].get(x["id"])
+        if old and old["sha"] == sha:
+            continue
+        if old:
+            try:
+                api("PATCH", f"/channels/{thread_id}/messages/{old['id']}", {"content": text})
+                edited += 1
+            except ClipperError:
+                old = None  # deleted by hand: post it again
+        if not old:
+            msg = api("POST", f"/channels/{thread_id}/messages", {"content": text})
+            old = {"id": msg["id"]}
+            posted += 1
+        state["messages"][x["id"]] = {"id": old["id"], "sha": sha}
+        jsonstate.write(dpath, state)
+    url = f"https://discord.com/channels/{dc['guild_id']}/{thread_id}"
+    print(f"discord: {posted} posted, {edited} edited, {len(leads) - posted - edited} unchanged: {url}")
+    return url
+
+
+def maybe_post(cfg: dict, subject: str) -> None:
+    """After leads, check or confirm with [investigate] discord on: Discord follows leads.json.
+    A failure is printed, not raised: leads.json is the record and is already written."""
+    if not cfg["investigate"]["discord"]:
+        return
+    try:
+        post_discord(cfg, subject)
+    except Exception as e:  # noqa: BLE001  # the research is saved; Discord can be retried with `post`
+        print(f"discord: not posted ({e}); clipper investigate post {subject}")
 
 
 def run_all(cfg: dict, subject: str, since: str | None = None, before: str | None = None,

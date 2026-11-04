@@ -299,6 +299,7 @@ clipper investigate list jer                                  # kind, confidence
 clipper investigate show jer L03                              # the story and the timeline, quote and link per receipt
 clipper investigate confirm jer [--lead L03]                  # test leads against more of the archive (`archive ask`)
 clipper investigate run jer                                   # facts --new -> leads -> check, total cost
+clipper investigate post jer [--new-thread]                   # the kept leads to Discord #investigations
 ```
 
 `facts` keeps only facts whose quote is found in the item's words (in the part it was read from,
@@ -319,6 +320,17 @@ labels each lead fresh, partly covered or covered; the searches are in
 for him, in `investigate/aliases.json` (`{"Jeremy": "self", "Hassan Piker": "Hasan Piker"}`).
 A run stops before it would spend more than `[investigate] budget_usd`. Whisper can mishear a
 number, so a "shift" is worth a listen at the link before you use it.
+
+With `[investigate] discord = true`, `leads`, `check` and `confirm` end by posting to
+`[investigate] discord_channel` (`#investigations`, made if missing; a forum channel of that
+name works too): one thread per investigation, that is per `leads` run, named
+"jer · 2026-11-03" (with the `--about` focus when there is one), and one short message per kept
+lead: headline, kind, confidence, coverage, how many receipts, the story's first sentence and a
+link to the lead in the war room. A later `check` or `confirm` edits those messages rather than
+posting again; a new `leads` run starts a new thread. The ids are in `investigate/discord.json`.
+A post that fails says so and leaves leads.json as it is; `clipper investigate post jer` retries.
+The war room's **Investigations** window shows each subject's dossier (leads.md, rendered),
+newest first; a Discord link (`#inv=jer&lead=L03`) opens it at that lead.
 
 ## Character pieces (Mother Moo)
 
