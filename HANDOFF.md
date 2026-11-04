@@ -68,10 +68,12 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   at upload (clip → segment `?t=`, segment → compilation) and backfilled hourly.
 - X (@lolcowcinema, 2026-10-31): `clipper x` posts Shorts as native video, never a link (X bills $0.20 a
   link post vs $0.015). Since 11-01 (user: "make both"): text is hook first (no "KINO CASINO |" prefix) +
-  one hashtag, and `--auto` posts approved Shorts from the last 72 h of streams, newest stream first,
+  hashtags, and `--auto` posts approved Shorts from the last 72 h of streams, newest stream first,
   without waiting for YouTube. **Auto on since 2026-11-01 12:21** (user): `[x] auto_post_minutes = 60`,
   `max_per_24h` 6 (weekly thread posts count too), `max_height` 1280 kept, no "Automated" label (user
-  skipped it). `clipper x --issue` posts the weekly as a thread (#115); #88 closed. Traction plan given the user: reposts from Kino/Don,
+  skipped it). Since 11-03 (user: credit the footage's owners): up to 3 hashtags ending with the show's
+  (#KinoCasino / #Channel404News) and a last line "From Kino Casino: @Andywarski @PoweroftheTruth" /
+  "From Channel 404 News: @Channel404News" / "From Just Trish: @trishapaytas" (`[shows.<key>.x] mentions`). `clipper x --issue` posts the weekly as a thread (#115); #88 closed. Traction plan given the user: reposts from Kino/Don,
   hand replies under big accounts, posting while hot. Signed in 2026-11-01; first post
   https://x.com/lolcowcinema/status/2116800759941767587 (720x1280 re-encode accepted).
   Profile set 11-01 (bio, youtube.com/@lolcowcinema, YouTube avatar + banner crop in
@@ -153,13 +155,14 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   left alone until the user says.
 - Content ID: all five pre-show/one-off uploads checked in Studio 2026-10-28, no claims, no region
   blocks. Keep checking new ones (Studio → video → Copyright; the Data API only sees region blocks).
-- Shorts "related video" (Studio only, the API can't): set on all 19 uploaded Shorts whose segment was
-  public, 2026-10-28 (marked `related_video` in schedule.json). `clipper upload --related` lists what's
+- Shorts "related video" (Studio only, the API can't): 33 of 54 uploaded Shorts have one (19 on 10-28,
+  14 more on 11-03; marked `related_video` in schedule.json). `clipper upload --related` lists what's
   due and the 09:00 digest carries the same list; after setting them, `clipper upload --related <keys or
-  links>` records them. Still to do as their segments go up:
-  kick-133423456 v01_w10 (10-29) and v04_t28 (10-30). (kick-132380636 v01_t29 and kick-132733064
-  v01_t27: their segments were let go on 10-29 and won't go up.) kick-133423456 v02_t12 and kick-133940023 v14_t35 fall outside every segment: pick one
-  by hand or leave them. Verify whether `thumbnails.set` works on Shorts before turning on
+  links>` records them. The rest wait for their segment to go public, or have none: kick-133423456
+  v01_w10, v04_t28 and v02_t12, kick-133940023 v14_t35, kick-132380636 v01_t29 and kick-132733064
+  v01_t27 match no scheduled segment (pick one by hand or leave them). Doing it in the built-in browser
+  (signed in to Studio): the field is `#linked-video-editor-link`; click its trigger, search the
+  segment's video id, pick the one result, Save. Verify whether `thumbnails.set` works on Shorts before turning on
   `[youtube] short_thumbnails`.
 - Old approved Short titles/descriptions that still say "hosts" (Kitsu text; uploads go as written).
   A war-room find-and-replace dry run found 14; not applied.
@@ -169,9 +172,10 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   (drop wrong or costume photos; image search photos always wait for you). Check Jer f868aa21db.
 - Faces: enroll PPP in his maple-leaf cap from the first non-costume stream the worker scans (kick-135553454
   is named and enrolled: known.json has 12 people, Andy/PPP/Jer 4 samples each).
-- `clipper investigate` (#108, merged 11-03 as 343a062, PR #131): jer Sept-Oct was a test; the user
-  found all 3 leads good (L03's $8,000 is Whisper: he said $1,000, noted on the lead). Still open: the
-  whole catalog (~$14 for facts, quote first) or months at a time, and whether a lead may ever become content.
+- `clipper investigate` (#108, merged 11-03: PR #131 343a062, Discord + war room PR #132 ecf07ba): jer Sept-Oct was a test; the user
+  found all 3 leads good (L03's $8,000 is Whisper: he said $1,000, noted on the lead). User 11-03: leave his old
+  videos alone for now (no back-catalog facts; `investigate run jer` reads only new ones). Still open:
+  whether a lead may ever become content.
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the

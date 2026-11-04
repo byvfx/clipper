@@ -242,9 +242,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "after_youtube": False,   # true: --auto waits until a Short is public on YouTube
         "max_age_hours": 72,      # --auto skips Shorts from streams older than this (--items still can); 0 = any
         "hashtags": [],           # added after the Short's own
-        "max_hashtags": 1,        # hashtags barely matter on X; one names the topic
+        "max_hashtags": 3,        # the Short's subject tags, then the show's
+        "show_hashtag": True,     # end the hashtags with the show's name (#KinoCasino), never dropped first
         "hook_first": True,       # drop [meta] title_format's show prefix: the feed shows the first words
-        "mentions": [],           # @handles ending every post (per show: [shows.<key>.x]); each is notified
+        "mentions": [],           # @handles of whose footage it is (per show: [shows.<key>.x]); each is notified
+        "credit": "From {show}: {mentions}",  # last line, when the show has mentions
         "max_chars": 280,         # X Premium accounts may post longer
         "max_height": 1280,       # taller videos are re-encoded to this (X recommends 720x1280); 0 = as is
         "post_usd": 0.015,        # X's price per post without a link, logged to paths.costs

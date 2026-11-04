@@ -14,7 +14,9 @@
 The video goes up through the v2 chunked media upload (initialize / append / finalize, then
 STATUS until X has processed it) and the post is POST /2/tweets with its media id. The text
 is the Short's title, hook first (no "KINO CASINO | " prefix, [x] hook_first), then up to
-[x] max_hashtags hashtags and any [x] mentions, banned words masked as everywhere else. No link goes in the text: X bills a post with a URL at $0.20 against $0.015 (pay-per-use
+[x] max_hashtags hashtags ending with the show's own (#KinoCasino, [x] show_hashtag), then
+a credit line tagging whose footage it is ([x] credit with the show's [x] mentions), banned
+words masked as everywhere else. No link goes in the text: X bills a post with a URL at $0.20 against $0.015 (pay-per-use
 pricing, 2026). Each post's cost is logged to paths.costs like a model call (`clipper costs`).
 
 X's recommended portrait size is 720x1280 and its docs cap dimensions near that, so a Short
@@ -212,41 +214,69 @@ def upload_video(paths: dict, video: Path, media_type: str = "video/mp4",
 
 # ---------- text ----------
 
-def post_text(title: str, tags: list[str], limit: int, max_tags: int, mentions: list[str] = ()) -> str:
-    """Title, then up to max_tags hashtags and the mentions, inside X's limit: tags go
-    first, then the title is shortened to leave room for the mentions (dropped only if they
-    can't fit beside a readable title). Links are taken out: X bills a post with a URL at
-    $0.20."""
-    title = re.sub(r"\s+", " ", re.sub(r"(https?://|www\.)\S+", "", title)).strip()
-    tags = list(dict.fromkeys(tags))[:max_tags]
-    ats = [m if m.startswith("@") else f"@{m}" for m in mentions]
+def post_text(title: str, tags: list[str], limit: int, max_tags: int, credit: str = "",
+              keep: list[str] = ()) -> str:
+    """Title, then up to max_tags hashtags, then the credit line, inside X's limit. The
+    `keep` tags (the show's) come last and stay; the others are dropped first, from the
+    end, then the title is shortened to leave room. The show tag and then the credit go only
+    if they can't fit beside a readable title. Links are taken out: X bills a post with a
+    URL at $0.20."""
+    def no_links(s: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"(https?://|www\.)\S+", "", s)).strip()
+
+    title, credit = no_links(title), no_links(credit)  # a link in [x] credit would bill the post too
+    keep = list(dict.fromkeys(keep))[:max_tags]
+    seen, own = {t.lower() for t in keep}, []
+    for t in tags:  # #KinoCasino from the draft and the show's #KinoCasino are one tag
+        if t.lower() not in seen:
+            seen.add(t.lower())
+            own.append(t)
+    own = own[:max_tags - len(keep)]
 
     def join(head: str) -> str:
-        return f"{head}\n\n{' '.join(tags + ats)}".strip()
+        tail = "\n".join(p for p in (" ".join(own + keep), credit) if p)
+        return f"{head}\n\n{tail}".strip()
 
     text = join(title)
-    while len(text) > limit and tags:
-        tags.pop()
+    while len(text) > limit and own:
+        own.pop()
         text = join(title)
-    if len(text) <= limit:
-        return text
-    room = limit - (len(" ".join(ats)) + 2 if ats else 0)
-    if room < 20:  # the mentions alone fill the post
-        ats, room = [], limit
-    return join(title[:room - 1].rstrip() + "…")
+    while len(text) > limit:
+        room = limit - (len(join("")) + 2 if keep or credit else 0)
+        if room >= 20:
+            return join(title[:room - 1].rstrip() + "…")
+        if keep:  # the tail alone fills the post
+            keep.pop()
+        elif credit:
+            credit = ""
+        else:
+            return title[:limit - 1].rstrip() + "…"
+        text = join(title)
+    return text
+
+
+def show_tag(show: str) -> str:
+    """"Channel 404 News" -> "#Channel404News"."""
+    word = re.sub(r"[^A-Za-z0-9]", "", show)
+    return f"#{word}" if word else ""
 
 
 def text_for(e: dict, cfg: dict) -> str:
     """The post's text. With hook_first the show prefix ("KINO CASINO | ") comes off the
-    title, so the feed's first words are the hook; the hashtag or a mention names the show."""
+    title, so the feed's first words are the hook; the show's hashtag ([x] show_hashtag) and
+    the credit line naming whose footage it is ([x] credit with the show's [x] mentions)
+    follow the Short's own hashtags."""
     from .review import bare_title
 
     scfg = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])
-    xc = scfg["x"]
+    xc, show = scfg["x"], scfg["meta"].get("show_name", "")
     title, tags = rumble.title_and_tags(e, cfg, "x")
     if xc["hook_first"]:
         title = bare_title(scfg, title)
-    return post_text(title, tags, xc["max_chars"], xc["max_hashtags"], xc["mentions"])
+    ats = " ".join(m if m.startswith("@") else f"@{m}" for m in xc["mentions"])
+    credit = xc["credit"].format(show=show, mentions=ats).strip() if ats else ""
+    keep = [show_tag(show)] if xc["show_hashtag"] and show_tag(show) else []
+    return post_text(title, tags, xc["max_chars"], xc["max_hashtags"], credit, keep)
 
 
 # ---------- posting ----------

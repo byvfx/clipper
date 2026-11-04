@@ -585,8 +585,11 @@ TikTok's app audit, which requires an app meant for other creators, not your own
 `clipper x` posts scheduled Shorts to X as native video through the X API v2 (pay-per-use:
 credits bought in the developer console, about $0.015 a post; a post with a link costs $0.20,
 so clipper never puts one in). The text is the Short's title without the "KINO CASINO | "
-prefix (`[x] hook_first`: the feed shows only the first words), then `[x] max_hashtags` (1)
-hashtag and any `[x] mentions` (per show in `[shows.<key>.x]`; each one gets notified). Shorts taller than `[x] max_height` (1280) are re-encoded to 720x1280 first, X's
+prefix (`[x] hook_first`: the feed shows only the first words), then up to `[x] max_hashtags` (3)
+hashtags ending with the show's own (`#KinoCasino`, `[x] show_hashtag`), then a credit line
+tagging whose footage it is: `[x] credit` ("From {show}: {mentions}") with the show's `[x] mentions`
+(set them in `[shows.<key>.x]`, e.g. `mentions = ["Andywarski", "PoweroftheTruth"]`; each one gets
+notified; no mentions, no credit line). Shorts taller than `[x] max_height` (1280) are re-encoded to 720x1280 first, X's
 recommended portrait size.
 
 1. **Developer app** at console.x.com, signed in as the X account the posts go out from.
