@@ -373,8 +373,11 @@ def triage(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict
         dur = f"{it['duration_s'] / 60:.0f} min" if it["duration_s"] else "? min"
         print(f"  [{tag}] {it['date'] or 'undated'} {it['channel'] or '?'}: {it['title'][:70]} ({dur})\n"
               f"      {it.get('page') or it['url']}")
-    print(f"to transcribe: {len(todo)} items, ~{hours:.1f} h on {sc['gpu']}: "
-          f"~${archive.estimate_usd(hours, sc['gpu'], cfg['archive']['diarize']):.2f}")
+    try:  # the GPU speeds and prices live in modal_app, which needs the modal package
+        usd = f"~${archive.estimate_usd(hours, sc['gpu'], cfg['archive']['diarize']):.2f}"
+    except ImportError:
+        usd = "no estimate (modal isn't installed: uv sync --extra modal)"
+    print(f"to transcribe: {len(todo)} items, ~{hours:.1f} h on {sc['gpu']}: {usd}")
     return data
 
 
