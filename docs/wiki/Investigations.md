@@ -31,8 +31,10 @@ which often refuses) and our own streams' segments; its planner adds searches an
 follow up, within `[investigate] swarm` (small: ~$0.01-0.03 a lead). With his own video titles,
 Haiku labels each lead fresh, partly covered or covered. The results and verdict are in
 `investigate/swarm/<lead>.json`, the task tree in `<lead>.trail.json` (`--trail` prints both). Edit `leads.json` to flip `keep`, change a headline or add
-`notes`; `leads.md` is the readable dossier. Put spellings Whisper gets wrong, or other names
-for him, in `investigate/aliases.json` (`{"Jeremy": "self", "Hassan Piker": "Hasan Piker"}`).
+`notes`; `leads.md` is the readable dossier. Everyone's names in [`clipper people`](People) merge
+their spellings, and the names of the person whose archive it is count as him. Put other
+spellings Whisper gets wrong, or other names for him, in `investigate/aliases.json` (`{"Jeremy":
+"self", "Hassan Piker": "Hasan Piker"}`), which wins over `clipper people`.
 A run stops before it would spend more than `[investigate] budget_usd`. Whisper can mishear a
 number, so a "shift" is worth a listen at the link before you use it.
 

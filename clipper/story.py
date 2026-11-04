@@ -144,25 +144,20 @@ def load_brief(cfg: dict, slug: str) -> dict:
 # ---------- 1. brief: who and where ----------
 
 def roster(cfg: dict) -> list[dict]:
-    """Everyone the story step knows: streamers.json, then [story] people ({name = {kick =
-    "...", youtube = "@..."}}), the latter winning on a name both have."""
-    p = Path(cfg["paths"]["streamers"])
-    people = {s["name"]: {"name": s["name"], "slug": s.get("slug") or "", "channels": s.get("channels") or {}}
-              for s in (jsonstate.read(p, {}) or {}).get("streamers", [])}
-    for name, ch in (cfg["story"]["people"] or {}).items():
-        people[name] = {"name": name, "slug": "", "channels": dict(ch)}
-    return list(people.values())
+    """Everyone the story step knows: `clipper people` (people.json, with streamers.json,
+    [story] people and the cast library folded in)."""
+    from . import people
+
+    return [{"name": r["name"], "slug": pid, "aliases": r["aliases"], "channels": r["channels"]}
+            for pid, r in people.load(cfg).items()]
 
 
 def aliases(person: dict) -> set[str]:
-    """"The Quartering (Jer)" -> quartering, jer, the quartering jer; the slug's words too."""
-    from .investigate import canon
+    """"The Quartering (Jer)" -> quartering, jer, quartering jer; the slug's words and the
+    person's aliases too."""
+    from .people import names
 
-    name = person["name"]
-    out = {canon(name), canon(re.sub(r"\(.*?\)", "", name)), *map(canon, re.findall(r"\((.*?)\)", name))}
-    if person.get("slug"):
-        out.add(canon(person["slug"].replace("-", " ")))
-    return {a for a in out if len(a) >= 3}
+    return names(person, person.get("slug") or "")
 
 
 def named(brief: str, people: list[dict], extra: list[str] = ()) -> list[dict]:
@@ -173,7 +168,19 @@ def named(brief: str, people: list[dict], extra: list[str] = ()) -> list[dict]:
     want = {canon(x) for x in extra}
     out = [p for p in people if any(f" {a} " in text for a in aliases(p)) or want & aliases(p)]
     if missing := want - {a for p in out for a in aliases(p)}:
-        raise ClipperError(f"--person {', '.join(sorted(missing))}: not in streamers.json or [story] people")
+        raise ClipperError(f"--person {', '.join(sorted(missing))}: nobody by that name (clipper people list)")
+    return out
+
+
+def own_channels(p: dict) -> list[tuple[str, str]]:
+    """(platform, id) for each of a person's channels: lists from `clipper people`, or one
+    string per key in an older brief.json (youtube_live and the like are YouTube)."""
+    from .people import platform_of
+
+    out = []
+    for key, val in p["channels"].items():
+        if platform := platform_of(key):
+            out += [(platform, v) for v in ([val] if isinstance(val, str) else val)]
     return out
 
 
@@ -181,8 +188,8 @@ def seeds(people: list[dict]) -> list[dict]:
     """Each person's own channels, as swarm tasks."""
     out = []
     for p in people:
-        for platform, kind in SEED_KINDS.items():
-            if target := p["channels"].get(platform):
+        for platform, target in own_channels(p):
+            if kind := SEED_KINDS.get(platform):
                 out.append({"kind": kind, "target": target, "why": f"{p['name']}'s own {platform} channel"})
     return out
 
@@ -190,7 +197,7 @@ def seeds(people: list[dict]) -> list[dict]:
 def context(b: dict) -> str:
     lines = []
     for p in b["people"]:
-        chans = ", ".join(f"{k} {v}" for k, v in p["channels"].items())
+        chans = ", ".join(f"{k} {v}" for k, v in own_channels(p))
         lines.append(f"- {p['name']}: {chans or 'no channels on file'}")
     window = f"from {b['since']}" + (f" to before {b['before']}" if b.get("before") else " to today")
     return ((("People:\n" + "\n".join(lines) + "\n") if lines else "")

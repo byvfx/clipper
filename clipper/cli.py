@@ -203,6 +203,21 @@ def cmd_modal(cfg: dict, args: argparse.Namespace) -> None:
         modalmon.print_status(cfg)
 
 
+def cmd_people(cfg: dict, args: argparse.Namespace) -> None:
+    from . import people
+
+    a = args.action
+    if a == "list":
+        return people.show_list(cfg)
+    if a == "show":
+        return people.show_person(cfg, args.name)
+    if a == "import":
+        return people.import_all(cfg, args.dry_run)
+    pid = people.set_person(cfg, args.name, args.new_name, args.alias, args.unalias, args.channel,
+                            args.unchannel, args.subject, args.cast, args.notes)
+    people.show_person(cfg, pid)
+
+
 def cmd_cast(cfg: dict, args: argparse.Namespace) -> None:
     from . import cast
 
@@ -848,7 +863,7 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'cast', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
+    ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
@@ -1441,6 +1456,29 @@ def add_extras(sub) -> None:
     r.add_argument("--alias", action="append", help="another name (repeatable; replaces the list)")
     r.add_argument("--channel", action="append", metavar="URL", help="https://www.youtube.com/@name or "
                                                                      "https://kick.com/name (repeatable; replaces the list)")
+
+    p = sub.add_parser("people", help="one record per person: names, channels, archive subject, cast folder "
+                                      "(story and investigate look people up here)")
+    psub = p.add_subparsers(dest="action", required=True)
+    p.set_defaults(fn=cmd_people)
+    psub.add_parser("list", help="everyone, and which lists each record comes from")
+    r = psub.add_parser("show", help="one person's record")
+    r.add_argument("name")
+    r = psub.add_parser("set", help="change a person in people.json, or add one (channels: confirmed ones only)")
+    r.add_argument("name", help="a name, alias or id")
+    r.add_argument("--name", dest="new_name", help="rename (the old name stays an alias)")
+    r.add_argument("--alias", action="append", default=[], help="another name, or Whisper's spelling (repeatable)")
+    r.add_argument("--unalias", action="append", default=[],
+                   help="drop an alias (one from streamers.json or the cast library comes back: fix it there)")
+    r.add_argument("--channel", action="append", default=[], metavar="PLATFORM=ID",
+                   help="youtube=@x, kick=x, twitch=x, rumble=URL, odysee=@x, x=handle, or a channel url (repeatable)")
+    r.add_argument("--unchannel", action="append", default=[], metavar="PLATFORM=ID", help="drop a channel")
+    r.add_argument("--subject", help="their archive subject (\"\" for none)")
+    r.add_argument("--cast", help="their cast library folder (\"\" for none)")
+    r.add_argument("--notes", help="free text kept with the record")
+    r = psub.add_parser("import", help="write everyone from streamers.json, [story] people and the cast library "
+                                       "into people.json")
+    r.add_argument("--dry-run", action="store_true", help="say who and what clashes, write nothing")
 
     p = sub.add_parser("news", help="headlines about the shows' people: feeds, Reddit, Google News (#110)")
     nsub = p.add_subparsers(dest="news_cmd", required=True)

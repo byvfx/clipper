@@ -35,6 +35,7 @@
 
 **🔎 Research**
 - [Archives](Archives)
+- [People](People)
 - [Receipts](Receipts)
 - [Investigations](Investigations)
 - [Search swarm](Search-swarm)

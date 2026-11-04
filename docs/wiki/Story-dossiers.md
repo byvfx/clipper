@@ -9,8 +9,8 @@ clipper story cut <slug>                       # render it, meta, thumbs, the Ki
 ```
 
 A brief in, a research dossier out, then a video of it for review. The people
-the brief names (by name, nickname or slug, from `research_notes/streamers.json` and `[story]
-people`; `--person` adds one) seed the swarm with their YouTube, Kick and Odysee channels. Triage
+the brief names (by name, nickname, alias or id, from [`clipper people`](People); `--person`
+adds one) seed the swarm with their YouTube, Kick and Odysee channels. Triage
 (Haiku) picks the videos worth transcribing within `--max-videos` / `--max-hours`, the people's own
 uploads first, and prints the Modal estimate; our own recorded streams are linked, not transcribed
 again. Ingest transcribes on Modal (YouTube audio, Kick VOD audio, Odysee) into the archive subject
@@ -43,8 +43,8 @@ cut again (unchanged parts aren't re-rendered). Approved, it goes out as soon as
 Story dossiers need the swarm's keys plus Modal (as for `clipper
 archive`): the videos it picks are transcribed there, on `[story] gpu` (L4). Kick VODs are
 downloaded here at their smallest variant (`[archive] kick_format`) for their audio; YouTube audio
-uses the archive's cookies retry. People and their channels come from `[paths] streamers`
-(`research_notes/streamers.json`) and `[story] people` for anyone not in it. `story cut` renders
+uses the archive's cookies retry. People and their channels come from [`clipper people`](People) (`people.json`, with
+`research_notes/streamers.json`, `[story] people` and the cast library folded in). `story cut` renders
 with `[receipts]`'s fonts (Impact and Arial Bold, as receipts need) and reads our own streams'
 source videos from `paths.streams`, so it runs on a machine that sees the share; with several
 shows, set `[story] show` or pass `clipper --show <key>` to `story plan`.

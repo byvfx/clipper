@@ -770,6 +770,25 @@ def check_cast(cfg: dict) -> None:
              "optional: a Brave Search API key (api-dashboard.search.brave.com) in that file or $BRAVE_API_KEY")
 
 
+def check_people(cfg: dict) -> None:
+    """#138: people.json readable, and no name two records answer to (a lookup by it fails)."""
+    from . import people
+
+    try:
+        everyone = people.load(cfg)
+    except Exception as e:  # noqa: BLE001  # a broken people.json: say so, don't stop doctor
+        fail("people", f"{people.path(cfg)}: {e}", "fix the JSON, or move it aside and run clipper people import")
+        return
+    clash = people.conflicts(everyone)
+    if clash:
+        warn("people", "a name of two people: " + "; ".join(f"{n} ({', '.join(ids)})" for n, ids in clash.items()),
+             "clipper people set <id> --unalias NAME, or fix the name in streamers.json / the cast library")
+    else:
+        own = len(people.stored(cfg))
+        ok("people", f"{len(everyone)} people, {own} in {people.path(cfg).name}"
+           + ("" if own else " (clipper people import writes them there)"))
+
+
 def check_news(cfg: dict, offline: bool) -> None:
     """#110: where the bot posts news, the judge's prompt, and (online) whether the feeds answer."""
     nc = cfg["news"]
@@ -947,6 +966,8 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_tailnet(cfg, offline)
     if role == "serve":
         check_cast_serve(cfg)
+    if role in ("all", "serve"):
+        check_people(cfg)
     if role in ("all", "serve", "bot"):
         check_news(cfg, offline)
     if not offline:

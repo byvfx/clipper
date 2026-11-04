@@ -31,6 +31,7 @@ modal_runs = "logs/modal_runs.jsonl"           # every Modal call's start and en
 voices = "voices"                              # enrolled voices per show (clipper speakers --enroll); the NAS share once it runs everything
 faces = "faces"                                # known faces for every show (clipper faces --enroll) + the face models
 streamers = "research_notes/streamers.json"    # people and their channels by platform (clipper story)
+people = "people.json"                         # one record per person: names, channels, archive subject (clipper people)
 costs = "logs/costs.jsonl"                     # every model call's cost, one line each (clipper costs, war room)
 warroom_undo = "logs/warroom_undo.json"        # the war room's last 20 actions, for Undo
 warroom_layouts = "logs/warroom_layouts.json"  # the war room's saved panel layouts (Layout button)
