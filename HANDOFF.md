@@ -150,9 +150,6 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
-- Story phase 2 PR #136 (`story-84-cut`): Copilot's 7 comments fixed (f513f21); merge when the user says.
-  Until it merges, the running serve schedules an approved story in normal slots, not asap, and
-  Saturday's weekly would count story streams as shows.
 - The DSP story video is in Kitsu for review (Kino Casino / "2026-11-04 story-dsp-credit-score-590",
   Discord card posted, user's go 11-04): "DSP Says the 590 Credit Score Letter Is Fake", 3:14.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
@@ -211,15 +208,16 @@ score is 590": 33 tasks, 92 findings, triage 3 + 5 of our streams linked; the Yo
 the bot check, so the dossier came from our streams alone (7 moments, good timeline and conflicts),
 ~$0.08 in models. Ingest now stops on a failure. After a fresh cookie export the four transcribed signed in
 (Modal ~$0.82: cold starts dominate a story's few items, so `[story] parallel` 2). Kick audio path checked on 2 min of a DSP VOD.
-3) phase 2 (`clipper/story_edit.py`, branch `story-84-cut`, worktree `.claude/worktrees/story`): `story
+3) phase 2 (`clipper/story_edit.py`, merged 11-04 as PR #136, serve restarted on it): `story
 plan` (Sonnet, ~$0.01: moments → ordered parts with chapters; code bounds each around its quote, drops a
 part repeating an earlier one's words, merges overlaps, caps at `[story] max_minutes`) →
 `streams/story-<slug>/story.json` (hand-editable; meta.json kind "story" on the show's Kick channel) →
 `story cut` (our streams from their source on the share, others by yt-dlp section; receipts' renderer with
 a lower third; one segment s00 with a chapter per part and retimed words.jsonl) → meta (sidecar chapters,
 `[story] credit` + a source line per part) → thumbs → Kitsu (episode "<date> story-<slug>"); schedule
-asap. Weekly skips stories; a retake trim refuses one (edit story.json, cut again). Then `investigate
-check` onto the swarm.
+asap. Weekly skips stories; a retake trim refuses one (edit story.json, cut again). 4) `investigate
+check` on the swarm (branch `investigate-swarm`): the old four searches are the seeds of a small swarm
+per lead (`[investigate] swarm`), then his own titles; the verdict as before.
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line
 wedges a stream's finalize; ~15 medium: quiet failures in the bot's notify loop and Health, `[notify]`

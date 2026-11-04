@@ -299,7 +299,7 @@ def test_check_labels_coverage_keeps_only_real_matches_and_a_dead_search_is_unch
     investigate.save_leads(defaults, "jer", {"subject": "jer", "about": "", "made_at": "2026-11-03T00:00:00+00:00",
                                          "model": "m", "candidates": 2, "leads": investigate.rank(leads, 5)})
     result = {"source": "youtube", "channel": "C", "date": "", "title": "t", "url": "u"}
-    monkeypatch.setattr(investigate, "findings", lambda cfg, s, lead: (
+    monkeypatch.setattr(investigate, "findings", lambda cfg, s, lead, claude=None: (
         ([result, {**result, "url": "u2"}], {"reddit": "429"}) if lead["headline"] == "covered one"
         else ([], {"youtube": "down"})))
     model = Scripted({"coverage": "partly covered", "note": "one video", "matches": [1, 9]})
@@ -321,7 +321,7 @@ def test_a_refused_coverage_judgement_is_unchecked_not_fresh(defaults, tmp_path,
         {"why": "w", "facts": [fact("a", "2026-01-01", "v1"), fact("b", "2026-02-01", "v2")]})
     investigate.save_leads(defaults, "jer", {"subject": "jer", "about": "", "made_at": "2026-11-03T00:00:00+00:00",
                                              "model": "m", "candidates": 1, "leads": investigate.rank([lead], 5)})
-    monkeypatch.setattr(investigate, "findings", lambda cfg, s, x: (
+    monkeypatch.setattr(investigate, "findings", lambda cfg, s, x, claude=None: (
         [{"source": "youtube", "channel": "C", "date": "", "title": "t", "url": "u"}], {}))
     monkeypatch.setattr(investigate, "llm_setup", lambda cfg, m: (Scripted(None), FakePrompts()))
     investigate.run_check(defaults, "jer")
@@ -464,3 +464,34 @@ def test_an_earlier_run_is_found_among_the_backups(defaults, tmp_path):
     assert investigate.load_run(defaults, "jer", "20261103000000")["made_at"].startswith("2026-11-03")
     assert investigate.load_run(defaults, "jer", "20261104000000")["made_at"].startswith("2026-11-04")
     assert investigate.load_run(defaults, "jer", "20250101000000") is None
+
+
+def test_check_searches_with_the_swarm_seeded_by_the_old_searches(defaults, tmp_path, monkeypatch):
+    from clipper import swarm
+
+    subject(defaults, tmp_path)
+    lead = {"id": "L01", "headline": "Merch numbers move", "search": "jer merch revenue", "story": "S",
+            "people": ["Jer"], "first": "2026-01-01", "last": "2026-02-01"}
+    got = {}
+
+    def fake_run(cfg, goal, path, context="", seeds=(), overrides=None, claude=None, days=0, since=None, **kw):
+        got.update(goal=goal, seeds=seeds, overrides=overrides, since=since, path=path, archives=kw["archives"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        jsonstate.write(path, {"tasks": tasks})
+        return {"findings": [{"source": "web", "title": "t", "url": "u", "channel": "c", "date": "",
+                              "relevance": "strong", "why": "same claim"}]}
+
+    monkeypatch.setattr(swarm, "run", fake_run)
+    tasks = [{"kind": "web_search", "target": "x", "status": "failed", "error": "429"},
+             {"kind": "youtube_search", "target": "x", "status": "done"}]
+    found, errors = investigate.findings(defaults, "jer", lead)
+    assert [x["kind"] for x in got["seeds"]] == ["youtube_search", "reddit_search", "web_search", "our_streams"]
+    assert {x["target"] for x in got["seeds"]} == {"jer merch revenue"} and got["since"] == "2026-01-01"
+    assert got["overrides"] == defaults["investigate"]["swarm"] and got["path"].name == "L01.trail.json"
+    assert got["archives"] == []   # his own transcripts: where the lead came from, not coverage
+    assert found[0]["why"] == "same claim" and errors == {}   # one search down of two: in the trail only
+    tasks = [{**tasks[0]}]
+    assert investigate.findings(defaults, "jer", lead)[1] == {"web_search x": "429",   # every one failed
+                                                              "swarm": "no search finished (stopped: ?)"}
+    tasks = [{**tasks[0], "status": "pending"}]   # stopped by a limit before any search ran
+    assert "swarm" in investigate.findings(defaults, "jer", lead)[1]
