@@ -826,7 +826,7 @@ max_videos = 12                # triage: videos to transcribe, at most (our own 
 max_hours = 6.0                # ...and hours of audio; a video of unknown length counts as an hour
 min_duration_s = 30            # shorter videos are skipped
 gpu = "L4"                     # Modal GPU for the transcripts
-parallel = 6                   # items at once
+parallel = 2                   # containers at once: each start costs ~10 min of GPU (~$0.13 on L4), and a story has few items
 youtube_bot_retry = true       # YouTube's bot check is retried signed in (youtube_cookies), as pre-shows do; false = never
 triage_model = "claude-haiku-5-5"
 triage_effort = "low"

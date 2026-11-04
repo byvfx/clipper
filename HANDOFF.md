@@ -151,9 +151,6 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 
 ## Waiting on the user
 - Story phase 1 PR (`story-84`, #135): merge after Copilot.
-- YouTube cookies (secrets/youtube_cookies.txt, 10-31 export) are stale: 11-03 the signed-in retry also
-  got the bot check. A fresh browser export fixes stories and pre-show grabs; then
-  `clipper story run dsp-credit-score-590` transcribes its four YouTube videos.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
   v05_t05, v07_t14, v08_t18) is still unposted and would need `--resend` once there is room.
 - Nothing waits for approval in Kitsu (checked 2026-10-30: no WFA/retake task in any open production;
@@ -208,7 +205,8 @@ verified with investigate's `locate`) → dossier (Sonnet; M/S cites must resolv
 and `struck` survive). Files in `paths.archive/story-<slug>/`. Live 11-03 "DSP says his credit
 score is 590": 33 tasks, 92 findings, triage 3 + 5 of our streams linked; the YouTube downloads hit
 the bot check, so the dossier came from our streams alone (7 moments, good timeline and conflicts),
-~$0.08 in models. Ingest now stops on a failure. Kick audio path checked on 2 min of a DSP VOD.
+~$0.08 in models. Ingest now stops on a failure. After a fresh cookie export the four transcribed signed in
+(Modal ~$0.82: cold starts dominate a story's few items, so `[story] parallel` 2). Kick audio path checked on 2 min of a DSP VOD.
 3) phase 2: edit plan → cut → meta/thumbs/Kitsu → asap. Then `investigate check` onto the swarm.
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line

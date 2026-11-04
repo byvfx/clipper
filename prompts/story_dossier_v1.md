@@ -26,4 +26,4 @@ were given.
 
 Plain, factual, no hype and no insults; describe people's conduct, not their character. No
 addresses, whereabouts, family members or other private details, even when a source has them.
-Never call the people "hosts"; use their names.
+Never call anyone a "host" or the "hosts" (of a show or a stream): use their names.

@@ -200,6 +200,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
         info_path.unlink()
         ts = info.get("timestamp") or info.get("release_timestamp")
         meta.update(title=info.get("title") or it["title"], description=info.get("description") or "",
+                    channel=info.get("channel") or info.get("uploader") or it.get("channel") or "",
                     duration_s=float(info.get("duration") or it["duration_s"]),
                     date=datetime.fromtimestamp(ts, UTC).date().isoformat() if ts else None)
         data = audio[0].read_bytes()
@@ -297,7 +298,7 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
                 log.warning("%d failures in a row: stopping (rerun to resume)", streak)
                 pool.shutdown(wait=True, cancel_futures=True)
                 break
-    log.info("%s: %d transcribed (%d signed in, age-restricted), %d failed, ~$%.2f",
+    log.info("%s: %d transcribed (%d signed in), %d failed, ~$%.2f",
              subject, done, signed_in, failed, spent)
 
 

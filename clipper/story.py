@@ -59,6 +59,7 @@ STEPS = ["swarm", "triage", "ingest", "find", "dossier"]
 ROLES = ["event", "reaction", "context"]
 VIDEO = ("yt:", "kick:", "od:")
 SEED_KINDS = {"youtube": "youtube_channel", "kick": "kick_videos", "odysee": "odysee_channel"}
+COLD_START_S = 600   # a Modal container's start before its first item (logged 11-03: 10-11 min on L4)
 UNKNOWN_S = 3600   # a video whose length the listing didn't give counts as an hour against --max-hours
 
 TRIAGE_SCHEMA = {
@@ -390,7 +391,12 @@ def triage(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict
         print(f"  [{tag}] {it['date'] or 'undated'} {it['channel'] or '?'}: {it['title'][:70]} ({dur})\n"
               f"      {it.get('page') or it['url']}")
     try:  # the GPU speeds and prices live in modal_app, which needs the modal package
-        usd = f"~${archive.estimate_usd(hours, sc['gpu'], cfg['archive']['diarize']):.2f}"
+        from .modal_app import GPU_PRICES
+
+        # each container's cold start (~10 min, 11-03): it dominates a story's few short items
+        starts = min(sc["parallel"], len(todo)) * COLD_START_S / 3600 * GPU_PRICES.get(sc["gpu"], 0.0)
+        usd = (f"~${archive.estimate_usd(hours, sc['gpu'], cfg['archive']['diarize']) + starts:.2f}"
+               f" (${starts:.2f} of it container starts)")
     except ImportError:
         usd = "no estimate (modal isn't installed: uv sync --extra modal)"
     print(f"to transcribe: {len(todo)} items, ~{hours:.1f} h on {sc['gpu']}: {usd}")

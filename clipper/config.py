@@ -203,7 +203,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_hours": 6.0,         # ...and hours of audio (a video of unknown length counts as one)
         "min_duration_s": 30,     # shorter videos are skipped
         "gpu": "L4",              # Modal GPU for the transcripts
-        "parallel": 6,            # items at once
+        "parallel": 2,            # containers at once: each cold start costs ~10 min of GPU, a story has few items
         "youtube_bot_retry": True,  # YouTube's bot check: retry signed in ([paths] youtube_cookies), as pre-shows do (user 11-03)
         "triage_model": "claude-haiku-5-5",
         "triage_effort": "low",
