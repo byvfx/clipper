@@ -69,7 +69,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "tts_max_chars": 3000,    # per read; split longer scripts at scene breaks
         "tts_settings": {},       # voice_settings for reads, e.g. {stability = 0.5, style = 0, speed = 1.05};
                                   # {} = the voice's own; eleven_v3 stability is 0, 0.5 or 1
-        "output_format": "mp3_44100_128",  # wav_44100 / pcm_44100 need the Pro tier
+        "output_format": "pcm_48000",  # lossless 48 kHz, saved as .wav (Creator plan and up; plans
+                                       # without it fall back to mp3_44100_128); pcm_44100 needs Pro
         "remove_background_noise": True,   # phone takes in a room
         "max_s": 300,             # longest take per call; split longer ones at pauses
     },
