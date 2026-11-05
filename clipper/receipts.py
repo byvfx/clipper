@@ -296,15 +296,17 @@ def download(cfg: dict, r: dict, dst: Path) -> None:
 
 
 def still(work: Path, name: str, lines: list[tuple], rc: dict, bug: str, dst: Path,
-          vo: Path | None = None) -> None:
+          vo: Path | None = None, min_s: float = 0.0, extra: str = "") -> None:
     """A card: lines of (font, size, color, y, text) centered on dark grey, the corner bug,
-    and the voice-over if any. It lasts [receipts] card_s, or the read plus vo_pad_s."""
+    and the voice-over if any. It lasts [receipts] card_s (or min_s if longer), or the read
+    plus vo_pad_s. extra: more drawtext options for every line (e.g. text_align=C)."""
     tag = text_file(work, "bug", bug)
     vf = [drawtext(font, text_file(work, f"{name}_{k}", text), size, color, "(w-text_w)/2", str(y),
-                   ":line_spacing=14")
+                   ":line_spacing=14" + extra)
           for k, (font, size, color, y, text) in enumerate(lines)]
     vf.append(drawtext(lines[-1][0], tag, 30, "white@0.6", "w-text_w-48", "h-text_h-40"))
-    dur = max(rc["card_s"], media.duration(vo) + rc["vo_pad_s"]) if vo else rc["card_s"]
+    base = max(rc["card_s"], min_s)
+    dur = max(base, media.duration(vo) + rc["vo_pad_s"]) if vo else base
     d = f"{dur:.2f}"
     audio = ["-i", str(vo), "-af", f"{loudnorm(rc)},aresample=48000,aformat=channel_layouts=stereo,apad"] if vo \
         else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
@@ -407,22 +409,9 @@ def print_script(data: dict) -> None:
 
 def voiced(cfg: dict, sdir: Path, text: str) -> Path | None:
     """The read of one line, voiced once per text, voice and settings (receipts/vo/)."""
-    import hashlib
-
     from . import narrate
 
-    if not text.strip():
-        return None
-    nc = narrate.settings(cfg)
-    sig = json.dumps([text, nc["voice_id"], nc["tts_model"], nc["tts_settings"]], sort_keys=True)
-    name = hashlib.sha1(sig.encode()).hexdigest()[:12]
-    # a read voiced before the format changed is still that read: reuse it rather than pay again
-    old = sorted((out_dir(sdir) / "vo").glob(f"{name}.*"))
-    out = old[0] if old else out_dir(sdir) / "vo" / f"{name}.{narrate.ext(nc['output_format'])}"
-    if not out.exists():
-        out.parent.mkdir(exist_ok=True)
-        narrate.speak(text, nc, out)
-    return out
+    return narrate.read(narrate.settings(cfg), text, out_dir(sdir) / "vo")
 
 
 def clip(cfg: dict, idir: Path, r: dict, src: Path, fonts: tuple[Path, Path], bug: str,

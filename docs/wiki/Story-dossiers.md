@@ -38,6 +38,34 @@ Kitsu card, in an episode of its own. A segment retake can't trim a story: edit 
 cut again (unchanged parts aren't re-rendered). Approved, it goes out as soon as possible
 (`[story] publish = "asap"`), with the hourly uploads.
 
+`clipper story cut <slug> --no-review` renders the video alone (no meta, thumbs or Kitsu card), for
+watching it yourself: with no Kitsu card it can never be approved, so it never uploads.
+
+## Narration
+
+A viewer who has never heard of anyone in the story shouldn't be dropped into a quote. So the
+edit (`[story] edit_prompt_version = "v2"`) is written for them: the parts go in the order things
+happened (the dossier's timeline, not the order the videos were posted), and `plan` writes three
+kinds of narration into `story.json`, using only what the dossier shows ("says" or "reportedly" for
+what it marks reported, never a speculation line as fact):
+
+- `tldr`: the short version, read first over a title card: who, what happened, each side's account,
+  where it stands. About 20-30 seconds.
+- `lead_in` on each part: one or two sentences before the clip: the date, what you're about to
+  see and who is talking (and that a recap channel is a recap channel).
+- `close`: where it stands and what is still unknown.
+
+`story cut` makes each one a card (the `[receipts]` look: a yellow header, the line, the bug)
+read by the story's narrator, `[story] voice_id` (an ElevenLabs voice from `clipper narrate
+voices`; not `[narrate] voice_id`, which is the character's), with `[story] tts_settings` and
+`[narrate]`'s key, `tts_model` and format. Each read is cached in `streams/story-<slug>/vo/` by its
+words and voice, so a re-cut pays only for lines that changed: a story's narration is a few hundred
+characters of credits. Without a `voice_id` the cards are silent and stay up long enough to read
+(`[story] read_wpm`). The chapters start at the cards (the short version, each part, where it
+stands) and the narration is in the captions. Edit any line in `story.json` and cut again; the
+video is re-cut when a line, the order or the voice changes. `[story] narrate = false` cuts the
+clips alone, and `edit_prompt_version = "v1"` plans the old clips-only edit.
+
 ## Setup
 
 Story dossiers need the swarm's keys plus Modal (as for `clipper

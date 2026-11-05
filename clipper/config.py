@@ -247,6 +247,14 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "publish": "asap",        # asap: out as soon as it is approved and uploaded | slots
         "playlist": "",           # YouTube playlist for every story ({show}); "" = the model's pick
         "credit": "Sources, in the order they appear:",  # the description's last block, a line per part after it
+        # Narration (user 11-05: "I'm being dropped into the story"): the edit opens with the short
+        # version, puts a line of context before each part and closes on where it stands, each a
+        # card read by the story's narrator (ElevenLabs, the [narrate] key and tts_model).
+        "edit_prompt_version": "v2",  # prompts/story_edit_<v>.md; v1 = clips only, no narration
+        "narrate": True,          # cut the narration in (false = the clips alone, as v1)
+        "voice_id": "",           # the narrator's ElevenLabs voice (clipper narrate voices); "" = silent cards
+        "tts_settings": {},       # the narrator's voice_settings ([narrate] tts_settings are the character's)
+        "read_wpm": 160,          # a silent card stays up long enough to read at this pace
     },
     "rumble": {
         # No upload API, so `clipper rumble` prepares folders for the web form.

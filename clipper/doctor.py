@@ -564,11 +564,15 @@ def check_x(cfg: dict) -> None:
 
 
 def check_narrate(cfg: dict) -> None:
-    """Optional: only `clipper narrate` needs it."""
+    """Optional: only `clipper narrate`, receipts' voice-over and story narration need it."""
     from .narrate import find_key, settings
 
     nc = settings(cfg)
     where = f"${nc['key_env']} or {nc['key_file']}"
+    sc = cfg["story"]
+    if sc["narrate"] and sc["voice_id"] and not find_key(nc):
+        fail("keys", f"[story] voice_id is set but there's no ElevenLabs key ({where}): story narration "
+             "can't be read", wiki.page("Story-dossiers", "narration"))
     if not find_key(nc):
         if nc["voice_id"]:
             fail("keys", f"[narrate] voice_id is set but there's no ElevenLabs key ({where})",

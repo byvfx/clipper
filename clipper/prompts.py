@@ -45,7 +45,7 @@ def figures(cfg: dict) -> str:
 # Prompts that write text viewers see; [scoring] house_style rules are appended to them.
 VIEWER_FACING = {"score_a", "score_b", "meta", "chapters", "segments", "compilation",
                  "thumbnail", "thumbnail_enquirer", "preshow", "oneoff", "pick", "retake",
-                 "receipts_stories", "weekly", "weekly_article"}
+                 "receipts_stories", "weekly", "weekly_article", "story_edit"}
 HOUSE_STYLE = ("House style for anything viewers see (titles, descriptions, hooks, chapter and "
                "thumbnail text):")
 # The weekly prompts keep the headers they were written with.

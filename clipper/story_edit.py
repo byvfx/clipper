@@ -4,9 +4,12 @@ Usage:
     clipper [--show <key>] story plan <slug> [--force]   the edit -> streams/story-<slug>/story.json
     clipper story cut <slug> [--force] [--no-review]     the video, meta, thumbs, the Kitsu card
 
-`plan` ([story] edit_model, Sonnet; ~$0.03) reads the dossier's summary and angles and the
-moments (phase 1), and writes the edit: title, topic, summary, description, and the moments
-in order with a chapter title each. Code bounds each part around its quote (receipts'
+`plan` ([story] edit_model, Sonnet; ~$0.03) reads the dossier's summary, timeline, conflicts and
+angles and the moments (phase 1), and writes the edit: title, topic, summary, description, and
+the moments in the order things happened with a chapter title each. With the v2 prompt
+([story] edit_prompt_version) it also writes the narration for someone who knows nothing of
+the story: `tldr`, the short version read first; a `lead_in` per part, read before its clip
+(the date, what you're about to see, who is talking); and `close`, where it stands. Code bounds each part around its quote (receipts'
 clip_bounds: [story] lead_s / tail_s / max_clip_s, snapped to sentence edges), drops a part
 that repeats an earlier part's words (a re-upload, a stream playing the video), merges two
 that overlap in one video, and stops the edit at [story] max_minutes: the parts left out stay
@@ -24,7 +27,10 @@ range, so a trim downloads again), re-encodes it to 1920x1080 30 fps with the ch
 on a lower third and the corner bug, bleeps it from its item's words (receipts' renderer and
 [receipts] settings), and joins them into segments/s00_<slug>.mp4: one segment, with a
 chapter per part in its sidecar, and the parts' words on the video's own timeline in
-words.jsonl for the captions. Then meta (the sidecar's chapters, [story] credit and a source
+words.jsonl for the captions. With [story] narrate, each narration line is a card (receipts'
+still: the header, the line, the bug) read by the story's narrator ([story] voice_id through
+ElevenLabs, each read cached in vo/ by its words and voice; no voice: silent cards that stay up
+long enough to read at [story] read_wpm); its words go into words.jsonl spread over the read. Then meta (the sidecar's chapters, [story] credit and a source
 line per part), thumbs and the Kitsu card, as a pre-show's. Approved, it goes out as soon as
 possible ([story] publish = "asap"). A part is rendered again when its bounds or its lower
 third change, meta when the edit's text, chapters or video change, and the cover whenever the
@@ -34,6 +40,7 @@ A source struck in dossier.json keeps its moments out of the plan.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -57,7 +64,13 @@ PLAN_SCHEMA = {
             "properties": {"moment": {"type": "string"}, "chapter": {"type": "string"}, "why": {"type": "string"}}}},
     },
 }
-REPEAT = 0.7      # a part whose quote shares this much of an earlier part's words repeats it
+# v2 and on (narrated): the short version first, a lead_in read before each part, a close at the end
+NARRATED_SCHEMA = copy.deepcopy(PLAN_SCHEMA)
+NARRATED_SCHEMA["required"] += ["tldr", "close"]
+NARRATED_SCHEMA["properties"].update(tldr={"type": "string"}, close={"type": "string"})
+NARRATED_SCHEMA["properties"]["parts"]["items"]["required"].append("lead_in")
+NARRATED_SCHEMA["properties"]["parts"]["items"]["properties"]["lead_in"] = {"type": "string"}
+REPEAT = 0.7     # a part whose quote shares this much of an earlier part's words repeats it
 CHAPTER_MIN_S = 10  # YouTube's shortest chapter
 
 
@@ -170,19 +183,24 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
         claude = Claude(cfg)
         preflight(claude, sc["edit_model"])
     prompts = Prompts(cfg)
-    prompts.version = sc["prompt_version"]
+    prompts.version = sc["edit_prompt_version"]
+    narrated = prompts.version != "v1"
     show_name = shc["meta"]["show_name"] or key
     ms = "\n".join(f"{m['id']} | {m['role']}, {m['fit']} | {m['date'] or 'undated'} | {m['channel'] or '?'}"
                    f"{f' (our show, {show_name})' if m['ours'] else ''} | {m['title']}\n    \"{m['quote']}\"\n"
                    f"    {m['why']}" for m in moments)
     angles = "\n".join(f"- {a['angle']} ({', '.join(a['moments'])})" for a in dossier.get("angles", []))
+    # the narration may only say what the dossier shows: its dated timeline and the two sides
+    timeline = "\n".join(f"- {x['date'] or 'undated'} [{x['status']}] {x['what']}" for x in dossier.get("timeline", []))
+    conflicts = "\n".join(f"- {x['what']}" for x in dossier.get("conflicts", []))
+    told = (f"Timeline:\n{timeline or '(none)'}\n\nConflicts:\n{conflicts or '(none)'}\n\n") if narrated else ""
     user = (f"Story: {b['brief']}\nShow: {show_name}\n\nSummary: {dossier.get('summary') or '(no dossier)'}\n\n"
-            f"Angles:\n{angles or '(none)'}\n\n<moments>\n{ms}\n</moments>")
+            f"{told}Angles:\n{angles or '(none)'}\n\n<moments>\n{ms}\n</moments>")
     budget = Budget(cfg["story"]["budget_usd"], claude, spent_before=claude.cost)
     out = story.ask(cfg, claude, budget, sc["edit_model"], sc["edit_effort"],
                     prompts.get("story_edit", max_minutes=f"{sc['max_minutes']:g}",
                                 part_s=f"{(sc['lead_s'] + sc['tail_s'] + 15):.0f}-{sc['max_clip_s']}"),
-                    user, PLAN_SCHEMA, 2000)
+                    user, NARRATED_SCHEMA if narrated else PLAN_SCHEMA, 3000 if narrated else 2000)
     if out is None:
         raise ClipperError("the edit model declined to plan one")
     by_id, parts = {m["id"]: m for m in moments}, []
@@ -198,13 +216,15 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
                       "subject": m["subject"], "item": m["item"], "dir": str(idir), "source": m["source"],
                       "url": it.get("m3u8") or m["url"], "page": m["page"] or m["url"], "ours": m["ours"],
                       "channel": label(shc, m), "date": m["date"], "title": m["title"], "role": m["role"],
-                      "start": a, "end": z, "found": found, "quote": m["quote"], "why": x["why"], "note": ""})
+                      "start": a, "end": z, "found": found, "quote": m["quote"],
+                      "lead_in": x.get("lead_in", "").strip(), "why": x["why"], "note": ""})
     shape(parts, sc["max_minutes"] * 60)
     if not any(p["use"] for p in parts):
         raise ClipperError("the edit has no parts (the model's picks weren't moments)")
     data = {"slug": slug, "brief": b["brief"], "show": key, "title": out["title"].strip(),
             "topic": out["topic"].strip(), "summary": out["summary"].strip(),
-            "description": out["description"].strip(), "figures": out["figures"], "parts": parts,
+            "description": out["description"].strip(), "figures": out["figures"],
+            "tldr": out.get("tldr", "").strip(), "close": out.get("close", "").strip(), "parts": parts,
             "model": sc["edit_model"], "prompt_version": prompts.version,
             "planned_at": datetime.now(UTC).isoformat(timespec="seconds"), "usd": round(claude.cost, 4)}
     sdir.mkdir(parents=True, exist_ok=True)
@@ -246,14 +266,20 @@ def print_plan(data: dict) -> None:
 
     used = [p for p in data["parts"] if p["use"]]
     total = sum(p["end"] - p["start"] for p in used)
-    print(f"{data['title']}  ({len(used)} parts, {clock(total)})")
+    print(f"{data['title']}  ({len(used)} parts, {clock(total)} of clips)")
+    if data.get("tldr"):
+        print(f"  short version: {data['tldr']}")
     for p in data["parts"]:
         mark = " " if p["use"] else "-"
         print(f" {mark}{p['id']} {'+'.join(p['moments'])} {p['date'] or 'undated'} {p['channel']}: "
               f"{clock(p['start'])}-{clock(p['end'])} ({p['end'] - p['start']:.0f} s) {p['chapter']}"
               + ("" if p["found"] else " [quote not found: the window]")
               + (f"  [{p['note']}]" if p["note"] else ""))
+        if p.get("lead_in"):
+            print(f"      narrator: {p['lead_in']}")
         print(f"      \"{p['quote'][:110]}\"")
+    if data.get("close"):
+        print(f"  close: {data['close']}")
 
 
 # ---------- cut ----------
@@ -337,8 +363,88 @@ def source_line(p: dict, t: float) -> dict:
             "link": source_link(p)}
 
 
-def signature(data: dict, used: list[dict]) -> list:
-    return [[p["item"], p["start"], p["end"], p["channel"], p["date"], p["title"]] for p in used]
+def signature(data: dict, used: list[dict], seq: list[dict] | None = None, nc: dict | None = None) -> list:
+    sig = [[p["item"], p["start"], p["end"], p["channel"], p["date"], p["title"]] for p in used]
+    cards = [[x["card"], x["header"], x.get("title", ""), x["text"]] for x in seq or [] if "card" in x]
+    if cards:  # the narration: its words, where the cards sit, and the voice reading them
+        sig.append(["narration", [x.get("card") or x["part"]["id"] for x in seq or []], cards,
+                    nc and [nc["voice_id"], nc["tts_model"], nc["tts_settings"]]])
+    return sig
+
+
+# ---------- narration ----------
+
+def narrator(cfg: dict) -> dict | None:
+    """[narrate]'s key, tts_model and format with the story's own voice and voice_settings;
+    None without a [story] voice_id (the cards are silent)."""
+    from . import narrate
+
+    sc = cfg["story"]
+    if not sc["voice_id"]:
+        return None
+    return {**narrate.settings(cfg), "voice_id": sc["voice_id"], "tts_settings": sc["tts_settings"]}
+
+
+def sequence(data: dict, used: list[dict], narrate: bool) -> list[dict]:
+    """The video in order: the short version, each part after its lead-in card, where it
+    stands; the clips alone when narration is off or the edit has none (a v1 plan)."""
+    if not narrate:
+        return [{"part": p} for p in used]
+    out = []
+    if data.get("tldr"):
+        out.append({"card": "tldr", "header": "THE SHORT VERSION", "title": data["title"], "text": data["tldr"],
+                    "chapter": "The short version"})
+    for p in used:
+        if p.get("lead_in"):
+            out.append({"card": f"{p['id']}_lead", "header": p["chapter"].upper(), "text": p["lead_in"],
+                        "chapter": p["chapter"]})
+        out.append({"part": p})
+    if data.get("close"):
+        out.append({"card": "close", "header": "WHERE IT STANDS", "text": data["close"],
+                    "chapter": "Where it stands"})
+    return out
+
+
+def card_lines(fonts: tuple[Path, Path], c: dict) -> list[tuple]:
+    """A card's lines for receipts.still, (font, size, color, y, text): the header, the title on
+    the short version, the narration, wrapped and the whole block centred on the frame."""
+    import textwrap
+
+    from .receipts import H
+
+    big, small = fonts
+    blocks = [(big, 64, "0xFFD400", c["header"], 40)]
+    if c.get("title"):
+        blocks.append((big, 80, "white", c["title"], 36))
+    blocks.append((small, 46, "0xEEEEEE", c["text"], 62))
+    wrapped = [(f, size, color, textwrap.wrap(text, width) or [""]) for f, size, color, text, width in blocks]
+    gap, spacing = 44, 14
+    y = (H - sum(len(ls) * (size + spacing) - spacing for _, size, _, ls in wrapped) - gap * (len(wrapped) - 1)) // 2
+    out = []
+    for f, size, color, ls in wrapped:
+        out.append((f, size, color, max(y, 40), "\n".join(ls)))
+        y += len(ls) * (size + spacing) - spacing + gap
+    return out
+
+
+def reading_s(c: dict, wpm: float) -> float:
+    """How long a silent card stays up: its words at wpm, and a second to look up."""
+    return len(f"{c.get('title', '')} {c['text']}".split()) * 60 / wpm + 1.0
+
+
+def read_words(text: str, at: float, dur: float, seg0: int) -> tuple[list[dict], int]:
+    """A read's words on the video's timeline for the captions, spread over the read by their
+    letters (the read comes without word timings), a caption segment per sentence."""
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
+    ws = [(w, n) for n, s in enumerate(sentences) for w in s.split()]
+    letters = sum(len(w) + 1 for w, _ in ws) or 1
+    out, t = [], at
+    for w, n in ws:
+        d = dur * (len(w) + 1) / letters
+        out.append({"word": w, "start": round(t, 3), "end": round(t + d, 3), "score": None, "speaker": None,
+                    "seg": seg0 + n})
+        t += d
+    return out, seg0 + len(sentences)
 
 
 def part_file(work: Path, p: dict) -> Path:
@@ -364,7 +470,8 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     from .bleep import Bleeper
     from .config import for_show, for_stream
     from .cut import write_sidecar
-    from .receipts import clip, first_font, join
+    from .narrate import read
+    from .receipts import clip, first_font, join, still
     from .segments import slug as file_slug
     from .timefmt import clock
 
@@ -372,26 +479,38 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     if bad := check_parts(data):
         raise ClipperError(f"story.json: {'; '.join(bad)}")
     cfg = for_stream(cfg, sdir)
-    rc = cfg["receipts"]
+    rc, sc = cfg["receipts"], cfg["story"]
     used = [p for p in data["parts"] if p["use"]]
     if not used:
         raise ClipperError(f"story {slug}: no part has use = true in story.json")
+    seq = sequence(data, used, sc["narrate"])
+    nc = narrator(cfg) if any("card" in x for x in seq) else None
+    sig = signature(data, used, seq, nc)
     work = sdir / "work"
     work.mkdir(parents=True, exist_ok=True)
     (sdir / "segments").mkdir(exist_ok=True)
     final = sdir / "segments" / f"s00_{file_slug(slug)}.mp4"   # one name, whatever the topic
     retire(sdir, final.stem)
     old = jsonstate.read(final.with_suffix(".json"), {}) or {}
-    same = final.exists() and old.get("signature") == signature(data, used) and not force
+    same = final.exists() and old.get("signature") == sig and not force
     bleeps = jsonstate.read(work / "bleeps.json", {}) or {}   # by part render, kept or new
     if same:
-        print(f"{final.name}: the edit's parts are unchanged, video kept (--force re-cuts)")
+        print(f"{final.name}: the edit is unchanged, video kept (--force re-cuts)")
     else:
         fonts = (first_font(rc["fonts"]), first_font(rc["text_fonts"]))
         bug = rc["bug"] or cfg["scoring"]["channel_name"]
         bleeper = Bleeper(cfg["bleep"])
         rendered = []
-        for p in used:
+        for x in seq:
+            if "card" in x:  # narration: read by the story's narrator (cached by its words), or silent
+                print(f"{x['card']}: {x['text'][:80]}", flush=True)
+                vo = read(nc, x["text"], sdir / "vo") if nc else None
+                dst = work / f"{x['card']}.mp4"
+                still(work, x["card"], card_lines(fonts, x), rc, bug, dst, vo,
+                      min_s=0.0 if vo else reading_s(x, sc["read_wpm"]), extra=":text_align=C")
+                rendered.append(dst)
+                continue
+            p = x["part"]
             print(f"{p['id']} {p['date'] or 'undated'} {p['channel']} {clock(p['start'])}-{clock(p['end'])}",
                   flush=True)
             src = work / f"{p['item']}_{p['start']:.2f}-{p['end']:.2f}.src.mp4"
@@ -413,30 +532,43 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                 jsonstate.write(work / "bleeps.json", bleeps)
             rendered.append(dst)
         join(rendered, work / "concat.txt", final)
-    # where each part starts in the video, from the rendered parts' own lengths
-    starts, t = [], 0.0
-    for p in used:
-        starts.append(t)
-        t += media.duration(part_file(work, p))
-    words, seg0 = [], 0
-    for p, at in zip(used, starts):
-        w, seg0 = part_words(p, at, seg0)
-        words += w
+    # where each piece starts in the video, from the rendered pieces' own lengths; a chapter
+    # starts at each card, and at each part not set up by a card of its own
+    starts, marks, words, seg0, t = [], [], [], 0, 0.0
+    for n, x in enumerate(seq):
+        f = work / f"{x['card']}.mp4" if "card" in x else part_file(work, x["part"])
+        dur = media.duration(f)
+        if "card" in x:
+            marks.append((x, t))
+            if nc:   # the read ends vo_pad_s before the card does
+                w, seg0 = read_words(x["text"], t, max(dur - rc["vo_pad_s"], 0.5), seg0)
+                words += w
+        else:
+            p = x["part"]
+            starts.append(t)
+            if not (n and seq[n - 1].get("card") == f"{p['id']}_lead"):
+                marks.append((p, t))
+            w, seg0 = part_words(p, t, seg0)
+            words += w
+        t += dur
     (sdir / "words.jsonl").write_text("".join(json.dumps(w) + "\n" for w in words), encoding="utf-8")
     seg = {"id": "s00", "kind": "commentary", "story": True, "title": data["title"], "topic": data["topic"],
            "summary": data["summary"], "description": data["description"], "figures": data["figures"],
            "source_share": "most", "standalone": True, "start_s": 0.0, "end_s": round(t, 3),
            "duration_s": round(t, 1), "file": final.name, "cut": True, "skip_reasons": [],
-           "chapters": chapters_of(used, starts, t),
+           "chapters": chapters_of([m for m, _ in marks], [at for _, at in marks], t),
            "bleeps": sum(bleeps.get(part_file(work, p).name, 0) for p in used),
-           "signature": signature(data, used)}
+           "signature": sig}
     write_sidecar(final, seg)
     jsonstate.write(sdir / "segments.json", {"stream_id": sdir.name, "story": slug, "gaps": [],
                                              "segments": [{k: v for k, v in seg.items() if k != "signature"}],
                                              "compilations": []})
     write_meta(sdir, for_show(cfg, data["show"]), data["show"], data, duration_s=round(t, 1),
                sources=[source_line(p, at) for p, at in zip(used, starts)])
-    print(f"{final} ({clock(t)}, {len(used)} parts, {seg['bleeps']} bleeped)")
+    cards = sum("card" in x for x in seq)
+    print(f"{final} ({clock(t)}, {len(used)} parts"
+          + (f", {cards} narration cards{'' if nc else ' (silent: no [story] voice_id)'}" if cards else "")
+          + f", {seg['bleeps']} bleeped)")
     if not review:
         print(f"--no-review: meta, thumbs and Kitsu not run (clipper story cut {slug} again to do them)")
         return final

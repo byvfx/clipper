@@ -876,6 +876,14 @@ odysee_format = "best[height<=1080]/best"
 publish = "asap"               # asap: out as soon as approved and uploaded | slots: schedule's slots
 playlist = ""                  # one YouTube playlist for every story ({show}); "" = the model's pick
 credit = "Sources, in the order they appear:"   # the description's last block; a line per part follows
+# Narration: the short version first, a line of context before each part, where it stands at
+# the end, each a card read by the narrator (ElevenLabs, [narrate]'s key and tts_model; a few
+# cents of credits a story). Without a voice_id the cards are silent, timed for reading.
+edit_prompt_version = "v2"     # prompts/story_edit_<v>.md; v1 = clips only, no narration
+narrate = true                 # false = the clips alone
+voice_id = ""                  # the narrator's voice (clipper narrate voices), not the [narrate] character's
+tts_settings = {}              # the narrator's voice_settings, e.g. { stability = 0.5, speed = 1.0 }
+read_wpm = 160                 # a silent card's reading pace
 
 [signals]
 chat_lag_s = 6             # shift chat earlier: stream delay + typing time
