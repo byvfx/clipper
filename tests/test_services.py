@@ -1,4 +1,5 @@
 import json
+import subprocess
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -58,7 +59,7 @@ def test_recorder_restart_refused_while_live(tmp_path, monkeypatch):
 
 def test_all_never_touches_the_recorder(tmp_path, monkeypatch):
     done = []
-    monkeypatch.setattr(services, "run_task", lambda name, action: done.append((name, action)) or 0)
+    monkeypatch.setattr(services, "run_task", lambda name, action, cfg=None: done.append((name, action)) or 0)
     monkeypatch.setattr(services, "recorder_compose", lambda cfg, action: pytest.fail("recorder touched"))
     services.run(cfg_with(tmp_path, {}), "stop", "all")
     assert done == [("worker", "stop"), ("serve", "stop"), ("bot", "stop")]
@@ -68,10 +69,21 @@ def test_status_shows_serve_and_bot_heartbeats(tmp_path, monkeypatch, capsys):
     """From the share, so it's right whichever machine they run on."""
     from clipper import daemon
 
-    monkeypatch.setattr(services, "run_task", lambda name, action: 0)
+    monkeypatch.setattr(services, "run_task", lambda name, action, cfg=None: 0)
     cfg = cfg_with(tmp_path, None)
     daemon.beat(cfg, "serve", "2026-11-03T10:00:00+00:00", jobs={"upload": {"running": True, "started": "2026-11-03T10:05:00+00:00"}})
     services.run(cfg, "status", "all")
     out = capsys.readouterr().out
     assert "serve: up on" in out and "upload: running since" in out
     assert "bot: no heartbeat" in out
+
+
+def test_hub_services_go_over_ssh(defaults, monkeypatch):
+    # [serve] hub: serve, the bot and the worker are containers on the NAS (deploy/hub).
+    cfg = {**defaults, "serve": {**defaults["serve"], "hub": "clipper-hub"}}
+    sent = []
+    monkeypatch.setattr(services, "ssh", lambda host, cmd, timeout=20: sent.append((host, cmd))
+                        or subprocess.CompletedProcess([host], 0, "ok", ""))
+    assert services.run_task("bot", "restart", cfg) == 0
+    host, cmd = sent[0]
+    assert host == "nas" and cmd.startswith("cd clipper-hub && ") and "docker compose restart bot" in cmd

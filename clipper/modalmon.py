@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -61,7 +62,7 @@ def tracked(path: Path | None, kind: str, what: str, gpu: str, audio_s: float):
     """Log a Modal call's start and end. The caller fills the yielded dict with the cost
     record (transcribe.modal_cost) and the audio length it got back."""
     run = {"run": os.urandom(6).hex(), "kind": kind, "what": what, "gpu": gpu or "",
-           "audio_s": round(audio_s, 1), "host": os.environ.get("COMPUTERNAME", "")}
+           "audio_s": round(audio_s, 1), "host": os.environ.get("COMPUTERNAME") or socket.gethostname()}
     append(path, {**run, "event": "start", "at": now_iso()})
     end: dict = {}
     try:

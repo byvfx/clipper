@@ -16,6 +16,7 @@
 - [macOS](Install-macOS)
 - [Transcribe on Modal](Transcribe-on-Modal)
 - [NAS recorder](NAS-recorder)
+- [NAS hub](NAS-hub)
 - [Phone access](Phone-access)
 - [Model providers](Model-providers)
 - [Adding a show](Adding-a-show)

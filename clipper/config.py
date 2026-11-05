@@ -1,7 +1,9 @@
 """Config loading: built-in defaults < clipper.toml < clipper.local.toml < CLIPPER_<SECTION>_<KEY> env vars.
 
-The file is found via --config, then $CLIPPER_CONFIG, then ./clipper.toml.
-Relative paths in [paths] resolve against the config file's directory.
+The file is found via --config, then $CLIPPER_CONFIG, then ./clipper.toml, then (Windows)
+the user-scope CLIPPER_CONFIG a shell may not have inherited: the laptop's points at the one
+on the NAS share since 2026-11-05. Relative paths in [paths] resolve against the config
+file's directory; prompts falls back to the checkout's own prompts/ when that has none.
 
 clipper.local.toml (beside clipper.toml, or $CLIPPER_LOCAL_CONFIG) holds this machine's own
 values (streams path, codec, transcribe backend; `clipper setup` writes it), so clipper.toml
@@ -737,6 +739,12 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # `clipper serve`: the always-on process (the war room, hourly uploads, pre-show grabs,
         # retakes, the daily jobs). The bot and `clipper doctor` reach it here.
         "url": "",                # "" = this machine, http://127.0.0.1:<[warroom] port>/; else e.g. "http://nas:8765/" (needs [warroom] token on both)
+
+        # Where serve, the bot and the worker run, for `clipper services`: "" = this machine's
+        # scheduled tasks (deploy/serve, deploy/discord, deploy/worker); else the compose folder
+        # on the NAS that deploy/hub/deploy.sh uses (relative to the ssh user's home, e.g.
+        # "clipper-hub"), reached over ssh like the recorder ([record] ssh_host, sudo).
+        "hub": "",
     },
     "warroom": {
         # The dashboard (schedule, pipeline, review queue, retakes): `clipper serve` runs it
@@ -1039,8 +1047,7 @@ def local_path(cfg_path: str | Path | None = None) -> Path:
     """This machine's clipper.local.toml: $CLIPPER_LOCAL_CONFIG, else beside the config file."""
     if os.environ.get("CLIPPER_LOCAL_CONFIG"):
         return Path(os.environ["CLIPPER_LOCAL_CONFIG"])
-    path = Path(cfg_path or os.environ.get("CLIPPER_CONFIG") or "clipper.toml")
-    return path.resolve().parent / LOCAL_CONFIG
+    return find(cfg_path).resolve().parent / LOCAL_CONFIG
 
 
 def _load_local(path: Path, cfg: dict, base: Path) -> dict:
@@ -1059,10 +1066,35 @@ def _load_local(path: Path, cfg: dict, base: Path) -> dict:
     return local
 
 
+CHECKOUT_PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
+
+
+def user_env(name: str) -> str:
+    """A Windows user-scope environment variable, read from the registry: agent and service
+    shells started without it don't inherit it. "" elsewhere or when unset."""
+    if sys.platform != "win32":
+        return ""
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            return str(winreg.QueryValueEx(key, name)[0])
+    except OSError:
+        return ""
+
+
+def find(path: str | Path | None = None) -> Path:
+    """The config file: --config, $CLIPPER_CONFIG, ./clipper.toml, the user's CLIPPER_CONFIG."""
+    if path or os.environ.get("CLIPPER_CONFIG"):
+        return Path(path or os.environ["CLIPPER_CONFIG"])
+    here = Path("clipper.toml")
+    return here if here.exists() else Path(user_env("CLIPPER_CONFIG") or here)
+
+
 def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, dict[str, Any]]:
     cfg = copy.deepcopy(DEFAULTS)
     unknown: list[str] = []
-    path = Path(path or os.environ.get("CLIPPER_CONFIG") or "clipper.toml")
+    path = find(path)
     base = Path.cwd()
     shows: dict[str, dict] = {}
     if path.exists():
@@ -1088,6 +1120,8 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
     local = _load_local(lpath, cfg, base) if use_local else {}
     _apply_env(cfg, local=local)
     _resolve_paths(cfg["paths"], base)
+    if not cfg["paths"]["prompts"].exists() and CHECKOUT_PROMPTS.exists():
+        cfg["paths"]["prompts"] = CHECKOUT_PROMPTS
 
     cfg["shows"] = {}
     for key, show in shows.items():

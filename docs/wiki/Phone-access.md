@@ -17,5 +17,16 @@ own Tailscale devices, nothing on the LAN or the internet, no port forwarding.
 5. On the phone, open the link, then Share / menu → Add to Home Screen.
 
 Check: `clipper doctor --role serve` (fetches the war room through the tailnet name), or
-`clipper warroom --tailnet status`. Off again: `clipper warroom --tailnet off`. When serve
-moves to the NAS (#9), do the same there with the Tailscale container.
+`clipper warroom --tailnet status`. Off again: `clipper warroom --tailnet off`.
+
+## On the NAS
+
+With serve on the NAS ([NAS hub](NAS-hub)), the `tailscale` container is the tailnet machine
+(`clipper.<tailnet>.ts.net`, `TS_HOSTNAME` in `deploy/hub/env.local`). Its first start prints a
+sign-in link: `ssh nas 'cd clipper-hub && docker compose logs tailscale'`, open it and approve
+(or put an auth key in `TS_AUTHKEY` before deploying). The container serves the war room itself
+from `deploy/hub/tailscale-serve.json`, so `clipper warroom --tailnet on` isn't used there (the
+clipper containers aren't root and can't change Tailscale's settings; `--tailnet status` works).
+Open `https://clipper.<tailnet>.ts.net/?key=<token>` once on the phone, with the token from
+`secrets/warroom_token.txt` in the NAS folder. Turn the laptop's off (`clipper warroom --tailnet
+off` there).

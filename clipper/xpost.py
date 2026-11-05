@@ -53,7 +53,7 @@ from pathlib import Path
 
 import requests
 
-from . import costs, jsonstate, media, oauth, rumble, wiki
+from . import costs, jsonstate, media, oauth, rumble, schedule, wiki
 from .config import for_stream
 from .errors import ClipperError
 from .states import split_key
@@ -434,7 +434,7 @@ def post(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
         if e["kind"] not in xc["kinds"]:
             print(f"  {e['key']}: a {e['kind']}, not posted ([x] kinds = {xc['kinds']})")
             continue
-        video = Path(e["file"])
+        video = schedule.video(cfg, e)
         if not video.exists():
             print(f"  {e['key']}: video missing ({video}); rerun clipper shorts")
             continue
@@ -665,7 +665,7 @@ def auto(cfg: dict, dry_run: bool = False) -> None:
     sched = rumble.load_schedule(cfg)
     room = max(limit - used_last_24h(cfg, sched), 0)
     queue = [e for e in due(sched, xc_for, aired=aired_of(cfg), approved=approved_of(cfg))
-             if Path(e["file"]).exists()]
+             if schedule.video(cfg, e).exists()]
     checked = [e for e in queue if xc_for(e)["after_youtube"]]
     if room and checked:
         public = {e["key"] for e in public_on_youtube(cfg, checked)}

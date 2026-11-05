@@ -1,5 +1,6 @@
 import json
 import tomllib
+from pathlib import Path
 
 import pytest
 from conftest import ROOT
@@ -201,3 +202,24 @@ def test_show_key_typos_warn(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("CLIPPER_DATA", "/volume1/docker/clipper")   # the NAS recorder's own variable
     path.write_text('[shows.kino]\nchannels = ["kinocasino"]\n', encoding="utf-8")
     assert config.problems(config.load(path)) == []
+
+def test_find_falls_back_to_the_user_config(tmp_path, monkeypatch):
+    # The laptop's config is on the NAS share (2026-11-05): shells that didn't inherit the
+    # user-scope CLIPPER_CONFIG still find it, but ./clipper.toml and the env var come first.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CLIPPER_CONFIG", raising=False)
+    monkeypatch.setattr(config, "user_env", lambda name: "//nas/clipper/clipper.toml")
+    assert config.find() == Path("//nas/clipper/clipper.toml")
+    assert config.find("other.toml") == Path("other.toml")
+    (tmp_path / "clipper.toml").write_text("")
+    assert config.find() == Path("clipper.toml")
+    monkeypatch.setenv("CLIPPER_CONFIG", "env.toml")
+    assert config.find() == Path("env.toml")
+
+
+def test_prompts_fall_back_to_the_checkout(tmp_path):
+    path = tmp_path / "clipper.toml"
+    path.write_text("")
+    assert config.load(path, use_local=False)["paths"]["prompts"] == config.CHECKOUT_PROMPTS
+    (tmp_path / "prompts").mkdir()
+    assert config.load(path, use_local=False)["paths"]["prompts"] == tmp_path / "prompts"

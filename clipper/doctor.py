@@ -232,30 +232,22 @@ def check_ffmpeg(cfg: dict, role: str) -> None:
             fail("ffmpeg", f"encoder {codec} failed: {err[:120]}", hint)
 
 
-def font_dirs() -> list[Path]:
-    if sys.platform == "win32":
-        return [Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts",
-                Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft/Windows/Fonts"]
-    if sys.platform == "darwin":
-        return [Path("/Library/Fonts"), Path("/System/Library/Fonts"),
-                Path("/System/Library/Fonts/Supplemental"), Path.home() / "Library/Fonts"]
-    return [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), Path.home() / ".fonts"]
-
-
 def check_fonts(cfg: dict) -> None:
+    from .draw import first_font, font_dirs
+
     tc = cfg["thumbnail"]
-    found = next((f for f in ([tc["font"]] if tc["font"] else []) + tc["fonts"] if Path(f).exists()), None)
+    found = first_font([tc["font"], *tc["fonts"]])
     if found:
         ok("fonts", f"thumbnail font {found}")
     else:
         fail("fonts", "none of [thumbnail] fonts exist", "install Impact (ttf-mscorefonts) or set [thumbnail] font")
     if tc["style"] == "enquirer":
-        cond = next((f for f in tc["condensed_fonts"] if Path(f).exists()), None)
+        cond = first_font(tc["condensed_fonts"])
         (ok if cond else warn)("fonts", f"condensed font {cond}" if cond else "no condensed font for enquirer covers",
                                "" if cond else "install Bahnschrift / Roboto Condensed or set [thumbnail] condensed_fonts")
     wc = cfg["weekly"]
     missing = [k for k in ("headline", "condensed", "serif_italic", "serif_bold_italic", "black", "bold")
-               if not any(Path(f).exists() for f in wc[f"{k}_fonts"])]
+               if not first_font(wc[f"{k}_fonts"])]
     if missing:
         warn("fonts", f"weekly issue fonts missing: {', '.join(missing)}",
              "install Impact, Bahnschrift (or Roboto Condensed), Georgia and Arial, or set [weekly] *_fonts")
@@ -929,10 +921,15 @@ def check_tailnet(cfg: dict, offline: bool) -> None:
     if not st["installed"]:
         return fail("warroom", "[warroom] tailnet is on but Tailscale isn't installed", hint)
     if st["state"] != "Running":
-        return fail("warroom", f"Tailscale is {st['state'] or 'not running'}", "sign in from its tray icon")
+        return fail("warroom", f"Tailscale is {st['state'] or 'not running'}",
+                    "sign in from its tray icon" if sys.platform in ("win32", "darwin") else
+                    "the tailscale container's sign-in link: docker compose logs tailscale (deploy/hub); "
+                    + wiki.page("Phone-access", "on-the-nas"))
     if not st["served"]:
         return fail("warroom", f"Tailscale is up as {st['name']}, but the war room isn't served",
-                    "clipper warroom --tailnet on")
+                    "clipper warroom --tailnet on" if sys.platform in ("win32", "darwin") else
+                    "the tailscale container serves it from deploy/hub/tailscale-serve.json (TS_SERVE_CONFIG): "
+                    "redeploy, then docker compose logs tailscale")
     if not token(cfg):
         warn("warroom", "no war room token: any device on the tailnet can open it",
              "clipper warroom --tailnet on makes one in secrets/")

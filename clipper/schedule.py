@@ -25,6 +25,8 @@ order), so one show's backlog can't hold back another's.
 Slots already assigned in the future stay put, so reruns only fill gaps; --reshuffle
 re-places the automatic ones that aren't uploaded yet. The result is
 schedule.json (the upload step reads it) and each item's Kitsu "Scheduled" column.
+An entry's `file` is relative to [paths] streams (<stream>/<folder>/<name>.mp4), so the
+same schedule.json works on every machine that sees the streams; read it with video().
 """
 
 from __future__ import annotations
@@ -39,6 +41,23 @@ from .states import ENTITY, RELEASE_KIND, split_key
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 # Unscheduled reasons for items that won't go out at all (not just waiting for a slot).
 DROPPED = ("stale", "over the stream's")
+
+
+def stream_file(e: dict) -> str:
+    """An entry's `file` as stored now: <stream>/<folder>/<name> with forward slashes. Entries
+    from before 2026-11-05 hold this machine's absolute path (a Windows UNC path on the
+    laptop); those are cut down to the part from the stream's folder on."""
+    f = str(e["file"]).replace("\\", "/")
+    parts = [x for x in f.split("/") if x]
+    if e.get("stream") in parts:
+        return "/".join(parts[len(parts) - 1 - parts[::-1].index(e["stream"]):])
+    return f
+
+
+def video(cfg: dict, e: dict) -> Path:
+    """A schedule entry's video file on this machine."""
+    f = stream_file(e)
+    return Path(f) if f.startswith("/") or Path(f).is_absolute() else cfg["paths"]["streams"] / f
 
 
 def truthy(v) -> bool:
@@ -113,7 +132,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
             fields = r.get("fields", {})
             score = fields.get("Score") or (heat.get(r["id"], 0) if kind == "segment" else 0)
             item = {"key": f"{sdir.name}/{key}", "stream": sdir.name, "show": show, "kind": kind,
-                    "id": r["id"], "file": str((sdir / r["file"]).resolve()),
+                    "id": r["id"], "file": f"{sdir.name}/" + r["file"].replace("\\", "/"),
                     "title": fields.get("YouTube title") or key,
                     "score": float(score), "stream_start": started,
                     "earliest": earliest, "entity": (ENTITY[r["kind"]], state[key]["entity_id"]),
@@ -149,7 +168,7 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
                                 if missing else "not cut"})
                 continue
             items.append({"key": key, "stream": sdir.name, "show": show, "kind": "compilation",
-                          "id": comp["topic"], "file": str(video.resolve()),
+                          "id": comp["topic"], "file": f"{sdir.name}/compilations/{comp['file']}",
                           "title": comp["title"], "score": comp_score, "stream_start": started,
                           "earliest": earliest, "entity": None, "override_text": "",
                           "segment_keys": seg_keys(comp), "priority": priority,
@@ -230,7 +249,7 @@ def previous(out_path: Path) -> tuple[dict, dict]:
     old, platforms = {}, {}
     if out_path.exists():
         prev_sched = jsonstate.load(out_path)
-        old = {e["key"]: e for e in prev_sched["entries"]}
+        old = {e["key"]: {**e, "file": stream_file(e)} for e in prev_sched["entries"]}
         # Other platforms' records (clipper rumble), kept while an item is unscheduled too.
         platforms = {e["key"]: e["platforms"] for e in prev_sched["entries"]
                      + prev_sched.get("unscheduled", []) if e.get("platforms")}

@@ -467,7 +467,7 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
                 ("tags", "Tags"), ("playlist", "Playlist"))},
             "thumbnail": jpg if ls.exists(jpg) else None,
             "thumb_mtime": ls.mtime(jpg),
-            "file": sdir / st["file"], "preview": sdir / "review" / f"{key}.mp4",
+            "file": sdir / st["file"].replace("\\", "/"), "preview": sdir / "review" / f"{key}.mp4",
             "revision": st.get("revision"), "synced_at": r.get("updated_at"),
         }
     return out

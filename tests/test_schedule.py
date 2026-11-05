@@ -210,3 +210,27 @@ def test_a_pin_that_has_passed_still_goes_at_budget_0(sc):
     placed, skipped, when = plan(items, sc)
     assert skipped == {}
     assert when["s/comp"] == "Sat 14:00" and placed["s/comp"]["source"] == "auto"
+
+
+def test_entry_files_are_stream_relative(tmp_path):
+    # Entries from before 2026-11-05 hold the laptop's UNC path; every machine maps them onto
+    # its own streams root by the part from the stream's folder on (#9).
+    cfg = {"paths": {"streams": tmp_path}}
+    old = {"stream": "kick-1", "file": r"\\192.168.0.155\docker\clipper\streams\kick-1\shorts\v01_x.mp4"}
+    assert schedule.stream_file(old) == "kick-1/shorts/v01_x.mp4"
+    assert schedule.stream_file({"stream": "kick-1", "file": "/data/streams/kick-1/clips/01.mp4"}) == "kick-1/clips/01.mp4"
+    new = {"stream": "kick-1", "file": "kick-1/segments/s02_x.mp4"}
+    assert schedule.stream_file(new) == new["file"]
+    assert schedule.video(cfg, old) == tmp_path / "kick-1" / "shorts" / "v01_x.mp4"
+    assert schedule.video(cfg, new) == tmp_path / "kick-1" / "segments" / "s02_x.mp4"
+    # a path with no stream folder in it is left as it is
+    assert schedule.video(cfg, {"stream": "kick-2", "file": "/elsewhere/a.mp4"}).as_posix() == "/elsewhere/a.mp4"
+
+
+def test_previous_rewrites_old_paths(tmp_path):
+    from clipper import jsonstate
+    path = tmp_path / "schedule.json"
+    jsonstate.write(path, {"entries": [{"key": "kick-1/v01", "stream": "kick-1", "status": "uploaded",
+                                        "file": "//nas/streams/kick-1/shorts/v01.mp4"}]})
+    old, _ = schedule.previous(path)
+    assert old["kick-1/v01"]["file"] == "kick-1/shorts/v01.mp4"
