@@ -97,6 +97,24 @@ def segment_heat(sdir: Path, segments: list[dict]) -> dict[str, float]:
             for s in segments if int(s["end_s"]) > int(s["start_s"])}
 
 
+def release_window(cfg: dict, sdir: Path, meta: dict) -> tuple[datetime, datetime | None]:
+    """When a stream's items may go out (kick_first_hours after it ended) and when they go
+    stale (stale_days after that; None: never). A pre-show is already public on the show's
+    own channel, and a story (#84) is other people's videos: no Kick-first wait, and with
+    publish = "asap" they never go stale."""
+    from .config import for_stream
+
+    scfg = for_stream(cfg, sdir)  # a stream's config.toml may change these
+    ssc = scfg["schedule"]
+    started = datetime.fromisoformat(meta["started_at"])
+    kind = meta.get("kind")
+    earliest = (started if kind in ("preshow", "story")
+                else started + timedelta(seconds=meta["duration_s"], hours=ssc["kick_first_hours"]))
+    asap = kind in ("preshow", "story") and scfg[kind]["publish"] == "asap"
+    return earliest, (earliest + timedelta(days=ssc["stale_days"])
+                      if ssc["stale_days"] and not asap else None)
+
+
 def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[list[dict], list[dict]]:
     """Approved, un-held items from every stream, plus why the others were left out."""
     from .config import for_stream, show_of_channel, stream_channel
@@ -110,17 +128,11 @@ def candidates(cfg: dict, streams_dir: Path, sc: dict, tz: ZoneInfo) -> tuple[li
         meta = jsonstate.load(sdir / "meta.json")
         started = datetime.fromisoformat(meta["started_at"])
         ssc = for_stream(cfg, sdir)["schedule"]  # a stream's config.toml may change these
-        earliest = started + timedelta(seconds=meta["duration_s"], hours=ssc["kick_first_hours"])
-        # A pre-show is already public on the show's own channel, and a story (#84) is other
-        # people's videos: no Kick-first wait.
+        earliest, expires = release_window(cfg, sdir, meta)
         stream_kind = meta.get("kind")
         asap = stream_kind in ("preshow", "story") and for_stream(cfg, sdir)[stream_kind]["publish"] == "asap"
-        if stream_kind in ("preshow", "story"):
-            earliest = started
         priority = bool(ssc["priority"])
         budget = budget_for(ssc, meta["duration_s"] / 3600)
-        expires = (earliest + timedelta(days=ssc["stale_days"])
-                   if ssc["stale_days"] and not asap else None)
         seg_data = jsonstate.load(sdir / "segments.json")
         # Only read for streams that are still current and have a budget to rank against.
         heat = (segment_heat(sdir, seg_data.get("segments", []))
@@ -194,6 +206,17 @@ def fits(when: datetime, taken: list[datetime], sc: dict) -> bool:
     return same_day < sc["max_per_day"] and all(abs(t - when) >= gap for t in taken)
 
 
+def next_free(kind: str, taken: list[datetime], sc: dict, tz: ZoneInfo,
+              after: datetime) -> datetime | None:
+    """The first open `kind` slot after `after` (within horizon_days of it) that the daily cap
+    and min_gap_minutes allow, given the times already taken; None if there is none. The war
+    room's "next open slot" button pins an item there."""
+    for when, k in slots(sc, tz, after.astimezone(tz).date()):
+        if k == kind and when > after and when not in taken and fits(when, taken, sc):
+            return when
+    return None
+
+
 def take_turns(items: list[dict]) -> list[dict]:
     """One queue per show, merged so the shows alternate (each keeps its own order)."""
     by_show: dict[str, list[dict]] = {}
@@ -213,7 +236,7 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
     streams_dir: Path = cfg["paths"]["streams"]
     out_path: Path = cfg["paths"]["schedule"]
     now = datetime.now(tz)
-    start = date.fromisoformat(sc["start"]) if sc["start"] else now.date() + timedelta(days=1)
+    start = first_day(sc, now)
 
     if sync_first and dry_run:  # a sync writes review.json and can post Kitsu comments
         print("dry run: decisions as last synced (review.json), Kitsu not read")
@@ -242,6 +265,26 @@ def run(cfg: dict, sync_first: bool = True, write_kitsu: bool = True, dry_run: b
     for e in entries:
         print(f"  {entry_line(e, tz)}")
     return result
+
+
+def first_day(sc: dict, now: datetime) -> date:
+    """The first day new automatic slots are filled from: [schedule] start, or tomorrow."""
+    return date.fromisoformat(sc["start"]) if sc["start"] else now.date() + timedelta(days=1)
+
+
+def with_pins(cfg: dict, pins: dict[str, str]) -> tuple[dict, list]:
+    """What a replan would do with these items pinned ({key: Publish at text}), from the
+    decisions as last synced: (entries by key, the ones left out). Writes nothing."""
+    sc = cfg["schedule"]
+    tz = ZoneInfo(sc["timezone"])
+    now = datetime.now(tz)
+    items, skipped = candidates(cfg, cfg["paths"]["streams"], sc, tz)
+    for it in items:
+        if it["key"] in pins:
+            it["override_text"] = pins[it["key"]]
+    old, platforms = previous(cfg["paths"]["schedule"])
+    return plan(items, skipped, old, platforms, sc, tz, now, first_day(sc, now), False,
+                lead=timedelta(minutes=cfg["youtube"]["min_lead_minutes"]))
 
 
 def previous(out_path: Path) -> tuple[dict, dict]:

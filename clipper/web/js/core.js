@@ -275,12 +275,17 @@ function renderSchedule() {
   $("#schedSub").textContent = `${STATE.counts.scheduled_7d} in 7 days`;
   const free = {};
   if (SHOWFREE) for (const f of STATE.free_slots || []) (free[dayKey(f.at)] ??= []).push(f);
-  const uns = STATE.items.filter(STATUS.unslotted);
+  // Over budget or stale too (the scheduler won't place those, a pin will), newest stream first.
+  const uns = STATE.items.filter(i => i.decision === "approved" && !i.scheduled && !i.uploaded)
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || a.ref.localeCompare(b.ref));
+  const segs = uns.some(i => i.kind === "segment" && !i.hold);
   $("#schedTools").innerHTML = `<label title="Show the open slots to drop items on"><input type="checkbox" id="showFree" ${SHOWFREE ? "checked" : ""}> Open slots</label>
     <span class="unpin" data-unpin>⇣ drop here to unpin</span>
+    ${segs ? `<button class="btn" data-nextkind="segment" title="Pin each approved segment without a slot to the next open segment slot, before it goes stale (a preview first)">⇥ Segments to open slots…</button>` : ""}
     <span>max ${STATE.rules?.max_per_day ?? "?"}/day · ${STATE.rules?.min_gap_minutes ?? "?"} min apart · drag a slot to move it</span>`;
-  $("#unslotted").innerHTML = uns.length ? `<div class="ss" style="color:var(--faint);font-size:11px">Approved, no slot yet (${uns.length}): drag onto an open slot</div>`
-    + uns.slice(0, 60).map(i => `<div class="chip" draggable="true" data-dref="${esc(i.ref)}" data-dkind="${esc(i.kind === "pick" ? "clip" : i.kind)}" title="${esc(i.title)}"><span class="bar ${esc(i.kind === "pick" ? "clip" : i.kind)}" style="width:4px;height:16px;border-radius:2px;display:block"></span><span>${esc(i.title)}</span></div>`).join("") : "";
+  const why = i => i.hold ? `<span class="why">held</span>` : i.dropped ? `<span class="why" title="${esc(i.dropped)}">${i.dropped.startsWith("stale") ? "stale" : "over budget"}</span>` : "<span></span>";
+  $("#unslotted").innerHTML = uns.length ? `<div class="ss" style="color:var(--faint);font-size:11px">Approved, no slot yet (${uns.length}): drag onto an open slot, or ⇥ for the next one</div>`
+    + uns.slice(0, 60).map(i => `<div class="chip" draggable="true" data-dref="${esc(i.ref)}" data-dkind="${esc(i.kind === "pick" ? "clip" : i.kind)}" title="${esc(i.title)}"><span class="bar ${esc(i.kind === "pick" ? "clip" : i.kind)}" style="width:4px;height:16px;border-radius:2px;display:block"></span><span class="t">${esc(i.title)}</span>${why(i)}${!i.hold && i.kind !== "compilation" ? `<button class="nx" data-nextslot="${esc(i.ref)}" title="Pin to the next open slot (a preview first)">⇥</button>` : "<span></span>"}</div>`).join("") : "";
   $("#unslotted").hidden = !uns.length;
   for (const d of Object.keys(free)) days[d] ??= [];
   $("#schedule").innerHTML = Object.keys(days).sort().map(d => {
