@@ -110,6 +110,23 @@ def test_release_leaves_a_successors_lock(tmp_path):
     assert lock.read_text() == "other host pid 1 2026-11-04 00:00:00 abc\n"
 
 
+def test_slow_ownership_read_is_not_done(tmp_path, monkeypatch):
+    # A read that crosses the caller's 5 s must report "not deleted" so the thread takes over.
+    lock = tmp_path / "s.json.lock"
+    lock.write_text("tok\n")
+    clock = [1000.0]
+    monkeypatch.setattr(jsonstate.time, "monotonic", lambda: clock[0])
+    real_read = type(lock).read_text
+
+    def slow_read(self, *a, **kw):
+        clock[0] += 6
+        return real_read(self, *a, **kw)
+
+    monkeypatch.setattr(type(lock), "read_text", slow_read)
+    assert jsonstate._unlink_own(lock, "tok\n", 1005.0) is False
+    assert lock.exists()
+
+
 def test_release_past_the_cutoff_leaves_the_lock(tmp_path, monkeypatch):
     # Held until a waiter may be taking it over as stale, the holder doesn't touch it at all:
     # read-then-delete could otherwise hit the waiter's new lock in between.
