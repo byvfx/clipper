@@ -176,6 +176,13 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
     kept = [m for m in moments if item_of(m).get("key") not in struck]
     if len(kept) < len(moments):
         print(f"  {len(moments) - len(kept)} moments left out: their source is struck in dossier.json")
+    # ... and so is a timeline or conflict line that only struck sources and their moments back
+    gone = ({x["id"] for x in dj.get("sources", []) if x.get("struck") and x.get("id")}
+            | {m["id"] for m in moments} - {m["id"] for m in kept})
+
+    def backed(x: dict) -> bool:
+        return not x.get("cites") or any(c not in gone for c in x["cites"])
+
     moments = kept
     if not moments:
         raise ClipperError(f"story {slug}: every moment's source is struck in dossier.json")
@@ -191,8 +198,9 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
                    f"    {m['why']}" for m in moments)
     angles = "\n".join(f"- {a['angle']} ({', '.join(a['moments'])})" for a in dossier.get("angles", []))
     # the narration may only say what the dossier shows: its dated timeline and the two sides
-    timeline = "\n".join(f"- {x['date'] or 'undated'} [{x['status']}] {x['what']}" for x in dossier.get("timeline", []))
-    conflicts = "\n".join(f"- {x['what']}" for x in dossier.get("conflicts", []))
+    timeline = "\n".join(f"- {x['date'] or 'undated'} [{x['status']}] {x['what']}"
+                         for x in dossier.get("timeline", []) if backed(x))
+    conflicts = "\n".join(f"- {x['what']}" for x in dossier.get("conflicts", []) if backed(x))
     told = (f"Timeline:\n{timeline or '(none)'}\n\nConflicts:\n{conflicts or '(none)'}\n\n") if narrated else ""
     user = (f"Story: {b['brief']}\nShow: {show_name}\n\nSummary: {dossier.get('summary') or '(no dossier)'}\n\n"
             f"{told}Angles:\n{angles or '(none)'}\n\n<moments>\n{ms}\n</moments>")
@@ -491,7 +499,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
         raise ClipperError(f"story.json: the narration of {', '.join(bad)} has a word [bleep] lists; "
                            "rewrite it (tldr, the part's lead_in or close) and cut again")
     nc = narrator(cfg) if any("card" in x for x in seq) else None
-    timing = [rc["card_s"], rc["vo_pad_s"], sc["read_wpm"]]
+    timing = [rc["card_s"], rc["vo_pad_s"], sc["read_wpm"], bleeper.rx and bleeper.rx.pattern]   # and what cards mask
     sig = signature(data, used, seq, nc, timing)
     work = sdir / "work"
     work.mkdir(parents=True, exist_ok=True)

@@ -215,10 +215,14 @@ def test_a_struck_sources_moments_are_left_out(cfg, planned):
     save_catalog(d, cat)
     dj = jsonstate.load(d / "dossier.json")
     dj["sources"] = [{"id": "S01", "key": "yt:bbbbbbbbbbb", "struck": True}]
+    dj["dossier"]["timeline"].append({"date": "2026-10-31", "what": "Chat calls it a lie.", "status": "reported",
+                                      "cites": ["M03", "S01"]})   # backed only by what was struck
     jsonstate.write(d / "dossier.json", dj)
     llm = EditLLM(["M01", "M03"])
     data = story_edit.plan(cfg, planned, claude=llm)
     assert "M03" not in llm.user and [p["moments"] for p in data["parts"]] == [["M01"]]
+    assert "Chat calls it a lie" not in llm.user
+    assert "DSP says 590 on stream." in llm.user and "He says 590; chat says lower." in llm.user   # M01 still backs them
 
 
 def test_check_parts():
@@ -345,7 +349,7 @@ def test_cut_reads_the_narration_as_cards(cfg, planned, monkeypatch):
     cfg["bleep"].update(mode="bleep", patterns=["part"], profanity=False)   # a listed word on a card: masked
     cfg["_resolved"].clear()
     stills.clear()
-    story_edit.cut(cfg, planned, review=False, force=True)
+    story_edit.cut(cfg, planned, review=False)      # a new pattern alone re-cuts the cards
     assert stills[1][1] == "P*** M01"
     cfg["bleep"]["patterns"] = ["report"]           # ... in a read: refused, rewritten by hand
     cfg["_resolved"].clear()
