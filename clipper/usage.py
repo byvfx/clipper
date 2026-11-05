@@ -16,12 +16,14 @@ crash before the line was written) still shows:
                 openrouter_key): today, this week, this month, all time, and what's left of the
                 key's limit; /api/v1/credits for the account balance when the key may read it.
 
-Each provider is asked at most every 5 minutes (modalmon.cached); the last good answer is
-kept, marked stale, when one fails.
+Each provider is asked at most every 5 minutes, failures included, and by one request at a
+time (throttled); the last good answer is kept, marked stale, when one fails.
 """
 from __future__ import annotations
 
 import os
+import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -150,19 +152,41 @@ def logged(cfg: dict, month: str) -> dict:
     for r in costs.read(Path(cfg["paths"]["costs"])):
         if r.get("kind") == "llm" and str(r.get("ts", "")).startswith(month):
             prov = r.get("provider") or "anthropic"
-            out[prov] = round(out.get(prov, 0.0) + float(r.get("usd") or 0), 4)
+            out[prov] = out.get(prov, 0.0) + float(r.get("usd") or 0)  # rounded only when shown
     return out
 
 
-def status(cfg: dict) -> dict:
-    from .modalmon import cached
+_LOCKS: dict[str, threading.Lock] = {}
+_LAST: dict[str, tuple[float, dict]] = {}  # key -> (when last asked, last answer)
+_GOOD: dict[str, dict] = {}
 
+
+def throttled(key: str, build) -> dict:
+    """build() at most once per TTL per key, failures included, and one at a time: a caller
+    that arrives during a refresh waits for it. A failure keeps the last good answer, marked
+    stale, else the error."""
+    lock = _LOCKS.setdefault(key, threading.Lock())
+    with lock:
+        hit = _LAST.get(key)
+        if hit and time.time() - hit[0] < TTL:
+            return hit[1]
+        try:
+            value = build()
+            _GOOD[key] = value
+        except Exception as e:  # noqa: BLE001  # a panel, not a reason to fail the page
+            err = f"{type(e).__name__}: {e}"[:300]
+            value = {**_GOOD[key], "stale": err[:200]} if key in _GOOD else {"error": err}
+        _LAST[key] = (time.time(), value)
+        return value
+
+
+def status(cfg: dict) -> dict:
     now = datetime.now(UTC)
     month = now.strftime("%Y-%m")
     ours = logged(cfg, month)
     return {"at": now.isoformat(timespec="seconds"), "month": month,
-            "claude": {**cached("usage:claude", TTL, lambda: claude(cfg)), "logged_usd": round(ours.get("anthropic", 0.0), 2)},
-            "openrouter": {**cached("usage:openrouter", TTL, lambda: openrouter(cfg)),
+            "claude": {**throttled("claude", lambda: claude(cfg)), "logged_usd": round(ours.get("anthropic", 0.0), 2)},
+            "openrouter": {**throttled("openrouter", lambda: openrouter(cfg)),
                            "logged_usd": round(ours.get("openrouter", 0.0), 2)}}
 
 
