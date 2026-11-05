@@ -177,7 +177,8 @@ def prompt_files(cfg: dict) -> list[str]:
     iv = cfg["investigate"]["prompt_version"]
     names += [f"investigate_{step}_{iv}" for step in ("facts", "leads", "check", "confirm")]
     names += [f"swarm_{step}_{cfg['swarm']['prompt_version']}" for step in ("plan", "worker")]
-    names += [f"story_{step}_{cfg['story']['prompt_version']}" for step in ("triage", "expand", "moments", "dossier", "edit")]
+    names += [f"story_{step}_{cfg['story']['prompt_version']}" for step in ("triage", "expand", "moments", "dossier")]
+    names.append(f"story_edit_{cfg['story']['edit_prompt_version']}")
     return [f"{n}.md" for n in names] + [wc["article_example"]]
 
 
@@ -566,11 +567,21 @@ def check_x(cfg: dict) -> None:
 
 
 def check_narrate(cfg: dict) -> None:
-    """Optional: only `clipper narrate` needs it."""
+    """Optional: only `clipper narrate`, receipts' voice-over and story narration need it."""
     from .narrate import find_key, settings
 
     nc = settings(cfg)
     where = f"${nc['key_env']} or {nc['key_file']}"
+    # a show can set its own narrator (and key), so each show's story settings are checked
+    unread = []   # each with where its own key would be
+    for key in ["", *_root(cfg)["shows"]]:
+        c = for_show(cfg, key)
+        sn = settings(c)
+        if c["story"]["narrate"] and c["story"]["voice_id"] and not find_key(sn):
+            unread.append(f"{key or 'base'}: ${sn['key_env']} or {sn['key_file']}")
+    if unread:
+        fail("keys", f"[story] voice_id is set but there's no ElevenLabs key ({'; '.join(unread)}): "
+             "story narration can't be read", wiki.page("Story-dossiers", "narration"))
     if not find_key(nc):
         if nc["voice_id"]:
             fail("keys", f"[narrate] voice_id is set but there's no ElevenLabs key ({where})",

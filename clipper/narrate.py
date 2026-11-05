@@ -172,6 +172,25 @@ def speak(text: str, nc: dict, out: Path, voice_id: str = "", overrides: dict | 
     return out
 
 
+def read(nc: dict, text: str, folder: Path) -> Path | None:
+    """One line read once per text, voice and settings, kept in folder (receipts' and stories'
+    voice-overs); None for an empty line."""
+    import hashlib
+    import json
+
+    if not text.strip():
+        return None
+    sig = json.dumps([text, nc["voice_id"], nc["tts_model"], nc["tts_settings"]], sort_keys=True)
+    name = hashlib.sha1(sig.encode()).hexdigest()[:12]
+    # a read voiced before the format changed is still that read: reuse it rather than pay again
+    old = sorted(folder.glob(f"{name}.*"))
+    out = old[0] if old else folder / f"{name}.{ext(nc['output_format'])}"
+    if not out.exists():
+        folder.mkdir(parents=True, exist_ok=True)
+        speak(text, nc, out)
+    return out
+
+
 def voices(nc: dict, search: str = "", accent: str = "", gender: str = "", age: str = "") -> None:
     h = {"xi-api-key": key(nc)}
     mine = requests.get(f"{API}/v1/voices", headers=h, timeout=30)

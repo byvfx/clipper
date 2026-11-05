@@ -50,14 +50,21 @@ def moment(mid, item, t, quote, ours=False, channel="DSP Meltdown", role="event"
 
 
 class EditLLM:
-    def __init__(self, parts):
-        self.cost, self.parts, self.user = 0.0, parts, ""
+    """The edit model: narration (v2) when the schema asks for it; a lead_in for the moments in leads."""
+    def __init__(self, parts, leads=()):
+        self.cost, self.parts, self.leads, self.user, self.schema = 0.0, parts, leads, "", None
 
     def json_call(self, model, system, user, schema, effort):
-        assert schema is story_edit.PLAN_SCHEMA
-        self.user = user
-        return {"title": "DSP's credit score", "topic": "DSP credit score", "summary": "s", "description": "d",
-                "figures": ["DSP"], "parts": [{"moment": m, "chapter": f"Part {m}", "why": "w"} for m in self.parts]}, {}
+        assert schema in (story_edit.PLAN_SCHEMA, story_edit.NARRATED_SCHEMA)
+        self.user, self.schema = user, schema
+        narrated = schema is story_edit.NARRATED_SCHEMA
+        out = {"title": "DSP's credit score", "topic": "DSP credit score", "summary": "s", "description": "d",
+               "figures": ["DSP"], "parts": [{"moment": m, "chapter": f"Part {m}", "why": "w",
+                                              **({"lead_in": f"October 30: {m}." if m in self.leads else ""}
+                                                 if narrated else {})} for m in self.parts]}
+        if narrated:
+            out.update(tldr="DSP says his score is 590. Nobody buys it.", close="He hasn't shown the report.")
+        return out, {}
 
 
 @pytest.fixture
@@ -81,7 +88,10 @@ def planned(cfg, tmp_path):
     for m in ms:
         m["subject"] = d.name
     jsonstate.write(d / "moments.json", {"moments": ms})
-    jsonstate.write(d / "dossier.json", {"dossier": {"summary": "He said 590.", "angles": []}})
+    jsonstate.write(d / "dossier.json", {"dossier": {
+        "summary": "He said 590.", "angles": [],
+        "timeline": [{"date": "2026-10-30", "what": "DSP says 590 on stream.", "status": "shown", "cites": ["M01"]}],
+        "conflicts": [{"what": "He says 590; chat says lower.", "cites": ["M01", "M03"]}]}})
     return slug
 
 
@@ -133,7 +143,7 @@ def test_chapters_are_a_part_each_at_least_ten_seconds_apart():
 
 
 def test_cut_writes_one_segment_with_its_words_chapters_and_sources(cfg, planned, monkeypatch):
-    cfg["story"]["show"] = "kino"
+    cfg["story"].update(show="kino", narrate=False)   # the clips alone (the narration: below)
     story_edit.plan(cfg, planned, claude=EditLLM(["M01", "M03", "M02"]))
     sdir = story_edit.stream_dir(cfg, planned)
     data = jsonstate.load(sdir / "story.json")
@@ -158,6 +168,7 @@ def test_cut_writes_one_segment_with_its_words_chapters_and_sources(cfg, planned
     assert [p["channel"] for p in jsonstate.load(sdir / "story.json")["parts"]] ==         ["DSP Meltdown", "Phil Fan", "Channel 404"]   # yt-dlp's uploader for the site's name
     seg = jsonstate.load(final.with_suffix(".json"))
     assert (seg["start_s"], seg["end_s"], seg["bleeps"]) == (0.0, 60.0, 3)
+    assert seg["signature"][1][3] == "Phil Fan"   # saved after yt-dlp named the channel: the next cut matches
     assert [c["t"] for c in seg["chapters"]] == [0, 20, 40]
     words = [json.loads(x) for x in (sdir / "words.jsonl").read_text(encoding="utf-8").splitlines()]
     first = next(w for w in words if w["word"] == "Phil")    # P02 starts 20 s into the video
@@ -204,10 +215,14 @@ def test_a_struck_sources_moments_are_left_out(cfg, planned):
     save_catalog(d, cat)
     dj = jsonstate.load(d / "dossier.json")
     dj["sources"] = [{"id": "S01", "key": "yt:bbbbbbbbbbb", "struck": True}]
+    dj["dossier"]["timeline"].append({"date": "2026-10-31", "what": "Chat calls it a lie.", "status": "reported",
+                                      "cites": ["M03", "S01"]})   # backed only by what was struck
     jsonstate.write(d / "dossier.json", dj)
     llm = EditLLM(["M01", "M03"])
     data = story_edit.plan(cfg, planned, claude=llm)
     assert "M03" not in llm.user and [p["moments"] for p in data["parts"]] == [["M01"]]
+    assert "Chat calls it a lie" not in llm.user
+    assert "DSP says 590 on stream." in llm.user and "He says 590; chat says lower." in llm.user   # M01 still backs them
 
 
 def test_check_parts():
@@ -248,3 +263,111 @@ def test_source_links():
     assert story_edit.source_link({**p, "url": "https://kick.com/donflurgundy"}) == "https://kick.com/donflurgundy"
     assert story_edit.source_link({**p, "ours": False, "source": "odysee", "url": "lbry://x",
                                    "page": "https://odysee.com/@a/x"}) == "https://odysee.com/@a/x at 0:09:38"
+
+
+def test_plan_writes_the_narration_from_the_dossier(cfg, planned):
+    cfg["story"]["show"] = "kino"
+    llm = EditLLM(["M01", "M03"], leads=["M01"])
+    data = story_edit.plan(cfg, planned, claude=llm)
+    assert llm.schema is story_edit.NARRATED_SCHEMA and data["prompt_version"] == "v2"
+    assert "Timeline:\n- 2026-10-30 [shown] DSP says 590 on stream." in llm.user
+    assert "Conflicts:\n- He says 590; chat says lower." in llm.user
+    assert data["tldr"].startswith("DSP says") and data["close"] == "He hasn't shown the report."
+    assert [p["lead_in"] for p in data["parts"]] == ["October 30: M01.", ""]
+    cfg["story"]["edit_prompt_version"] = "v1"     # the clips-only edit: the old schema, no timeline
+    cfg["_resolved"].clear()                        # for_show caches each show's config
+    data = story_edit.plan(cfg, planned, force=True, claude=llm)
+    assert llm.schema is story_edit.PLAN_SCHEMA and "Timeline:" not in llm.user
+    assert data["tldr"] == "" and story_edit.sequence(data, data["parts"], True) == \
+        [{"part": p} for p in data["parts"]]
+
+
+def test_cut_reads_the_narration_as_cards(cfg, planned, monkeypatch):
+    from clipper import narrate
+
+    cfg["story"].update(show="kino", voice_id="narrator1", tts_settings={"speed": 1.0})
+    cfg["narrate"]["voice_id"] = "mother-moo"
+    story_edit.plan(cfg, planned, claude=EditLLM(["M01", "M03"], leads=["M01"]))
+    sdir = story_edit.stream_dir(cfg, planned)
+    reads, stills = [], []
+
+    def fake_read(nc, text, folder):
+        reads.append((nc["voice_id"], nc["tts_settings"], text))
+        return folder / "vo.wav"
+
+    def fake_still(work, name, lines, rc, bug, dst, vo=None, min_s=0.0, extra=""):
+        stills.append((name, lines[0][4], vo is not None, min_s))
+        dst.write_bytes(b"c")
+
+    def fake_clip(cfg, idir, r, src, fonts, bug, bleeper, dst, label="THEN: ", seek=False):
+        dst.write_bytes(b"x")
+        return 0
+
+    monkeypatch.setattr(narrate, "read", fake_read)
+    monkeypatch.setattr(receipts, "still", fake_still)
+    monkeypatch.setattr(receipts, "clip", fake_clip)
+    monkeypatch.setattr(receipts, "first_font", lambda paths: ROOT)
+    monkeypatch.setattr(receipts, "join", lambda parts, lst, dst: dst.write_bytes(b"v"))
+    monkeypatch.setattr(story_edit, "fetch", lambda cfg, p, dst: dst.write_bytes(b"s") and "")
+    monkeypatch.setattr(media, "duration", lambda p: 4.0 if p.stem == "vo" else    # a read: shorter than its card
+                        10.0 if p.stem.endswith(("tldr", "_lead", "close")) else 20.0)
+    final = story_edit.cut(cfg, planned, review=False)
+    # the short version, P01's lead-in, P01, P02 (no lead-in: its chapter starts at the clip), the close
+    assert [n for n, *_ in stills] == ["tldr", "P01_lead", "close"]
+    assert stills[0][1] == "THE SHORT VERSION" and stills[1][1] == "PART M01" and stills[0][2]
+    # read to render, then again (from the cache) to time the captions
+    assert {v for v, _, _ in reads} == {"narrator1"} and reads[0][1] == {"speed": 1.0}   # not Mother Moo
+    assert [x for _, _, x in reads[:3]] == [x for _, _, x in reads[3:]]
+    seg = jsonstate.load(final.with_suffix(".json"))
+    assert seg["duration_s"] == 10 + 10 + 20 + 20 + 10
+    assert [(c["t"], c["title"]) for c in seg["chapters"]] == \
+        [(0, "The short version"), (10, "Part M01"), (40, "Part M03"), (60, "Where it stands")]
+    m = jsonstate.load(sdir / "meta.json")
+    assert [s["t"] for s in m["sources"]] == [20, 40]
+    words = [json.loads(x) for x in (sdir / "words.jsonl").read_text(encoding="utf-8").splitlines()]
+    tldr = [w for w in words if w["start"] < 10]
+    assert " ".join(w["word"] for w in tldr) == "DSP says his score is 590. Nobody buys it."
+    assert tldr[-1]["end"] == 4.0 and len({w["seg"] for w in tldr}) == 2   # over the read, not the card
+    stills.clear()
+    story_edit.cut(cfg, planned, review=False)      # nothing changed
+    assert stills == []
+    data = jsonstate.load(sdir / "story.json")
+    data["tldr"] = "DSP says 590."                  # a line edited by hand: the video again
+    jsonstate.write(sdir / "story.json", data)
+    story_edit.cut(cfg, planned, review=False)
+    assert [n for n, *_ in stills] == ["tldr", "P01_lead", "close"] and reads[-3][2] == "DSP says 590."
+    cfg["story"]["voice_id"] = ""                   # no narrator: silent cards, up long enough to read
+    cfg["_resolved"].clear()
+    stills.clear()
+    story_edit.cut(cfg, planned, review=False)
+    assert stills and all(not voiced and min_s > 2 for _, _, voiced, min_s in stills)
+    cfg["story"]["read_wpm"] = 100                  # a slower pace: the cards again
+    cfg["_resolved"].clear()
+    stills.clear()
+    story_edit.cut(cfg, planned, review=False)
+    assert len(stills) == 3
+    cfg["bleep"].update(mode="bleep", patterns=["part"], profanity=False)   # a listed word on a card: masked
+    cfg["_resolved"].clear()
+    stills.clear()
+    story_edit.cut(cfg, planned, review=False)      # a new pattern alone re-cuts the cards
+    assert stills[1][1] == "P*** M01"
+    cfg["bleep"]["patterns"] = ["report"]           # ... in a read: refused, rewritten by hand
+    cfg["_resolved"].clear()
+    with pytest.raises(ClipperError, match="narration of close"):
+        story_edit.cut(cfg, planned, review=False)
+    assert not any(w["start"] < 10 for w in
+                   map(json.loads, (sdir / "words.jsonl").read_text(encoding="utf-8").splitlines()))
+
+
+def test_card_lines_and_reading_time():
+    lines = story_edit.card_lines((ROOT, ROOT), {"header": "THE SHORT VERSION", "title": "A title",
+                                                 "text": "word " * 40})
+    assert [ln[1] for ln in lines] == [64, 80, 46] and [ln[3] for ln in lines] == sorted(ln[3] for ln in lines)
+    assert all(len(row) <= 62 for row in lines[2][4].split("\n"))
+    rows = lines[2][4].count("\n") + 1
+    bottom = lines[2][3] + rows * (46 + 14) - 14
+    assert abs(lines[0][3] - (receipts.H - bottom)) <= 2          # the block is centred
+    assert story_edit.reading_s({"text": "one two three four"}, 120) == 3.0
+    words, n = story_edit.read_words("One two. Three!", 5.0, 3.0, 7)
+    assert [w["seg"] for w in words] == [7, 7, 8] and n == 9
+    assert words[0]["start"] == 5.0 and words[-1]["end"] == 8.0
