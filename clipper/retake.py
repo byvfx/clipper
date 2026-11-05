@@ -90,8 +90,18 @@ SCHEMA_BASE = {
 }
 
 
+def comp_segments(sdir: Path, st: dict) -> list[dict]:
+    """A compilation's segments (segments.json rows), in order."""
+    data = load(sdir / "segments.json", {})
+    name = Path(st["file"].replace("\\", "/")).name
+    comp = next(c for c in data.get("compilations", []) if c["file"] == name)
+    by_id = {s["id"]: s for s in data["segments"]}
+    return [by_id[i] for i in comp["segments"]]
+
+
 def window(sdir: Path, st: dict) -> tuple[float, float] | None:
-    """The item's current in/out points in stream seconds (None for compilations)."""
+    """The item's current in/out points in stream seconds; a compilation's are its first
+    segment's start and its last segment's end."""
     kind = st["kind"]
     if kind == "pick":
         c = next(r for r in load(sdir / "candidates.json", {})["pass_a"] if r["id"] == st["id"])
@@ -102,6 +112,9 @@ def window(sdir: Path, st: dict) -> tuple[float, float] | None:
     if kind == "segment":
         s = next(x for x in load(sdir / "segments.json", {})["segments"] if x["id"] == st["id"])
         return s["start_s"], s["end_s"]
+    if kind == "compilation":
+        segs = comp_segments(sdir, st)
+        return segs[0]["start_s"], segs[-1]["end_s"]
     return None
 
 
@@ -140,9 +153,15 @@ def context(cfg: dict, sdir: Path, key: str, st: dict, row: dict) -> str:
     if win:
         a, b = win
         words = load_words(sdir)
-        lines.append(f"Current cut: {a:.1f} to {b:.1f} s ({b - a:.0f} s long)")
+        if st["kind"] == "compilation":
+            segs = comp_segments(sdir, st)
+            lines.append(f"Current cut: starts at {a:.1f} s (start of its first segment), ends at "
+                         f"{b:.1f} s (end of its last segment). Segments: " + "; ".join(
+                             f"{s['start_s']:.1f}-{s['end_s']:.1f} s {s['title']!r}" for s in segs))
+        else:
+            lines.append(f"Current cut: {a:.1f} to {b:.1f} s ({b - a:.0f} s long)")
         pad = cfg["retake"]["context_s"]
-        if st["kind"] == "segment" and b - a > 4 * pad:
+        if st["kind"] in ("segment", "compilation") and b - a > 4 * pad:
             parts = [(max(0, a - pad), a + pad, "around the start"),
                      (b - pad, b + pad, "around the end")]
         else:
@@ -175,10 +194,6 @@ def plan(cfg: dict, sdir: Path, key: str, st: dict, row: dict, note: str) -> tup
                "unsupported": f"The model declined this note ({meta.get('refusal')})."}
     if st["kind"] != "short":
         out["layout"] = None
-    if st["kind"] == "compilation" and out.get("trim"):
-        out["trim"] = None
-        out["unsupported"] = " ".join(filter(None, [out.get("unsupported"),
-                                                    "Compilations can't be trimmed."]))
     if st["kind"] == "short":
         out["thumbnail"] = None
     return out, claude.cost
@@ -197,17 +212,21 @@ def snap_trim(cfg: dict, sdir: Path, st: dict, trim: dict) -> tuple[float, float
     if b - a < 3:
         raise ValueError(f"trim {a:.1f}-{b:.1f} s is too short")
     sc = cfg["shorts"]
-    if st["kind"] in ("pick", "short"):
-        words = load_words(sdir)
+    words = load_words(sdir)
+    cur = window(sdir, st)
+    sa, sb = snap_window(words, a, b, sc["pad_s"])  # never in the middle of a word
+    if st["kind"] in ("pick", "short") or not cur:
+        a, b = sa, sb
+    else:  # a long video's end the note didn't move isn't pulled back into a silence
+        a = sa if abs(a - cur[0]) >= 0.3 else cur[0]
+        b = sb if abs(b - cur[1]) >= 0.3 else cur[1]
+    # #77 L16: no Short under min_s. Snapping can drop silence at the ends, so the
+    # check comes after it, and the grown window is snapped again.
+    if st["kind"] == "short" and b - a < sc["min_s"]:
+        a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"], 0.0, end)
         a, b = snap_window(words, a, b, sc["pad_s"])
-        # #77 L16: no Short under min_s. Snapping can drop silence at the ends, so the
-        # check comes after it, and the grown window is snapped again.
-        if st["kind"] == "short" and b - a < sc["min_s"]:
-            a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"], 0.0, end)
-            a, b = snap_window(words, a, b, sc["pad_s"])
     if st["kind"] == "short":
         b = min(b, a + sc["max_s"])
-    cur = window(sdir, st)
     if cur and abs(cur[0] - a) < 0.3 and abs(cur[1] - b) < 0.3:
         return None  # what it already is
     return round(a, 3), round(b, 3)
@@ -292,6 +311,32 @@ def trim_segment(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> list[st
     return [f"comp-{c['file'].removesuffix('.mp4')}" for c in comps]
 
 
+def comp_edits(segs: list[dict], a: float, b: float) -> list[tuple[dict, float, float]]:
+    """(segment, new start, new end) for a compilation trimmed to a-b: its start is the first
+    segment's, its end the last's; the segments between stay as they are."""
+    first, last = segs[0], segs[-1]
+    out = []
+    if abs(a - first["start_s"]) >= 0.3:
+        out.append((first, a, b if first is last else first["end_s"]))
+    if abs(b - last["end_s"]) >= 0.3 and not (out and first is last):
+        out.append((last, last["start_s"], b))
+    for seg, x, y in out:
+        if y - x < 3:
+            raise ClipperError(f"the trim would cut away all of {seg['id']}; retake the "
+                               f"segment itself or drop it from the compilation")
+    return out
+
+
+def trim_compilation(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> list[tuple[str, str]]:
+    """Trim the compilation's first and/or last segment (which re-cuts the compilation).
+    Returns (item key, thumbs asset id) of every video that changed."""
+    out = []
+    for seg, x, y in comp_edits(comp_segments(sdir, st), a, b):
+        out.append((Path(seg["file"]).stem, seg["id"]))
+        out += [(k, k) for k in trim_segment(cfg, sdir, {"id": seg["id"]}, x, y)]
+    return list(dict.fromkeys(out))
+
+
 def thumb_asset_id(st: dict) -> str:
     return st["id"]  # thumbs asset ids: s02, t20, comp-<topic>
 
@@ -316,6 +361,11 @@ def apply(cfg: dict, sdir: Path, key: str, st: dict, p: dict, who: str) -> tuple
                 for comp in trim_segment(cfg, sdir, st, a, b):
                     videos.append(comp)
                     thumb_ids.append(comp)
+            elif st["kind"] == "compilation":
+                for k, tid in trim_compilation(cfg, sdir, st, a, b):
+                    if k != key:
+                        videos.append(k)
+                        thumb_ids.append(tid)
             videos.append(key)
             if st["kind"] != "short":
                 thumb_ids.append(thumb_asset_id(st))
