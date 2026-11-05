@@ -94,6 +94,29 @@ T7, route by confidence (the docs' pattern): Jev answers when it is sure, Haiku 
 Best (claim): AUC 0.72; keeping 95% of fact pieces still sends 89% of the words. Not worth it.
 Length alone: AUC 0.60.
 
+## Pre-upload check on Shorts (T9)
+
+`python lab/guard.py [--model M]`: eight atomic nouls on a Short as it stands before upload
+(speaker-tagged transcript of its cut, 8 s lead-in, title, hook; the live set also has the final
+description): casino, outside_audio, needs_context, misrepresents, title_mismatch, misattributed,
+starts_mid, ends_early. 293 Shorts, 304k tokens ($0.013).
+
+- Labelled set: Haiku's Shorts that Pass B dropped for a safety reason (its reason matches
+  context / misrepresent / someone else's audio / gambling: 62) vs Pass B's picks (116). Every
+  question is a coin flip (AUC 0.44-0.55); only gambling (n=7) 0.70 and misrepresents (n=17) 0.64.
+  Haiku's own low score does better (0.65). What is left after Haiku's flags is editorial judgment,
+  which Jev can't make; window-level flags (T6) looked good because they were the obvious cases.
+- Live set (115 approved Shorts, final titles): needs_context and misrepresents fire on 95-97%
+  (drama Shorts all "make someone look worse"): useless. casino flags 0%, outside_audio 3%.
+- The outside_audio flags read true by hand (LwohIAzF0Y8 is almost all a [?] voice; eSa1J0PK2t4
+  mostly Jim Bakker's video). A free rule does most of it: seconds of speaker-tagged voices that
+  aren't the show's people, against [scoring] max_source_audio_s = 5. 6 of 44 tagged uploaded
+  Shorts are over (57 s, 22 s, 15 s, 12 s, 11 s, 8 s; four from kick-131151926). Spearman between
+  the tag share and Jev's outside_audio 0.5; Jev adds untagged (v4) Shorts and a payoff carried by
+  a short outside line.
+- Verdict: not a Jev job. The useful check is a deterministic one in clipper (tagged outside-voice
+  seconds over max_source_audio_s -> a warning at review), with Jev at most for untagged Shorts.
+
 ## Rerunning on OpenRouter
 
 1. Add the provider to `clipper/llm.py` (an `openrouter:` prefix, OpenAI-compatible).
