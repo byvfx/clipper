@@ -124,7 +124,7 @@ def split(model: str) -> tuple[str, str]:
 def is_llm(key: str, value: Any) -> bool:
     """A config value that names a chat model (not a TTS, Whisper or lip-sync model)."""
     return (isinstance(value, str) and bool(MODEL_KEY.search(key))
-            and (value.startswith("claude-") or split(value)[0] != "anthropic"))
+            and (value.startswith(("claude-", "anthropic:claude-")) or split(value)[0] != "anthropic"))
 
 
 def configured(cfg: dict) -> dict[str, str]:
@@ -321,7 +321,7 @@ class LLM:
         run with one clear line instead of 60 identical failures."""
         if split(model)[0] != "anthropic":
             try:
-                self._compat(model, [{"role": "user", "content": "Say OK."}], "low", 16)
+                self._compat(model, [{"role": "user", "content": "Say OK."}], "", 256, length_ok=True)
             except RuntimeError as e:
                 raise ClipperError(f"{model} unavailable: {e}") from None
             return
@@ -383,9 +383,10 @@ class LLM:
         return {"type": "json_object"}
 
     def _compat(self, model: str, messages: list[dict], effort: str, max_tokens: int,
-                response_format: dict | None = None) -> tuple[dict, dict]:
+                response_format: dict | None = None, length_ok: bool = False) -> tuple[dict, dict]:
         """One chat/completions request with retries. Returns (response JSON, meta); meta has
-        "refusal" when the model refused."""
+        "refusal" when the model refused. length_ok: running out of max_tokens isn't an error
+        (the preflight, where a reasoning model can spend them all thinking)."""
         import requests
 
         prov, name = split(model)
@@ -448,7 +449,7 @@ class LLM:
         refusal = choice["message"].get("refusal")
         if refusal or choice.get("finish_reason") == "content_filter":
             meta["refusal"] = refusal or "content_filter"
-        elif choice.get("finish_reason") == "length":
+        elif choice.get("finish_reason") == "length" and not length_ok:
             raise RuntimeError(f"{model} hit max_tokens ({meta['request_id']})")
         return data, meta
 

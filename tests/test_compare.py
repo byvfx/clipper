@@ -64,3 +64,15 @@ def test_baseline_models_come_from_the_results():
     assert compare.baseline_models(base, cfg) == ("claude-haiku-4-5", "claude-sonnet-4-5")
     assert compare.baseline_models({}, cfg) == ("claude-haiku-5-5", "claude-sonnet-5-5")
     assert compare.slug("openrouter:openai/gpt-5-mini") == "openrouter-openai-gpt-5-mini"
+
+
+def test_report_names_keep_the_dots_in_model_names():
+    names = {compare.report_stem(m, w) for m in ("openai:gpt-4.1", "openai:gpt-4.1-mini") for w in ("a", "b")}
+    assert len(names) == 4 and "score_openai-gpt-4.1_a" in names
+
+
+def test_hand_picks_stay_out_of_both_sides():
+    base = {"pass_a": [{"id": "w01", "status": "kept"}, {"id": "h01", "status": "kept", "source": "hand"}],
+            "pass_b": {"picks": [{"id": "h01"}, {"id": "w01"}]}}
+    hand, pass_a, picks = compare.scored_only(base)
+    assert hand == {"h01"} and [r["id"] for r in pass_a] == ["w01"] and picks == [{"id": "w01"}]

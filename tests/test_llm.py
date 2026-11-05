@@ -133,3 +133,40 @@ def test_the_client_sends_the_file_key(posted, monkeypatch, defaults, tmp_path):
     replies.append(FakeResponse(answer("hi")))
     llm.LLM(defaults).text_call("openrouter:openai/gpt-6-luna", "sys", "hello", "low")
     assert sent[0]["headers"]["Authorization"] == "Bearer sk-file"
+
+
+def test_preflight_takes_a_reasoning_model_running_out_of_tokens(posted, monkeypatch, defaults):
+    sent, replies = posted
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    out = answer("")
+    out["choices"][0]["finish_reason"] = "length"
+    replies.append(FakeResponse(out))
+    llm.LLM(defaults).preflight("openrouter:deepseek/deepseek-v4.1-flash")  # no raise
+    assert "reasoning" not in sent[0]["body"]
+
+
+def test_prefixed_claude_models_count_as_claude(defaults):
+    for sec in defaults.values():
+        if isinstance(sec, dict):
+            for k, v in list(sec.items()):
+                if llm.is_llm(k, v):
+                    sec[k] = "openrouter:openai/gpt-5-mini"
+    defaults["segments"]["model"] = "anthropic:claude-opus-5-5"
+    assert llm.claude_model(defaults) == "claude-opus-5-5"
+
+
+def test_doctor_checks_the_openrouter_key_itself(defaults, monkeypatch):
+    import requests
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "bad")
+    defaults["scoring"]["model_a"] = "openrouter:openai/gpt-5-mini"
+    got = []
+
+    def get(url, timeout, headers):
+        got.append(url)
+        return FakeResponse({"data": [{"id": "openai/gpt-5-mini"}]} if url.endswith("/models") else {}, 
+                            200 if url.endswith("/models") else 401)
+    monkeypatch.setattr(requests, "get", get)
+    results = doctor.collect(doctor.check_llm_online, defaults)
+    assert any(r[0] == "FAIL" and "refused the key" in r[2] for r in results)
+    assert got[-1].endswith("/key")

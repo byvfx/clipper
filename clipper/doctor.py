@@ -411,6 +411,17 @@ def check_llm_online(cfg: dict) -> None:
         if not r.ok:
             fail("online", f"{prov}: HTTP {r.status_code} from {base}/models", f"check {env}")
             continue
+        if prov == "openrouter":  # its /models answers anyone; /key only a good key
+            try:
+                k = requests.get(f"{base}/key", timeout=15, headers={"Authorization": f"Bearer {key}"})
+            except requests.RequestException as e:
+                fail("online", f"openrouter: {base}/key unreachable ({type(e).__name__})")
+                continue
+            if not k.ok:
+                fail("online", f"openrouter refused the key (HTTP {k.status_code})",
+                     f"check {env} or {cfg['paths'].get('openrouter_key')}")
+                continue
+            ok("online", "openrouter key accepted")
         have = {m.get("id", "").removeprefix("models/") for m in r.json().get("data", [])}
         for use in uses:
             name = llm.split(use.split(" = ", 1)[1])[1]

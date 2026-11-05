@@ -35,7 +35,9 @@ with, the same windows (chat and transcript scan) and the cached summary, so onl
 
 It prints the estimate first and refuses a run over `--budget` ($2 by default); `--dry-run` only
 prints it. An OpenRouter model with no `[llm.prices]` entry is estimated from OpenRouter's own
-price list. The report goes to `<stream>/compare/score_<model>_<pass>.md` (and `.json`):
+price list; any other model with no price is refused, since the budget couldn't hold. A stream
+with no cached summary gets one made with its own Pass A model, counted in the estimate. Hand
+picks (`clipper pick`) are left out on both sides. The report goes to `<stream>/compare/score_<model>_<pass>.md` (and `.json`):
 
 - Pass A: how many windows got the same verdict (kept, no clip, rejected, refused, error), and
   for windows both kept, the score difference and how much the clips overlap.

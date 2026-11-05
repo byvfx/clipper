@@ -13,8 +13,10 @@ each did against the review decisions (review.json, synced from Kitsu). Written 
   --pass ab  the candidate does both (--model-b: a different candidate for Pass B)
 
 The summary and transcript scan stay as the stream cached them: what is compared is the
-judgments, not the windows. --dry-run prints the estimate; a run whose estimate is over
---budget is refused.
+judgments, not the windows (a missing summary is made with the stream's own Pass A model,
+and counted in the estimate). Hand picks (`clipper pick`) are left out on both sides.
+--dry-run prints the estimate; a run whose estimate is over --budget, or that would call a
+model with no known price, is refused.
 """
 from __future__ import annotations
 
@@ -36,11 +38,24 @@ from .states import Decision
 STATUSES = ("kept", "no_clip", "rejected", "refused", "error")
 # Pick and Short of the same moment share a candidate id; the stronger decision speaks for it.
 DECISION_RANK = [Decision.APPROVED, Decision.CHANGES, Decision.REJECTED, Decision.PENDING]
-A_OUT_TOKENS, B_OUT_TOKENS, B_TOKENS_PER_CANDIDATE = 600, 3000, 400
+A_OUT_TOKENS, B_OUT_TOKENS, B_TOKENS_PER_CANDIDATE, SUMMARY_OUT_TOKENS = 600, 3000, 400, 300
 
 
 def slug(model: str) -> str:
     return re.sub(r"[^a-z0-9.]+", "-", model.lower()).strip("-")
+
+
+def report_stem(label: str, which: str) -> str:
+    """The report's file name without extension (model names have dots: never with_suffix)."""
+    return f"score_{slug(label)}_{which}"
+
+
+def scored_only(base: dict) -> tuple[set[str], list[dict], list[dict]]:
+    """candidates.json without hand picks (`clipper pick`), which were never scored or ranked
+    and so stay out of both sides and the review totals: (hand ids, pass_a, pass_b picks)."""
+    hand = {r["id"] for r in base.get("pass_a", []) if r.get("source") == "hand"}
+    return (hand, [r for r in base.get("pass_a", []) if r["id"] not in hand],
+            [p for p in (base.get("pass_b") or {}).get("picks", []) if p["id"] not in hand])
 
 
 def baseline_models(base: dict, cfg: dict) -> tuple[str, str]:
@@ -182,10 +197,19 @@ def score_windows(sdir: Path, cfg: dict, prompts: Prompts, base_a: list[dict]) -
 
 
 def estimate(cfg: dict, prompts: Prompts, which: str, windows: list[dict], n_kept: int,
-             model_a: str, model_b: str, words: list[dict], sig: dict) -> float:
-    from .scoring import pass_a_user
+             model_a: str, model_b: str, words: list[dict], sig: dict,
+             summary_model: str = "", duration_s: float = 0) -> float:
+    """$ for the calls the comparison makes; summary_model: the summary isn't cached, so it is
+    made again with that model (one call per block)."""
+    from .scoring import SUMMARY_BLOCK_S, pass_a_user
+    from .transcript import transcript_lines
 
     usd = 0.0
+    if summary_model:
+        blocks = math.ceil(duration_s / SUMMARY_BLOCK_S)
+        text = len("\n".join(transcript_lines(words, 0, math.ceil(duration_s))))
+        usd += llm.estimate(cfg, summary_model, (len(prompts.get("summary")) * blocks + text) / 4,
+                            SUMMARY_OUT_TOKENS * blocks)
     if "a" in which:
         system = prompts.get("score_a")
         tokens_in = sum(len(system) + len(pass_a_user(w, words, sig, cfg["scoring"]["lead_in_s"]))
@@ -221,9 +245,8 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
         raise ClipperError(f"{label} is what scored {sdir.name} already ({which}): pick another model")
     sc["model_a"], sc["model_b"] = model_a, model_b
 
-    base_a = base.get("pass_a", [])
-    base_b = base.get("pass_b") or {}
-    notes = []
+    hand, base_a, base_picks = scored_only(base)
+    notes = [f"{len(hand)} hand pick(s) left out on both sides"] if hand else []
     if base.get("windows_sha") not in (None, file_sha(sdir / "windows.json")):
         notes.append("windows.json changed since the stream was scored: only windows that still match are compared")
     words, sig = load_words(sdir), load_signals(sdir)
@@ -231,19 +254,28 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     if missing:
         notes.append(f"{len(missing)} window(s) not rebuilt, left out: {', '.join(missing[:8])}")
     base_kept = [r for r in base_a if r["status"] == "kept"]
-    est = estimate(cfg, prompts, which, windows, len(base_kept), model_a, model_b, words, sig)
-    unpriced = sorted(m for m in {model_a, model_b} if llm.known_price(cfg, m) is None)
+    cached = sdir / f"summary_{prompts.version}.json"
+    summary_model = "" if cached.exists() else base_a_model
+    duration = jsonstate.load(sdir / "meta.json")["duration_s"]
+    est = estimate(cfg, prompts, which, windows, len(base_kept), model_a, model_b, words, sig,
+                   summary_model, duration)
+    calls = list(dict.fromkeys(m for m in (summary_model, model_a if "a" in which else "", model_b) if m))
+    unpriced = [m for m in calls if llm.known_price(cfg, m) is None]
     print(f"compare {sdir.name}: pass {which}, Pass A {model_a}, Pass B {model_b}, prompt {prompts.version}; "
           f"{len(windows)} windows" + (f" ({len(missing)} not rebuilt)" if missing else "")
+          + (f"; summary made again with {summary_model}" if summary_model else "")
           + f"; estimate ${est:.3f}"
-          + (f" (no [llm] prices for {', '.join(unpriced)}: counted as $0)" if unpriced else ""))
+          + (f" (no price for {', '.join(unpriced)}: counted as $0)" if unpriced else ""))
     if dry_run:
         return {}
+    if unpriced:
+        raise ClipperError(f"no price for {', '.join(unpriced)}, so --budget can't hold: add "
+                           '[llm.prices] "<model>" = [<$ per 1M in>, <$ per 1M out>] to clipper.toml')
     if est > budget:
         raise ClipperError(f"estimate ${est:.2f} is over --budget ${budget:.2f}; raise it to go ahead")
 
     claude = Claude(cfg)
-    for m in dict.fromkeys(m for m, base_m in ((model_a, base_a_model), (model_b, base_b_model)) if m != base_m):
+    for m in calls:  # every model the run calls, before anything is paid for
         preflight(claude, m)
     t0 = time.time()
     out_dir = sdir / "compare"
@@ -255,38 +287,36 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
         cand_a, kept = [], base_kept
     cost_a = claude.cost
     # The stream's cached summary; made with the stream's own Pass A model if it's missing.
-    cached = sdir / f"summary_{prompts.version}.json"
-    if cached.exists():
+    if not summary_model:
         summary = jsonstate.load(cached)
     else:
         sum_cfg = copy.deepcopy(cfg)
         sum_cfg["scoring"]["model_a"] = base_a_model
-        summary = stream_summary(out_dir, words, math.ceil(jsonstate.load(sdir / "meta.json")["duration_s"]),
-                                 sum_cfg, claude, prompts)
+        summary = stream_summary(out_dir, words, math.ceil(duration), sum_cfg, claude, prompts)
     cand_b = run_pass_b(kept, summary, words, cfg, claude, prompts) if kept else {"picks": []}
     base_results = {r["id"]: r for r in base_a}
 
-    decided = decisions(jsonstate.read(sdir / "review.json", {}))
+    decided = {k: v for k, v in decisions(jsonstate.read(sdir / "review.json", {})).items() if k not in hand}
     res = {
         "stream": sdir.name, "which": "score", "pass": which, "prompt_version": prompts.version,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"), "estimate_usd": round(est, 4), "notes": notes,
         "baseline": {"label": base_a_model if which == "a" else base_b_model if which == "b"
                      else f"{base_a_model} + {base_b_model}",
                      "model_a": base_a_model, "model_b": base_b_model,
-                     "cost_usd": base.get("cost_usd", 0.0), "picks": base_b.get("picks", []),
-                     "review": against_review(base_b.get("picks", []), decided)},
+                     "cost_usd": base.get("cost_usd", 0.0), "picks": base_picks,
+                     "review": against_review(base_picks, decided)},
         "candidate": {"label": label, "model_a": model_a, "model_b": model_b,
                       "cost_usd": round(claude.cost, 4), "cost_pass_a_usd": round(cost_a, 4),
                       "seconds": round(time.time() - t0, 1), "pass_a": cand_a, "pass_b": cand_b,
                       "review": against_review(cand_b.get("picks", []), decided)},
         "pass_a_agreement": pass_a_agreement(base_a, cand_a) if cand_a else None,
-        "picks": pick_rows(base_b.get("picks", []), cand_b.get("picks", []), decided, base_results,
+        "picks": pick_rows(base_picks, cand_b.get("picks", []), decided, base_results,
                            {r["id"]: r for r in cand_a} or base_results),
     }
-    stem = out_dir / f"score_{slug(label)}_{which}"
-    jsonstate.write(stem.with_suffix(".json"), res)
+    stem = report_stem(label, which)
+    jsonstate.write(out_dir / f"{stem}.json", res)
     md = report_md(res)
-    stem.with_suffix(".md").write_text(md, encoding="utf-8")
+    (out_dir / f"{stem}.md").write_text(md, encoding="utf-8")
     print(md)
-    print(f"written: {stem}.json, .md")
+    print(f"written: {out_dir / stem}.json, .md")
     return res

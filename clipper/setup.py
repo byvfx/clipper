@@ -566,10 +566,14 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
     if roles == ["recorder"]:
         say("The recorder needs no keys here.")
         return
-    ensure_env_key(cfg, ask, "ANTHROPIC_API_KEY", "the model calls (score, segments, titles, covers)",
-                   "console.anthropic.com -> API keys")
     from .doctor import llm_providers
-    from .llm import PROVIDERS, provider_key
+    from .llm import PROVIDERS, claude_model, provider_key
+
+    if claude_model(cfg):
+        ensure_env_key(cfg, ask, "ANTHROPIC_API_KEY", "the model calls (score, segments, titles, covers)",
+                       "console.anthropic.com -> API keys")
+    else:
+        say("ANTHROPIC_API_KEY: not needed, no stage uses Claude")
 
     for prov, uses in llm_providers(cfg).items():
         env = PROVIDERS[prov][1]
