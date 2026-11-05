@@ -230,8 +230,11 @@ def estimate(cfg: dict, prompts: Prompts, which: str, windows: list[dict], n_kep
 
 
 def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: float = 2.0,
-                  dry_run: bool = False, model_b: str = "", effort: str = "", prompt_version: str = "") -> dict:
-    """Score `sdir` again with `model` in the passes `which` names; see the module doc."""
+                  dry_run: bool = False, model_b: str = "", effort: str = "", prompt_version: str = "",
+                  repeat: bool = False) -> dict:
+    """Score `sdir` again with `model` in the passes `which` names; see the module doc.
+    repeat: the stream's own models and prompt again, which shows how much a rerun alone
+    changes (the noise floor every other comparison sits on)."""
     from .scoring import load_signals, run_pass_a, run_pass_b, stream_summary
     from .transcript import load_words
 
@@ -254,12 +257,13 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     if effort and effort not in EFFORTS:
         raise ClipperError(f"--effort {effort}: one of {', '.join(EFFORTS)}")
     label = ((f"{model} + {model_b}" if model_b and model_b != model else model) + (f" @{effort}" if effort else "")
-             + (f" {prompts.version}" if new_prompt else ""))
+             + (f" {prompts.version}" if new_prompt else "") + (" (repeat)" if repeat else ""))
     model_b = model_b or model
     model_a = model if "a" in which else base_a_model
     model_b = model_b if "b" in which else base_b_model
-    if model_a == base_a_model and model_b == base_b_model and not new_prompt:
-        raise ClipperError(f"{label} is what scored {sdir.name} already ({which}): pick another model")
+    if model_a == base_a_model and model_b == base_b_model and not new_prompt and not repeat:
+        raise ClipperError(f"{label} is what scored {sdir.name} already ({which}): pick another model, "
+                           "or --repeat to see what a rerun alone changes")
     sc["model_a"], sc["model_b"] = model_a, model_b
     if effort:  # the candidate's passes only; the stream's own model keeps its effort
         for p in which:
