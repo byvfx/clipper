@@ -184,10 +184,10 @@ def report_md(res: dict) -> str:
 def score_windows(sdir: Path, cfg: dict, version: str, base_a: list[dict]) -> tuple[list[dict], list[str]]:
     """The windows Pass A saw: windows.json plus the transcript-scan windows rebuilt from the
     cached scan. Returns (windows in candidates.json's order, ids that couldn't be rebuilt)."""
-    from .scoring import load_chat, load_signals, scan_windows
+    from .scoring import cached_scan, load_chat, load_signals, scan_windows
 
     windows = jsonstate.load(sdir / "windows.json")["windows"]
-    scan = jsonstate.read(sdir / f"scan_{version}.json")
+    scan = cached_scan(sdir / f"scan_{version}.json")
     if scan:
         meta = jsonstate.load(sdir / "meta.json")
         windows = windows + scan_windows(scan, windows, load_signals(sdir), load_chat(sdir, meta),

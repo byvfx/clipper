@@ -288,6 +288,12 @@ max_source_audio_s = 5
 audience_knowledge = "strangers"
 known_figures = ""             # plus the cast library's people ([cast] known_figures)
 
+# Gambling (v7+ prompts):
+#   "reject"      no Short about gambling play: slots, cards, bets, wins or losses on a site
+#   "commentary"  gambling as a topic is fine (mocking someone's bets, a show named "Casino");
+#                 only a Short that promotes gambling (a site, a code, "go play") is rejected
+gambling = "reject"
+
 # Transcript-first candidates: the Pass A model scans each 15-minute block for moments
 # carried by the hosts' own words, added to the chat-heat windows (scan prompt, v4+).
 transcript_scan = true

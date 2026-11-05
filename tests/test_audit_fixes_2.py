@@ -183,3 +183,14 @@ def test_effort_values_of_any_type_are_checked(defaults):
         cfg = {**defaults, "meta": {**defaults["meta"], "effort": bad}}
         with pytest.raises(ClipperError, match=r"\[meta\] effort"):
             config.check_choices(cfg)
+
+
+def test_a_rescan_that_moves_a_transcript_id_retires_its_number():
+    old = [{"id": "w01", "window": [0, 60]}, {"id": "t01", "source": "transcript", "window": [100, 160]},
+           {"id": "h01", "source": "hand", "window": [5, 9]}, {"id": "t02", "source": "transcript"}]
+    same = [{"id": "w01", "window": [0, 60]}, {"id": "t01", "source": "transcript", "window": [100, 160]}]
+    assert scoring.moved_ids(old, same) == []
+    rescanned = same[:1] + [{"id": "t01", "source": "transcript", "window": [40, 90]},
+                            {"id": "t02", "source": "transcript", "window": [100, 160]}]
+    assert scoring.moved_ids(old, rescanned) == ["t01"]  # t02 had no window recorded: not counted
+    assert scoring.moved_ids(old, same[:1]) == ["t01"]  # gone: its number goes before t01 can return
