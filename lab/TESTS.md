@@ -112,5 +112,4 @@ Length alone: AUC 0.60.
 - Few-shot examples inside the instructions (docs: helps only when examples resemble inputs).
 - Choice-option order bias on `category` (docs: leans to the first option).
 - Images (Jev 1.14 takes PNG/JPEG, "Dreamer-ready"): cover frame choice in `thumbs`, which Opus does.
-- A pre-upload guardrail (casino / third-party audio / needs-context on the final Short), the
-  place T6 says Jev is good.
+- (done, T9) a pre-upload guardrail on the final Short.
