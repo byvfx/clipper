@@ -196,8 +196,13 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   `GEMINI_API_KEY` or `OPENROUTER_API_KEY` here and no Ollama yet. With a key, try Pass A first:
   `clipper compare score <stream> --model openrouter:<vendor>/<model> --dry-run` for the estimate
   (Wiki Model-providers). Haiku vs Sonnet on kick-135553454 Pass B ($0.003): Haiku kept 4 of the 5 approved.
-  User picked OpenRouter (11-04). Pass A candidates at Haiku's price, each ~$0.08 on kick-135553454:
-  openai/gpt-6-luna, deepseek/deepseek-v4.1-flash, qwen/qwen3.8-flash.
+  User picked OpenRouter (11-04; key in secrets/openrouter_secret.txt). Sweep 11-04/05: 12 models x reasoning
+  none/medium on kick-135553454 Pass A, leaders on kick-134467434 + kick-134812118 (`clipper compare list <stream>`).
+  None near Haiku+Sonnet (18/18 approved): Gemini 4 Argon 7/18 (closest verdicts, fewest Haiku rejects kept,
+  ~20x Haiku's Pass A cost), Flash Lite 7/18 (5/5 was luck), DeepSeek V4 Pro 5/18, GPT-6 Luna ~5/18, DeepSeek
+  Flash 1-2/5. All keep 3-8x Haiku's windows, mostly ones Haiku rejected (third party, needs context). Reasoning
+  on/off a wash for Pass A. Single runs are noisy (Luna 4/5 then 2/5). The approved set only holds the baseline's
+  picks, so it favours Claude. Haiku scoring cost $0.67 in Oct-Nov; the spend is segments (~$16), thumbs, meta.
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
