@@ -270,6 +270,7 @@ never goes stale; a passed slot never goes public at once from a long run; an X 
 "unknown" for a hand check, never retried; a cast grab is refused when another enrolled person fits
 better. Left for later: #15 (example toml commented), #24/#25 (lock edges), #29-#35, #37, #41, #46-#50
 (lows), #42's lock part.
+**Jev lab 2026-11-04** (branch `jev-lab`, worktree `C:\clipper-jevlab`, `lab/TESTS.md`): side tests of where TypeSafe's Jev decision model fits, after the 11-03 gate (`clipper gate`, merged in). Scoring is not its spot: with the Pass A brief a composite of atomic nouls matches Haiku's keeps at AUC 0.83 (0.63 without the brief), it can't stand in for Pass B or predict views (Haiku's score now does, rho 0.57, n=58), and a safe gate (drop each stream's bottom 20%) saves what Jev costs. It is strong on concrete flags (casino 0.98, third-party audio 0.86 vs Haiku's own) and routing by confidence works (rejects its surest 20% at 99.6%, 0 picks lost). Archive facts pre-screen: no. Next: rerun the same tests with `--model openrouter:<m>` once the provider exists (the user wants that), then the routing test across models; untested: a pre-upload guardrail on finished Shorts. Key: TYPESAFE_API_KEY user env var.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
