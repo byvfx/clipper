@@ -844,6 +844,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
             "claude-haiku-5-5": [0.10, 0.50],
             "claude-sonnet-5-5": [2.00, 10.00],
             "claude-opus-5-5": [4.00, 20.00],
+            "typesafe:jev-latest": [0.042, 0.0],  # decision model: output is free
         },
     },
     "scoring": {
