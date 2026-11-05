@@ -299,6 +299,14 @@ def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
     if args.backfill:
         costs.backfill(cfg, args.dry_run)
         return
+    if args.providers:
+        from . import usage
+
+        if args.json:
+            print(json.dumps(usage.status(cfg), indent=2))
+        else:
+            usage.print_status(cfg)
+        return
     rep = costs.report(cfg, args.month or "")
     if args.json:
         print(json.dumps(rep, indent=2))
@@ -1523,6 +1531,8 @@ def add_extras(sub) -> None:
     p.add_argument("--backfill", action="store_true",
                    help="add model spend earlier runs recorded in their output files, once")
     p.add_argument("--dry-run", action="store_true", help="with --backfill: list, write nothing")
+    p.add_argument("--providers", action="store_true",
+                   help="this month by the Claude API's and OpenRouter's own count, next to our log")
     p.set_defaults(fn=cmd_costs)
 
     p = sub.add_parser("compare", help="another model on a stage that already ran, side by side with "

@@ -43,6 +43,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "openai_key": "secrets/openai_secret.txt",
         "gemini_key": "secrets/gemini_secret.txt",
         "openrouter_key": "secrets/openrouter_secret.txt",
+        # Anthropic Admin API key, if not $ANTHROPIC_ADMIN_KEY: the Claude bill in the war room's
+        # API usage panel and `clipper costs --providers` (clipper/usage.py)
+        "anthropic_admin_key": "secrets/anthropic_admin_secret.txt",
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "serve_log": "logs/serve.log",  # `clipper serve` log (rotated); "" = console only

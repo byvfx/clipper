@@ -22,6 +22,7 @@ brave_key = "secrets/brave_secret.txt"        # Brave Search API key for cast im
 openai_key = "secrets/openai_secret.txt"      # model provider keys, each if its env var isn't set
 gemini_key = "secrets/gemini_secret.txt"      # ($OPENAI_API_KEY, $GEMINI_API_KEY, $OPENROUTER_API_KEY)
 openrouter_key = "secrets/openrouter_secret.txt"
+anthropic_admin_key = "secrets/anthropic_admin_secret.txt"  # Admin API key (sk-ant-admin...) for Claude's own bill, if $ANTHROPIC_ADMIN_KEY is unset
 discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 elevenlabs_key = "secrets/elevenlabs_api_key.txt"  # if $ELEVENLABS_API_KEY ([narrate] key_env) is unset
 sync_key = "secrets/sync_api_key.txt"          # sync.so lip-sync key, if $SYNC_API_KEY ([perform] sync_key_env) is unset

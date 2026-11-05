@@ -149,7 +149,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   refs in mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
   (~1,550 credits; 18,457 Runway credits left on 10-24).
 - **Costs:** October ~$200 in model/GPU spend, ~$184 of it the Jer archive; `clipper costs`, war room
-  Costs and Modal panels. Monthly analytics check-in task runs on the 1st at 09:00; October's
+  Costs, Modal and API usage panels (`clipper costs --providers`: Claude's and OpenRouter's own count next
+  to our log; Claude's needs an Admin API key, `ANTHROPIC_ADMIN_KEY`, not set here: waiting on the user). Monthly analytics check-in task runs on the 1st at 09:00; October's
   (`reports/analytics/2026-10-checkin.md`) was gone through 11-02: 1-4 taken, 5 (titles without the
   show prefix) skipped; its Decisions section is what November's check-in follows up.
 - **Analytics:** YouTube Analytics API enabled 10-28; October so far 12.7k views, 68.5 h watch, +28 subs,

@@ -473,6 +473,14 @@ def check_keys(cfg: dict, role: str) -> None:
                  f"copy {p['youtube_client_secret'].name} and {p['youtube_token'].name} into secrets/")
         check_tiktok(cfg)
         check_x(cfg)
+        from .usage import ADMIN_ENV, admin_key
+
+        if admin_key(cfg):
+            ok("keys", "Anthropic Admin key found (the war room's API usage panel reads Claude's bill)")
+        else:
+            warn("keys", "no Anthropic Admin key: the API usage panel shows our log for Claude, not its bill",
+                 f"Console -> Settings -> Admin keys (organizations only); set {ADMIN_ENV} "
+                 f"or put it in {cfg['paths'].get('anthropic_admin_key')}")
 
 
 def check_youtube_cookies(cfg: dict) -> None:

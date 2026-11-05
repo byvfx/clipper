@@ -10,7 +10,7 @@ its provider by prefix; a bare name like `claude-sonnet-5-5` is Claude, as befor
 
 Add prices under `[llm.prices]` (`"openai:gpt-5-mini" = [0.25, 2.00]`, $ per 1M input/output
 tokens) so the cost lines stay right; an unlisted model counts as $0, except on OpenRouter,
-which reports what each call cost. `clipper doctor` checks the key or URL for every provider in
+which reports what each call cost ([its own count](Costs#the-providers-own-numbers) is in the war room). `clipper doctor` checks the key or URL for every provider in
 use and, online, that the server lists the model; `clipper setup --step keys` asks for the key of
 any provider a stage uses. `ANTHROPIC_API_KEY` is only required while some stage is on Claude.
 
