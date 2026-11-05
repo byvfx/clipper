@@ -885,6 +885,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "third_party_audio": "reject",  # or "allow_reactions"; v3+ prompts
         "max_source_audio_s": 5,  # allow_reactions: most source audio a Short may carry
         "audience_knowledge": "strangers",  # or "fans" (know known_figures); v4+ prompts
+        "gambling": "reject",     # or "commentary" (only promoting gambling is out); v7+ prompts
         "known_figures": "",      # regulars fans are assumed to know, comma-separated
         "transcript_scan": True,  # also find own-voice moments from the transcript (scan prompt)
         "scan_max_per_block": 3,  # per 15-minute block
@@ -946,6 +947,7 @@ CHOICES = {
     ("perform", "lipsync_engine"): ("latentsync", "sync"),
     ("scoring", "third_party_audio"): ("reject", "allow_reactions"),
     ("scoring", "audience_knowledge"): ("strangers", "fans"),
+    ("scoring", "gambling"): ("reject", "commentary"),
 }
 # CLIPPER_* variables that aren't settings.
 SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "CLIPPER_ALERT_WEBHOOK",

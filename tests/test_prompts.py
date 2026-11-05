@@ -35,3 +35,14 @@ def test_newest_prompts_say_host_only_to_ban_it():
         for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             if re.search(r"\bhosts?\b", line, re.IGNORECASE):
                 assert re.search(r"\bnever\b", line, re.IGNORECASE), f"{f.name}:{n}: {line.strip()}"
+
+
+def test_the_gambling_rule_is_a_show_setting_from_v7(defaults):
+    cfg = {**defaults, "scoring": {**defaults["scoring"], "prompt_version": "v7"}}
+    assert "is about gambling play" in prompts.Prompts(cfg).get("score_a")
+    cfg["scoring"]["gambling"] = "commentary"
+    p = prompts.Prompts(cfg)
+    assert "would promote gambling" in p.get("score_a") and "promotes gambling" in p.get("score_b")
+    assert "promote gambling" in p.get("scan")
+    v6 = {**defaults, "scoring": {**defaults["scoring"], "prompt_version": "v6", "gambling": "commentary"}}
+    assert "is about gambling play" in prompts.Prompts(v6).get("score_a")  # v6 keeps its own wording

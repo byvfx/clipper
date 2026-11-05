@@ -32,3 +32,10 @@ def test_a_show_with_a_missing_prompt_is_named(tmp_path):
 
 def test_the_labeller_prompt_is_checked(defaults):
     assert "shorts_layout_v1.md" in doctor.prompt_files(defaults)
+
+
+def test_v7_prompts_need_the_show_gambling_rule(defaults):
+    defaults["scoring"].update(prompt_version="v7", gambling="commentary")
+    assert "gambling_commentary_v7.md" in doctor.prompt_files(defaults)
+    defaults["scoring"]["prompt_version"] = "v6"
+    assert not any("gambling" in n for n in doctor.prompt_files(defaults))

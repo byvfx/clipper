@@ -156,6 +156,8 @@ def prompt_files(cfg: dict) -> list[str]:
     if int(v.lstrip("v") or 0) >= 4:
         names += [f"scan_{v}", f"third_party_{sc['third_party_audio']}_{v}",
                   f"audience_{sc['audience_knowledge']}_{v}"]
+    if int(v.lstrip("v") or 0) >= 7:
+        names.append(f"gambling_{sc['gambling']}_{v}")
     seg, mv = cfg["segments"]["prompt_version"], cfg["meta"]["prompt_version"]
     pc, rc, ac, wc = cfg["preshow"], cfg["receipts"], cfg["archive"], cfg["weekly"]
     tc = cfg["thumbnail"]
