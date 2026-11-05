@@ -1,4 +1,4 @@
-clipper runs in four roles. A machine can do more than one.
+clipper runs in four roles, plus an optional operator. A machine can do more than one.
 
 | Role | What runs there | Needs |
 |---|---|---|
@@ -6,6 +6,7 @@ clipper runs in four roles. A machine can do more than one.
 | **Serve** | `clipper serve`: the [war room](War-room), hourly replan and upload, pre-show grabs, retakes, daily jobs | always on, the NAS share (or local streams), ffmpeg; the GPU extra, Modal or a CPU transcribe for [pre-shows](Pre-shows) |
 | **Bot** | `clipper bot`: Discord review cards, buttons, DMs ([Review](Review)) | always on (usually the serve machine), the NAS share |
 | **Recorder** | `clipper record watch` in Docker on the NAS | Docker; see [NAS recorder](NAS-recorder) |
+| **Claude** (optional) | Claude Code in its own clone of the repo, driven from the Claude app on the phone | Docker on the NAS; see [Claude on the NAS](Claude-on-the-NAS) |
 
 All roles share one streams folder (a NAS share). Only one machine runs serve and only one
 runs the bot. Here serve, the bot and the worker run as containers on the NAS since
@@ -43,5 +44,5 @@ there; `clipper doctor --role bot` checks).
 ## Logs and alerts
 
 Logs go to `logs\` (`serve.log`, `bot.log`, `worker.log`). The bot DMs you when something needs
-you ([Review](Review), "Alerts"). `clipper doctor --role gpu|serve|bot|nas` checks a machine
+you ([Review](Review), "Alerts"). `clipper doctor --role gpu|serve|bot|nas|claude` checks a machine
 and prints a fix for each problem.

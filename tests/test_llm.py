@@ -226,3 +226,14 @@ def test_too_many_output_tokens_falls_back_to_what_was_asked(posted, monkeypatch
     text, _ = llm.LLM(defaults).text_call("openai:o5-mini", "sys", "hi", "medium", max_tokens=4000)
     assert text == "a" and sent[1]["body"]["max_completion_tokens"] == 4000
     assert sent[1]["body"]["reasoning_effort"] == "medium"
+
+
+def test_the_anthropic_key_from_a_file_when_the_env_has_none(tmp_path, monkeypatch, defaults):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    key = tmp_path / "anthropic_secret.txt"
+    key.write_text("sk-ant-file\n", encoding="utf-8")
+    defaults["paths"]["anthropic_key"] = key
+    assert llm.provider_key("anthropic", defaults["paths"]) == "sk-ant-file"
+    assert llm.LLM(defaults).client.api_key == "sk-ant-file"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env")
+    assert llm.provider_key("anthropic", defaults["paths"]) == "sk-ant-env"

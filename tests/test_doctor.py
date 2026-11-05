@@ -39,3 +39,17 @@ def test_v7_prompts_need_the_show_gambling_rule(defaults):
     assert "gambling_commentary_v7.md" in doctor.prompt_files(defaults)
     defaults["scoring"]["prompt_version"] = "v6"
     assert not any("gambling" in n for n in doctor.prompt_files(defaults))
+
+
+def test_repo_state_reads_branch_ahead_and_changes():
+    assert doctor.repo_state("## main...origin/main\n") == ("main", 0, 0)
+    assert doctor.repo_state("## nas-claude...origin/nas-claude [ahead 2, behind 1]\n M clipper/x.py\n?? y\n") \
+        == ("nas-claude", 2, 2)
+    assert doctor.repo_state("## local-only\n") == ("local-only", 0, 0)
+    assert doctor.repo_state("## HEAD (no branch)\n") == ("", 0, 0)
+
+
+def test_claude_auth_reads_the_status():
+    assert doctor.claude_auth('{"loggedIn": true, "authMethod": "claude.ai"}', 0) == (True, "claude.ai")
+    assert doctor.claude_auth('{"authMethod": "api_key"}', 0) == (True, "api_key")
+    assert doctor.claude_auth("Not logged in", 1) == (False, "")

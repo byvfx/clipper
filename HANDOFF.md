@@ -329,7 +329,7 @@ per upload still allowed today), worker takeover under a lock, pick numbers kept
 (pass_b `numbers`), Short retakes grown to min_s, failed captions retried hourly (3 tries,
 `upload --captions`). Write "#77 L6" rather than "fix #77" in commit messages: GitHub closes
 the issue on "fix". Roadmaps, issues only: NAS hub #14 (#9 war room and #12 worker/bot on the NAS done 2026-11-05,
-#64 single-owner daemon `clipper serve` (split done 11-03), #65 Claude Code on the NAS, #13 chat panel),
+#64 single-owner daemon `clipper serve` (split done 11-03), #65 Claude Code on the NAS (built 11-05 on branch `nas-claude`, not deployed: `deploy/claude`, wiki Claude-on-the-NAS; the user signs in once), #13 chat panel),
 transcript-framed edits #66 (#67-#71), YouTube Posts magazine #30 (#32-#38), cast library #41,
 lore-order playlists #43, archive fun #63, news watcher #110 (off since 2026-11-03 at the user's word: `[news] check_minutes = 0` in clipper.toml and no terms; since #127 only `[news] watch` / `[shows.<key>.news] watch` terms are watched, none = nothing fetched, `auto_watch = true` brings back the cast/figures/library list; #news exists), Udder Truth #58/#59/#60, Modal ideas #53, #55, #56.
 **Faces #54 (merged 2026-11-01, PR #117):** `clipper faces <stream>` runs locally on the CPU (no Modal:

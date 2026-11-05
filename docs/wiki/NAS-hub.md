@@ -16,6 +16,9 @@ All four use host networking and their own compose project (`clipper-hub`), so a
 restarts the recorder. The image is Debian 13 (ffmpeg 7.1) with Intel's media driver:
 `/dev/dri` is passed in and `h264_qsv` encodes on the NAS iGPU, as on the laptop.
 
+Claude Code can run beside them too, in its own container, so clipper can be driven and
+changed from the Claude app on the phone: [Claude on the NAS](Claude-on-the-NAS).
+
 ## The config and state live on the NAS
 
 The NAS folder `/volume1/docker/clipper` (`/data` in the containers, the `docker/clipper` share

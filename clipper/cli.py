@@ -1621,8 +1621,8 @@ def add_setup(sub) -> None:
 
     p = sub.add_parser("doctor", help="check this machine: ffmpeg, GPU, fonts, keys, Kitsu/Discord/NAS")
     p.add_argument("--offline", action="store_true", help="skip the network checks")
-    p.add_argument("--role", choices=["all", "gpu", "serve", "bot", "nas"], default="all",
-                   help="only what this machine runs (gpu worker, serve, bot, nas recorder)")
+    p.add_argument("--role", choices=["all", "gpu", "serve", "bot", "nas", "claude"], default="all",
+                   help="only what this machine runs (gpu worker, serve, bot, nas recorder, claude on the NAS)")
     p.set_defaults(fn=cmd_doctor)
 
     p = sub.add_parser("config", help="settings: where a value comes from (default, clipper.toml, show, ...)")

@@ -25,6 +25,7 @@ secrets/
 deploy/kitsu/env.local
 deploy/record/env.local
 deploy/hub/env.local
+deploy/claude/env.local
 
 # run state (upload schedule, analytics, `clipper setup` progress)
 setup_state.json
