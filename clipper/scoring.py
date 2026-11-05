@@ -397,7 +397,7 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False, force: bool = False)
     # #75: Pass A is saved here before Pass B, so a Pass B failure (or a crash) doesn't mean
     # paying for every window again; the next run re-asks only windows that errored.
     ckpt = stream_dir / f"pass_a_{prompts.version}.json"
-    ckpt_sha = prompt_sha(prompts.get("score_a"), prompts.get("scan"))
+    ckpt_sha = prompt_sha(prompts.get("score_a"), prompts.get("scan") if sc["transcript_scan"] else "")
     saved = jsonstate.read(ckpt)
     if saved and saved.get("prompt_sha", ckpt_sha) != ckpt_sha:
         print(f"{ckpt.name} was saved with other prompt settings: scoring every window again")
@@ -447,11 +447,14 @@ def _finish(stream_dir: Path, cfg: dict, meta: dict, prompts: Prompts, claude: C
     hand_ids = {r["id"] for r in hand}
     results = results + hand
     windows_sha = file_sha(stream_dir / "windows.json")
-    if old and old.get("windows_sha") not in (None, windows_sha):
-        # Pick ids are positional (t03 = the third transcript window): after a signals rerun
-        # the same id is a different moment, so no id keeps its number. The history stays, so
-        # the new numbers never collide with keys already in Kitsu or schedule.json.
-        print("windows.json changed since the last score: picks get new numbers (old keys keep theirs)")
+    moved = moved_ids(old.get("pass_a", []), results)
+    if old and (old.get("windows_sha") not in (None, windows_sha) or moved):
+        # Pick ids are positional (t03 = the third transcript window): after a signals rerun,
+        # or a rescan with other prompts, the same id is a different moment, so no id keeps
+        # its number. The history stays, so the new numbers never collide with keys already
+        # in Kitsu or schedule.json.
+        why = "windows.json changed" if not moved else f"the scan moved {', '.join(moved)}"
+        print(f"{why} since the last score: picks get new numbers (old keys keep theirs)")
         # Retired ids stay in the history under RETIRED, so their numbers stay reserved for
         # good and a later re-score can't hand v02_t02 to yet another moment; hand picks
         # (`clipper pick`, not positional) keep their ids, numbers and places in the list.
@@ -484,6 +487,14 @@ def retire_numbers(old_b: dict, hand_ids: set[str]) -> dict:
     return {"numbers": {k if k in hand_ids or k.startswith(RETIRED) else RETIRED + k: v
                         for k, v in number_history(old_b).items()},
             "picks": [p for p in old_b.get("picks", []) if p["id"] in hand_ids]}
+
+
+def moved_ids(old_a: list[dict], new_a: list[dict]) -> list[str]:
+    """Ids that name a different window than in the last score (a rescan's t01 can be
+    another moment)."""
+    was = {r["id"]: r["window"] for r in old_a if r.get("source") != "hand" and r.get("window")}
+    return [r["id"] for r in new_a if r.get("source") != "hand" and r["id"] in was
+            and was[r["id"]] != r.get("window")]
 
 
 def file_sha(path: Path) -> str:
