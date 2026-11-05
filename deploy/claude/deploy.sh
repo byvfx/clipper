@@ -25,7 +25,10 @@ if [ ! -f "$ENV_LOCAL" ]; then
     echo "created $ENV_LOCAL: fill in the keys, then run this again" >&2
     exit 1
 fi
-setting() { grep "^$1=" "$ENV_LOCAL" | tail -1 | cut -d= -f2- || true; }
+# KEY's value in env.local, without the quotes a dotenv value may have (KEY="value")
+setting() {
+    grep "^$1=" "$ENV_LOCAL" | tail -1 | cut -d= -f2- | sed -E "s/^\"(.*)\"\$/\1/; s/^'(.*)'\$/\1/" || true
+}
 DATA=$(setting CLIPPER_DATA); DATA=${DATA:-/volume1/docker/clipper}
 CDIR=$(setting CLAUDE_DIR); CDIR=${CDIR:-/volume1/docker/clipper-claude}
 

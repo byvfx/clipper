@@ -7,16 +7,19 @@ set -eu
 # Remote Control refuses API-key auth; clipper reads its key from [paths] anthropic_key.
 unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN
 
+# gh reads GH_TOKEN itself; this makes git use it too (the first clone of the private repo,
+# then pushes).
+if [ -n "${GH_TOKEN:-}" ]; then
+    gh auth setup-git >/dev/null 2>&1 || echo "gh auth setup-git failed: git will ask for a login" >&2
+fi
+
 if [ ! -d /app/.git ]; then
     [ -n "${CLIPPER_REPO:-}" ] || { echo "CLIPPER_REPO is empty: set it in deploy/claude/env.local" >&2; exit 1; }
     echo "cloning $CLIPPER_REPO into /app"
-    git clone "$CLIPPER_REPO" /app
+    GIT_TERMINAL_PROMPT=0 git clone "$CLIPPER_REPO" /app \
+        || { echo "clone failed: a private repo needs GH_TOKEN in deploy/claude/env.local" >&2; exit 1; }
 fi
 
-# gh reads GH_TOKEN itself; this makes git use it for https pushes too.
-if [ -n "${GH_TOKEN:-}" ]; then
-    gh auth setup-git >/dev/null 2>&1 || echo "gh auth setup-git failed: pushes will ask for a login" >&2
-fi
 if [ -n "${GIT_USER_NAME:-}" ]; then git config --global user.name "$GIT_USER_NAME"; fi
 if [ -n "${GIT_USER_EMAIL:-}" ]; then git config --global user.email "$GIT_USER_EMAIL"; fi
 
