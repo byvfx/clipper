@@ -570,7 +570,7 @@ def push_previews(gazu, stream_dir: Path, rc: dict, proj: dict, ep: dict, types:
         old = state.get(it["key"], {})  # keep what we last proposed, for the columns
         state[it["key"]] = {**{k: old[k] for k in ("fields", "thumbnail_text") if k in old},
                             "kind": it["kind"], "id": it["meta"]["id"],
-                            "file": str(it["file"].relative_to(stream_dir)),
+                            "file": it["file"].relative_to(stream_dir).as_posix(),
                             "sequence": it["seq"], "entity_id": entity["id"],
                             "task_id": task["id"], "preview_id": preview["id"],
                             "revision": preview.get("revision"), "preview_mtime": mtime,

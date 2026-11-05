@@ -47,7 +47,7 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate, media, oauth, rumble
+from . import jsonstate, media, oauth, rumble, schedule
 from .config import for_stream
 from .errors import ClipperError
 from .states import split_key
@@ -240,7 +240,7 @@ def send(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
         if e["kind"] not in tc["kinds"]:
             print(f"  {e['key']}: a {e['kind']}, not sent ([tiktok] kinds = {tc['kinds']})")
             continue
-        video = Path(e["file"])
+        video = schedule.video(cfg, e)
         if not video.exists():
             print(f"  {e['key']}: video missing ({video}); rerun clipper shorts")
             continue
@@ -283,7 +283,7 @@ def auto(cfg: dict, dry_run: bool = False) -> None:
     sched = rumble.load_schedule(cfg)
     room = max(tc["max_per_24h"] - sent_last_24h(sched), 0)
     queue = sorted((e for e in sched["entries"] if e["kind"] in tc["kinds"] and not tiktok_of(e)
-                    and e.get("status") in ("scheduled", "uploaded") and Path(e["file"]).exists()),
+                    and e.get("status") in ("scheduled", "uploaded") and schedule.video(cfg, e).exists()),
                    key=lambda e: e.get("publish_at") or "")
     print(f"TikTok: {len(queue)} Shorts not sent; {room} of {tc['max_per_24h']} drafts left in 24 h")
     picked = []

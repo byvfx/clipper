@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -757,7 +756,7 @@ def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
 
 
 def config_path(args: argparse.Namespace) -> str:
-    return str(Path(args.config or os.environ.get("CLIPPER_CONFIG") or "clipper.toml").resolve())
+    return str(config.find(args.config).resolve())
 
 
 def cmd_run(cfg: dict, args: argparse.Namespace) -> None:

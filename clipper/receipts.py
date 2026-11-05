@@ -241,9 +241,10 @@ def show(sdir: Path, data: dict | None = None) -> None:
 # ---------- cut ----------
 
 def first_font(paths: list[str]) -> Path:
-    for f in paths:
-        if Path(f).exists():
-            return Path(f)
+    from .draw import first_font as find
+
+    if f := find(paths):
+        return Path(f)
     raise ClipperError(f"no font found among {paths}; set [receipts] fonts / text_fonts")
 
 

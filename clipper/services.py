@@ -5,9 +5,10 @@
     clipper services stop|restart recorder [--force]
     clipper record status                     the recorder alone (exit 3 while recording)
 
-serve, the bot and the worker are Windows scheduled tasks; this runs their deploy scripts
-(deploy/serve/serve-task.ps1, deploy/discord/bot-task.ps1, deploy/worker/worker-task.ps1),
-which also stop the supervisor and the stage processes. serve and the bot write a
+serve, the bot and the worker are Windows scheduled tasks, or with [serve] hub containers on
+the NAS (deploy/hub). For tasks this runs their deploy scripts (deploy/serve/serve-task.ps1,
+deploy/discord/bot-task.ps1, deploy/worker/worker-task.ps1), which also stop the supervisor
+and the stage processes; for the hub, `docker compose` in that folder over ssh. serve and the bot write a
 heartbeat to the streams share every minute (streams/.serve/status.json, .bot/status.json,
 clipper/daemon.py), shown whatever machine they run on. The recorder is a container on
 the NAS: its state is the heartbeat it writes every 2 s (streams/.record/status.json), and
@@ -74,8 +75,25 @@ def record_status(cfg: dict, now: datetime | None = None) -> None:
         raise ClipperError("", status=3)
 
 
-def run_task(name: str, action: str) -> int:
-    """The bot's or worker's task script (Windows); its output goes straight through."""
+HUB_ACTION = {"status": "ps", "stop": "stop", "restart": "restart"}
+
+
+def hub_compose(cfg: dict, name: str, action: str) -> int:
+    """serve, bot or worker as a container on the NAS ([serve] hub): docker compose over ssh."""
+    host, _, sudo = recorder_ssh(cfg)
+    folder = cfg["serve"]["hub"]
+    cmd = f"cd {shlex.quote(folder)} && {sudo} docker compose {HUB_ACTION[action]} {name}"
+    if action != "status":
+        cmd += f" && {sudo} docker compose ps {name}"
+    r = ssh(host, cmd, timeout=120)
+    print((r.stdout + r.stderr).strip() or f"{name}: no output from {host}")
+    return r.returncode
+
+
+def run_task(name: str, action: str, cfg: dict | None = None) -> int:
+    """The task script (Windows) or the hub container; its output goes straight through."""
+    if cfg and cfg["serve"]["hub"]:
+        return hub_compose(cfg, name, action)
     if sys.platform != "win32":
         print(f"{name}: not a Windows scheduled task on this machine ({TASKS[name].name} is Windows only)")
         return 0
@@ -127,7 +145,7 @@ def run(cfg: dict, action: str = "status", which: str = "all", force: bool = Fal
             print(f"===== {name}", flush=True)
             if name in HEARTBEATS:
                 print("\n".join(daemon.heartbeat_lines(name, daemon.heartbeat(cfg, name))), flush=True)
-            run_task(name, "status")
+            run_task(name, "status", cfg)
         if which in ("all", "recorder"):
             print("===== recorder")
             print("\n".join(recorder_lines(recorder(cfg))))
@@ -143,5 +161,5 @@ def run(cfg: dict, action: str = "status", which: str = "all", force: bool = Fal
     worst = 0
     for name in (["worker", "serve", "bot"] if which == "all" else [which]):
         print(f"===== {name}", flush=True)
-        worst = max(worst, run_task(name, action))
+        worst = max(worst, run_task(name, action, cfg))
     return worst

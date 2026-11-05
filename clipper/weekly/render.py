@@ -13,6 +13,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
+from ..draw import first_font
 from ..errors import ClipperError
 from . import style as weekly_style
 from .faces import Faces
@@ -28,7 +29,7 @@ class Fonts:
     def __init__(self, wc: dict):
         self.paths = {}
         for key in ("headline", "condensed", "serif_italic", "serif_bold_italic", "black", "bold"):
-            p = next((f for f in wc[f"{key}_fonts"] if Path(f).exists()), None)
+            p = first_font(wc[f"{key}_fonts"])
             if not p:
                 raise ClipperError(f"[weekly] {key}_fonts: none of {wc[f'{key}_fonts']} exist (clipper doctor)")
             self.paths[key] = p

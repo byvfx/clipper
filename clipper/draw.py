@@ -5,6 +5,9 @@ stage (clipper/thumbs/); nothing here knows a cover's layout."""
 from __future__ import annotations
 
 import io
+import os
+import sys
+from functools import cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
@@ -20,11 +23,41 @@ def color(c: str) -> tuple[int, int, int]:
 # ---------- fonts ----------
 # tc is a [thumbnail]-like table: font, fonts, condensed_fonts, condensed_variation.
 
-def font_path(tc: dict, key: str = "font") -> str:
-    for p in [tc.get(key) or tc["font"], *tc["fonts"]]:
-        if p and Path(p).exists():
+def font_dirs() -> list[Path]:
+    """Where this OS keeps fonts."""
+    if sys.platform == "win32":
+        return [Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts",
+                Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft/Windows/Fonts"]
+    if sys.platform == "darwin":
+        return [Path("/Library/Fonts"), Path("/System/Library/Fonts"),
+                Path("/System/Library/Fonts/Supplemental"), Path.home() / "Library/Fonts"]
+    return [Path("/usr/share/fonts"), Path("/usr/local/share/fonts"), Path.home() / ".fonts"]
+
+
+@cache
+def installed_fonts() -> dict[str, Path]:
+    """This machine's font files by lower-case file name."""
+    return {f.name.lower(): f for d in font_dirs() if d.exists() for f in sorted(d.rglob("*"))
+            if f.suffix.lower() in (".ttf", ".otf", ".ttc")}
+
+
+def first_font(paths: list[str]) -> str | None:
+    """The first of paths that exists here, as given or as an installed font with its file
+    name. The defaults name Windows paths first; a Linux machine (the NAS containers) that has
+    the same files in a font folder (/usr/local/share/fonts) finds them by name."""
+    for p in filter(None, paths):
+        if Path(p).exists():
             return str(p)
-    raise ClipperError("thumbnail: no font found; set [thumbnail] font to a .ttf path")
+        if hit := installed_fonts().get(Path(p.replace("\\", "/")).name.lower()):
+            return str(hit)
+    return None
+
+
+def font_path(tc: dict, key: str = "font") -> str:
+    p = first_font([tc.get(key) or tc["font"], *tc["fonts"]])
+    if not p:
+        raise ClipperError("thumbnail: no font found; set [thumbnail] font to a .ttf path")
+    return p
 
 
 def font_at_cap(path: str, cap: float) -> ImageFont.FreeTypeFont:
@@ -35,15 +68,15 @@ def font_at_cap(path: str, cap: float) -> ImageFont.FreeTypeFont:
 
 def cond_font(tc: dict, size: int) -> ImageFont.FreeTypeFont:
     """The condensed face for teasers, subheads and labels; the headline font if none."""
-    for p in tc["condensed_fonts"]:
-        if p and Path(p).exists():
-            f = ImageFont.truetype(p, size)
-            try:
-                f.set_variation_by_name(tc["condensed_variation"])
-            except (OSError, ValueError, AttributeError):
-                pass  # not a variable font, or no such instance
-            return f
-    return ImageFont.truetype(font_path(tc), size)
+    p = first_font(tc["condensed_fonts"])
+    if not p:
+        return ImageFont.truetype(font_path(tc), size)
+    f = ImageFont.truetype(p, size)
+    try:
+        f.set_variation_by_name(tc["condensed_variation"])
+    except (OSError, ValueError, AttributeError):
+        pass  # not a variable font, or no such instance
+    return f
 
 
 def head_font(tc: dict, size: int) -> ImageFont.FreeTypeFont:

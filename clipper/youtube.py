@@ -45,7 +45,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import jsonstate, ytquota
+from . import jsonstate, schedule, ytquota
 from .bleep import Bleeper
 from .config import for_stream
 from .errors import ClipperError
@@ -115,7 +115,7 @@ def clean(text: str, limit: int) -> str:
 
 
 def metadata(entry: dict, cfg: dict) -> dict:
-    video = Path(entry["file"])
+    video = schedule.video(cfg, entry)
     sdir = cfg["paths"]["streams"] / entry["stream"]
     cfg = for_stream(cfg, sdir)  # title_format and show name are per show
     draft_path = sdir / "metadata" / video.parent.name / f"{video.stem}.json"
@@ -201,7 +201,7 @@ def source_parents(cfg: dict, e: dict, entries: list[dict], cache: dict) -> list
     segs, comps = stream_sources(sdir, cache)
     out = []
     if e["kind"] == "clip":
-        side = sdir / "clips" / f"{Path(e['file']).stem}.json"
+        side = sdir / "clips" / f"{schedule.video(cfg, e).stem}.json"
         if side.exists():
             c = jsonstate.load(side)
             for s in segs:
@@ -229,7 +229,7 @@ def source_parents(cfg: dict, e: dict, entries: list[dict], cache: dict) -> list
 def short_segment(cfg: dict, e: dict, entries: list[dict], cache: dict) -> dict | None:
     """The scheduled segment a Short's moment falls in (its sidecar's in_s), if any."""
     sdir = cfg["paths"]["streams"] / e["stream"]
-    side = sdir / "shorts" / f"{Path(e['file']).stem}.json"
+    side = sdir / "shorts" / f"{schedule.video(cfg, e).stem}.json"
     if not side.exists():
         return None
     in_s = jsonstate.load(side)["in_s"]
@@ -785,7 +785,7 @@ def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: d
     # made_for_kids, playlist_privacy...) applies to its uploads.
     cfg = for_stream(cfg, cfg["paths"]["streams"] / e["stream"])
     yc = cfg["youtube"]
-    if not Path(e["file"]).exists():
+    if not schedule.video(cfg, e).exists():
         raise FileNotFoundError(f"no video file {e['file']}")
     m = metadata(e, cfg)
     parents = source_parents(cfg, e, sched["entries"], sources)
@@ -816,7 +816,7 @@ def upload_one(cfg: dict, yt, e: dict, sched: dict, sched_path: Path, sources: d
     print(f"uploading {e['key']} -> {when}: {m['title']}",
           flush=True)
     t = time.time()
-    vid = upload_video(yt, Path(e["file"]), body, yc["notify_subscribers"])
+    vid = upload_video(yt, schedule.video(cfg, e), body, yc["notify_subscribers"])
     url = f"https://youtu.be/{vid}"
     # Record the upload before the optional extras, so a failure there can't
     # make the next run upload the same video twice.
@@ -913,7 +913,7 @@ def attach(cfg: dict, ref: str, url: str, dry_run: bool = False) -> None:
     if not found:
         raise ClipperError(f"YouTube has no video {vid} on this channel (still uploading?)")
     v = found[0]
-    stem = Path(e["file"]).stem
+    stem = schedule.video(cfg, e).stem
     print(f"{key} <- https://youtu.be/{vid} ({v['status']['privacyStatus']}, "
           f"Studio title {v['snippet']['title']!r})")
     import re

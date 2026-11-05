@@ -549,6 +549,10 @@ disk_free_gb = 50            # 0 = no disk check
 # "" = this machine (http://127.0.0.1:<[warroom] port>/). On another machine, e.g.
 # "http://nas:8765/", with the same [warroom] token (or secrets/warroom_token.txt) on both.
 url = ""
+# Where serve, the bot and the worker run, for `clipper services`: "" = this machine's
+# scheduled tasks (deploy/serve, deploy/discord, deploy/worker); "clipper-hub" = containers
+# on the NAS (deploy/hub/deploy.sh), reached over ssh like the recorder ([record] ssh_host).
+hub = ""
 
 [warroom]
 # The dashboard at http://127.0.0.1:8765/ with which shows are live, each stream's pipeline,

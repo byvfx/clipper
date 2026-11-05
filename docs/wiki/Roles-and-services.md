@@ -8,7 +8,8 @@ clipper runs in four roles. A machine can do more than one.
 | **Recorder** | `clipper record watch` in Docker on the NAS | Docker; see [NAS recorder](NAS-recorder) |
 
 All roles share one streams folder (a NAS share). Only one machine runs serve and only one
-runs the bot.
+runs the bot. Here serve, the bot and the worker run as containers on the NAS since
+2026-11-05, with the config and state there too: see [NAS hub](NAS-hub).
 
 ## Services
 
@@ -28,7 +29,9 @@ also stop the supervisor and stage processes (stopping the task alone doesn't).
 `clipper services restart recorder` restarts the recorder over ssh, refused while it's
 recording a show.
 
-Restart serve after scheduler or war-room changes, the bot after Discord changes.
+Restart serve after scheduler or war-room changes, the bot after Discord changes. With
+`[serve] hub` set ([NAS hub](NAS-hub)), `clipper services` runs `docker compose` on the NAS over
+ssh instead, and code changes go out with `bash deploy/hub/deploy.sh`.
 
 ## Serve and bot on different machines
 

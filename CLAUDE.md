@@ -67,11 +67,18 @@ the same PR as the change.
 - Keys are Windows *user* environment variables, which agent shells do not inherit. Load
   them first, for example in PowerShell:
   `$env:KITSU_TOKEN = [Environment]::GetEnvironmentVariable("KITSU_TOKEN","User")`.
-- `clipper serve` (the war room and every background job), the Discord bot and the GPU worker
-  run as scheduled tasks (`deploy/serve`, `deploy/discord`, `deploy/worker`).
-  `clipper services status|stop|restart serve|bot|worker|all` runs their task scripts, which also
-  stop the supervisor and stage processes (stopping the task alone doesn't). Restart serve after
-  scheduler or war-room Python changes, the bot after Discord changes.
+- The config and all state live on the NAS since 2026-11-05 (wiki NAS-hub): `clipper.toml`,
+  `schedule.json`, `secrets/`, `logs/`, `faces/` etc. are in `//192.168.0.155/docker/clipper`
+  (`/data` in the containers), not in the repo. The user variable `CLIPPER_CONFIG` points there,
+  and clipper reads it from the registry when a shell didn't inherit it; a `./clipper.toml` in
+  the checkout would win, so don't make one.
+- `clipper serve` (the war room and every background job), the Discord bot and the worker run
+  as containers on the NAS (`deploy/hub`, compose project `clipper-hub`), not on the laptop.
+  `clipper services status|stop|restart serve|bot|worker|all` runs `docker compose` there over
+  ssh (`[serve] hub`). Code changes reach them with `bash deploy/hub/deploy.sh` from a checkout
+  of main (Git Bash): that replaces restarting serve or the bot, and never touches the recorder.
+  The laptop's scheduled tasks (`deploy/serve`, `deploy/discord`, `deploy/worker`) are disabled;
+  never run them alongside the containers (their single-instance locks don't see each other).
 - The NAS recorder is deployed with `bash deploy/record/deploy.sh`, only when no show is live:
   the restart starts a new recording part. The script refuses while `clipper record status`
   shows a recording (exit 3); `--force` overrides it.
@@ -79,8 +86,8 @@ the same PR as the change.
   cost before doing it on a long stream. `score` refuses a rerun without `--force` (`clipper run
   --from` passes it), `cut` keeps picks whose in/out points are unchanged, `thumbs` keeps a cover
   whose cut is unchanged, and `weekly --render` never drafts.
-- Before a hand edit of `schedule.json` or `clipper.toml`, copy it to
-  `backups/<file>.before_<what>_<date>` (gitignored), not the repo root.
+- Before a hand edit of `schedule.json` or `clipper.toml` (both on the NAS share), copy it to
+  `backups/<file>.before_<what>_<date>` beside it, not the repo root.
 
 ## Checks
 

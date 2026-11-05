@@ -33,7 +33,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import jsonstate, youtube
+from . import jsonstate, schedule, youtube
 from .errors import ClipperError
 from .states import split_key
 
@@ -101,7 +101,7 @@ def resolve(sched: dict, ref: str) -> dict:
 def text_for(e: dict, cfg: dict) -> dict:
     rc = cfg["rumble"]
     m = youtube.metadata(e, cfg)
-    video = Path(e["file"])
+    video = schedule.video(cfg, e)
     draft_path = m["stream_dir"] / "metadata" / video.parent.name / f"{video.stem}.json"
     draft = jsonstate.read(draft_path, {})
     desc = m["description"]
@@ -128,7 +128,7 @@ def title_and_tags(e: dict, cfg: dict, section: str) -> tuple[str, list[str]]:
     sdir = cfg["paths"]["streams"] / e["stream"]
     scfg = for_stream(cfg, sdir)
     m = youtube.metadata(e, cfg)
-    video = Path(e["file"])
+    video = schedule.video(cfg, e)
     draft = jsonstate.read(sdir / "metadata" / video.parent.name / f"{video.stem}.json", {})
     review_path = sdir / "review.json"
     fields = (jsonstate.load(review_path).get(m["review_key"], {})
@@ -193,7 +193,7 @@ def upload_txt(e: dict, t: dict, cfg: dict, thumb: bool, video_name: str) -> str
 
 def prepare(cfg: dict, e: dict, kitsu: list) -> dict:
     rc = cfg["rumble"]
-    video = Path(e["file"])
+    video = schedule.video(cfg, e)
     if not video.exists():
         raise FileNotFoundError(video)
     folder = cfg["paths"]["rumble"] / e["stream"] / short_key(e)
@@ -310,7 +310,7 @@ def run(cfg: dict, stream: str | None = None, items: list[str] | None = None,
         if dry_run:
             t = text_for(e, cfg)
             print(f"  {e['key']}: {t['title']}  ({len(t['tags'])} tags, "
-                  f"thumbnail {'yes' if Path(e['file']).with_suffix('.jpg').exists() else 'no'}, "
+                  f"thumbnail {'yes' if schedule.video(cfg, e).with_suffix('.jpg').exists() else 'no'}, "
                   f"{release_time(e, cfg)})")
             continue
         try:
