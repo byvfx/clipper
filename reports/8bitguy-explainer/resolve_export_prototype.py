@@ -1,6 +1,6 @@
 # Prototype: the 8-Bit Guy explainer as a Resolve project: vertical shots with handles, Moo's reads and
 # the ducked beds as media, and a Resolve-shaped OTIO timeline that places them like the natural mix.
-# usage: python resolve_export.py <workdir> <outdir>
+# usage: python resolve_export_prototype.py <workdir> <outdir> [VERSION]
 import copy, json, subprocess, sys, tomllib, wave
 from pathlib import Path
 import numpy as np
@@ -18,7 +18,7 @@ VIDEO_CROPS = shorts.panel_crops({"panels": [{"src": [0.1563, 0.1259, 0.7167, 0.
 SR, FPS, HANDLE = 48000, 30, 1.0
 TL_START = 108000                       # 01:00:00:00 at 30 fps, Resolve's default
 LINES = json.load(open(D / "vo4" / "lines.json"))
-REF = json.load(open(Path(__file__).parent.parent / "rv" / "ref.otio"))   # a timeline Resolve exported itself
+REF = json.load(open(Path(__file__).parent / "resolve" / "resolve_reference.otio"))  # a timeline Resolve exported itself
 
 
 def run(cmd):
