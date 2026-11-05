@@ -31,7 +31,7 @@ with, the same windows (chat and transcript scan) and the cached summary, so onl
 |---|---|---|
 | `a` (default) | judges every window (Pass A); Pass B stays on the stream's model | the most: one call per window |
 | `b` | ranks the stream's own Pass A results (Pass B) | one call |
-| `ab` | both | both |
+| `ab` | both (`--model-b` gives Pass B its own candidate) | both |
 
 It prints the estimate first and refuses a run over `--budget` ($2 by default); `--dry-run` only
 prints it. An OpenRouter model with no `[llm.prices]` entry is estimated from OpenRouter's own

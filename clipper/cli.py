@@ -286,7 +286,8 @@ def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_compare(cfg: dict, args: argparse.Namespace) -> None:
     from . import compare
 
-    compare.compare_score(stream_dir(cfg, args.stream), cfg, args.model, args.which, args.budget, args.dry_run)
+    compare.compare_score(stream_dir(cfg, args.stream), cfg, args.model, args.which, args.budget, args.dry_run,
+                          args.model_b)
 
 
 def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
@@ -1531,6 +1532,7 @@ def add_extras(sub) -> None:
     q.add_argument("--pass", dest="which", choices=("a", "b", "ab"), default="a",
                    help="a: the candidate judges every window, Pass B stays (default); b: the candidate "
                         "ranks the stream's own Pass A results; ab: both")
+    q.add_argument("--model-b", default="", help="with --pass ab: a different candidate for Pass B")
     q.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
     q.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
     q.set_defaults(fn=cmd_compare)

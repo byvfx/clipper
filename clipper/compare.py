@@ -10,7 +10,7 @@ each did against the review decisions (review.json, synced from Kitsu). Written 
   --pass a   the candidate judges every window (Pass A); Pass B stays on the stream's model,
              so the picks show what the Pass A difference does downstream (the default)
   --pass b   the stream's own Pass A results; the candidate ranks them (Pass B, one call)
-  --pass ab  the candidate does both
+  --pass ab  the candidate does both (--model-b: a different candidate for Pass B)
 
 The summary and transcript scan stay as the stream cached them: what is compared is the
 judgments, not the windows. --dry-run prints the estimate; a run whose estimate is over
@@ -196,7 +196,7 @@ def estimate(cfg: dict, prompts: Prompts, which: str, windows: list[dict], n_kep
 
 
 def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: float = 2.0,
-                  dry_run: bool = False) -> dict:
+                  dry_run: bool = False, model_b: str = "") -> dict:
     """Score `sdir` again with `model` in the passes `which` names; see the module doc."""
     from .scoring import load_signals, run_pass_a, run_pass_b, stream_summary
     from .transcript import load_words
@@ -211,10 +211,14 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     sc["prompt_version"] = base.get("prompt_version") or sc["prompt_version"]
     prompts = Prompts(cfg)
     base_a_model, base_b_model = baseline_models(base, cfg)
+    if model_b and which != "ab":
+        raise ClipperError("--model-b goes with --pass ab (--pass b takes --model)")
+    label = f"{model} + {model_b}" if model_b and model_b != model else model
+    model_b = model_b or model
     model_a = model if "a" in which else base_a_model
-    model_b = model if "b" in which else base_b_model
+    model_b = model_b if "b" in which else base_b_model
     if model_a == base_a_model and model_b == base_b_model:
-        raise ClipperError(f"{model} is what scored {sdir.name} already ({which}): pick another model")
+        raise ClipperError(f"{label} is what scored {sdir.name} already ({which}): pick another model")
     sc["model_a"], sc["model_b"] = model_a, model_b
 
     base_a = base.get("pass_a", [])
@@ -239,7 +243,8 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
         raise ClipperError(f"estimate ${est:.2f} is over --budget ${budget:.2f}; raise it to go ahead")
 
     claude = Claude(cfg)
-    preflight(claude, model)
+    for m in dict.fromkeys(m for m, base_m in ((model_a, base_a_model), (model_b, base_b_model)) if m != base_m):
+        preflight(claude, m)
     t0 = time.time()
     out_dir = sdir / "compare"
     out_dir.mkdir(exist_ok=True)
@@ -270,7 +275,7 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
                      "model_a": base_a_model, "model_b": base_b_model,
                      "cost_usd": base.get("cost_usd", 0.0), "picks": base_b.get("picks", []),
                      "review": against_review(base_b.get("picks", []), decided)},
-        "candidate": {"label": model, "model_a": model_a, "model_b": model_b,
+        "candidate": {"label": label, "model_a": model_a, "model_b": model_b,
                       "cost_usd": round(claude.cost, 4), "cost_pass_a_usd": round(cost_a, 4),
                       "seconds": round(time.time() - t0, 1), "pass_a": cand_a, "pass_b": cand_b,
                       "review": against_review(cand_b.get("picks", []), decided)},
@@ -278,7 +283,7 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
         "picks": pick_rows(base_b.get("picks", []), cand_b.get("picks", []), decided, base_results,
                            {r["id"]: r for r in cand_a} or base_results),
     }
-    stem = out_dir / f"score_{slug(model)}_{which}"
+    stem = out_dir / f"score_{slug(label)}_{which}"
     jsonstate.write(stem.with_suffix(".json"), res)
     md = report_md(res)
     stem.with_suffix(".md").write_text(md, encoding="utf-8")
