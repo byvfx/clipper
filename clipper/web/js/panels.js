@@ -92,35 +92,44 @@ document.addEventListener("drop", async e => {
   act(ref, "pin", { text });
 });
 
-// Next open slot: the server picks it by the scheduler's rules; a preview, then the pins.
+// Next open slot: the server picks it by the scheduler's rules; a preview, then the pins. Apply
+// sends the preview's print: if the plan has moved since, the new one is shown instead.
+let SLOTWIN = 0;  // which preview window is open: an answer for an older (or closed) one is dropped
 async function nextSlot(body, what) {
-  const d = $("#tool"); d.dataset.kind = "slot";
+  const d = $("#tool"), win = ++SLOTWIN; d.dataset.kind = "slot"; d.classList.remove("cover", "facesw");
+  const live = () => win === SLOTWIN && d.open && d.dataset.kind === "slot";
   d.innerHTML = `<div class="m-head"><b>Next open slot</b><span class="sp" style="color:var(--faint);font-size:12px">${esc(what)}</span><button class="x" data-close>×</button></div>
     <div class="tbody"><div class="rep-list" id="slList"><span class="f">Finding slots…</span></div>
       <div><button class="btn primary" id="slApply" disabled>Pin</button></div></div>`;
   if (!d.open) d.showModal();
-  let r;
-  try { r = await api("/api/slot", { ...body, dry_run: true }); }
-  catch (e) { $("#slList").innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; return; }
+  const list = $("#slList"), btn = $("#slApply");
   const when = iso => new Date(iso).toLocaleString([], { timeZone: STATE.timezone, weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  $("#slList").innerHTML = (r.plan.length ? `<div class="f">Pin${r.plan.length > 1 ? ` these ${r.plan.length}` : ""} (Publish at in Kitsu):</div>`
-      + r.plan.map(p => `<div class="it"><b>${esc(when(p.at))}</b> ${esc(p.title)}</div>`).join("") : `<div class="f">Nothing to pin.</div>`)
-    + (r.bumped.length ? `<div style="color:var(--amber)">These lose their slot (a pin counts against its stream's budget first):</div>`
-      + r.bumped.map(b => `<div class="it"><span class="f">${esc(when(b.at))}</span> ${esc(b.title)} <span class="f">· ${esc(b.why)}</span></div>`).join("") : "")
-    + (r.refused.length ? `<details ${r.plan.length ? "" : "open"}><summary class="f">${r.refused.length} left out</summary>`
-      + r.refused.map(x => `<div class="it">${esc(x.title)} <span class="f">· ${esc(x.why)}</span></div>`).join("") + `</details>` : "");
-  const btn = $("#slApply");
-  btn.disabled = !r.plan.length;
-  btn.textContent = r.plan.length === 1 ? `Pin for ${when(r.plan[0].at)}` : `Pin ${r.plan.length}`;
+  let print = "";
+  const show = (r, moved) => {
+    print = r.print;
+    list.innerHTML = (moved ? `<div style="color:var(--amber)">The schedule moved since the preview; nothing was pinned. This is the plan now:</div>` : "")
+      + (r.plan.length ? `<div class="f">Pin${r.plan.length > 1 ? ` these ${r.plan.length}` : ""} (Publish at in Kitsu):</div>`
+        + r.plan.map(p => `<div class="it"><b>${esc(when(p.at))}</b> ${esc(p.title)}${p.let_go ? ` <span class="f" title="${esc(p.let_go)}">· ${p.let_go.startsWith("stale") ? "stale" : "over its stream's budget"}: goes because it's pinned</span>` : ""}</div>`).join("") : `<div class="f">Nothing to pin.</div>`)
+      + (r.bumped.length ? `<div style="color:var(--amber)">These lose their slot (a pin counts against its stream's budget first):</div>`
+        + r.bumped.map(b => `<div class="it"><span class="f">${esc(when(b.at))}</span> ${esc(b.title)} <span class="f">· ${esc(b.why)}</span></div>`).join("") : "")
+      + (r.refused.length ? `<details ${r.plan.length ? "" : "open"}><summary class="f">${r.refused.length} left out</summary>`
+        + r.refused.map(x => `<div class="it">${esc(x.title)} <span class="f">· ${esc(x.why)}</span></div>`).join("") + `</details>` : "");
+    btn.disabled = !r.plan.length;
+    btn.textContent = r.plan.length === 1 ? `Pin for ${when(r.plan[0].at)}` : `Pin ${r.plan.length}`;
+  };
+  try { const r = await api("/api/slot", { ...body, dry_run: true }); if (live()) show(r); }
+  catch (e) { if (live()) list.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; return; }
   btn.onclick = async () => {
     btn.disabled = true; btn.textContent = "Pinning…";
     try {
-      const a = await api("/api/slot", body);
+      const a = await api("/api/slot", { ...body, print });
+      if (a.changed) { if (live()) show(a, true); return; }
       (a.rows || []).forEach(upsert);
       const f = a.failed || [];
       toast(`Pinned ${a.done} to the next open slot${a.done === 1 ? "" : "s"}${f.length ? `; ${f.length} failed (${f[0].ref.split("/")[1]}: ${f[0].error})` : ""}`, !!f.length && !a.done, a.undo);
-      d.close(); renderQueue(); refresh();
-    } catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = "Pin"; }
+      if (live()) d.close();
+      renderQueue(); refresh();
+    } catch (e) { toast(e.message, true); if (live()) { btn.disabled = false; btn.textContent = "Pin"; } }
   };
 }
 document.addEventListener("click", e => {

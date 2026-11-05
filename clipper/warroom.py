@@ -916,8 +916,8 @@ SLOT_KINDS = ("clip", "short", "segment")  # a compilation waits for its segment
 
 def slot_plan(cfg: dict, refs: list[str] | None = None, kind: str = "") -> dict:
     """refs: these items; or kind: every approved one of that kind without a slot, not held.
-    {"plan": [{ref, title, kind, at, text}], "refused": [{ref, title, why}],
-    "bumped": [{ref, title, at, why}]}."""
+    {"plan": [{ref, title, kind, at, text, let_go}], "refused": [{ref, title, why}],
+    "bumped": [{ref, title, at, why}]}; let_go: why the scheduler won't send it (a pin will)."""
     sc = cfg["schedule"]
     tz = ZoneInfo(sc["timezone"])
     now = datetime.now(tz)
@@ -962,7 +962,7 @@ def slot_plan(cfg: dict, refs: list[str] | None = None, kind: str = "") -> dict:
                 continue
             taken.append(when)
             plan.append({"ref": r["ref"], "title": r["title"], "kind": k, "at": when.isoformat(),
-                         "text": f"{when:%Y-%m-%d %H:%M}"})
+                         "text": f"{when:%Y-%m-%d %H:%M}", "let_go": r.get("dropped") or ""})
         bumped = []
         if plan:  # what a replan with the pins drops that one without them keeps
             keeps = keeps if keeps is not None else schedule.with_pins(cfg, {})[0]
@@ -977,18 +977,28 @@ def slot_plan(cfg: dict, refs: list[str] | None = None, kind: str = "") -> dict:
         full |= more
 
 
+def slot_print(out: dict) -> str:
+    """What a preview showed, to tell whether Apply would do the same: the pins and the bumps."""
+    return json.dumps([sorted((p["ref"], p["text"]) for p in out["plan"]),
+                       sorted(b["ref"] for b in out["bumped"])])
+
+
 def do_slot(cfg: dict, body: dict) -> dict:
     """{"refs": [...]} or {"kind": "segment"} (every one without a slot); dry_run: only the
-    plan. Otherwise pin each item to its slot and replan once."""
+    plan, with its "print". Otherwise pin each item to its slot and replan once, if the plan
+    is still the previewed one (body "print"); if not: the new plan, "changed", nothing done."""
     refs = [checked_ref(r) for r in body["refs"]] if body.get("refs") else None
     kind = body.get("kind", "")
     if refs is None and kind not in SLOT_KINDS:
         raise ClipperError("slot what? refs, or a kind: " + ", ".join(SLOT_KINDS))
     if body.get("dry_run"):
-        return slot_plan(cfg, refs, kind)
+        out = slot_plan(cfg, refs, kind)
+        return {**out, "print": slot_print(out)}
     done, failed, rows = [], [], []
     with LOCK:  # planned again: the schedule may have moved since the preview
         out = slot_plan(cfg, refs, kind)
+        if slot_print(out) != body.get("print"):
+            return {**out, "print": slot_print(out), "changed": True, "done": 0}
         for p in out["plan"]:
             try:
                 item = actions.resolve(cfg, p["ref"])

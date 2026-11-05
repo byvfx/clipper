@@ -208,3 +208,8 @@ def test_next_slot_for_every_segment_leaves_out_a_full_budget(tmp_path, defaults
     assert out["bumped"] == [{"ref": "a/auto", "title": "a/auto", "at": auto["publish_at"],
                               "why": "over the stream's segment budget (1)"}]
     assert {r["ref"]: r["why"] for r in out["refused"]} == {"b/held": "held", "b/no": "not approved"}
+
+    shown = warroom.do_slot(cfg, {"kind": "segment", "dry_run": True})
+    assert shown["plan"][0]["let_go"] == "" and shown["print"]
+    moved = warroom.do_slot(cfg, {"kind": "segment", "print": "an older preview"})  # Apply pins nothing
+    assert moved["changed"] and moved["done"] == 0 and moved["print"] == shown["print"]
