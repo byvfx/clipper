@@ -46,3 +46,7 @@ backups/
 # video never goes in git (demo clips, renders)
 *.mp4
 news/
+
+# Resolve export media for the 8-Bit Guy explainer prototype
+reports/8bitguy-explainer/resolve/media/
+reports/8bitguy-explainer/resolve/roomtone/
