@@ -227,6 +227,8 @@ def snap_trim(cfg: dict, sdir: Path, st: dict, trim: dict) -> tuple[float, float
         a, b = snap_window(words, a, b, sc["pad_s"])
     if st["kind"] == "short":
         b = min(b, a + sc["max_s"])
+    if b - a < 3:  # snapping can shrink a window with little speech in it
+        raise ValueError(f"trim {a:.1f}-{b:.1f} s is too short")
     if cur and abs(cur[0] - a) < 0.3 and abs(cur[1] - b) < 0.3:
         return None  # what it already is
     return round(a, 3), round(b, 3)
@@ -278,23 +280,33 @@ def rewrite_draft(cfg: dict, path: Path, chapters: list[dict]) -> None:
 def trim_segment(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> list[str]:
     """Re-cut the segment, shift its chapters, re-cut the compilations it is part of.
     Returns the compilation item keys that changed."""
+    return trim_segments(cfg, sdir, {st["id"]: (a, b)})
+
+
+def trim_segments(cfg: dict, sdir: Path, wins: dict[str, tuple[float, float]]) -> list[str]:
+    """trim_segment for several segments at once: each compilation is re-cut only once."""
     from .cut import cut_compilations, cut_segments
 
     if (load(sdir / "meta.json", {}) or {}).get("kind") == "story":
         story = sdir.name.removeprefix("story-")
         raise ClipperError(f"a story's video is an edit of other videos: trim its parts in {sdir.name}/story.json, "
                            f"then clipper story cut {story}")
+    deltas = {}
     with jsonstate.update(sdir / "segments.json", {}) as data:
-        seg = next(s for s in data["segments"] if s["id"] == st["id"])
-        delta = a - seg["start_s"]
-        seg.setdefault("orig_start_s", seg["start_s"])
-        seg.setdefault("orig_end_s", seg["end_s"])
-        seg["start_s"], seg["end_s"], seg["duration_s"] = a, b, round(b - a, 1)
-    cut_segments(sdir, cfg, ids=[seg["id"]])
-    draft = sdir / "metadata" / "segments" / f"{Path(seg['file']).stem}.json"
-    if draft.exists():
-        rewrite_draft(cfg, draft, shift_chapters(load(draft, {}).get("chapters", []), delta, b - a))
-    comps = [c for c in data.get("compilations", []) if seg["id"] in c["segments"]]
+        for seg in data["segments"]:
+            if seg["id"] in wins:
+                a, b = wins[seg["id"]]
+                deltas[seg["id"]] = a - seg["start_s"]
+                seg.setdefault("orig_start_s", seg["start_s"])
+                seg.setdefault("orig_end_s", seg["end_s"])
+                seg["start_s"], seg["end_s"], seg["duration_s"] = a, b, round(b - a, 1)
+    cut_segments(sdir, cfg, ids=list(wins))
+    for seg in data["segments"]:
+        draft = sdir / "metadata" / "segments" / f"{Path(seg['file']).stem}.json"
+        if seg["id"] in wins and draft.exists():
+            rewrite_draft(cfg, draft, shift_chapters(load(draft, {}).get("chapters", []),
+                                                     deltas[seg["id"]], seg["duration_s"]))
+    comps = [c for c in data.get("compilations", []) if set(wins) & set(c["segments"])]
     if not comps:
         return []
     cut_compilations(sdir, cfg, topics=[c["topic"] for c in comps])
@@ -330,11 +342,9 @@ def comp_edits(segs: list[dict], a: float, b: float) -> list[tuple[dict, float, 
 def trim_compilation(cfg: dict, sdir: Path, st: dict, a: float, b: float) -> list[tuple[str, str]]:
     """Trim the compilation's first and/or last segment (which re-cuts the compilation).
     Returns (item key, thumbs asset id) of every video that changed."""
-    out = []
-    for seg, x, y in comp_edits(comp_segments(sdir, st), a, b):
-        out.append((Path(seg["file"]).stem, seg["id"]))
-        out += [(k, k) for k in trim_segment(cfg, sdir, {"id": seg["id"]}, x, y)]
-    return list(dict.fromkeys(out))
+    edits = comp_edits(comp_segments(sdir, st), a, b)
+    comps = trim_segments(cfg, sdir, {seg["id"]: (x, y) for seg, x, y in edits})
+    return [(Path(seg["file"]).stem, seg["id"]) for seg, _, _ in edits] + [(k, k) for k in comps]
 
 
 def thumb_asset_id(st: dict) -> str:
