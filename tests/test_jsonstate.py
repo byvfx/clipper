@@ -99,6 +99,16 @@ def test_release_leaves_a_successors_lock(tmp_path):
     assert lock.read_text() == "other host pid 1 2026-11-04 00:00:00 abc\n"
 
 
+def test_release_past_the_cutoff_leaves_the_lock(tmp_path, monkeypatch):
+    # Held until a waiter may be taking it over as stale, the holder doesn't touch it at all:
+    # read-then-delete could otherwise hit the waiter's new lock in between.
+    monkeypatch.setattr(jsonstate, "STALE_S", 10)   # cutoff = 10 s before stale = at once
+    p = tmp_path / "s.json"
+    with jsonstate.locked(p):
+        pass
+    assert (tmp_path / "s.json.lock").exists()
+
+
 def test_unwritable_folder_fails_instead_of_spinning(tmp_path, monkeypatch):
     def refuse(*a, **kw):
         raise PermissionError(13, "Access is denied")

@@ -113,8 +113,11 @@ def _release_file(lock_path: Path, token: str, acquired: float) -> None:
 
 
 def _unlink_own(lock_path: Path, token: str, until: float) -> bool:
+    """Checked before every try: read-then-delete isn't atomic, so it's only safe while no one
+    can be taking the lock over (`until` is >= 10 s before that, which also covers clock skew
+    with the NAS). Past it the lock is left for the waiters' stale takeover."""
     attempt = 0
-    while True:
+    while time.monotonic() < until:
         try:
             if lock_path.read_text(encoding="utf-8") == token:
                 lock_path.unlink()
@@ -122,10 +125,9 @@ def _unlink_own(lock_path: Path, token: str, until: float) -> bool:
         except FileNotFoundError:
             return True
         except PermissionError:
-            if time.monotonic() >= until:
-                return False
             attempt += 1
             time.sleep(min(0.1 * attempt, 0.5))
+    return False
 
 
 def _acquire_file(lock_path: Path, wait_s: float) -> tuple[str, float]:
