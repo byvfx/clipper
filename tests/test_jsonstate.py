@@ -62,3 +62,36 @@ def test_release_retries_a_busy_lock(tmp_path, monkeypatch):
     with jsonstate.locked(p):
         pass
     assert not fails and not lock.exists()
+
+
+def test_release_keeps_trying_in_the_background(tmp_path, monkeypatch):
+    # Left behind, a fresh lock would make the next writer time out (60 s) before it counts
+    # as stale (120 s), so the releaser keeps at it until it can be deleted.
+    import threading
+    p = tmp_path / "s.json"
+    lock = tmp_path / "s.json.lock"
+    real_unlink = type(lock).unlink
+    fails = [PermissionError(13, "Access is denied")] * 15
+
+    def unlink(self, *a, **kw):
+        if self == lock and fails:
+            raise fails.pop()
+        return real_unlink(self, *a, **kw)
+
+    monkeypatch.setattr(type(lock), "unlink", unlink)
+    monkeypatch.setattr(jsonstate.time, "sleep", lambda s: None)
+    with jsonstate.locked(p):
+        pass
+    for t in threading.enumerate():
+        if t.name == "release s.json.lock":
+            t.join(5)
+    assert not fails and not lock.exists()
+
+
+def test_unwritable_folder_fails_instead_of_spinning(tmp_path, monkeypatch):
+    def refuse(*a, **kw):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(jsonstate.os, "open", refuse)
+    with pytest.raises(PermissionError), jsonstate.locked(tmp_path / "s.json", wait_s=0.2):
+        pass

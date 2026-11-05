@@ -100,13 +100,22 @@ def locked(path: Path, wait_s: float = WAIT_S) -> Iterator[None]:
 
 
 def _release_file(lock_path: Path) -> None:
-    for attempt in range(10):
+    if not _unlink(lock_path, 10):
+        # Still busy: keep trying from a thread (exit waits for it, this caller doesn't), so a
+        # waiter gets the lock as soon as it can be deleted. ~60 s, under STALE_S, so nobody
+        # can have reclaimed it and made a new one by then.
+        threading.Thread(target=_unlink, args=(lock_path, 120), name=f"release {lock_path.name}",
+                         daemon=False).start()
+
+
+def _unlink(lock_path: Path, tries: int) -> bool:
+    for attempt in range(tries):
         try:
             lock_path.unlink(missing_ok=True)
-            return
+            return True
         except PermissionError:  # another process is looking at it (Windows, the NAS share)
-            time.sleep(0.1 * (attempt + 1))
-    # still there: the next writer waits it out as stale rather than this one failing
+            time.sleep(min(0.1 * (attempt + 1), 0.5))
+    return False
 
 
 def _acquire_file(lock_path: Path, wait_s: float) -> None:
@@ -115,15 +124,21 @@ def _acquire_file(lock_path: Path, wait_s: float) -> None:
     while True:
         try:
             fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except (FileExistsError, PermissionError):
+        except (FileExistsError, PermissionError) as e:
             # PermissionError: on Windows and the NAS share a lock that is being deleted
             # (its holder just let go) refuses opens and stats until it is gone. Wait for it.
+            denied = e if isinstance(e, PermissionError) else None
             try:
                 if time.time() - lock_path.stat().st_mtime > STALE_S:
                     lock_path.unlink(missing_ok=True)  # its owner died holding it
                     continue
             except FileNotFoundError:
-                continue
+                if not denied:
+                    continue
+                # no lock, yet creating one is refused: maybe it just went, maybe the folder
+                # isn't writable. Back off, and past the deadline say which.
+                if time.monotonic() > deadline:
+                    raise denied
             except PermissionError:
                 pass
             if time.monotonic() > deadline:
