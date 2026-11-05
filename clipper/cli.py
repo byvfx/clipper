@@ -299,6 +299,16 @@ def cmd_models(cfg: dict, args: argparse.Namespace) -> None:
     if args.action == "list":
         models.list_tests(cfg)
         return
+    if args.action == "gold":
+        from . import gold
+
+        if args.gold_action == "propose":
+            gold.propose(cfg, args.streams)
+        elif args.gold_action == "confirm":
+            gold.confirm(cfg, jsonstate.load(Path(args.file)))
+        else:
+            gold.run(cfg, args.model, args.effort, args.prompt_version, args.budget, args.dry_run)
+        return
     models.test_model(cfg, args.model, args.effort, args.budget, not args.no_long, args.dry_run)
 
 
@@ -1581,6 +1591,21 @@ def add_extras(sub) -> None:
     q.set_defaults(fn=cmd_models)
     q = rsub.add_parser("list", help="every saved test, newest first")
     q.set_defaults(fn=cmd_models)
+    q = rsub.add_parser("gold", help="Pass A against windows a person labelled: propose them, then run a model")
+    gsub = q.add_subparsers(dest="gold_action", required=True)
+    g = gsub.add_parser("propose", help="windows from reviewed streams to label, into [paths] model_gold")
+    g.add_argument("--streams", type=int, default=12, help="the newest this many reviewed streams (12)")
+    g.set_defaults(fn=cmd_models)
+    g = gsub.add_parser("confirm", help='set labels from a JSON file: {"<stream>_<id>": {"label": "keep"}}')
+    g.add_argument("file")
+    g.set_defaults(fn=cmd_models)
+    g = gsub.add_parser("run", help="score the confirmed windows with a model; recall and precision per label")
+    g.add_argument("model")
+    g.add_argument("--effort", default="", help="instead of [scoring] effort_a; none = reasoning off")
+    g.add_argument("--prompt-version", default="", help="instead of [scoring] prompt_version")
+    g.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
+    g.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    g.set_defaults(fn=cmd_models)
 
 
 def add_setup(sub) -> None:
