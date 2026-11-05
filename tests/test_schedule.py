@@ -234,3 +234,33 @@ def test_previous_rewrites_old_paths(tmp_path):
                                         "file": "//nas/streams/kick-1/shorts/v01.mp4"}]})
     old, _ = schedule.previous(path)
     assert old["kick-1/v01"]["file"] == "kick-1/shorts/v01.mp4"
+
+
+def test_next_free_keeps_the_rules(sc):
+    sc = {**sc, "segment_times": ["10:00", "16:00"], "min_gap_minutes": 90}
+    at = lambda d, h, m=0: datetime(2026, 11, d, h, m, tzinfo=TZ)
+    nxt = lambda taken, after=NOW: schedule.next_free("segment", taken, sc, TZ, after)
+    assert nxt([]) == at(2, 10)                          # Monday's 10:00, an hour from NOW
+    assert nxt([], at(2, 10)) == at(2, 16)               # strictly after `after`
+    assert nxt([at(2, 10)]) == at(2, 16)                 # taken
+    assert nxt([at(2, 9, 0)]) == at(2, 16)               # 10:00 is within 90 min of 9:00
+    assert nxt([at(2, 10), at(2, 16)]) == at(3, 10)
+    assert nxt([at(2, 12)], at(2, 9)) == at(2, 10)       # 2 h apart is fine
+    assert schedule.next_free("segment", [at(2, 12)], {**sc, "max_per_day": 1}, TZ, NOW) == at(3, 10)
+    assert schedule.next_free("short", [], {**sc, "short_days": []}, TZ, NOW) is None
+    full = [at(d, h) for d in (2, 3, 4) for h in (10, 16)]
+    assert nxt(full) is None                             # nothing in horizon_days (3)
+
+
+def test_release_window(defaults, tmp_path):
+    meta = {"started_at": "2026-11-01T18:00:00-08:00", "duration_s": 7200}
+    sc = defaults["schedule"]
+    end = datetime.fromisoformat("2026-11-01T20:00:00-08:00")
+    earliest = end + timedelta(hours=sc["kick_first_hours"])
+    assert schedule.release_window(defaults, tmp_path, meta) == (
+        earliest, earliest + timedelta(days=sc["stale_days"]) if sc["stale_days"] else None)
+    started = datetime.fromisoformat(meta["started_at"])
+    defaults["preshow"]["publish"] = "asap"
+    assert schedule.release_window(defaults, tmp_path, {**meta, "kind": "preshow"}) == (started, None)
+    defaults["schedule"]["stale_days"] = 2
+    assert schedule.release_window(defaults, tmp_path, meta)[1] == earliest + timedelta(days=2)

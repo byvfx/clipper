@@ -177,3 +177,34 @@ def test_investigations_list_newest_first_and_render_the_one_asked_for(defaults,
     gone = warroom.investigations_get(defaults, "jer", "20200101000000")
     assert gone["missing_run"] and gone["markdown"] == ""
     assert warroom.investigations_get(defaults, "jer", "20261103000000")["run"] == "20261103000000"
+
+
+def test_next_slot_for_every_segment_leaves_out_a_full_budget(tmp_path, defaults, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from clipper import jsonstate, schedule
+
+    cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path, "schedule": tmp_path / "schedule.json"}}
+    jsonstate.write(cfg["paths"]["schedule"], {"entries": []})
+    row = lambda ref, **kw: {"ref": ref, "stream": ref.split("/")[0], "kind": "segment", "title": ref,
+                             "decision": "approved", "hold": False, "scheduled": "", "uploaded": False, **kw}
+    monkeypatch.setattr(warroom, "all_rows", lambda c: [row("a/x"), row("b/y"), row("b/held", hold=True),
+                                                        row("b/no", decision="pending")])
+    monkeypatch.setattr(schedule, "release_window", lambda c, sdir, meta: (datetime.now(UTC) - timedelta(days=1), None))
+    auto = {"key": "a/auto", "title": "a/auto", "publish_at": "2026-11-09T16:00:00-08:00"}
+
+    def with_pins(c, pins):  # stream a's budget is full: pinning a/x bumps a/auto
+        if "a/x" in pins:
+            return {}, [{"key": "a/auto", "reason": "over the stream's segment budget (1)"}]
+        return {"a/auto": auto}, []
+    monkeypatch.setattr(schedule, "with_pins", with_pins)
+
+    out = warroom.slot_plan(cfg, kind="segment")
+    assert [p["ref"] for p in out["plan"]] == ["b/y"] and out["bumped"] == []
+    assert [(r["ref"], r["why"][:27]) for r in out["refused"]] == [("a/x", "its stream's budget is full")]
+
+    out = warroom.slot_plan(cfg, ["a/x", "b/held", "b/no"])  # one you pick may swap
+    assert [p["ref"] for p in out["plan"]] == ["a/x"]
+    assert out["bumped"] == [{"ref": "a/auto", "title": "a/auto", "at": auto["publish_at"],
+                              "why": "over the stream's segment budget (1)"}]
+    assert {r["ref"]: r["why"] for r in out["refused"]} == {"b/held": "held", "b/no": "not approved"}

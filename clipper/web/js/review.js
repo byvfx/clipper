@@ -222,7 +222,7 @@ function openModal(ref) {
         ${i.kind !== "short" ? `<label>Thumbnail words</label><input id="fThumb" maxlength="40" data-check="thumb_text"><div class="warn-line" id="w_thumb_text"></div><div class="row"><button class="btn" id="bThumb">Re-render thumbnail</button></div>` : ""}
         <label>Pin release time</label><input id="fPin" type="datetime-local">
         <div class="hint" id="pinHint"></div>
-        <div class="row"><button class="btn" id="bPin">Pin</button><button class="btn" id="bUnpin">Unpin</button></div>
+        <div class="row"><button class="btn" id="bPin">Pin</button><button class="btn" id="bUnpin">Unpin</button>${i.kind !== "compilation" ? `<button class="btn" data-nextslot="${esc(ref)}" title="Pin to the next open slot its kind may take (a preview first)">⇥ Next open slot</button>` : ""}</div>
       </div>
     </div>`;
   fillModalState(i, true);

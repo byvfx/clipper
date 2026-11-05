@@ -228,9 +228,11 @@ input.search { margin-left: auto; width: 180px; }
 .sched-tools label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
 .unpin { border: 1px dashed var(--line); border-radius: 7px; padding: 4px 10px; }
 .unslotted { padding: 6px 14px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 3px; max-height: 220px; overflow: auto; }
-.unslotted .chip { display: grid; grid-template-columns: 6px 1fr; gap: 8px; align-items: center; font-size: 12px; padding: 3px 6px; border-radius: 6px; cursor: grab; }
+.unslotted .chip { display: grid; grid-template-columns: 6px 1fr auto auto; gap: 8px; align-items: center; font-size: 12px; padding: 3px 6px; border-radius: 6px; cursor: grab; }
 .unslotted .chip:hover { background: var(--panel2); }
-.unslotted .chip span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unslotted .chip .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unslotted .chip .why { font-size: 10px; color: var(--amber); }
+.unslotted .chip .nx { background: none; border: 0; padding: 0 4px; color: var(--blue); font: inherit; font-size: 14px; cursor: pointer; }
 /* #54 faces: a stream's groups, the box tool */
 #tool.facesw { width: min(1180px, 97vw); }
 .lnk { background: none; border: 0; padding: 0; color: var(--blue); font: inherit; cursor: pointer; }

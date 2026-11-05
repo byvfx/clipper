@@ -91,6 +91,45 @@ document.addEventListener("drop", async e => {
   if (warn.length && !confirm(`Pin for ${text}?\n\n` + warn.map(x => "• " + x).join("\n"))) return;
   act(ref, "pin", { text });
 });
+
+// Next open slot: the server picks it by the scheduler's rules; a preview, then the pins.
+async function nextSlot(body, what) {
+  const d = $("#tool"); d.dataset.kind = "slot";
+  d.innerHTML = `<div class="m-head"><b>Next open slot</b><span class="sp" style="color:var(--faint);font-size:12px">${esc(what)}</span><button class="x" data-close>×</button></div>
+    <div class="tbody"><div class="rep-list" id="slList"><span class="f">Finding slots…</span></div>
+      <div><button class="btn primary" id="slApply" disabled>Pin</button></div></div>`;
+  if (!d.open) d.showModal();
+  let r;
+  try { r = await api("/api/slot", { ...body, dry_run: true }); }
+  catch (e) { $("#slList").innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; return; }
+  const when = iso => new Date(iso).toLocaleString([], { timeZone: STATE.timezone, weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  $("#slList").innerHTML = (r.plan.length ? `<div class="f">Pin${r.plan.length > 1 ? ` these ${r.plan.length}` : ""} (Publish at in Kitsu):</div>`
+      + r.plan.map(p => `<div class="it"><b>${esc(when(p.at))}</b> ${esc(p.title)}</div>`).join("") : `<div class="f">Nothing to pin.</div>`)
+    + (r.bumped.length ? `<div style="color:var(--amber)">These lose their slot (a pin counts against its stream's budget first):</div>`
+      + r.bumped.map(b => `<div class="it"><span class="f">${esc(when(b.at))}</span> ${esc(b.title)} <span class="f">· ${esc(b.why)}</span></div>`).join("") : "")
+    + (r.refused.length ? `<details ${r.plan.length ? "" : "open"}><summary class="f">${r.refused.length} left out</summary>`
+      + r.refused.map(x => `<div class="it">${esc(x.title)} <span class="f">· ${esc(x.why)}</span></div>`).join("") + `</details>` : "");
+  const btn = $("#slApply");
+  btn.disabled = !r.plan.length;
+  btn.textContent = r.plan.length === 1 ? `Pin for ${when(r.plan[0].at)}` : `Pin ${r.plan.length}`;
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = "Pinning…";
+    try {
+      const a = await api("/api/slot", body);
+      (a.rows || []).forEach(upsert);
+      const f = a.failed || [];
+      toast(`Pinned ${a.done} to the next open slot${a.done === 1 ? "" : "s"}${f.length ? `; ${f.length} failed (${f[0].ref.split("/")[1]}: ${f[0].error})` : ""}`, !!f.length && !a.done, a.undo);
+      d.close(); renderQueue(); refresh();
+    } catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = "Pin"; }
+  };
+}
+document.addEventListener("click", e => {
+  const n = e.target.closest?.("[data-nextslot],[data-nextkind]");
+  if (!n) return;
+  const i = STATE.items.find(x => x.ref === n.dataset.nextslot);
+  if (n.dataset.nextkind) nextSlot({ kind: n.dataset.nextkind }, `every approved ${n.dataset.nextkind} without a slot`);
+  else nextSlot({ refs: [n.dataset.nextslot] }, i ? i.title : n.dataset.nextslot);
+});
 document.addEventListener("change", e => {
   if (e.target.id === "showFree") { SHOWFREE = e.target.checked; try { localStorage.setItem("warroom.free", SHOWFREE ? "1" : "0"); } catch { /* private window */ } renderSchedule(); }
 });
