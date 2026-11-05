@@ -46,3 +46,29 @@ def test_the_gambling_rule_is_a_show_setting_from_v7(defaults):
     assert "promote gambling" in p.get("scan")
     v6 = {**defaults, "scoring": {**defaults["scoring"], "prompt_version": "v6", "gambling": "commentary"}}
     assert "is about gambling play" in prompts.Prompts(v6).get("score_a")  # v6 keeps its own wording
+
+
+def test_a_scan_made_with_other_settings_is_scanned_again(defaults, tmp_path):
+    from clipper import jsonstate, scoring
+
+    class Fake:
+        calls = 0
+
+        def json_call(self, *a, **k):
+            Fake.calls += 1
+            return {"moments": []}, {}
+
+    words = [{"start": 1.0, "end": 1.5, "word": "hi", "seg": 0}]
+
+    def run(cfg):
+        return scoring.transcript_scan(tmp_path, words, 10, cfg, Fake(), prompts.Prompts(cfg))
+
+    v7 = {**defaults, "scoring": {**defaults["scoring"], "prompt_version": "v7", "gambling": "reject"}}
+    run(v7)
+    run(v7)
+    assert Fake.calls == 1  # cached
+    run({**v7, "scoring": {**v7["scoring"], "gambling": "commentary"}})
+    assert Fake.calls == 2  # the show's rule changed the prompt
+    old = [{"start_s": 1, "end_s": 30, "summary": "x"}]
+    jsonstate.write(tmp_path / "scan_v7.json", old)  # cached before the digest: still current
+    assert scoring.cached_scan(tmp_path / "scan_v7.json", "anything") == old

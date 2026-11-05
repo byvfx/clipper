@@ -192,10 +192,12 @@ def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
                     claude: Claude, prompts: Prompts) -> list[dict]:
     """Find own-voice moments block by block, independent of chat heat."""
     path = stream_dir / f"scan_{prompts.version}.json"
-    if path.exists():
-        return jsonstate.load(path)
     sc = cfg["scoring"]
     system = prompts.get("scan")
+    sha = prompt_sha(system)
+    cached = cached_scan(path, sha)
+    if cached is not None:
+        return cached
 
     def one(a: int) -> list[dict]:
         lines = transcript_lines(words, a, a + SUMMARY_BLOCK_S)
@@ -221,8 +223,26 @@ def transcript_scan(stream_dir: Path, words: list[dict], n: int, cfg: dict,
     if failed:  # #75: not cached, so the next run scans those blocks again
         print(f"scan: {failed} block(s) failed or refused; not cached")
     else:
-        jsonstate.write(path, moments)
+        jsonstate.write(path, {"prompt_sha": sha, "moments": moments})
     return moments
+
+
+def prompt_sha(*texts: str) -> str:
+    """A short digest of rendered prompts: a show setting that changes them changes this."""
+    import hashlib
+
+    return hashlib.sha1("|".join(texts).encode("utf-8")).hexdigest()[:12]
+
+
+def cached_scan(path: Path, sha: str = "") -> list[dict] | None:
+    """The moments in a scan cache, or None when there is none or (with `sha`) it was made
+    from other prompts. A scan cached before the digest was kept is a bare list: current."""
+    data = jsonstate.read(path)
+    if isinstance(data, list):
+        return data
+    if not data or (sha and data.get("prompt_sha") != sha):
+        return None
+    return data["moments"]
 
 
 def scan_windows(moments: list[dict], windows: list[dict], sig: dict, msgs: list[dict],
@@ -377,7 +397,11 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False, force: bool = False)
     # #75: Pass A is saved here before Pass B, so a Pass B failure (or a crash) doesn't mean
     # paying for every window again; the next run re-asks only windows that errored.
     ckpt = stream_dir / f"pass_a_{prompts.version}.json"
+    ckpt_sha = prompt_sha(prompts.get("score_a"), prompts.get("scan"))
     saved = jsonstate.read(ckpt)
+    if saved and saved.get("prompt_sha", ckpt_sha) != ckpt_sha:
+        print(f"{ckpt.name} was saved with other prompt settings: scoring every window again")
+        saved = None
     if saved:
         summary = stream_summary(stream_dir, words, n, cfg, claude, prompts)
         redo = [r for r in saved["pass_a"] if r["status"] == "error"]
@@ -400,8 +424,8 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False, force: bool = False)
                                  cfg["signals"]["chat_lag_s"])
             print(f"transcript scan: {len(moments)} moments, {len(extra)} new windows")
             results += run_pass_a(extra, words, sig, cfg, claude, prompts)
-    jsonstate.write(ckpt, {"prompt_version": prompts.version, "pass_a": results, "scan_windows": extra,
-                           "cost_usd": round(claude.cost, 4)})
+    jsonstate.write(ckpt, {"prompt_version": prompts.version, "prompt_sha": ckpt_sha, "pass_a": results,
+                           "scan_windows": extra, "cost_usd": round(claude.cost, 4)})
     return _finish(stream_dir, cfg, meta, prompts, claude, summary, words, results, ckpt, t0)
 
 

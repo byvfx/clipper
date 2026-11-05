@@ -15,7 +15,8 @@ guest. "[music]" is a song, not talk. Tags can be wrong for a few words in cross
 when someone does a voice; trust the words when they clearly disagree.
 
 Find up to {scan_max_per_block} moments where the show's own people carry the moment in
-their OWN words and this viewer would get it without the rest of the stream: a story with
+their OWN voices and this viewer would get it without the rest of the stream (reading a
+post, chat message or statement aloud, in a voice or not, is their own audio and counts): a story with
 a payoff, a rant with a sharp line, a joke or bit that lands, a strong take stated cleanly,
 a genuine reaction put into words. Each moment runs 20-120 s.
 
