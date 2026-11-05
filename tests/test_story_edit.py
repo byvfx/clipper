@@ -168,6 +168,7 @@ def test_cut_writes_one_segment_with_its_words_chapters_and_sources(cfg, planned
     assert [p["channel"] for p in jsonstate.load(sdir / "story.json")["parts"]] ==         ["DSP Meltdown", "Phil Fan", "Channel 404"]   # yt-dlp's uploader for the site's name
     seg = jsonstate.load(final.with_suffix(".json"))
     assert (seg["start_s"], seg["end_s"], seg["bleeps"]) == (0.0, 60.0, 3)
+    assert seg["signature"][1][3] == "Phil Fan"   # saved after yt-dlp named the channel: the next cut matches
     assert [c["t"] for c in seg["chapters"]] == [0, 20, 40]
     words = [json.loads(x) for x in (sdir / "words.jsonl").read_text(encoding="utf-8").splitlines()]
     first = next(w for w in words if w["word"] == "Phil")    # P02 starts 20 s into the video
@@ -341,6 +342,15 @@ def test_cut_reads_the_narration_as_cards(cfg, planned, monkeypatch):
     stills.clear()
     story_edit.cut(cfg, planned, review=False)
     assert len(stills) == 3
+    cfg["bleep"].update(mode="bleep", patterns=["part"], profanity=False)   # a listed word on a card: masked
+    cfg["_resolved"].clear()
+    stills.clear()
+    story_edit.cut(cfg, planned, review=False, force=True)
+    assert stills[1][1] == "P*** M01"
+    cfg["bleep"]["patterns"] = ["report"]           # ... in a read: refused, rewritten by hand
+    cfg["_resolved"].clear()
+    with pytest.raises(ClipperError, match="narration of close"):
+        story_edit.cut(cfg, planned, review=False)
     assert not any(w["start"] < 10 for w in
                    map(json.loads, (sdir / "words.jsonl").read_text(encoding="utf-8").splitlines()))
 

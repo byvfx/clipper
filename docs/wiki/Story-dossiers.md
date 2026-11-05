@@ -66,7 +66,9 @@ characters of credits. Without a `voice_id` the cards are silent and stay up lon
 (`[story] read_wpm`). The chapters start at the cards (the short version, each part, where it
 stands) and the narration is in the captions. Edit any line in `story.json` and cut again; the
 video is re-cut when a line, the order or the voice changes. `[story] narrate = false` cuts the
-clips alone, and `edit_prompt_version = "v1"` plans the old clips-only edit.
+clips alone, and `edit_prompt_version = "v1"` plans the old clips-only edit. The `[bleep]` list
+applies to the cards: a listed word in a header or title is masked, and a read can't be bleeped, so
+`cut` refuses a narration line with one and names it for you to rewrite in `story.json`.
 
 ## Setup
 

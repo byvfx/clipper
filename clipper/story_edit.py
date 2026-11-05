@@ -485,8 +485,14 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     if not used:
         raise ClipperError(f"story {slug}: no part has use = true in story.json")
     seq = sequence(data, used, sc["narrate"])
+    bleeper = Bleeper(cfg["bleep"])
+    # a read can't be bleeped the way a clip is: a narration line with a listed word is rewritten by hand
+    if bleeper.on and (bad := [x["card"] for x in seq if "card" in x and bleeper.mask(x["text"]) != x["text"]]):
+        raise ClipperError(f"story.json: the narration of {', '.join(bad)} has a word [bleep] lists; "
+                           "rewrite it (tldr, the part's lead_in or close) and cut again")
     nc = narrator(cfg) if any("card" in x for x in seq) else None
-    sig = signature(data, used, seq, nc, [rc["card_s"], rc["vo_pad_s"], sc["read_wpm"]])
+    timing = [rc["card_s"], rc["vo_pad_s"], sc["read_wpm"]]
+    sig = signature(data, used, seq, nc, timing)
     work = sdir / "work"
     work.mkdir(parents=True, exist_ok=True)
     (sdir / "segments").mkdir(exist_ok=True)
@@ -500,14 +506,14 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     else:
         fonts = (first_font(rc["fonts"]), first_font(rc["text_fonts"]))
         bug = rc["bug"] or cfg["scoring"]["channel_name"]
-        bleeper = Bleeper(cfg["bleep"])
         rendered = []
         for x in seq:
             if "card" in x:  # narration: read by the story's narrator (cached by its words), or silent
                 print(f"{x['card']}: {x['text'][:80]}", flush=True)
                 vo = read(nc, x["text"], sdir / "vo") if nc else None
                 dst = work / f"{x['card']}.mp4"
-                still(work, x["card"], card_lines(fonts, x), rc, bug, dst, vo,
+                shown = {**x, "header": bleeper.mask(x["header"]), "title": bleeper.mask(x.get("title", ""))}
+                still(work, x["card"], card_lines(fonts, shown), rc, bug, dst, vo,
                       min_s=0.0 if vo else reading_s(x, sc["read_wpm"]), extra=":text_align=C")
                 rendered.append(dst)
                 continue
@@ -519,9 +525,9 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                 seen = fetch(cfg, p, src)
                 if seen and p["channel"].lower() in PLATFORMS | {"?"}:  # the search's "YouTube"
                     print(f"  channel: {p['channel']} -> {seen} (kept in story.json)")
-                    for x in data["parts"]:
-                        if x["item"] == p["item"] and x["channel"].lower() in PLATFORMS | {"?"}:
-                            x["channel"] = seen
+                    for q in data["parts"]:
+                        if q["item"] == p["item"] and q["channel"].lower() in PLATFORMS | {"?"}:
+                            q["channel"] = seen
                     jsonstate.write(sdir / "story.json", data)
             dst = part_file(work, p)
             if force or not dst.exists():
@@ -533,6 +539,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                 jsonstate.write(work / "bleeps.json", bleeps)
             rendered.append(dst)
         join(rendered, work / "concat.txt", final)
+        sig = signature(data, used, seq, nc, timing)   # with the channels yt-dlp filled in, so the next cut matches
     # where each piece starts in the video, from the rendered pieces' own lengths; a chapter
     # starts at each card, and at each part not set up by a card of its own
     starts, marks, words, seg0, t = [], [], [], 0, 0.0
