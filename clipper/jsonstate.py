@@ -119,8 +119,8 @@ def _unlink_own(lock_path: Path, token: str, until: float) -> bool:
     attempt = 0
     while time.monotonic() < until:
         try:
-            if lock_path.read_text(encoding="utf-8") == token:
-                lock_path.unlink()
+            if lock_path.read_text(encoding="utf-8") == token and time.monotonic() < until:
+                lock_path.unlink()  # (a slow read over the share may have crossed it)
             return True
         except FileNotFoundError:
             return True

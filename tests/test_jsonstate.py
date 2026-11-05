@@ -71,20 +71,31 @@ def test_release_keeps_trying_in_the_background(tmp_path, monkeypatch):
     p = tmp_path / "s.json"
     lock = tmp_path / "s.json.lock"
     real_unlink = type(lock).unlink
-    fails = [PermissionError(13, "Access is denied")] * 15
+    fails = [PermissionError(13, "Access is denied")] * 40   # outlasts the 5 s in the caller
 
     def unlink(self, *a, **kw):
         if self == lock and fails:
             raise fails.pop()
         return real_unlink(self, *a, **kw)
 
+    clock = [1000.0]   # sleeping moves a fake clock instead of waiting
+    monkeypatch.setattr(jsonstate.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(jsonstate.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
+    real_unlink_own = jsonstate._unlink_own
+    tries = []
+
+    def unlink_own(*a):
+        tries.append(threading.current_thread().name)
+        return real_unlink_own(*a)
+
     monkeypatch.setattr(type(lock), "unlink", unlink)
-    monkeypatch.setattr(jsonstate.time, "sleep", lambda s: None)
+    monkeypatch.setattr(jsonstate, "_unlink_own", unlink_own)
     with jsonstate.locked(p):
         pass
     for t in threading.enumerate():
         if t.name == "release s.json.lock":
             t.join(5)
+    assert tries[1:] == ["release s.json.lock"]   # the caller gave up; the thread finished it
     assert not fails and not lock.exists()
 
 
