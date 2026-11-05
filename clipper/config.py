@@ -656,6 +656,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "keep_work": False,       # keep shorts/work/ (intermediate cut, .ass captions)
         "pad_s": 0.15,            # room before the first and after the last word
         "window": "short",        # short: scoring's 15-60 s short window | clip: the pick's in/out
+        # Propose Hold in review for a Short whose voices other than [meta] cast (speaker
+        # tags) run over [scoring] max_source_audio_s; release it if the show carries it.
+        "hold_source_audio": True,
         "min_s": 15,              # widen shorter windows by whole transcript lines to this
         "max_s": 59,              # longest Short: over 60 s, any Content ID claim blocks it worldwide
         "end_pause_s": 0.7,       # window "short": end on a sentence end or a pause this long; 0 = off

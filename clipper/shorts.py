@@ -45,7 +45,7 @@ from .media import source_file
 from .prompts import Prompts
 from .segments import slug
 from .states import numbered_picks
-from .transcript import load_words
+from .transcript import load_words, outside_voice_s
 
 CENTER = {"description": "anything else: the middle of the frame",
           "panels": [{"src": [0.0, 0.0, 1.0, 1.0]}], "caption_y": 0.72}
@@ -720,6 +720,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
         side = {**p, "key": key, "in_s": a, "out_s": b, "duration_s": dur, "layout": label,
                 **multi, "layout_by": how, "bleeps": n_bleeps, "captions": n_caps, **loud,
                 "category": c.get("category"), "score_a": c.get("score"),
+                "source_audio_s": outside_voice_s(words, a, b, cfg["meta"]["cast"]),
                 "clip": clip_video.name if clip_video != dst else ""}
         save_short(stream_dir, state_path, dst, side, clip_video, p, sc, sig)
         done.append(side)

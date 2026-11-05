@@ -407,6 +407,16 @@ def schedule_dropped(cfg: dict) -> dict[str, str]:
             if u["reason"].startswith(DROPPED)}
 
 
+def other_voices(seconds, limit: float) -> str:
+    """A Short's other voices as a card shows them, only when over the limit:
+    "22 s of other voices (limit 5 s)"."""
+    try:
+        s = float(seconds)
+    except (TypeError, ValueError):
+        return ""
+    return f"{s:.0f} s of other voices (limit {limit:g} s)" if s > limit else ""
+
+
 def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
     """Everything a card or list row shows, per item, from local files (review.json is
     as of the last sync). Kitsu is only asked for links older publishes didn't save."""
@@ -443,6 +453,8 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
             "decision": r.get("decision", "pending"), "status": r.get("status", "wfa"),
             "comment": r.get("comment", ""),
             "hold": str(fields.get("Hold") or "").lower() in ("true", "1", "yes", "on"),
+            "other_voices": other_voices(fields.get("Other voices") or proposed.get("Other voices"),
+                                         cfg["scoring"]["max_source_audio_s"]),
             "publish_at": fields.get("Publish at") or "",
             "scheduled": entry["publish_at"] if entry else "",
             "uploaded": bool(entry and entry.get("status") == "uploaded"),

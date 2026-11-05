@@ -97,6 +97,9 @@ COLUMNS = [
     ("Shot", "Found by", "list", ["chat", "transcript"]),
     # Shorts: the crop layout (a name from [shorts] layouts); edit it and rerun clipper shorts.
     ("Shot", "Layout", "string", None),
+    # Shorts: seconds of voices that aren't the show's own people (speaker tags); over
+    # [scoring] max_source_audio_s the Short is proposed held ([shorts] hold_source_audio).
+    ("Shot", "Other voices", "number", None),
     # Scheduling (clipper schedule): Publish at and Hold are yours to set; Scheduled is
     # written by clipper with the slot it assigned.
     ("Sequence", "Publish at", "string", None),
@@ -262,7 +265,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "duration_s": d["duration_s"],
                         "fields": {"Hook": d.get("hook"), "Category": d.get("category"),
                                    "Score": d.get("score_a"), "Layout": d["layout"],
-                                   "Found by": found_by(d["id"])},
+                                   "Found by": found_by(d["id"]), **source_hold(d, cfg)},
                         "meta": d})
     if "compilations" in include:
         for side in sorted((stream_dir / "compilations").glob("*.json")):
@@ -293,6 +296,20 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
         tags = upload.get("Hashtags")
         it["text"] = f"{it['title']}\n\n{it['description']}" + (f"\n\n{tags}" if tags else "")
         it["fields"] = {**upload, **{k: v for k, v in it["fields"].items() if v is not None}}
+    return out
+
+
+def source_hold(short: dict, cfg: dict | None) -> dict:
+    """A Short's Other voices column and proposed Hold: held while its other voices
+    (shorts.json source_audio_s) run over [scoring] max_source_audio_s. A proposal only:
+    fill_columns never overwrites a Hold set or released by hand, and a re-cut under the
+    limit releases a hold clipper set."""
+    s = short.get("source_audio_s")
+    if s is None or not cfg:
+        return {}
+    out = {"Other voices": s}
+    if cfg["shorts"]["hold_source_audio"]:
+        out["Hold"] = "true" if s > cfg["scoring"]["max_source_audio_s"] else "false"
     return out
 
 

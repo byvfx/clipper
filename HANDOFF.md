@@ -46,6 +46,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - Titles/descriptions/cut points approved as-is; fun descriptions are liked.
 - Long video per recurring topic (compilations, e.g. "The Quartering" 3h13m) plus segments plus short picks.
 - `third_party_audio = "allow_reactions"`, `audience_knowledge = "fans"`, Victor/blackjack segments stay.
+- Shorts over `max_source_audio_s` of other voices (speaker tags) arrive **held** in review with the
+  seconds on the card, not dropped (user 11-04: "sounds good"); release it when the show carries it
+  (`[shorts] hold_source_audio`). Kino only until c404 is diarized (Don not enrolled; ~$0.30/stream).
 - Kitsu is the record for review/edits (no separate DB). Discord approvals must keep working.
 - Thumbnails: `[thumbnail] style = "enquirer"` (1990s tabloid: KINO CASINO masthead, no "THE NEW" roundel,
   no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v5` (face = headline
