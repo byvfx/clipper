@@ -147,7 +147,7 @@ def against_review(picks: list[dict], decided: dict[str, str]) -> dict:
 def report_md(res: dict) -> str:
     """The comparison for a person to read."""
     base, cand, ag = res["baseline"], res["candidate"], res.get("pass_a_agreement")
-    lines = [f"# {res['stream']}: {res['which']} — {base['label']} vs {cand['label']}", "",
+    lines = [f"# {res['stream']}: {res['which']}: {base['label']} vs {cand['label']}", "",
              (f"Prompt {res['prompt_version']}, pass {res['pass']}. Candidate ${cand['cost_usd']:.3f} "
              f"(estimated ${res['estimate_usd']:.3f}) in {cand['seconds']:.0f} s; "
              f"baseline scoring cost ${base['cost_usd']:.3f} in all."), ""]
@@ -335,3 +335,41 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     print(md)
     print(f"written: {out_dir / stem}.json, .md")
     return res
+
+
+# ---------- every report on a stream, one table ----------
+
+def summary_row(res: dict) -> dict:
+    """One line of `clipper compare list`: what a report says about its candidate."""
+    cand, ag = res["candidate"], res.get("pass_a_agreement") or {}
+    approved = cand["review"].get(str(Decision.APPROVED), {"picked": 0, "of": 0})
+    statuses = Counter(r["status"] for r in cand.get("pass_a", []))
+    table = ag.get("table") or {}
+    return {"label": cand["label"], "pass": res["pass"],
+            "approved": f"{approved['picked']}/{approved['of']}",
+            "baseline_approved": f"{res['baseline']['review'].get(str(Decision.APPROVED), {}).get('picked', 0)}"
+                                 f"/{approved['of']}",
+            "same": f"{ag['same_status']}/{ag['windows']}" if ag else "",
+            "kept": statuses.get("kept", 0) if ag else None,
+            # the guard: windows the stream's model rejected (other creators' audio, needs
+            # context) that the candidate kept
+            "kept_rejected": table.get("rejected", {}).get("kept") if table else None,
+            "errors": statuses.get("error", 0) + statuses.get("refused", 0),
+            "cost_usd": cand["cost_usd"], "seconds": cand["seconds"]}
+
+
+def list_reports(sdir: Path) -> list[dict]:
+    rows = [summary_row(jsonstate.load(p)) for p in sorted((sdir / "compare").glob("score_*.json"))]
+    if not rows:
+        print(f"no comparisons on {sdir.name} yet (clipper compare score {sdir.name} --model ...)")
+        return rows
+    rows.sort(key=lambda r: (-int(r["approved"].split("/")[0]), r["kept_rejected"] or 0, r["cost_usd"]))
+    print(f"{sdir.name}: the stream's own models picked {rows[0]['baseline_approved']} approved\n")
+    head = f"{'candidate':58} {'pass':4} {'approved':>8} {'same':>6} {'kept':>4} {'rej>kept':>8} {'err':>3} {'$':>7} {'s':>5}"
+    print(head)
+    for r in rows:
+        print(f"{r['label'][:58]:58} {r['pass']:4} {r['approved']:>8} {r['same']:>6} "
+              f"{'' if r['kept'] is None else r['kept']:>4} {'' if r['kept_rejected'] is None else r['kept_rejected']:>8} "
+              f"{r['errors']:>3} {r['cost_usd']:>7.3f} {r['seconds']:>5.0f}")
+    print("\nrej>kept: windows the stream's model rejected (other creators' audio, needs context) that the candidate kept")
+    return rows

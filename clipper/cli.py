@@ -286,6 +286,9 @@ def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_compare(cfg: dict, args: argparse.Namespace) -> None:
     from . import compare
 
+    if args.action == "list":
+        compare.list_reports(stream_dir(cfg, args.stream))
+        return
     compare.compare_score(stream_dir(cfg, args.stream), cfg, args.model, args.which, args.budget, args.dry_run,
                           args.model_b, args.effort)
 
@@ -1537,6 +1540,9 @@ def add_extras(sub) -> None:
                                                 "none = reasoning off (other providers)")
     q.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
     q.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    q.set_defaults(fn=cmd_compare)
+    q = rsub.add_parser("list", help="every comparison on a stream, one table, best first")
+    add_stream(q)
     q.set_defaults(fn=cmd_compare)
 
 

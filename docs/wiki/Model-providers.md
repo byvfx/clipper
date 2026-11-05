@@ -50,5 +50,9 @@ picks (`clipper pick`) are left out on both sides. The report goes to `<stream>/
 - Picks: each moment either side picked, with both titles and the review decision.
 - Against review: how many of the approved, sent-back and rejected moments each side picked.
 
+`clipper compare list <stream>` puts every report on a stream in one table, best first: approved
+moments picked, verdicts shared, windows kept, windows the stream's model rejected that the
+candidate kept (the guard against other creators' audio), errors, cost and time.
+
 Older streams were scored with older prompts, and the analytics feedback Pass B reads has moved
 on since, so compare a few recent reviewed streams before moving a stage's default.

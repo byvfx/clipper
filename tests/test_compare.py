@@ -83,3 +83,15 @@ def test_thinking_models_are_estimated_with_their_thinking():
     assert compare.out_tokens("openrouter:deepseek/deepseek-v4.1-flash", "none", "a") == compare.A_OUT_TOKENS
     assert compare.out_tokens("openrouter:deepseek/deepseek-v4.1-flash", "medium", "a") == 2500
     assert compare.out_tokens("openrouter:deepseek/deepseek-v4-pro-0813", "high", "b") == 16000
+
+
+def test_summary_row_reads_a_report():
+    res = {"pass": "a", "baseline": {"review": {"approved": {"picked": 5, "of": 5}}},
+           "candidate": {"label": "openrouter:x @none", "cost_usd": 0.05, "seconds": 300,
+                         "review": {"approved": {"picked": 3, "of": 5}},
+                         "pass_a": [{"status": "kept"}, {"status": "kept"}, {"status": "error"}]},
+           "pass_a_agreement": {"same_status": 1, "windows": 3,
+                                "table": {"rejected": {"kept": 1}, "kept": {"kept": 1}}}}
+    row = compare.summary_row(res)
+    assert row["approved"] == "3/5" and row["baseline_approved"] == "5/5" and row["same"] == "1/3"
+    assert row["kept"] == 2 and row["kept_rejected"] == 1 and row["errors"] == 1
