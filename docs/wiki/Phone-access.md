@@ -22,9 +22,28 @@ Check: `clipper doctor --role serve` (fetches the war room through the tailnet n
 ## On the NAS
 
 With serve on the NAS ([NAS hub](NAS-hub)), the `tailscale` container is the tailnet machine
-(`clipper.<tailnet>.ts.net`, `TS_HOSTNAME` in `deploy/hub/env.local`). Its first start prints a
-sign-in link: `ssh nas 'cd clipper-hub && docker compose logs tailscale'`, open it and approve
-(or put an auth key in `TS_AUTHKEY` before deploying). The container serves the war room itself
+(`clipper.<tailnet>.ts.net`, `TS_HOSTNAME` in `deploy/hub/env.local`). It needs signing in
+once; the login lives in the `tailscale-state` volume after that. The easy way is an auth key
+in `TS_AUTHKEY` before deploying. Without one, the container's own sign-in link is no use: its
+startup gives up after about a minute and restarts with a new link. Sign in from a one-off
+daemon on the same volumes instead, then start the service:
+
+```bash
+ssh nas 'cd clipper-hub && docker compose stop tailscale && docker run -d --name ts-login --network host -v clipper-hub_tailscale-state:/var/lib/tailscale -v clipper-hub_tailscale-socket:/var/run/tailscale tailscale/tailscale:v1.104.4 tailscaled --tun=userspace-networking --statedir=/var/lib/tailscale --socket=/var/run/tailscale/tailscaled.sock'
+```
+
+```bash
+ssh nas 'docker exec ts-login tailscale --socket=/var/run/tailscale/tailscaled.sock up --hostname=clipper --timeout=0'
+```
+
+Open the link it prints and approve. If it still says logged out afterwards, restart `ts-login`
+and run `up` again (the first approval here didn't reach it). Then:
+
+```bash
+ssh nas 'docker rm -f ts-login && cd clipper-hub && docker compose up -d tailscale && docker compose restart serve'
+```
+
+Restart serve so its health and the bot's links show the tailnet address. The container serves the war room itself
 from `deploy/hub/tailscale-serve.json`, so `clipper warroom --tailnet on` isn't used there (the
 clipper containers aren't root and can't change Tailscale's settings; `--tailnet status` works).
 Open `https://clipper.<tailnet>.ts.net/?key=<token>` once on the phone, with the token from

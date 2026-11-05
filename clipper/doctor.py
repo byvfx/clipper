@@ -936,13 +936,16 @@ def check_tailnet(cfg: dict, offline: bool) -> None:
     if offline:
         return ok("warroom", f"on the tailnet at {st['served']}")
     import requests
-    try:  # through the tailnet proxy to the running war room (the bot's)
-        r = requests.get(st["served"].rstrip("/") + "/manifest.webmanifest", timeout=10)
+    # Through the tailnet proxy to the running war room. Userspace Tailscale (the NAS hub)
+    # can't route this machine's own requests onto the tailnet: try the proxy's target.
+    url = (f"http://127.0.0.1:{cfg['warroom']['port']}/" if st.get("userspace") else st["served"].rstrip("/") + "/")
+    try:
+        r = requests.get(url + "manifest.webmanifest", timeout=10)
         r.raise_for_status()
-        ok("warroom", f"on the tailnet at {st['served']} (answers)")
+        ok("warroom", f"on the tailnet at {st['served']} (answers"
+           + (f"; checked at {url}, the address tailscale serve proxies to)" if st.get("userspace") else ")"))
     except Exception as e:  # noqa: BLE001
-        fail("warroom", f"{st['served']} doesn't answer ({type(e).__name__})",
-             "is clipper serve running here?")
+        fail("warroom", f"{url} doesn't answer ({type(e).__name__})", "is clipper serve running here?")
 
 
 def serve_elsewhere(cfg: dict) -> bool:
