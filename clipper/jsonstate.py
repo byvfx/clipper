@@ -94,9 +94,19 @@ def locked(path: Path, wait_s: float = WAIT_S) -> Iterator[None]:
         finally:
             local[1] -= 1
             if local[1] == 0:
-                lock_path.unlink(missing_ok=True)
+                _release_file(lock_path)
     finally:
         local[0].release()
+
+
+def _release_file(lock_path: Path) -> None:
+    for attempt in range(10):
+        try:
+            lock_path.unlink(missing_ok=True)
+            return
+        except PermissionError:  # another process is looking at it (Windows, the NAS share)
+            time.sleep(0.1 * (attempt + 1))
+    # still there: the next writer waits it out as stale rather than this one failing
 
 
 def _acquire_file(lock_path: Path, wait_s: float) -> None:
@@ -105,13 +115,17 @@ def _acquire_file(lock_path: Path, wait_s: float) -> None:
     while True:
         try:
             fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
+        except (FileExistsError, PermissionError):
+            # PermissionError: on Windows and the NAS share a lock that is being deleted
+            # (its holder just let go) refuses opens and stats until it is gone. Wait for it.
             try:
                 if time.time() - lock_path.stat().st_mtime > STALE_S:
                     lock_path.unlink(missing_ok=True)  # its owner died holding it
                     continue
             except FileNotFoundError:
                 continue
+            except PermissionError:
+                pass
             if time.monotonic() > deadline:
                 raise TimeoutError(f"{lock_path} is held by another process for over {wait_s:.0f} s "
                                    f"(delete it if nothing is running)") from None
