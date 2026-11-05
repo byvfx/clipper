@@ -34,6 +34,7 @@ import os
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from .errors import ClipperError
@@ -96,6 +97,19 @@ def known_price(cfg: dict, model: str) -> tuple[float, float] | None:
     if p is None and split(model)[0] == "openrouter":
         p = openrouter_prices().get(split(model)[1])
     return p
+
+
+def provider_key(prov: str, paths: dict | None = None) -> str:
+    """A provider's key: its env var ($OPENROUTER_API_KEY, ...), else the file [paths]
+    <prov>_key (secrets/openrouter_secret.txt, ...); "" if neither."""
+    key = os.environ.get(PROVIDERS[prov][1], "").strip()
+    path = (paths or {}).get(f"{prov}_key")
+    if key or not path:
+        return key
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def split(model: str) -> tuple[str, str]:
@@ -192,8 +206,9 @@ class LLM:
         if isinstance(cfg, dict):
             workspace_id, lc = cfg["scoring"]["workspace_id"], cfg.get("llm") or DEFAULTS["llm"]
             self.ledger = cfg["paths"].get("costs")  # [paths] costs: one line per call
+            self.paths = cfg["paths"]
         else:
-            workspace_id, lc, self.ledger = cfg, DEFAULTS["llm"], None
+            workspace_id, lc, self.ledger, self.paths = cfg, DEFAULTS["llm"], None, {}
         # Keys not scoped to a workspace must name one on every request.
         self.workspace_id = workspace_id or os.environ.get("ANTHROPIC_WORKSPACE_ID", "")
         self.lc = {**DEFAULTS["llm"], **lc}
@@ -379,9 +394,10 @@ class LLM:
         if not base:
             raise ClipperError(f"{model}: set [llm] local_base_url in clipper.toml "
                              "(an OpenAI-compatible server, e.g. http://<host>:11434/v1)")
-        key = os.environ.get(env, "")
+        key = provider_key(prov, self.paths)
         if not key and prov != "local":
-            raise ClipperError(f"{model}: set the {env} environment variable")
+            raise ClipperError(f"{model}: set the {env} environment variable "
+                               f"(or put the key in [paths] {prov}_key)")
         body: dict[str, Any] = {"model": name, "messages": messages,
                                 ("max_completion_tokens" if prov == "openai" else "max_tokens"): max_tokens}
         if response_format:

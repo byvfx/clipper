@@ -39,6 +39,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "x_token": "secrets/x_token.json",              # written by `clipper x --sign-in`
         "warroom_token": "secrets/warroom_token.txt",   # war room token, if not [warroom] token
         "brave_key": "secrets/brave_secret.txt",        # Brave Search API key, if not $BRAVE_API_KEY
+        # Model provider keys (#72), each if its env var isn't set: $OPENAI_API_KEY, ...
+        "openai_key": "secrets/openai_secret.txt",
+        "gemini_key": "secrets/gemini_secret.txt",
+        "openrouter_key": "secrets/openrouter_secret.txt",
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "serve_log": "logs/serve.log",  # `clipper serve` log (rotated); "" = console only

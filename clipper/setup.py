@@ -569,11 +569,15 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
     ensure_env_key(cfg, ask, "ANTHROPIC_API_KEY", "the model calls (score, segments, titles, covers)",
                    "console.anthropic.com -> API keys")
     from .doctor import llm_providers
-    from .llm import PROVIDERS
+    from .llm import PROVIDERS, provider_key
 
     for prov, uses in llm_providers(cfg).items():
         env = PROVIDERS[prov][1]
-        if env in PROVIDER_KEYS:
+        if env not in PROVIDER_KEYS:
+            continue
+        if not user_env(env) and provider_key(prov, cfg["paths"]):
+            say(f"{env}: key in {cfg['paths'][f'{prov}_key']}")
+        else:
             ensure_env_key(cfg, ask, env, f"{prov} models ({uses[0]})", PROVIDER_KEYS[env])
     rc = cfg["review"]
     if not rc["host"] or "<" in rc["host"]:

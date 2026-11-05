@@ -93,8 +93,9 @@ def test_claude_model_finds_a_claude_stage_or_none(defaults):
     assert llm.claude_model(defaults) == ""
 
 
-def test_doctor_names_the_openrouter_key(defaults, monkeypatch):
+def test_doctor_names_the_openrouter_key(defaults, monkeypatch, tmp_path):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    defaults["paths"]["openrouter_key"] = tmp_path / "none.txt"
     defaults["scoring"]["model_a"] = "openrouter:openai/gpt-5-mini"
     (status, _, what, _), = doctor.collect(doctor.check_llm_keys, defaults)
     assert status == "FAIL" and "OPENROUTER_API_KEY" in what and "scoring.model_a" in what
@@ -112,3 +113,23 @@ def test_doctor_wants_no_price_for_openrouter(defaults):
     defaults["scoring"]["model_a"] = "openrouter:openai/gpt-6-luna"
     (status, _, what, _), = doctor.collect(doctor.check_llm_prices, defaults)
     assert status == "OK", what
+
+
+def test_a_provider_key_from_env_or_the_secrets_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    paths = {"openrouter_key": tmp_path / "openrouter_secret.txt"}
+    assert llm.provider_key("openrouter", paths) == ""
+    paths["openrouter_key"].write_text("sk-file\n", encoding="utf-8")
+    assert llm.provider_key("openrouter", paths) == "sk-file"
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-env")
+    assert llm.provider_key("openrouter", paths) == "sk-env"
+
+
+def test_the_client_sends_the_file_key(posted, monkeypatch, defaults, tmp_path):
+    sent, replies = posted
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    defaults["paths"]["openrouter_key"] = tmp_path / "k.txt"
+    defaults["paths"]["openrouter_key"].write_text("sk-file", encoding="utf-8")
+    replies.append(FakeResponse(answer("hi")))
+    llm.LLM(defaults).text_call("openrouter:openai/gpt-6-luna", "sys", "hello", "low")
+    assert sent[0]["headers"]["Authorization"] == "Bearer sk-file"

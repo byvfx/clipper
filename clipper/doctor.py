@@ -368,8 +368,11 @@ def check_llm_keys(cfg: dict) -> None:
                      "set it in clipper.toml to the server's OpenAI-compatible /v1 URL")
         elif os.environ.get(env):
             ok("keys", f"{what}: {env} set")
+        elif llm.provider_key(prov, cfg["paths"]):
+            ok("keys", f"{what}: key in {cfg['paths'][f'{prov}_key']}")
         else:
-            fail("keys", f"{what}: {env} not set", "set it as a user environment variable")
+            fail("keys", f"{what}: {env} not set",
+                 f"set it as a user environment variable, or put the key in {cfg['paths'].get(f'{prov}_key')}")
 
 
 def check_llm_prices(cfg: dict) -> None:
@@ -396,7 +399,7 @@ def check_llm_online(cfg: dict) -> None:
     for prov, uses in llm_providers(cfg).items():
         base, env = llm.PROVIDERS[prov]
         base = (cfg["llm"]["local_base_url"] if prov == "local" else base).rstrip("/")
-        key = os.environ.get(env, "")
+        key = llm.provider_key(prov, cfg["paths"]) if prov != "local" else os.environ.get(env, "")
         if not base or (prov != "local" and not key):
             continue  # already a failure under keys
         try:
