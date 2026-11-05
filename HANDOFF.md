@@ -115,7 +115,14 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - **Shows:** kino and c404 live through review → schedule; `chud` (ChudLogic, Kick `chudlogic`; user
   2026-11-04: "we have the clear to clip him") added 11-04: daily ~10 h from ~00:00-02:00 PT, budget
   segment 3 / short 5 per 8 h, 8-Bit Guy moments ranked up; first recording not yet run or reviewed;
-  layouts `watch` and `cam` measured from a VOD (reports/chudlogic-2026-10-28.md has the background); dsp and blade are config-only tests; `trish` is a
+  layouts `watch` and `cam` measured from a VOD (reports/chudlogic-2026-10-28.md has the background).
+  His 10-18 VOD `kick-132975332` is fetched and transcribed only: its timestamps jump back 821.7 s before
+  7:28 (transcript = source + 821.7 s), so don't `clipper run` it until fetch is fixed (proposed as its
+  own task 11-04). An 8-Bit Guy explainer (Mother Moo v4 reads, edited in DaVinci Resolve: project
+  "8-Bit Guy explainer" on the laptop, timeline v6, Resolve MCP registered locally) went out on X 11-04
+  with burned-in captions (https://x.com/lolcowcinema/status/2118120833046741152); files and recipe in
+  reports/8bitguy-explainer/ and its draft. ElevenLabs reads default to lossless pcm_48000 WAV since
+  PR #143 (merged 11-04); dsp and blade are config-only tests; `trish` is a
   placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI).
 - **Schedule: stay current, no backlog (live 2026-10-29 09:51).** 15/day couldn't keep up (~140
   approved a week vs 105 slots, newest stream 15 days behind). `stale_days = 3`, `[scoring]
@@ -222,7 +229,7 @@ a lower third; one segment s00 with a chapter per part and retimed words.jsonl) 
 asap. Weekly skips stories; a retake trim refuses one (edit story.json, cut again). 4) `investigate
 check` on the swarm (branch `investigate-swarm`): the old four searches are the seeds of a small swarm
 per lead (`[investigate] swarm`), then his own titles; the verdict as before.
-**Investigate anyone (#138, user 11-04; part 1 on branch `people-records`):** investigate on a person not yet archived (swarm
+**Investigate anyone (#138, user 11-04; part 1 merged 11-04, PR #141):** investigate on a person not yet archived (swarm
 finds their channels and X handles, the user approves, a sample spread over time is transcribed into a normal
 subject, then `investigate run`), cross-referenced with others' videos and X posts (API, not scraping),
 every fact with a speaker and said/posted dates, one people record across archive/streamers/cast/facts,
@@ -232,11 +239,10 @@ full-archive search first) → vault → watchlist (serve, alert on change only)
 needs a token) → `investigate eval` on known stories (Huck, DSP; build early) → Good/Noise buttons + `tune`.
 Also: a review gate before a lead becomes content, Wayback snapshots of receipts, source reliability
 notes + a never-read list (Kiwi Farms).
-Part 1 (`clipper/people.py`, `clipper people list|show|set|import`): people.json (`[paths] people`,
+Part 1 (`clipper/people.py`, `clipper people list|show|set|import|merge`): people.json (`[paths] people`,
 gitignored) is the record; streamers.json, `[story] people` and cast folders fold in by name; story's
-roster and investigate's alias merging (subject's names = self, aliases.json wins) read it. Not yet
-imported here: after merge, `clipper people import`, then `people merge channel-404-news don` and
-`people merge melonie-mac "Mel mac"` (those two didn't match by name).
+roster and investigate's alias merging (subject's names = self, aliases.json wins) read it. Imported here
+11-04: 23 people, Don and Mel mac merged into channel-404-news and melonie-mac, no shared names. Next: part 2.
 **Code audit 2026-11-03** (`reports/code-audit-2026-11-03.md`): correctness pass on everything since
 10-28 plus an architecture/usability look. 50 findings (1 high: a cut-short `live/chat.jsonl` line
 wedges a stream's finalize; ~15 medium: quiet failures in the bot's notify loop and Health, `[notify]`

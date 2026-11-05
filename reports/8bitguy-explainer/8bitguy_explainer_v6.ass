@@ -1,0 +1,168 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Cap,Impact,96,&H00FFFFFF,&H0000D4FF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,7,3,5,60,60,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.62,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}THIS{\r} IS THE
+Dialogue: 0,0:00:00.62,0:00:00.88,Cap,,0,0,0,,{\pos(540,1344)}THIS {\c&H0000D4FF\fscx115\fscy115}IS{\r} THE
+Dialogue: 0,0:00:00.88,0:00:01.10,Cap,,0,0,0,,{\pos(540,1344)}THIS IS {\c&H0000D4FF\fscx115\fscy115}THE{\r}
+Dialogue: 0,0:00:01.10,0:00:01.52,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}8-BIT{\r} GUY.
+Dialogue: 0,0:00:01.52,0:00:02.13,Cap,,0,0,0,,{\pos(540,1344)}8-BIT {\c&H0000D4FF\fscx115\fscy115}GUY.{\r}
+Dialogue: 0,0:00:02.14,0:00:02.26,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}FOR{\r} YEARS HE
+Dialogue: 0,0:00:02.26,0:00:02.70,Cap,,0,0,0,,{\pos(540,1344)}FOR {\c&H0000D4FF\fscx115\fscy115}YEARS{\r} HE
+Dialogue: 0,0:00:02.70,0:00:02.94,Cap,,0,0,0,,{\pos(540,1344)}FOR YEARS {\c&H0000D4FF\fscx115\fscy115}HE{\r}
+Dialogue: 0,0:00:02.94,0:00:03.12,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}HAS{\r} MENDED OLD
+Dialogue: 0,0:00:03.12,0:00:03.46,Cap,,0,0,0,,{\pos(540,1344)}HAS {\c&H0000D4FF\fscx115\fscy115}MENDED{\r} OLD
+Dialogue: 0,0:00:03.46,0:00:03.74,Cap,,0,0,0,,{\pos(540,1344)}HAS MENDED {\c&H0000D4FF\fscx115\fscy115}OLD{\r}
+Dialogue: 0,0:00:03.74,0:00:04.24,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}COMPUTERS{\r} ON
+Dialogue: 0,0:00:04.24,0:00:04.54,Cap,,0,0,0,,{\pos(540,1344)}COMPUTERS {\c&H0000D4FF\fscx115\fscy115}ON{\r}
+Dialogue: 0,0:00:04.54,0:00:05.23,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}YOUTUBE.{\r}
+Dialogue: 0,0:00:05.44,0:00:05.64,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}THEN{\r} HE VANISHED
+Dialogue: 0,0:00:05.64,0:00:05.88,Cap,,0,0,0,,{\pos(540,1344)}THEN {\c&H0000D4FF\fscx115\fscy115}HE{\r} VANISHED
+Dialogue: 0,0:00:05.88,0:00:06.38,Cap,,0,0,0,,{\pos(540,1344)}THEN HE {\c&H0000D4FF\fscx115\fscy115}VANISHED{\r}
+Dialogue: 0,0:00:06.38,0:00:06.86,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}FOR{\r} THREE MONTHS.
+Dialogue: 0,0:00:06.86,0:00:07.20,Cap,,0,0,0,,{\pos(540,1344)}FOR {\c&H0000D4FF\fscx115\fscy115}THREE{\r} MONTHS.
+Dialogue: 0,0:00:07.20,0:00:07.93,Cap,,0,0,0,,{\pos(540,1344)}FOR THREE {\c&H0000D4FF\fscx115\fscy115}MONTHS.{\r}
+Dialogue: 0,0:00:08.14,0:00:08.26,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}HE{\r} CAME BACK
+Dialogue: 0,0:00:08.26,0:00:08.46,Cap,,0,0,0,,{\pos(540,1344)}HE {\c&H0000D4FF\fscx115\fscy115}CAME{\r} BACK
+Dialogue: 0,0:00:08.46,0:00:08.82,Cap,,0,0,0,,{\pos(540,1344)}HE CAME {\c&H0000D4FF\fscx115\fscy115}BACK{\r}
+Dialogue: 0,0:00:08.82,0:00:09.16,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}WITH{\r} THIS.
+Dialogue: 0,0:00:09.16,0:00:09.83,Cap,,0,0,0,,{\pos(540,1344)}WITH {\c&H0000D4FF\fscx115\fscy115}THIS.{\r}
+Dialogue: 0,0:00:10.04,0:00:10.22,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}THIS{\r} VIDEO IS
+Dialogue: 0,0:00:10.22,0:00:10.68,Cap,,0,0,0,,{\pos(540,1344)}THIS {\c&H0000D4FF\fscx115\fscy115}VIDEO{\r} IS
+Dialogue: 0,0:00:10.68,0:00:10.82,Cap,,0,0,0,,{\pos(540,1344)}THIS VIDEO {\c&H0000D4FF\fscx115\fscy115}IS{\r}
+Dialogue: 0,0:00:10.82,0:00:10.90,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}GOING{\r} TO BE
+Dialogue: 0,0:00:10.90,0:00:10.96,Cap,,0,0,0,,{\pos(540,1344)}GOING {\c&H0000D4FF\fscx115\fscy115}TO{\r} BE
+Dialogue: 0,0:00:10.96,0:00:11.06,Cap,,0,0,0,,{\pos(540,1344)}GOING TO {\c&H0000D4FF\fscx115\fscy115}BE{\r}
+Dialogue: 0,0:00:11.06,0:00:11.14,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}A{\r} LITTLE SHORT
+Dialogue: 0,0:00:11.14,0:00:11.28,Cap,,0,0,0,,{\pos(540,1344)}A {\c&H0000D4FF\fscx115\fscy115}LITTLE{\r} SHORT
+Dialogue: 0,0:00:11.28,0:00:11.60,Cap,,0,0,0,,{\pos(540,1344)}A LITTLE {\c&H0000D4FF\fscx115\fscy115}SHORT{\r}
+Dialogue: 0,0:00:11.60,0:00:12.10,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}AND{\r} QUITE UNUSUAL
+Dialogue: 0,0:00:12.10,0:00:12.56,Cap,,0,0,0,,{\pos(540,1344)}AND {\c&H0000D4FF\fscx115\fscy115}QUITE{\r} UNUSUAL
+Dialogue: 0,0:00:12.56,0:00:12.92,Cap,,0,0,0,,{\pos(540,1344)}AND QUITE {\c&H0000D4FF\fscx115\fscy115}UNUSUAL{\r}
+Dialogue: 0,0:00:12.92,0:00:13.22,Cap,,0,0,0,,{\pos(540,1344)}{\c&H0000D4FF\fscx115\fscy115}FOR{\r} MY CHANNEL.
+Dialogue: 0,0:00:13.22,0:00:13.40,Cap,,0,0,0,,{\pos(540,1344)}FOR {\c&H0000D4FF\fscx115\fscy115}MY{\r} CHANNEL.
+Dialogue: 0,0:00:13.40,0:00:13.93,Cap,,0,0,0,,{\pos(540,1344)}FOR MY {\c&H0000D4FF\fscx115\fscy115}CHANNEL.{\r}
+Dialogue: 0,0:00:13.96,0:00:14.42,Cap,,0,0,0,,{\pos(540,806)}A {\c&H0000D4FF\fscx115\fscy115}FIFTY{\r} MINUTE
+Dialogue: 0,0:00:14.42,0:00:14.70,Cap,,0,0,0,,{\pos(540,806)}A FIFTY {\c&H0000D4FF\fscx115\fscy115}MINUTE{\r}
+Dialogue: 0,0:00:14.70,0:00:15.40,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}SUPERHERO{\r} FILM
+Dialogue: 0,0:00:15.40,0:00:15.92,Cap,,0,0,0,,{\pos(540,806)}SUPERHERO {\c&H0000D4FF\fscx115\fscy115}FILM{\r}
+Dialogue: 0,0:00:15.92,0:00:16.50,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}MADE{\r} WITH A.I.
+Dialogue: 0,0:00:16.50,0:00:16.78,Cap,,0,0,0,,{\pos(540,806)}MADE {\c&H0000D4FF\fscx115\fscy115}WITH{\r} A.I.
+Dialogue: 0,0:00:16.78,0:00:17.52,Cap,,0,0,0,,{\pos(540,806)}MADE WITH {\c&H0000D4FF\fscx115\fscy115}A.I.{\r}
+Dialogue: 0,0:00:17.52,0:00:17.96,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}IT{\r} IS CALLED
+Dialogue: 0,0:00:17.96,0:00:18.16,Cap,,0,0,0,,{\pos(540,806)}IT {\c&H0000D4FF\fscx115\fscy115}IS{\r} CALLED
+Dialogue: 0,0:00:18.16,0:00:18.58,Cap,,0,0,0,,{\pos(540,806)}IT IS {\c&H0000D4FF\fscx115\fscy115}CALLED{\r}
+Dialogue: 0,0:00:18.58,0:00:19.22,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}THE{\r} TECH SUPPORT
+Dialogue: 0,0:00:19.22,0:00:19.56,Cap,,0,0,0,,{\pos(540,806)}THE {\c&H0000D4FF\fscx115\fscy115}TECH{\r} SUPPORT
+Dialogue: 0,0:00:19.56,0:00:19.96,Cap,,0,0,0,,{\pos(540,806)}THE TECH {\c&H0000D4FF\fscx115\fscy115}SUPPORT{\r}
+Dialogue: 0,0:00:19.96,0:00:20.67,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}GUY.{\r}
+Dialogue: 0,0:00:20.78,0:00:20.98,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}THE{\r} HERO DOES
+Dialogue: 0,0:00:20.98,0:00:21.28,Cap,,0,0,0,,{\pos(540,806)}THE {\c&H0000D4FF\fscx115\fscy115}HERO{\r} DOES
+Dialogue: 0,0:00:21.28,0:00:21.84,Cap,,0,0,0,,{\pos(540,806)}THE HERO {\c&H0000D4FF\fscx115\fscy115}DOES{\r}
+Dialogue: 0,0:00:21.84,0:00:22.18,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}TECH{\r} SUPPORT.
+Dialogue: 0,0:00:22.18,0:00:22.87,Cap,,0,0,0,,{\pos(540,806)}TECH {\c&H0000D4FF\fscx115\fscy115}SUPPORT.{\r}
+Dialogue: 0,0:00:22.96,0:00:23.06,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}HE{\r} BOOKED A
+Dialogue: 0,0:00:23.06,0:00:23.28,Cap,,0,0,0,,{\pos(540,806)}HE {\c&H0000D4FF\fscx115\fscy115}BOOKED{\r} A
+Dialogue: 0,0:00:23.28,0:00:23.50,Cap,,0,0,0,,{\pos(540,806)}HE BOOKED {\c&H0000D4FF\fscx115\fscy115}A{\r}
+Dialogue: 0,0:00:23.50,0:00:23.84,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}CINEMA{\r} FOR THE
+Dialogue: 0,0:00:23.84,0:00:24.12,Cap,,0,0,0,,{\pos(540,806)}CINEMA {\c&H0000D4FF\fscx115\fscy115}FOR{\r} THE
+Dialogue: 0,0:00:24.12,0:00:24.32,Cap,,0,0,0,,{\pos(540,806)}CINEMA FOR {\c&H0000D4FF\fscx115\fscy115}THE{\r}
+Dialogue: 0,0:00:24.32,0:00:24.87,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}PREMIERE.{\r}
+Dialogue: 0,0:00:24.88,0:00:25.18,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}HE{\r} DID NOT
+Dialogue: 0,0:00:25.18,0:00:25.32,Cap,,0,0,0,,{\pos(540,806)}HE {\c&H0000D4FF\fscx115\fscy115}DID{\r} NOT
+Dialogue: 0,0:00:25.32,0:00:25.58,Cap,,0,0,0,,{\pos(540,806)}HE DID {\c&H0000D4FF\fscx115\fscy115}NOT{\r}
+Dialogue: 0,0:00:25.58,0:00:25.84,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}MAKE{\r} IT.
+Dialogue: 0,0:00:25.84,0:00:26.16,Cap,,0,0,0,,{\pos(540,806)}MAKE {\c&H0000D4FF\fscx115\fscy115}IT.{\r}
+Dialogue: 0,0:00:26.16,0:00:26.68,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}I{\r} HAVE BEEN
+Dialogue: 0,0:00:26.68,0:00:26.80,Cap,,0,0,0,,{\pos(540,806)}I {\c&H0000D4FF\fscx115\fscy115}HAVE{\r} BEEN
+Dialogue: 0,0:00:26.80,0:00:26.92,Cap,,0,0,0,,{\pos(540,806)}I HAVE {\c&H0000D4FF\fscx115\fscy115}BEEN{\r}
+Dialogue: 0,0:00:26.92,0:00:27.12,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}STUCK{\r} IN THIS
+Dialogue: 0,0:00:27.12,0:00:27.26,Cap,,0,0,0,,{\pos(540,806)}STUCK {\c&H0000D4FF\fscx115\fscy115}IN{\r} THIS
+Dialogue: 0,0:00:27.26,0:00:27.42,Cap,,0,0,0,,{\pos(540,806)}STUCK IN {\c&H0000D4FF\fscx115\fscy115}THIS{\r}
+Dialogue: 0,0:00:27.42,0:00:27.68,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}TRAFFIC{\r} JAM FOR
+Dialogue: 0,0:00:27.68,0:00:27.98,Cap,,0,0,0,,{\pos(540,806)}TRAFFIC {\c&H0000D4FF\fscx115\fscy115}JAM{\r} FOR
+Dialogue: 0,0:00:27.98,0:00:28.64,Cap,,0,0,0,,{\pos(540,806)}TRAFFIC JAM {\c&H0000D4FF\fscx115\fscy115}FOR{\r}
+Dialogue: 0,0:00:28.64,0:00:30.30,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}OVER{\r} AN HOUR.
+Dialogue: 0,0:00:30.30,0:00:30.54,Cap,,0,0,0,,{\pos(540,806)}OVER {\c&H0000D4FF\fscx115\fscy115}AN{\r} HOUR.
+Dialogue: 0,0:00:30.54,0:00:31.07,Cap,,0,0,0,,{\pos(540,806)}OVER AN {\c&H0000D4FF\fscx115\fscy115}HOUR.{\r}
+Dialogue: 0,0:00:31.14,0:00:31.58,Cap,,0,0,0,,{\pos(540,806)}KICK {\c&H0000D4FF\fscx115\fscy115}STREAMER{\r} CHUD
+Dialogue: 0,0:00:31.58,0:00:31.96,Cap,,0,0,0,,{\pos(540,806)}KICK STREAMER {\c&H0000D4FF\fscx115\fscy115}CHUD{\r}
+Dialogue: 0,0:00:31.96,0:00:32.62,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}LOGIC,{\r} WHOSE OWN
+Dialogue: 0,0:00:32.62,0:00:32.74,Cap,,0,0,0,,{\pos(540,806)}LOGIC, {\c&H0000D4FF\fscx115\fscy115}WHOSE{\r} OWN
+Dialogue: 0,0:00:32.74,0:00:33.04,Cap,,0,0,0,,{\pos(540,806)}LOGIC, WHOSE {\c&H0000D4FF\fscx115\fscy115}OWN{\r}
+Dialogue: 0,0:00:33.04,0:00:33.40,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}YOUTUBE{\r} CHANNEL
+Dialogue: 0,0:00:33.40,0:00:33.76,Cap,,0,0,0,,{\pos(540,806)}YOUTUBE {\c&H0000D4FF\fscx115\fscy115}CHANNEL{\r}
+Dialogue: 0,0:00:33.76,0:00:33.96,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}HAD{\r} BEEN
+Dialogue: 0,0:00:33.96,0:00:34.16,Cap,,0,0,0,,{\pos(540,806)}HAD {\c&H0000D4FF\fscx115\fscy115}BEEN{\r}
+Dialogue: 0,0:00:34.16,0:00:34.64,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}TERMINATED{\r} DAYS
+Dialogue: 0,0:00:34.64,0:00:35.14,Cap,,0,0,0,,{\pos(540,806)}TERMINATED {\c&H0000D4FF\fscx115\fscy115}DAYS{\r}
+Dialogue: 0,0:00:35.14,0:00:36.04,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}EARLIER,{\r} SAT
+Dialogue: 0,0:00:36.04,0:00:36.12,Cap,,0,0,0,,{\pos(540,806)}EARLIER, {\c&H0000D4FF\fscx115\fscy115}SAT{\r}
+Dialogue: 0,0:00:36.12,0:00:36.38,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}THROUGH{\r} ALL FIFTY
+Dialogue: 0,0:00:36.38,0:00:36.82,Cap,,0,0,0,,{\pos(540,806)}THROUGH {\c&H0000D4FF\fscx115\fscy115}ALL{\r} FIFTY
+Dialogue: 0,0:00:36.82,0:00:37.30,Cap,,0,0,0,,{\pos(540,806)}THROUGH ALL {\c&H0000D4FF\fscx115\fscy115}FIFTY{\r}
+Dialogue: 0,0:00:37.30,0:00:37.52,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}MINUTES{\r} ON OUR
+Dialogue: 0,0:00:37.52,0:00:38.28,Cap,,0,0,0,,{\pos(540,806)}MINUTES {\c&H0000D4FF\fscx115\fscy115}ON{\r} OUR
+Dialogue: 0,0:00:38.28,0:00:38.80,Cap,,0,0,0,,{\pos(540,806)}MINUTES ON {\c&H0000D4FF\fscx115\fscy115}OUR{\r}
+Dialogue: 0,0:00:38.80,0:00:39.57,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}BEHALF.{\r}
+Dialogue: 0,0:00:39.70,0:00:39.84,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}I{\r} PRESENT TO
+Dialogue: 0,0:00:39.84,0:00:40.14,Cap,,0,0,0,,{\pos(540,806)}I {\c&H0000D4FF\fscx115\fscy115}PRESENT{\r} TO
+Dialogue: 0,0:00:40.14,0:00:40.42,Cap,,0,0,0,,{\pos(540,806)}I PRESENT {\c&H0000D4FF\fscx115\fscy115}TO{\r}
+Dialogue: 0,0:00:40.42,0:00:41.05,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}YOU,{\r}
+Dialogue: 0,0:00:41.50,0:00:41.84,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}THE{\r} TECH SUPPORT
+Dialogue: 0,0:00:41.84,0:00:42.10,Cap,,0,0,0,,{\pos(540,806)}THE {\c&H0000D4FF\fscx115\fscy115}TECH{\r} SUPPORT
+Dialogue: 0,0:00:42.10,0:00:42.52,Cap,,0,0,0,,{\pos(540,806)}THE TECH {\c&H0000D4FF\fscx115\fscy115}SUPPORT{\r}
+Dialogue: 0,0:00:42.52,0:00:43.17,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}GUY.{\r}
+Dialogue: 0,0:00:43.22,0:00:43.30,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}I{\r} ALSO CHECKED
+Dialogue: 0,0:00:43.30,0:00:43.54,Cap,,0,0,0,,{\pos(540,806)}I {\c&H0000D4FF\fscx115\fscy115}ALSO{\r} CHECKED
+Dialogue: 0,0:00:43.54,0:00:43.76,Cap,,0,0,0,,{\pos(540,806)}I ALSO {\c&H0000D4FF\fscx115\fscy115}CHECKED{\r}
+Dialogue: 0,0:00:43.76,0:00:43.94,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}THE{\r} SECURITY
+Dialogue: 0,0:00:43.94,0:00:44.24,Cap,,0,0,0,,{\pos(540,806)}THE {\c&H0000D4FF\fscx115\fscy115}SECURITY{\r}
+Dialogue: 0,0:00:44.24,0:00:44.89,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}CAMERAS.{\r}
+Dialogue: 0,0:00:45.36,0:00:45.54,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}IT'S{\r} TRUE, VIPER
+Dialogue: 0,0:00:45.54,0:00:45.88,Cap,,0,0,0,,{\pos(540,806)}IT'S {\c&H0000D4FF\fscx115\fscy115}TRUE,{\r} VIPER
+Dialogue: 0,0:00:45.88,0:00:46.00,Cap,,0,0,0,,{\pos(540,806)}IT'S TRUE, {\c&H0000D4FF\fscx115\fscy115}VIPER{\r}
+Dialogue: 0,0:00:46.00,0:00:46.18,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}HAS{\r} BEEN HERE
+Dialogue: 0,0:00:46.18,0:00:46.32,Cap,,0,0,0,,{\pos(540,806)}HAS {\c&H0000D4FF\fscx115\fscy115}BEEN{\r} HERE
+Dialogue: 0,0:00:46.32,0:00:46.46,Cap,,0,0,0,,{\pos(540,806)}HAS BEEN {\c&H0000D4FF\fscx115\fscy115}HERE{\r}
+Dialogue: 0,0:00:46.46,0:00:46.62,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}FOR{\r} ALMOST A
+Dialogue: 0,0:00:46.62,0:00:46.80,Cap,,0,0,0,,{\pos(540,806)}FOR {\c&H0000D4FF\fscx115\fscy115}ALMOST{\r} A
+Dialogue: 0,0:00:46.80,0:00:46.98,Cap,,0,0,0,,{\pos(540,806)}FOR ALMOST {\c&H0000D4FF\fscx115\fscy115}A{\r}
+Dialogue: 0,0:00:46.98,0:00:47.14,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}MONTH{\r} RIGHT UNDER
+Dialogue: 0,0:00:47.14,0:00:47.36,Cap,,0,0,0,,{\pos(540,806)}MONTH {\c&H0000D4FF\fscx115\fscy115}RIGHT{\r} UNDER
+Dialogue: 0,0:00:47.36,0:00:47.58,Cap,,0,0,0,,{\pos(540,806)}MONTH RIGHT {\c&H0000D4FF\fscx115\fscy115}UNDER{\r}
+Dialogue: 0,0:00:47.58,0:00:47.78,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}OUR{\r} NOSES.
+Dialogue: 0,0:00:47.78,0:00:48.31,Cap,,0,0,0,,{\pos(540,806)}OUR {\c&H0000D4FF\fscx115\fscy115}NOSES.{\r}
+Dialogue: 0,0:00:48.42,0:00:48.50,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}BUT{\r} NO ONE
+Dialogue: 0,0:00:48.50,0:00:48.80,Cap,,0,0,0,,{\pos(540,806)}BUT {\c&H0000D4FF\fscx115\fscy115}NO{\r} ONE
+Dialogue: 0,0:00:48.80,0:00:49.08,Cap,,0,0,0,,{\pos(540,806)}BUT NO {\c&H0000D4FF\fscx115\fscy115}ONE{\r}
+Dialogue: 0,0:00:49.08,0:00:49.30,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}LOOKED{\r} AT ANY
+Dialogue: 0,0:00:49.30,0:00:49.58,Cap,,0,0,0,,{\pos(540,806)}LOOKED {\c&H0000D4FF\fscx115\fscy115}AT{\r} ANY
+Dialogue: 0,0:00:49.58,0:00:49.88,Cap,,0,0,0,,{\pos(540,806)}LOOKED AT {\c&H0000D4FF\fscx115\fscy115}ANY{\r}
+Dialogue: 0,0:00:49.88,0:00:50.26,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}POINT{\r} IN THE
+Dialogue: 0,0:00:50.26,0:00:50.54,Cap,,0,0,0,,{\pos(540,806)}POINT {\c&H0000D4FF\fscx115\fscy115}IN{\r} THE
+Dialogue: 0,0:00:50.54,0:00:50.78,Cap,,0,0,0,,{\pos(540,806)}POINT IN {\c&H0000D4FF\fscx115\fscy115}THE{\r}
+Dialogue: 0,0:00:50.78,0:00:51.02,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}PAST{\r} MONTH.
+Dialogue: 0,0:00:51.02,0:00:51.58,Cap,,0,0,0,,{\pos(540,806)}PAST {\c&H0000D4FF\fscx115\fscy115}MONTH.{\r}
+Dialogue: 0,0:00:51.58,0:00:51.94,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}HIS{\r} CHANNEL IS
+Dialogue: 0,0:00:51.94,0:00:52.40,Cap,,0,0,0,,{\pos(540,806)}HIS {\c&H0000D4FF\fscx115\fscy115}CHANNEL{\r} IS
+Dialogue: 0,0:00:52.40,0:00:52.96,Cap,,0,0,0,,{\pos(540,806)}HIS CHANNEL {\c&H0000D4FF\fscx115\fscy115}IS{\r}
+Dialogue: 0,0:00:52.96,0:00:53.58,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}RESTORING{\r} OLD
+Dialogue: 0,0:00:53.58,0:00:54.06,Cap,,0,0,0,,{\pos(540,806)}RESTORING {\c&H0000D4FF\fscx115\fscy115}OLD{\r}
+Dialogue: 0,0:00:54.06,0:00:54.78,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}TECH.{\r}
+Dialogue: 0,0:00:54.78,0:00:54.90,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}IT'S{\r} LIKE
+Dialogue: 0,0:00:54.90,0:00:54.98,Cap,,0,0,0,,{\pos(540,806)}IT'S {\c&H0000D4FF\fscx115\fscy115}LIKE{\r}
+Dialogue: 0,0:00:54.98,0:00:55.26,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}LITERALLY{\r} THE
+Dialogue: 0,0:00:55.26,0:00:55.54,Cap,,0,0,0,,{\pos(540,806)}LITERALLY {\c&H0000D4FF\fscx115\fscy115}THE{\r}
+Dialogue: 0,0:00:55.54,0:00:55.76,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}WORST{\r} POSSIBLE
+Dialogue: 0,0:00:55.76,0:00:56.20,Cap,,0,0,0,,{\pos(540,806)}WORST {\c&H0000D4FF\fscx115\fscy115}POSSIBLE{\r}
+Dialogue: 0,0:00:56.20,0:00:56.87,Cap,,0,0,0,,{\pos(540,806)}{\c&H0000D4FF\fscx115\fscy115}AUDIENCE.{\r}
