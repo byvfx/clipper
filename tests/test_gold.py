@@ -78,3 +78,25 @@ def test_score_counts_recall_precision_and_hard_rule_keeps():
     assert res["kept_hard_rule"] == 1  # c: a played clip kept
     assert res["keep_right"] == 3  # a, d, e right (e: "error" is not a keep); b, c wrong
     assert res["confusion"]["no_clip>error"] == 1
+
+
+def test_the_repeat_is_found_by_the_stream_own_model(defaults, tmp_path):
+    w = {"window": [100, 200], "model": "claude-sonnet-5-5", "why": "x"}
+    d = stream(tmp_path, "kick-2", [{"id": "w01", **w, **rec("rejected", needs_context=True)}], {})
+    jsonstate.write(d / "compare" / "score_claude-sonnet-5-5-repeat_a.json",
+                    {"candidate": {"pass_a": [{"id": "w01", **rec("no_clip")}]}})
+    assert gold.stream_proposals(d, defaults) == []  # the rerun disagreed
+
+
+def test_propose_makes_its_folder_and_keeps_the_lead_in(defaults, tmp_path):
+    defaults["paths"]["streams"] = tmp_path / "streams"
+    defaults["paths"]["model_gold"] = path = tmp_path / "new" / "gold.json"
+    w = {"window": [130, 200], "model": "claude-haiku-5-5", "why": "x"}
+    d = stream(defaults["paths"]["streams"], "kick-3", [{"id": "w01", **w, **rec("no_clip")}],
+               {"s01_x": {"kind": "segment", "id": "s01", "decision": "approved"}})
+    (d / "words.jsonl").write_text("\n".join(
+        f'{{"start": {t}, "end": {t + 1}, "word": "w{t}", "seg": {t}}}' for t in (5, 50, 150)), encoding="utf-8")
+    gold.propose(defaults)
+    item = jsonstate.read(path)["items"][0]
+    assert item["lead_in"] == ["[50.0] w50"]  # lead_in_s 120 before 130: from 10 s
+    assert item["transcript"] == ["[150.0] w150"]

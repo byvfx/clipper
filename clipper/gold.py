@@ -29,7 +29,15 @@ from collections import Counter
 from pathlib import Path
 
 from . import jsonstate, llm
-from .compare import decisions, out_tokens, score_windows, scored_only, slug
+from .compare import (
+    baseline_models,
+    decisions,
+    out_tokens,
+    report_stem,
+    score_windows,
+    scored_only,
+    slug,
+)
 from .config import EFFORTS, for_stream
 from .errors import ClipperError
 from .llm import Claude
@@ -55,11 +63,13 @@ def verdict(rec: dict, max_source_s: float) -> str:
     return "needs_context" if rec.get("needs_context") else "no_clip"
 
 
-def excerpt(words: list[dict], rec: dict) -> list[str]:
+def excerpt(words: list[dict], window: list[float], lead_in_s: float) -> tuple[list[str], list[str]]:
+    """(the lead-in Pass A is given before the window, the window), as transcript lines: the
+    person labelling sees what the model sees."""
     from .transcript import transcript_lines
 
-    a, b = rec["window"]
-    return transcript_lines(words, a, b)
+    a, b = window
+    return transcript_lines(words, max(0, a - lead_in_s), a), transcript_lines(words, a, b)
 
 
 def stream_proposals(sdir: Path, cfg: dict) -> list[dict]:
@@ -71,7 +81,9 @@ def stream_proposals(sdir: Path, cfg: dict) -> list[dict]:
     cfg = for_stream(cfg, sdir)
     max_src = cfg["scoring"]["max_source_audio_s"]
     _, base_a, _ = scored_only(base)
-    repeat = jsonstate.read(sdir / "compare" / "score_claude-haiku-5-5-repeat_a.json") or {}
+    # `compare --repeat` names its report after the stream's own Pass A model
+    plain = report_stem(f"{baseline_models(base, cfg)[0]} (repeat)", "a")
+    repeat = jsonstate.read(sdir / "compare" / f"{plain}.json") or {}
     again = {r["id"]: verdict(r, max_src) for r in (repeat.get("candidate") or {}).get("pass_a", [])}
     decided = decisions(review)
     out = []
@@ -120,12 +132,16 @@ def propose(cfg: dict, streams: int = 12, seed: int = 72) -> dict:
         cands = pool.get(label, [])
         rnd.shuffle(cands)
         added += cands[:max(0, quota - have_n[label])]
+    have["items"] += sorted(added, key=lambda p: (p["stream"], p["window"][0]))
     words: dict[str, list[dict]] = {}
-    for p in added:
+    for p in have["items"]:
+        if "lead_in" in p:  # proposed before the lead-in was kept gets it now
+            continue
         if p["stream"] not in words:
             words[p["stream"]] = load_words(root / p["stream"])
-        p["transcript"] = excerpt(words[p["stream"]], p)
-    have["items"] += sorted(added, key=lambda p: (p["stream"], p["window"][0]))
+        lead_in_s = for_stream(cfg, root / p["stream"])["scoring"]["lead_in_s"]
+        p["lead_in"], p["transcript"] = excerpt(words[p["stream"]], p["window"], lead_in_s)
+    path.parent.mkdir(parents=True, exist_ok=True)
     jsonstate.write(path, have)
     n = Counter(i["proposed"] for i in have["items"])
     print(f"gold: {len(added)} new proposal(s) from {len(dirs)} stream(s); {len(have['items'])} in {path} ("
@@ -137,6 +153,8 @@ def propose(cfg: dict, streams: int = 12, seed: int = 72) -> dict:
 def confirm(cfg: dict, labels: dict[str, dict]) -> int:
     """Set and confirm labels by "<stream>_<id>"; returns how many changed."""
     path = Path(cfg["paths"]["model_gold"])
+    if not path.exists():
+        raise ClipperError(f"no {path} yet: clipper models gold propose")
     unknown = [k for k, v in labels.items() if v.get("label") not in LABELS]
     if unknown:
         raise ClipperError(f"labels must be one of {', '.join(LABELS)}: {', '.join(unknown[:5])}")
@@ -210,14 +228,22 @@ def run(cfg: dict, model: str, effort: str = "", prompt_version: str = "", budge
           + f"; estimate ${est:.3f}")
     if dry_run:
         return {}
-    if llm.known_price(cfg, model) is None and llm.split(model)[0] != "local":
+    if llm.split(model)[0] != "local" and any(llm.known_price(j[1], model) is None for j in jobs):
         raise ClipperError(f"no price for {model}: add it to [llm.prices] in clipper.toml")
     if est > budget:
         raise ClipperError(f"estimate ${est:.2f} is over --budget ${budget:.2f}; raise it to go ahead")
-    claude = Claude(cfg)
-    llm.preflight(claude, model)
+    # Each stream's own config makes its client (a show can name its own key file or local
+    # server); one preflight per distinct set of model settings, before anything is paid for.
+    clients, checked = [], set()
+    for _, scfg, *_ in jobs:
+        claude = Claude(scfg)
+        settings = repr((scfg.get("llm"), scfg["paths"].get(f"{llm.split(model)[0]}_key")))
+        if settings not in checked:
+            llm.preflight(claude, model)
+            checked.add(settings)
+        clients.append(claude)
     said, theirs, results = {}, {}, []
-    for sdir, scfg, prompts, windows, words, sig, _ in jobs:
+    for (sdir, scfg, prompts, windows, words, sig, _), claude in zip(jobs, clients, strict=True):
         max_src = scfg["scoring"]["max_source_audio_s"]
         for rec in run_pass_a(windows, words, sig, scfg, claude, prompts):
             said[(sdir.name, rec["id"])] = verdict(rec, max_src)
@@ -225,7 +251,7 @@ def run(cfg: dict, model: str, effort: str = "", prompt_version: str = "", budge
                             "why": rec.get("why") or rec.get("error", "")})
     for g in gold:
         theirs[(g["stream"], g["id"])] = g["model_said"]
-    res = {"model": model, "effort": effort, "prompt_version": version, "cost_usd": round(claude.cost, 4),
+    res = {"model": model, "effort": effort, "prompt_version": version, "cost_usd": round(sum(c.cost for c in clients), 4),
            "candidate": score(gold, said), "original": score(gold, theirs),
            "original_models": sorted({g["model"] for g in gold}), "windows": results}
     out = path.parent / f"gold_{slug(f'{model} {effort} {version}')}.json"

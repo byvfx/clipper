@@ -183,7 +183,7 @@ FIXTURES = [
 # What each stage asks of its model, by config key; every stage needs "json".
 NEEDS = {"scoring.model_a": ("json", "pass_a"), "segments.model": ("json", "long"),
          "shorts.layout_model": ("json", "vision"), "cast.label_model": ("json", "vision"),
-         "meta.model": ("json", "text")}
+         "thumbnail.model": ("json", "vision"), "meta.model": ("json", "text")}
 
 
 def words_of(lines: list[tuple]) -> list[dict]:
@@ -338,6 +338,7 @@ def check_text(cfg: dict, claude: Claude, model: str, effort: str) -> dict:
 LONG_SCHEMA = {"type": "object", "properties": {"password": {"type": "string"}, "time_s": {"type": "number"}},
                "required": ["password", "time_s"], "additionalProperties": False}
 NEEDLE = "Quick reminder for everyone: the raffle password tonight is purple walrus forty-two."
+PASSWORD = re.compile(r"\bpurple\s+walrus\s+(forty[\s-]?two|42)\b", re.IGNORECASE)
 SUBJECTS = ["my cousin", "the guy at the gas station", "our neighbor", "the new intern", "my dentist",
             "a lady on the bus", "the delivery driver", "my old roommate", "the mayor", "the barista"]
 DOINGS = ["tried to return a sandwich", "parked across three spaces", "learned to juggle", "bought a boat",
@@ -374,8 +375,7 @@ def check_long(claude: Claude, model: str, effort: str) -> dict:
                                  "and at what second is it said?", LONG_SCHEMA, effort, stream=True)
     if out is None:
         return {"ok": False, "answer": "refused"}
-    pw = out["password"].lower()
-    found = "walrus" in pw and ("42" in pw or "forty" in pw)
+    found = bool(PASSWORD.search(out["password"]))
     return {"ok": found and abs(out["time_s"] - t_needle) <= 5, "answer": out, "said_at": t_needle,
             "input_tokens": meta.get("input_tokens"), "retried": bool(meta.get("retried"))}
 
@@ -393,6 +393,19 @@ def estimate(cfg: dict, model: str, effort: str, long: bool) -> float:
     if long:
         usd += llm.estimate(cfg, model, LONG_TOKENS, out_tokens(model, effort, "a"))
     return usd
+
+
+def json_check(checks: dict) -> dict:
+    """Structured answers across the checks that ask for them: at least one Pass A answer came
+    back, and none (Pass A, vision, long) still broke its schema after the retry."""
+    pa = checks["pass_a"]
+    retried = pa.get("retried", 0) + sum(bool(checks[k].get("retried")) for k in ("vision", "long") if k in checks)
+    errors = [e for e in pa.get("errors", []) if "schema" in e]
+    errors += [f"{k}: {checks[k]['error']}" for k in ("vision", "long") if "schema" in checks.get(k, {}).get("error", "")]
+    answered = pa.get("calls", 0) - len(pa.get("errors", [])) - pa.get("refused", 0)
+    if "error" in pa:
+        errors.append(f"pass_a: {pa['error']}")
+    return {"ok": answered > 0 and not errors, "answered": answered, "retried": retried, "errors": errors}
 
 
 def timed(fn, *args) -> dict:
@@ -444,10 +457,7 @@ def test_model(cfg: dict, model: str, effort: str = "", budget: float = 1.0, lon
               "text": timed(check_text, cfg, claude, model, effort)}
     if long:
         checks["long"] = timed(check_long, claude, model, effort)
-    pa = checks["pass_a"]
-    retried = pa.get("retried", 0) + sum(bool(checks[k].get("retried")) for k in ("vision", "long") if k in checks)
-    json_errors = [e for e in pa.get("errors", []) if "schema" in e]
-    checks["json"] = {"ok": "error" not in pa and not json_errors, "retried": retried, "errors": json_errors}
+    checks["json"] = json_check(checks)
     res = {"model": model, "effort": effort, "prompt_version": cfg["scoring"]["prompt_version"],
            "at": time.strftime("%Y-%m-%d %H:%M"), "cost_usd": round(claude.cost, 4), "checks": checks,
            "fit": fitness(cfg, checks)}
@@ -499,7 +509,8 @@ def report(res: dict) -> str:
 def list_tests(cfg: dict) -> None:
     """Every saved test, one line each, newest first."""
     d = Path(cfg["paths"]["model_tests"])
-    rows = sorted((jsonstate.read(p) or {} for p in d.glob("*.json")), key=lambda r: r.get("at", ""), reverse=True)
+    rows = [r for r in (jsonstate.read(p) or {} for p in d.glob("*.json")) if "checks" in r]  # not the gold files
+    rows.sort(key=lambda r: r.get("at", ""), reverse=True)
     if not rows:
         print(f"no model tests in {d} yet: clipper models test <model>")
         return

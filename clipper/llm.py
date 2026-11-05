@@ -78,6 +78,7 @@ def price_of(prices: dict, model: str) -> tuple[float, float] | None:
 
 _OPENROUTER_PRICES: dict[str, tuple[float, float]] | None = None
 _OPENROUTER_CONTEXT: dict[str, int] = {}
+_OPENROUTER_MAX_OUT: dict[str, int] = {}
 
 
 def openrouter_prices() -> dict[str, tuple[float, float]]:
@@ -94,6 +95,8 @@ def openrouter_prices() -> dict[str, tuple[float, float]]:
                                   for m in data if m.get("pricing")}
             _OPENROUTER_CONTEXT.update({m["id"]: int(m["context_length"])
                                         for m in data if m.get("context_length")})
+            _OPENROUTER_MAX_OUT.update({m["id"]: int(m["top_provider"]["max_completion_tokens"])
+                                        for m in data if (m.get("top_provider") or {}).get("max_completion_tokens")})
         except (requests.RequestException, ValueError, KeyError, TypeError):
             return {}  # not cached: the next estimate tries again
     return _OPENROUTER_PRICES
@@ -106,6 +109,14 @@ def context_length(model: str) -> int | None:
         return None
     openrouter_prices()
     return _OPENROUTER_CONTEXT.get(split(model)[1])
+
+
+def max_output(model: str) -> int | None:
+    """The most a model writes in one answer, where it is published (OpenRouter's list)."""
+    if split(model)[0] != "openrouter":
+        return None
+    openrouter_prices()
+    return _OPENROUTER_MAX_OUT.get(split(model)[1])
 
 
 def known_price(cfg: dict, model: str) -> tuple[float, float] | None:
@@ -417,10 +428,14 @@ class LLM:
         if not key and prov != "local":
             raise ClipperError(f"{model}: set the {env} environment variable "
                                f"(or put the key in [paths] {prov}_key)")
-        if effort and effort != "none":  # thinking is output: room for it and the answer
-            max_tokens = max(max_tokens, self.lc["thinking_max_tokens"])
-        body: dict[str, Any] = {"model": name, "messages": messages,
-                                ("max_completion_tokens" if prov == "openai" else "max_tokens"): max_tokens}
+        asked = max_tokens
+        if effort and effort != "none" and model not in self._no_effort:
+            # Thinking is output: room for it and the answer, within what the model can write
+            # (published for OpenRouter; elsewhere a 400 about it falls back to what was asked).
+            cap = max_output(model)
+            max_tokens = max(asked, min(self.lc["thinking_max_tokens"], cap or self.lc["thinking_max_tokens"]))
+        limit = "max_completion_tokens" if prov == "openai" else "max_tokens"
+        body: dict[str, Any] = {"model": name, "messages": messages, limit: max_tokens}
         if response_format:
             body["response_format"] = response_format
         if effort and model not in self._no_effort:
@@ -451,6 +466,10 @@ class LLM:
                     self._no_effort.add(model)  # not a reasoning model
                     body.pop("reasoning_effort", None)
                     body.pop("reasoning", None)
+                    body[limit] = asked  # no thinking, so no room for it
+                    continue
+                if body[limit] > asked and ("max_tokens" in text or "max_completion_tokens" in text):
+                    body[limit] = asked  # more than this model writes: the caller's own figure
                     continue
                 if (response_format or {}).get("type") == "json_schema" and (
                         "response_format" in text or "json_schema" in text):

@@ -75,8 +75,8 @@ model and provider, so a model can be tried before any stage moves to it.
 | Check | What it asks | Stages that need it |
 |---|---|---|
 | `pass_a` | six made-up windows (two clean keepers, a played video, slots, a running joke nobody explains, a break) through the real Pass A code with the prompt version in use, twice: the verdicts, the cut rules on what it keeps (Short 15-60 s around the payoff, clip 30-300 s, no "hosts") and whether both rounds agree | `scoring.model_a` |
-| `json` | every structured answer matched its schema (an answer fixed on the retry is counted: it costs double) | all |
-| `vision` | a picture with a colour and a number on it | `shorts.layout_model`, `cast.label_model` |
+| `json` | at least one structured answer came back, and every one matched its schema (an answer fixed on the retry is counted: it costs double) | all |
+| `vision` | a picture with a colour and a number on it | `shorts.layout_model`, `cast.label_model`, `thumbnail.model` |
 | `text` | a short description with the house style applied | `meta.model` |
 | `long` | a password said once in a made-up ~9-hour transcript (~130k tokens) | `segments.model` |
 
@@ -95,8 +95,9 @@ catch a model that can't follow the format or the hard rules, not one with poor 
    `[paths] model_gold` (`logs/model_tests/gold.json`): moments approved in review come in as
    `keep`, already confirmed; windows the stream's model rejected or passed on come with its
    reason as the proposed label (`third_party`, `needs_context`, `casino`, `no_clip`); windows
-   it kept that were never approved come unlabelled. Run it again later to add more; labels
-   already confirmed are never changed.
+   it kept that were never approved come unlabelled. Each window keeps its transcript and the
+   lead-in Pass A gets before it, so the label rests on what the model sees. Run it again later
+   to add more; labels already confirmed are never changed.
 2. Label them: set `"label"` and `"confirmed": true` in the file, or put the labels in a file
    shaped `{"<stream>_<id>": {"label": "keep", "note": "why"}}` and run
    `clipper models gold confirm <file>`.

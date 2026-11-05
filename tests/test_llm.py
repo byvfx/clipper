@@ -194,3 +194,35 @@ def test_reasoning_gets_room_to_think(posted, monkeypatch, defaults):
     client.text_call("openrouter:deepseek/deepseek-v4-pro-0813", "sys", "hi", "none", max_tokens=4000)
     assert sent[0]["body"]["max_tokens"] == defaults["llm"]["thinking_max_tokens"]
     assert sent[1]["body"]["max_tokens"] == 4000
+
+
+def test_room_to_think_stays_within_what_the_model_writes(posted, monkeypatch, defaults):
+    sent, replies = posted
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    monkeypatch.setitem(llm._OPENROUTER_MAX_OUT, "openai/gpt-4.1", 32768)
+    replies.append(FakeResponse(answer("a")))
+    llm.LLM(defaults).text_call("openrouter:openai/gpt-4.1", "sys", "hi", "medium", max_tokens=4000)
+    assert sent[0]["body"]["max_tokens"] == 32768
+
+
+def test_a_model_without_reasoning_gets_back_the_tokens_asked_for(posted, monkeypatch, defaults):
+    sent, replies = posted
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    replies += [FakeResponse({"error": "reasoning_effort is not supported"}, 400), FakeResponse(answer("a")),
+                FakeResponse(answer("b"))]
+    client = llm.LLM(defaults)
+    client.text_call("openai:gpt-4.1", "sys", "hi", "medium", max_tokens=4000)
+    client.text_call("openai:gpt-4.1", "sys", "hi", "medium", max_tokens=4000)
+    assert sent[0]["body"]["max_completion_tokens"] == defaults["llm"]["thinking_max_tokens"]
+    assert sent[1]["body"]["max_completion_tokens"] == 4000 and "reasoning_effort" not in sent[1]["body"]
+    assert sent[2]["body"]["max_completion_tokens"] == 4000  # remembered: no reasoning, no extra room
+
+
+def test_too_many_output_tokens_falls_back_to_what_was_asked(posted, monkeypatch, defaults):
+    sent, replies = posted
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    replies += [FakeResponse({"error": "max_completion_tokens is too large: 64000 > 32768"}, 400),
+                FakeResponse(answer("a"))]
+    text, _ = llm.LLM(defaults).text_call("openai:o5-mini", "sys", "hi", "medium", max_tokens=4000)
+    assert text == "a" and sent[1]["body"]["max_completion_tokens"] == 4000
+    assert sent[1]["body"]["reasoning_effort"] == "medium"

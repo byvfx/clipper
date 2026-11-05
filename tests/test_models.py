@@ -86,3 +86,41 @@ def test_report_reads_a_saved_result(defaults):
     text = models.report(res)
     assert "6/6 verdicts right" in text and "no image input" in text
     assert "could take 0 of 1 stages; not: scoring.model_a (pass_a)" in text
+
+
+def test_only_the_whole_password_counts():
+    assert models.PASSWORD.search("Purple walrus forty-two")
+    assert models.PASSWORD.search("purple walrus 42") and models.PASSWORD.search("purple walrus forty two")
+    assert not models.PASSWORD.search("yellow walrus forty-three")
+    assert not models.PASSWORD.search("purple walrus forty-three")
+
+
+def test_json_needs_an_answer_and_counts_every_schema_failure():
+    all_refused = {"pass_a": {"calls": 12, "refused": 12, "errors": []}}
+    assert not models.json_check(all_refused)["ok"]
+    vision_broke = {"pass_a": {"calls": 12, "refused": 0, "errors": []},
+                    "vision": {"ok": False, "error": "RuntimeError: m answered JSON that doesn't match the schema: x"}}
+    res = models.json_check(vision_broke)
+    assert not res["ok"] and res["errors"][0].startswith("vision:")
+    fine = {"pass_a": {"calls": 12, "refused": 1, "errors": [], "retried": 2},
+            "vision": {"ok": False, "error": "HTTP 404: no image input"}, "long": {"ok": True, "retried": True}}
+    assert models.json_check(fine) == {"ok": True, "answered": 11, "retried": 3, "errors": []}
+
+
+def test_thumbnails_need_vision(defaults):
+    rows = {r["stage"]: r for r in models.fitness(defaults, {"json": {"ok": True}, "vision": {"ok": False}})}
+    assert rows["thumbnail.model"]["failed"] == ["vision"]
+
+
+def test_list_skips_the_gold_files(defaults, tmp_path, capsys):
+    from clipper import jsonstate
+
+    defaults["paths"]["model_tests"] = tmp_path
+    jsonstate.write(tmp_path / "gold.json", {"items": []})
+    jsonstate.write(tmp_path / "gold_m.json", {"candidate": {}})
+    jsonstate.write(tmp_path / "m-none.json", {"model": "m", "effort": "none", "at": "2026-11-05 10:00",
+                                                "cost_usd": 0.01, "checks": {"pass_a": {"right": 12, "of": 12},
+                                                                             "json": {"ok": True}}})
+    models.list_tests(defaults)
+    out = capsys.readouterr().out
+    assert "m @none: pass_a 12/12 json ok" in out and out.count("\n") == 1
