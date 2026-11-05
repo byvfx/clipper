@@ -95,3 +95,20 @@ def test_summary_row_reads_a_report():
     row = compare.summary_row(res)
     assert row["approved"] == "3/5" and row["baseline_approved"] == "5/5" and row["same"] == "1/3"
     assert row["kept"] == 2 and row["kept_rejected"] == 1 and row["errors"] == 1
+
+
+class FakePrompts:
+    def __init__(self, summary_len: int):
+        self.summary_len = summary_len
+
+    def get(self, name: str) -> str:
+        return "x" * (self.summary_len if name == "summary" else 400)
+
+
+def test_estimate_counts_a_rebuilt_summary_with_the_baseline_prompts(defaults):
+    args = (defaults, FakePrompts(4000), "b", [], 3, "claude-haiku-5-5", "claude-haiku-5-5", [], {})
+    model = "claude-haiku-5-5"
+    own = compare.estimate(*args, model, 1800, FakePrompts(400_000))
+    cand = compare.estimate(*args, model, 1800)
+    none = compare.estimate(*args)
+    assert own > cand > none  # the baseline's (longer) summary prompt is what gets priced

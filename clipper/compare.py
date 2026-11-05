@@ -207,9 +207,9 @@ def score_windows(sdir: Path, cfg: dict, version: str, base_a: list[dict]) -> tu
 
 def estimate(cfg: dict, prompts: Prompts, which: str, windows: list[dict], n_kept: int,
              model_a: str, model_b: str, words: list[dict], sig: dict,
-             summary_model: str = "", duration_s: float = 0) -> float:
+             summary_model: str = "", duration_s: float = 0, summary_prompts: Prompts | None = None) -> float:
     """$ for the calls the comparison makes; summary_model: the summary isn't cached, so it is
-    made again with that model (one call per block)."""
+    made again with that model (one call per block), with summary_prompts (default prompts)."""
     from .scoring import SUMMARY_BLOCK_S, pass_a_user
     from .transcript import transcript_lines
 
@@ -217,7 +217,7 @@ def estimate(cfg: dict, prompts: Prompts, which: str, windows: list[dict], n_kep
     if summary_model:
         blocks = math.ceil(duration_s / SUMMARY_BLOCK_S)
         text = len("\n".join(transcript_lines(words, 0, math.ceil(duration_s))))
-        usd += llm.estimate(cfg, summary_model, (len(prompts.get("summary")) * blocks + text) / 4,
+        usd += llm.estimate(cfg, summary_model, (len((summary_prompts or prompts).get("summary")) * blocks + text) / 4,
                             SUMMARY_OUT_TOKENS * blocks)
     if "a" in which:
         system = prompts.get("score_a")
@@ -264,6 +264,11 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     if model_a == base_a_model and model_b == base_b_model and not new_prompt and not repeat:
         raise ClipperError(f"{label} is what scored {sdir.name} already ({which}): pick another model, "
                            "or --repeat to see what a rerun alone changes")
+    # A missing summary is made as the stream would have made it: its own model, effort and
+    # prompt version, so --prompt-version changes only what the passes are asked.
+    sum_cfg = copy.deepcopy(cfg)
+    sum_cfg["scoring"].update(model_a=base_a_model, prompt_version=base_version)
+    sum_prompts = Prompts(sum_cfg)
     sc["model_a"], sc["model_b"] = model_a, model_b
     if effort:  # the candidate's passes only; the stream's own model keeps its effort
         for p in which:
@@ -282,7 +287,7 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     summary_model = "" if cached.exists() else base_a_model
     duration = jsonstate.load(sdir / "meta.json")["duration_s"]
     est = estimate(cfg, prompts, which, windows, len(base_kept), model_a, model_b, words, sig,
-                   summary_model, duration)
+                   summary_model, duration, sum_prompts)
     calls = list(dict.fromkeys(m for m in (summary_model, model_a if "a" in which else "", model_b) if m))
     unpriced = [m for m in calls if llm.known_price(cfg, m) is None]
     print(f"compare {sdir.name}: pass {which}, Pass A {model_a}, Pass B {model_b}, prompt {prompts.version}; "
@@ -310,13 +315,9 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     else:
         cand_a, kept = [], base_kept
     cost_a = claude.cost
-    # The stream's cached summary; made with the stream's own Pass A model if it's missing.
-    if not summary_model:
-        summary = jsonstate.load(cached)
-    else:
-        sum_cfg = copy.deepcopy(cfg)
-        sum_cfg["scoring"]["model_a"] = base_a_model
-        summary = stream_summary(out_dir, words, math.ceil(duration), sum_cfg, claude, prompts)
+    # The stream's cached summary; made as the stream would have made it if it's missing.
+    summary = (jsonstate.load(cached) if not summary_model
+               else stream_summary(out_dir, words, math.ceil(duration), sum_cfg, claude, sum_prompts))
     cand_b = run_pass_b(kept, summary, words, cfg, claude, prompts) if kept else {"picks": []}
     base_results = {r["id"]: r for r in base_a}
 
