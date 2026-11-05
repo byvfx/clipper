@@ -191,6 +191,10 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   found all 3 leads good (L03's $8,000 is Whisper: he said $1,000, noted on the lead). User 11-03: leave his old
   videos alone for now (no back-catalog facts; `investigate run jer` reads only new ones). Still open:
   whether a lead may ever become content.
+- Other model providers (#72, user 11-04: OpenAI, Gemini, local and OpenRouter): no `OPENAI_API_KEY`,
+  `GEMINI_API_KEY` or `OPENROUTER_API_KEY` here and no Ollama yet. With a key, try Pass A first:
+  `clipper compare score <stream> --model openrouter:<vendor>/<model> --dry-run` for the estimate
+  (Wiki Model-providers). Haiku vs Sonnet on kick-135553454 Pass B ($0.003): Haiku kept 4 of the 5 approved.
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
@@ -279,8 +283,8 @@ changed schedule values only (`schedule --kitsu-all` for everything), doctor che
 **#101 (weekly split) merged 2026-11-02** as d9e1477: `clipper/weekly/` package (gather, draft, render,
 faces, style), prompts through Prompts, the look as data in `<paths.weekly>/style.toml` (doctor checks
 it). Issue 04 (11-07) is the first one built from it. Worktree and branch removed (GitHub too).
-Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (provider side-by-side,
-`clipper edit`), #50 (revenue once monetized); #42 closed 11-02 after the October check-in. #77 is done
+Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (`clipper compare score` built
+11-04 with `openrouter:`; left: a stage moved after a compare, `clipper edit`), #50 (revenue once monetized); #42 closed 11-02 after the October check-in. #77 is done
 (#106, 10-30): YouTube quota counted per Pacific day in `logs/youtube_quota.json` (each upload run
 ends with the total; link updates and caption retries only spend what's left after `upload_units`
 per upload still allowed today), worker takeover under a lock, pick numbers kept across re-scores

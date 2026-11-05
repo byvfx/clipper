@@ -231,7 +231,8 @@ credits = {}               # monthly credits per provider, as above
 [llm]
 # Any stage's model key can name another provider by prefix (see the wiki, "Model
 # providers"): "openai:<model>" (OPENAI_API_KEY), "gemini:<model>" (GEMINI_API_KEY),
-# "local:<model>" (the OpenAI-compatible server below). Bare names are Claude.
+# "openrouter:<vendor>/<model>" (OPENROUTER_API_KEY), "local:<model>" (the OpenAI-compatible
+# server below). Bare names are Claude. `clipper compare score` tries one on a reviewed stream.
 local_base_url = ""        # e.g. "http://<host>:11434/v1" (Ollama); only for local: models
 timeout_s = 600            # seconds per request to an OpenAI-compatible provider
 # [llm.prices]             # $ per 1M input/output tokens for cost lines; adds to the built-in Claude ones

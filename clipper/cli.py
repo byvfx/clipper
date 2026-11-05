@@ -283,6 +283,12 @@ def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
         print(f"for {e['show']}'s next stream: {e['text']}")
 
 
+def cmd_compare(cfg: dict, args: argparse.Namespace) -> None:
+    from . import compare
+
+    compare.compare_score(stream_dir(cfg, args.stream), cfg, args.model, args.which, args.budget, args.dry_run)
+
+
 def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
     from . import costs
 
@@ -866,7 +872,7 @@ COMMAND_GROUPS = [
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
-                'costs']),
+                'costs', 'compare']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
@@ -1514,6 +1520,20 @@ def add_extras(sub) -> None:
                    help="add model spend earlier runs recorded in their output files, once")
     p.add_argument("--dry-run", action="store_true", help="with --backfill: list, write nothing")
     p.set_defaults(fn=cmd_costs)
+
+    p = sub.add_parser("compare", help="another model on a stage that already ran, side by side with "
+                                       "its output and the review decisions (#72)")
+    rsub = p.add_subparsers(dest="action", required=True)
+    q = rsub.add_parser("score", help="score a stream again with --model; candidates.json is left alone")
+    add_stream(q)
+    q.add_argument("--model", required=True,
+                   help="the candidate, e.g. openai:gpt-5-mini, openrouter:google/gemini-3-flash, local:qwen3")
+    q.add_argument("--pass", dest="which", choices=("a", "b", "ab"), default="a",
+                   help="a: the candidate judges every window, Pass B stays (default); b: the candidate "
+                        "ranks the stream's own Pass A results; ab: both")
+    q.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
+    q.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    q.set_defaults(fn=cmd_compare)
 
 
 def add_setup(sub) -> None:

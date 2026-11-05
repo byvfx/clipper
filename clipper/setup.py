@@ -264,7 +264,7 @@ def load_user_env(cfg: dict) -> None:
     """The keys clipper reads, from the user's saved environment into this process, so the
     checks see what a new terminal (and the scheduled tasks) will."""
     for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_WORKSPACE_ID", "OPENAI_API_KEY", "GEMINI_API_KEY",
-                 "LOCAL_LLM_API_KEY", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "HF_TOKEN",
+                 "OPENROUTER_API_KEY", "LOCAL_LLM_API_KEY", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "HF_TOKEN",
                  "ELEVENLABS_API_KEY", "BRAVE_API_KEY", cfg["review"]["token_env"], cfg["discord"]["token_env"]):
         user_env(name)
 
@@ -504,10 +504,17 @@ def check_key(name: str, cfg: dict) -> tuple[bool, str]:
     import requests
     try:
         if name == "ANTHROPIC_API_KEY":
-            from .llm import Claude
-            model = cfg["scoring"]["model_a"]
+            from .llm import Claude, claude_model
+            model = claude_model(cfg) or "claude-haiku-5-5"
             Claude(cfg).client.models.retrieve(model)
             return True, f"Anthropic answers ({model} available)"
+        if name in PROVIDER_KEYS:
+            from .llm import PROVIDERS
+            prov = next(p for p, (_, env) in PROVIDERS.items() if env == name)
+            # OpenRouter lists its models to anyone; /key answers only to a good key.
+            url = PROVIDERS[prov][0] + ("/key" if prov == "openrouter" else "/models")
+            r = requests.get(url, headers={"Authorization": f"Bearer {os.environ[name]}"}, timeout=15)
+            return (True, f"{prov} answers") if r.ok else (False, f"{prov} refused it (HTTP {r.status_code})")
         if name == cfg["review"]["token_env"]:
             from . import review
             gazu = review.connect(cfg["review"])
@@ -521,6 +528,15 @@ def check_key(name: str, cfg: dict) -> tuple[bool, str]:
     except Exception as e:  # noqa: BLE001
         return False, f"{type(e).__name__}: {str(e)[:160]}"
     return True, "set"
+
+
+# Keys for the other model providers (#72), asked for only when a stage's model uses one:
+# env var -> where to get one.
+PROVIDER_KEYS = {
+    "OPENAI_API_KEY": "platform.openai.com -> API keys",
+    "GEMINI_API_KEY": "aistudio.google.com -> Get API key",
+    "OPENROUTER_API_KEY": "openrouter.ai -> Keys",
+}
 
 
 def ensure_env_key(cfg: dict, ask: Ask, name: str, what: str, where: str, check: bool = True) -> None:
@@ -552,6 +568,13 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
         return
     ensure_env_key(cfg, ask, "ANTHROPIC_API_KEY", "the model calls (score, segments, titles, covers)",
                    "console.anthropic.com -> API keys")
+    from .doctor import llm_providers
+    from .llm import PROVIDERS
+
+    for prov, uses in llm_providers(cfg).items():
+        env = PROVIDERS[prov][1]
+        if env in PROVIDER_KEYS:
+            ensure_env_key(cfg, ask, env, f"{prov} models ({uses[0]})", PROVIDER_KEYS[env])
     rc = cfg["review"]
     if not rc["host"] or "<" in rc["host"]:
         def url_ok(v: str) -> str | None:

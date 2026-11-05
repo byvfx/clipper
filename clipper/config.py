@@ -835,7 +835,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "llm": {
         # Which provider answers is the model string's prefix (clipper/llm.py): bare or
         # "anthropic:" = Claude, "openai:<model>" (OPENAI_API_KEY), "gemini:<model>"
-        # (GEMINI_API_KEY), "local:<model>" = an OpenAI-compatible server at local_base_url.
+        # (GEMINI_API_KEY), "openrouter:<vendor>/<model>" (OPENROUTER_API_KEY), "local:<model>" =
+        # an OpenAI-compatible server at local_base_url.
         "local_base_url": "",     # e.g. http://<host>:11434/v1 for Ollama; set in clipper.toml
         "timeout_s": 600,         # per OpenAI-compatible request
         # $ per 1M input/output tokens, by model string, for cost lines only (a model not

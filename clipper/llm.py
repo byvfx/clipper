@@ -4,6 +4,8 @@ The model string picks the provider by its prefix:
     claude-sonnet-5-5, anthropic:claude-...  the Claude API (ANTHROPIC_API_KEY)
     openai:<model>                           OpenAI (OPENAI_API_KEY)
     gemini:<model>                           Google, OpenAI-compatible endpoint (GEMINI_API_KEY)
+    openrouter:<vendor>/<model>              OpenRouter, one key for many vendors (OPENROUTER_API_KEY),
+                                             e.g. openrouter:openai/gpt-5-mini
     local:<model>                            any OpenAI-compatible server at [llm] local_base_url
                                              (Ollama, vLLM, LM Studio; LOCAL_LLM_API_KEY if it
                                              wants one)
@@ -13,7 +15,8 @@ wording, give that stage a new prompt version rather than editing one.
 
 What differs per provider:
 - effort: Claude's output_config.effort; OpenAI-compatible servers get reasoning_effort
-  (low/medium/high), and a model that rejects it is asked again without it.
+  (low/medium/high; OpenRouter's reasoning.effort), and a model that rejects it is asked
+  again without it.
 - structured output: native JSON schema on both; a server without json_schema gets JSON mode
   with the schema in the prompt. Answers from OpenAI-compatible servers are checked against
   the schema and sent back once with what was wrong.
@@ -21,7 +24,8 @@ What differs per provider:
   server-side refusal fallback exists on the Claude API only.
 - images: Claude content blocks ({"type": "image", "source": {"type": "base64", ...}}) are
   converted to image_url data URLs.
-Prices are [llm] prices ($ per 1M input/output tokens, by model string), for cost lines only.
+Prices are [llm] prices ($ per 1M input/output tokens, by model string), for cost lines only;
+OpenRouter reports what each call cost, and that wins over the table.
 """
 from __future__ import annotations
 
@@ -37,6 +41,7 @@ from .errors import ClipperError
 PROVIDERS = {  # prefix -> (base URL, key env var)
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
+    "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     "local": ("", "LOCAL_LLM_API_KEY"),
 }
 EFFORT = {"low": "low", "medium": "medium", "high": "high", "xhigh": "high", "max": "high"}
@@ -66,7 +71,8 @@ def price_of(prices: dict, model: str) -> tuple[float, float] | None:
 
 
 def split(model: str) -> tuple[str, str]:
-    """("anthropic" | "openai" | "gemini" | "local", the provider's own model name)."""
+    """("anthropic" | "openai" | "gemini" | "openrouter" | "local", the provider's own model
+    name)."""
     prefix, _, name = model.partition(":")
     if name and (prefix in PROVIDERS or prefix == "anthropic"):
         return prefix, name
@@ -88,6 +94,12 @@ def configured(cfg: dict) -> dict[str, str]:
         for s, sec in prof.get("overrides", {}).items():
             out.update({f"shows.{show}.{s}.{k}": v for k, v in sec.items() if is_llm(k, v)})
     return out
+
+
+def claude_model(cfg: dict) -> str:
+    """A Claude model the config uses, by its API name (to check the Anthropic key against);
+    "" when every stage is on another provider."""
+    return next((split(m)[1] for m in configured(cfg).values() if split(m)[0] == "anthropic"), "")
 
 
 def check_schema(schema: dict, v: Any, path: str = "$") -> list[str]:
@@ -174,11 +186,15 @@ class LLM:
             self._client = anthropic.Anthropic(max_retries=4, default_headers=headers)
         return self._client
 
-    def _account(self, model: str, tokens_in: int, tokens_out: int) -> dict:
+    def _account(self, model: str, tokens_in: int, tokens_out: int,
+                 usd: float | None = None) -> dict:
+        """Add a call to the cost and the ledger. usd: what the provider says it cost
+        (OpenRouter), else the [llm] prices table's figure."""
         from . import costs
 
-        pin, pout = price_of(self.prices, model) or (0.0, 0.0)
-        usd = (tokens_in * pin + tokens_out * pout) / 1e6
+        if usd is None:
+            pin, pout = price_of(self.prices, model) or (0.0, 0.0)
+            usd = (tokens_in * pin + tokens_out * pout) / 1e6
         with self._lock:
             self.cost += usd
         costs.llm_call(self.ledger, split(model)[0], model, tokens_in, tokens_out, usd)
@@ -282,7 +298,7 @@ class LLM:
                 "stop_reason": resp.stop_reason,
                 **self._account(model, resp.usage.input_tokens, resp.usage.output_tokens)}
 
-    # ---------- OpenAI-compatible (OpenAI, Gemini, local servers) ----------
+    # ---------- OpenAI-compatible (OpenAI, Gemini, OpenRouter, local servers) ----------
 
     @staticmethod
     def _messages(system: str, user: str | list[dict]) -> list[dict]:
@@ -343,8 +359,15 @@ class LLM:
         if response_format:
             body["response_format"] = response_format
         if effort and model not in self._no_effort:
-            body["reasoning_effort"] = EFFORT.get(effort, "medium")
+            if prov == "openrouter":
+                body["reasoning"] = {"effort": EFFORT.get(effort, "medium")}
+            else:
+                body["reasoning_effort"] = EFFORT.get(effort, "medium")
+        if prov == "openrouter":
+            body["usage"] = {"include": True}  # the call's cost in the answer
         headers = {"Authorization": f"Bearer {key}"} if key else {}
+        if prov == "openrouter":
+            headers["X-Title"] = "clipper"
         for attempt in range(6):
             try:
                 r = requests.post(f"{base}/chat/completions", json=body, headers=headers,
@@ -359,9 +382,10 @@ class LLM:
                 continue
             if r.status_code == 400:
                 text = r.text.lower()
-                if "reasoning_effort" in body and "reasoning" in text:
+                if ("reasoning_effort" in body or "reasoning" in body) and "reasoning" in text:
                     self._no_effort.add(model)  # not a reasoning model
-                    body.pop("reasoning_effort")
+                    body.pop("reasoning_effort", None)
+                    body.pop("reasoning", None)
                     continue
                 if (response_format or {}).get("type") == "json_schema" and (
                         "response_format" in text or "json_schema" in text):
@@ -372,9 +396,11 @@ class LLM:
         data = r.json()
         choice = data["choices"][0]
         usage = data.get("usage") or {}
+        cost = usage.get("cost")
         meta = {"model": f"{prov}:{data.get('model') or name}", "request_id": data.get("id"),
                 "stop_reason": choice.get("finish_reason"),
-                **self._account(model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))}
+                **self._account(model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
+                                cost if isinstance(cost, (int, float)) else None)}
         refusal = choice["message"].get("refusal")
         if refusal or choice.get("finish_reason") == "content_filter":
             meta["refusal"] = refusal or "content_filter"

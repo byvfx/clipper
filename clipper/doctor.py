@@ -415,8 +415,12 @@ def check_llm_online(cfg: dict) -> None:
 
 def check_keys(cfg: dict, role: str) -> None:
     if role != "nas":
+        from .llm import claude_model
+
         if os.environ.get("ANTHROPIC_API_KEY"):
             ok("keys", "ANTHROPIC_API_KEY set")
+        elif not claude_model(cfg):
+            ok("keys", "ANTHROPIC_API_KEY not set; no stage uses Claude")
         else:
             fail("keys", "ANTHROPIC_API_KEY not set", "clipper setup --step keys (or set it as a user env var)")
         check_llm_keys(cfg)
@@ -617,12 +621,14 @@ def online_youtube(cfg: dict) -> None:
 
 
 def online_anthropic(cfg: dict) -> None:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    from .llm import Claude, claude_model
+
+    model = claude_model(cfg)  # [scoring] model_a may be another provider's
+    if not os.environ.get("ANTHROPIC_API_KEY") or not model:
         return
     try:
-        from .llm import Claude
-        Claude(cfg).client.models.retrieve(cfg["scoring"]["model_a"])
-        ok("online", f"Anthropic API answers ({cfg['scoring']['model_a']} available)")
+        Claude(cfg).client.models.retrieve(model)
+        ok("online", f"Anthropic API answers ({model} available)")
     except Exception as e:  # noqa: BLE001
         fail("online", f"Anthropic API: {type(e).__name__}: {str(e)[:120]}",
              "check the key, or set [scoring] workspace_id / $ANTHROPIC_WORKSPACE_ID")
