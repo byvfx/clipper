@@ -595,6 +595,24 @@ def columns_to_fill(values: dict, before: dict, current: dict, tf: str | None,
     return missing
 
 
+OWNED = ("Hold",)  # columns where only a value clipper wrote counts as its proposal
+
+
+def proposals_to_keep(fields: dict, before: dict, written: set[str]) -> dict:
+    """What review_state.json keeps as our proposals (columns_to_fill's `before`): every
+    field as proposed, except an OWNED column whose new proposal wasn't written and wasn't
+    ours already. There the earlier proposal stays, so a value set by hand (a Hold put on a
+    clean Short) is never taken for ours and released by a later proposal."""
+    out = {n: str(v) for n, v in fields.items()}
+    for n in OWNED:
+        if n in out and n not in written and before.get(n) != out[n]:
+            if n in before:
+                out[n] = before[n]
+            else:
+                del out[n]
+    return out
+
+
 def fill_columns(gazu, proj: dict, todo: list[dict], state: dict, state_path: Path) -> dict:
     """Custom columns of the published items (columns_to_fill); what was proposed is kept
     in review_state.json (st["fields"]). Returns the state."""
@@ -616,7 +634,8 @@ def fill_columns(gazu, proj: dict, todo: list[dict], state: dict, state_path: Pa
         if missing:
             write_data(gazu, etype, st["entity_id"], missing)
             filled += 1
-        st["fields"] = {n: str(v) for n, v in it["fields"].items()}  # what we proposed
+        written = {n for (e, n), fid in fmap.items() if e == etype and fid in missing}
+        st["fields"] = proposals_to_keep(it["fields"], st.get("fields", {}), written)
     state = jsonstate.merge(state_path, state, [it["key"] for it in todo if it["key"] in state])
     print(f"custom columns filled on {filled} items")
     return state

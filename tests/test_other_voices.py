@@ -74,3 +74,42 @@ def test_card_says_why_a_short_is_held():
     assert any(f["name"] == "Other voices" for f in embed["fields"])
     embed, _ = notify.card(row(other_voices=""))
     assert not any("voices" in f["name"] for f in embed["fields"])
+
+
+def publish(column: str | None, before: dict, hold: str) -> tuple[str | None, dict]:
+    """One review publish of a Short's Hold, as fill_columns does it: (column after, kept)."""
+    write = review.columns_to_fill({"f_hold": hold}, {"f_hold": before["Hold"]} if "Hold" in before else {},
+                                   {"f_hold": column}, None, None)
+    column = write.get("f_hold", column)
+    return column, review.proposals_to_keep({"Hold": hold}, before, {"Hold"} if write else set())
+
+
+def test_a_hold_set_by_hand_survives_recuts_over_and_back_under_the_limit():
+    col, kept = publish(None, {}, "false")        # clean Short: we write false
+    assert (col, kept) == ("false", {"Hold": "false"})
+    col = "true"                                  # the reviewer holds it by hand
+    col, kept = publish(col, kept, "true")        # re-cut over the limit: nothing to write
+    assert (col, kept) == ("true", {"Hold": "false"})  # and true isn't taken as ours
+    col, kept = publish(col, kept, "false")       # re-cut under the limit
+    assert col == "true"                          # the hand hold stays
+
+
+def test_our_hold_comes_off_when_a_recut_is_under_the_limit():
+    col, kept = publish(None, {}, "true")
+    assert (col, kept) == ("true", {"Hold": "true"})
+    col, kept = publish(col, kept, "false")
+    assert (col, kept) == ("false", {"Hold": "false"})
+
+
+def test_proposals_to_keep_leaves_other_columns_as_proposed():
+    assert review.proposals_to_keep({"YouTube title": "new", "Hold": "true"}, {"YouTube title": "old"},
+                                    {"YouTube title": "edited", "Hold": "true"}) == \
+        {"YouTube title": "new", "Hold": "true"}
+
+
+def test_a_released_hold_stays_released_through_recuts():
+    col, kept = publish(None, {}, "true")          # ours
+    col = "false"                                  # released by hand
+    for hold in ("true", "false", "true"):         # re-cuts over, under, over
+        col, kept = publish(col, kept, hold)
+        assert col == "false"
