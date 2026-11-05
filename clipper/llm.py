@@ -77,6 +77,7 @@ def price_of(prices: dict, model: str) -> tuple[float, float] | None:
 
 
 _OPENROUTER_PRICES: dict[str, tuple[float, float]] | None = None
+_OPENROUTER_CONTEXT: dict[str, int] = {}
 
 
 def openrouter_prices() -> dict[str, tuple[float, float]]:
@@ -91,9 +92,20 @@ def openrouter_prices() -> dict[str, tuple[float, float]]:
             _OPENROUTER_PRICES = {m["id"]: (float(m["pricing"]["prompt"]) * 1e6,
                                             float(m["pricing"]["completion"]) * 1e6)
                                   for m in data if m.get("pricing")}
+            _OPENROUTER_CONTEXT.update({m["id"]: int(m["context_length"])
+                                        for m in data if m.get("context_length")})
         except (requests.RequestException, ValueError, KeyError, TypeError):
             return {}  # not cached: the next estimate tries again
     return _OPENROUTER_PRICES
+
+
+def context_length(model: str) -> int | None:
+    """How many tokens a model takes in, where it is published (OpenRouter's list); None
+    when unknown (Claude, OpenAI, Gemini, local servers)."""
+    if split(model)[0] != "openrouter":
+        return None
+    openrouter_prices()
+    return _OPENROUTER_CONTEXT.get(split(model)[1])
 
 
 def known_price(cfg: dict, model: str) -> tuple[float, float] | None:
@@ -374,6 +386,7 @@ class LLM:
             except ValueError as e:
                 out, errs = None, [f"not JSON ({e})"]
             if not errs:
+                meta["retried"] = attempt > 0  # the first answer broke the schema
                 return out, meta
             if attempt == 0:  # once more, with what was wrong
                 msgs += [{"role": "assistant", "content": text},

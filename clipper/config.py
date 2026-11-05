@@ -43,6 +43,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "openai_key": "secrets/openai_secret.txt",
         "gemini_key": "secrets/gemini_secret.txt",
         "openrouter_key": "secrets/openrouter_secret.txt",
+        # Anthropic Admin API key, if not $ANTHROPIC_ADMIN_KEY: the Claude bill in the war room's
+        # API usage panel and `clipper costs --providers` (clipper/usage.py)
+        "anthropic_admin_key": "secrets/anthropic_admin_secret.txt",
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "serve_log": "logs/serve.log",  # `clipper serve` log (rotated); "" = console only
@@ -51,6 +54,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "youtube_cookies": "secrets/youtube_cookies.txt",  # optional, Netscape cookies.txt: `archive` age-restricted items, pre-shows on a bot check
         "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
         "costs": "logs/costs.jsonl",  # every model call's cost (`clipper costs`, the war room)
+        "model_tests": "logs/model_tests",  # `clipper models test` results, one file a model and effort
+        "model_gold": "logs/model_tests/gold.json",  # labelled windows for `clipper models gold`
         "warroom_undo": "logs/warroom_undo.json",  # the war room's last 20 actions, for Undo
         "warroom_layouts": "logs/warroom_layouts.json",  # the war room's saved panel layouts
         "news": "news",           # `clipper news`: news.sqlite (headlines, stories), context.json

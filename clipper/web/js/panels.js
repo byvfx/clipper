@@ -1,4 +1,4 @@
-// War room: the side panels: pop-out, uploads, the schedule (drag to move), cover editor, analytics, costs, Modal.
+// War room: the side panels: pop-out, uploads, the schedule (drag to move), cover editor, analytics, costs, API usage, Modal.
 
 // ---------- pop-out (#26) ----------
 
@@ -297,6 +297,34 @@ async function refreshCosts() {
     <div class="sub">By stage</div><div>${list(c.by_stage, 6)}</div>
     <div class="sub">By show</div><div>${list(c.by_show, 6)}</div>
     <div class="f">${c.calls.toLocaleString()} calls and runs · all time ${usd(c.all_time_usd)} since ${esc(c.since || "-")} · revenue once monetized</div>`;
+}
+
+// ---------- API usage (#72): the Claude API's and OpenRouter's own numbers ----------
+
+async function refreshUsage() {
+  const el = $("#usage");
+  let u;
+  try { u = await api("/api/usage"); } catch (e) { u = { error: e.message }; }
+  if (u.error) { el.innerHTML = `<div class="bad">${esc(u.error)}</div>`; $("#usageSub").textContent = ""; return; }
+  const usd = v => "$" + (+v || 0).toFixed(2);
+  const ours = p => `<span class="f" title="What clipper's own cost log recorded for this provider this month">our log ${usd(p.logged_usd)}</span>`;
+  const one = (title, p, extra) => {
+    if (p.missing) return `<div class="sub">${title}</div><div>${ours(p)}</div><div class="f">${esc(p.missing)}</div>`;
+    if (p.error) return `<div class="sub">${title}</div><div class="bad">${esc(p.error)}</div><div>${ours(p)}</div>`;
+    const models = Object.entries(p.by_model || {}).slice(0, 5).map(([k, v]) => `${esc(k)} ${usd(v)}`).join(", ");
+    return `<div class="sub">${title}</div>
+      <div class="row"><span class="big">${usd(p.month_usd)}</span><span>this month · ${usd(p.today_usd)} today · ${ours(p)}</span></div>
+      ${extra(p)}${models ? `<div>${models}</div>` : ""}
+      ${p.stale ? `<div class="f bad" title="${esc(p.stale)}">last good answer; the provider didn't reply</div>` : ""}
+      ${p.link ? `<div><a href="${esc(p.link)}" target="_blank" rel="noopener">Open ${title} ↗</a></div>` : ""}`;
+  };
+  const cl = u.claude || {}, or = u.openrouter || {};
+  $("#usageSub").textContent = u.month;
+  el.innerHTML = one("Claude API", cl, () => "") + one("OpenRouter", or, p => {
+    const cap = p.limit_usd, left = p.limit_left_usd, pct = cap ? Math.min(100, 100 * (cap - left) / cap) : 0;
+    return `<div>${usd(p.week_usd)} this week · all time ${usd(p.all_time_usd)}${p.balance_usd != null ? ` · account balance <b style="color:var(--text)">${usd(p.balance_usd)}</b> of ${usd(p.credits_usd)} bought` : ""}</div>
+      ${cap ? `<div class="row"><span class="meter"><i class="${pct > 90 ? "over" : pct > 75 ? "warn" : ""}" style="width:${pct}%"></i></span><span>${usd(left)} left of ${usd(cap)}</span></div>` : ""}`;
+  });
 }
 
 // ---------- Modal (#49) ----------

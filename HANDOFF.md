@@ -149,7 +149,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   refs in mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
   (~1,550 credits; 18,457 Runway credits left on 10-24).
 - **Costs:** October ~$200 in model/GPU spend, ~$184 of it the Jer archive; `clipper costs`, war room
-  Costs and Modal panels. Monthly analytics check-in task runs on the 1st at 09:00; October's
+  Costs, Modal and API usage panels (`clipper costs --providers`: Claude's and OpenRouter's own count next
+  to our log; Claude's needs an Admin API key, `ANTHROPIC_ADMIN_KEY`, not set here: waiting on the user). Monthly analytics check-in task runs on the 1st at 09:00; October's
   (`reports/analytics/2026-10-checkin.md`) was gone through 11-02: 1-4 taken, 5 (titles without the
   show prefix) skipped; its Decisions section is what November's check-in follows up.
 - **Analytics:** YouTube Analytics API enabled 10-28; October so far 12.7k views, 68.5 h watch, +28 subs,
@@ -191,12 +192,32 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   found all 3 leads good (L03's $8,000 is Whisper: he said $1,000, noted on the lead). User 11-03: leave his old
   videos alone for now (no back-catalog facts; `investigate run jer` reads only new ones). Still open:
   whether a lead may ever become content.
-- Other model providers (#72, user 11-04: OpenAI, Gemini, local and OpenRouter): no `OPENAI_API_KEY`,
-  `GEMINI_API_KEY` or `OPENROUTER_API_KEY` here and no Ollama yet. With a key, try Pass A first:
+- Other model providers (#72, user 11-04: OpenAI, Gemini, local and OpenRouter): OpenRouter key in
+  secrets/openrouter_secret.txt; no OpenAI/Gemini key and no Ollama yet. Try Pass A first:
   `clipper compare score <stream> --model openrouter:<vendor>/<model> --dry-run` for the estimate
   (Wiki Model-providers). Haiku vs Sonnet on kick-135553454 Pass B ($0.003): Haiku kept 4 of the 5 approved.
-  User picked OpenRouter (11-04). Pass A candidates at Haiku's price, each ~$0.08 on kick-135553454:
-  openai/gpt-6-luna, deepseek/deepseek-v4.1-flash, qwen/qwen3.8-flash.
+  User picked OpenRouter (11-04; key in secrets/openrouter_secret.txt). Sweep 11-04/05: 12 models x reasoning
+  none/medium on kick-135553454 Pass A, leaders on kick-134467434 + kick-134812118 (`clipper compare list <stream>`).
+  None near Haiku+Sonnet (18/18 approved): Gemini 4 Argon 7/18 (closest verdicts, fewest Haiku rejects kept,
+  ~20x Haiku's Pass A cost), Flash Lite 7/18 (5/5 was luck), DeepSeek V4 Pro 5/18, GPT-6 Luna ~5/18, DeepSeek
+  Flash 1-2/5. All keep 3-8x Haiku's windows, mostly ones Haiku rejected (third party, needs context). Reasoning
+  on/off a wash for Pass A. Single runs are noisy (Luna 4/5 then 2/5). The approved set only holds the baseline's
+  picks, so it favours Claude. Haiku scoring cost $0.67 in Oct-Nov; the spend is segments (~$16), thumbs, meta.
+  v6 (stricter score_a + rule files, 11-05; config stays v5) and the control: Haiku v5 rerun (`compare --repeat`)
+  picks only 7/18 of its own approved moments, so that metric is mostly noise. 18 approved on 3 streams: Haiku
+  rerun 7, Haiku v6 7, Argon v5 7, Qwen 3.8 Flash v6 6, Luna v6 5, DeepSeek Pro/Flash v6 4, MiniMax v6 4.
+  Verdicts shared with the original Haiku run: Haiku rerun ~73%, Haiku v6 ~59%, Argon ~57%, the cheap ones
+  34-43%. v6 made Haiku keep more, not less: not adopted. A fair test needs blind review of each model's picks.
+  User 11-05 (build it agnostically, "in case someone else ever wants to use it"): two tests (Wiki
+  Model-providers). `clipper models test <model>` = built-in conformance (made-up windows through real Pass A,
+  JSON, vision, text, 130k-token needle) + which configured stages it could take: Haiku, Qwen 3.8 Flash and
+  DeepSeek V4 Pro (all @none) 12/12 verdicts, long ok; V4 Pro has no image input (not for shorts layout or cast
+  labels). `clipper models gold propose|confirm|run` = answer key: logs/model_tests/gold.json has 66 windows
+  from the 12 newest reviewed streams, 24 approved keeps confirmed, 42 waiting on the user's labels in the
+  private label page https://claude.ai/artifact/Jre3fSSFVMDc51deRLSUoE (db collection `labels`, doc id
+  `<stream>_<id>`; read it with ArtifactData list, write a {key: {label, note}} file, `gold confirm` it). Then
+  `gold run` Haiku, Qwen, DeepSeek Pro (~2 cents each). Qwen on the 24 keeps alone: 18/24 (4 called third party,
+  read-aloud stricter than Haiku; 1 schema failure after the retry).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the

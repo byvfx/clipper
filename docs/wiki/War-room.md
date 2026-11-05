@@ -128,6 +128,10 @@ run and its errors, and what goes next. Uploaded slots show views and a YouTube 
 - **Costs** (below it): the month added up. Every model call (logged as it is made, with its
   stage and stream), Modal runs, and `[costs] monthly` fixed costs, by stage and show.
   `clipper costs` prints the same; revenue joins it once the channel is monetized.
+- **API usage** (below Costs): the month by the Claude API's and OpenRouter's own count,
+  today, by model, OpenRouter's week, limit and balance, each next to what our log recorded.
+  Claude's needs an Admin API key ([Costs](Costs#the-providers-own-numbers));
+  `clipper costs --providers` prints the same.
 - **Analytics** (full width, under the queue): a month of YouTube. Views, watch time and
   subscribers against the month before, views per day, where views came from (Shorts feed,
   search, ...), and the first-7-day numbers of that month's uploads by show, kind, weekday and
