@@ -875,6 +875,7 @@ COMMAND_GROUPS = [
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
+                'costs', 'gate']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
