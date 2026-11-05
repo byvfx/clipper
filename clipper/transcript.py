@@ -52,6 +52,33 @@ def transcript_lines(words: list[dict], a: float, b: float, speakers: bool = Tru
     return lines
 
 
+def outside_voice_s(words: list[dict], a: float, b: float, cast: list[str]) -> float | None:
+    """Seconds of a..b spoken by voices that aren't the show's own people (cast, by name):
+    other named voices and unnamed ones ("[?]": usually a video being played), split into
+    turns the way transcript_lines tags them; music doesn't count. None when the words carry
+    no speaker names or the show names no cast, since then nobody can be told apart."""
+    if not cast or not words or "who" not in words[0]:
+        return None
+    own = {c.casefold() for c in cast} | {"music"}
+
+    def outside(line: list[dict]) -> float:
+        return sum(min(b, run[-1]["end"]) - max(a, run[0]["start"]) for spk, run in turns(line)
+                   if spk and ("?" if UNNAMED.fullmatch(spk) else spk).casefold() not in own)
+
+    total, line, seg = 0.0, [], None
+    for w in words:
+        if w["end"] < a or w["start"] >= b:
+            continue
+        if w["seg"] != seg and line:
+            total += outside(line)
+            line = []
+        seg = w["seg"]
+        line.append(w)
+    if line:
+        total += outside(line)
+    return round(max(total, 0.0), 1)
+
+
 def turns(line: list[dict]) -> list[tuple[str | None, list[dict]]]:
     """A line's words split by speaker. Words with no turn stay with the run they are in;
     runs under TURN_MIN_WORDS words join their longer neighbour (pyannote's turns and
