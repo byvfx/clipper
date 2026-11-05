@@ -28,7 +28,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import jsonstate, llm
-from .config import for_stream
+from .config import EFFORTS, for_stream
 from .errors import ClipperError
 from .llm import Claude, preflight
 from .prompts import Prompts
@@ -39,6 +39,15 @@ STATUSES = ("kept", "no_clip", "rejected", "refused", "error")
 # Pick and Short of the same moment share a candidate id; the stronger decision speaks for it.
 DECISION_RANK = [Decision.APPROVED, Decision.CHANGES, Decision.REJECTED, Decision.PENDING]
 A_OUT_TOKENS, B_OUT_TOKENS, B_TOKENS_PER_CANDIDATE, SUMMARY_OUT_TOKENS = 600, 3000, 400, 300
+# Another provider's reasoning model thinks in output tokens: DeepSeek V4 Flash spent ~2,200
+# a Pass A window (11-04), Pro all 16,000 of Pass B at effort high.
+THINKING_OUT = {"a": 2500, "b": 16000}
+
+
+def out_tokens(model: str, effort: str, which: str) -> int:
+    base = A_OUT_TOKENS if which == "a" else B_OUT_TOKENS
+    thinks = llm.split(model)[0] != "anthropic" and effort != "none"
+    return max(base, THINKING_OUT[which]) if thinks else base
 
 
 def slug(model: str) -> str:
@@ -214,13 +223,14 @@ def estimate(cfg: dict, prompts: Prompts, which: str, windows: list[dict], n_kep
         system = prompts.get("score_a")
         tokens_in = sum(len(system) + len(pass_a_user(w, words, sig, cfg["scoring"]["lead_in_s"]))
                         for w in windows) / 4
-        usd += llm.estimate(cfg, model_a, tokens_in, A_OUT_TOKENS * len(windows))
+        usd += llm.estimate(cfg, model_a, tokens_in,
+                            out_tokens(model_a, cfg["scoring"]["effort_a"], "a") * len(windows))
     tokens_b = len(prompts.get("score_b")) / 4 + B_TOKENS_PER_CANDIDATE * n_kept + 3000
-    return usd + llm.estimate(cfg, model_b, tokens_b, B_OUT_TOKENS)
+    return usd + llm.estimate(cfg, model_b, tokens_b, out_tokens(model_b, cfg["scoring"]["effort_b"], "b"))
 
 
 def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: float = 2.0,
-                  dry_run: bool = False, model_b: str = "") -> dict:
+                  dry_run: bool = False, model_b: str = "", effort: str = "") -> dict:
     """Score `sdir` again with `model` in the passes `which` names; see the module doc."""
     from .scoring import load_signals, run_pass_a, run_pass_b, stream_summary
     from .transcript import load_words
@@ -237,13 +247,18 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     base_a_model, base_b_model = baseline_models(base, cfg)
     if model_b and which != "ab":
         raise ClipperError("--model-b goes with --pass ab (--pass b takes --model)")
-    label = f"{model} + {model_b}" if model_b and model_b != model else model
+    if effort and effort not in EFFORTS:
+        raise ClipperError(f"--effort {effort}: one of {', '.join(EFFORTS)}")
+    label = (f"{model} + {model_b}" if model_b and model_b != model else model) + (f" @{effort}" if effort else "")
     model_b = model_b or model
     model_a = model if "a" in which else base_a_model
     model_b = model_b if "b" in which else base_b_model
     if model_a == base_a_model and model_b == base_b_model:
         raise ClipperError(f"{label} is what scored {sdir.name} already ({which}): pick another model")
     sc["model_a"], sc["model_b"] = model_a, model_b
+    if effort:  # the candidate's passes only; the stream's own model keeps its effort
+        for p in which:
+            sc[f"effort_{p}"] = effort
 
     hand, base_a, base_picks = scored_only(base)
     notes = [f"{len(hand)} hand pick(s) left out on both sides"] if hand else []

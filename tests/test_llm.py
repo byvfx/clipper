@@ -170,3 +170,16 @@ def test_doctor_checks_the_openrouter_key_itself(defaults, monkeypatch):
     results = doctor.collect(doctor.check_llm_online, defaults)
     assert any(r[0] == "FAIL" and "refused the key" in r[2] for r in results)
     assert got[-1].endswith("/key")
+
+
+def test_effort_none_turns_reasoning_off(posted, monkeypatch, defaults):
+    sent, replies = posted
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    replies += [FakeResponse(answer("a")), FakeResponse(answer("b"))]
+    client = llm.LLM(defaults)
+    client.text_call("openrouter:deepseek/deepseek-v4.1-flash", "sys", "hi", "none")
+    client.text_call("openai:gpt-6-luna", "sys", "hi", "none")
+    assert sent[0]["body"]["reasoning"] == {"effort": "none"}
+    assert sent[1]["body"]["reasoning_effort"] == "none"
+    assert llm.claude_effort("none") == "low" and llm.claude_effort("high") == "high"

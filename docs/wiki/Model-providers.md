@@ -33,6 +33,12 @@ with, the same windows (chat and transcript scan) and the cached summary, so onl
 | `b` | ranks the stream's own Pass A results (Pass B) | one call |
 | `ab` | both (`--model-b` gives Pass B its own candidate) | both |
 
+`--effort` sets the candidate's effort instead of `[scoring] effort_a`/`effort_b`. `none` turns a
+reasoning model's thinking off on the other providers (and is `low` on Claude): DeepSeek V4 Flash
+thinks by default, about 2,200 output tokens a window, which cost more than Haiku on 11-04, and
+V4 Pro at `high` spent all 16,000 of Pass B thinking. Any `*effort` key in the config takes
+`none` too.
+
 It prints the estimate first and refuses a run over `--budget` ($2 by default); `--dry-run` only
 prints it. An OpenRouter model with no `[llm.prices]` entry is estimated from OpenRouter's own
 price list; any other model with no price is refused, since the budget couldn't hold. A stream

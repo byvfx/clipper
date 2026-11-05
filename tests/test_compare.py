@@ -76,3 +76,10 @@ def test_hand_picks_stay_out_of_both_sides():
             "pass_b": {"picks": [{"id": "h01"}, {"id": "w01"}]}}
     hand, pass_a, picks = compare.scored_only(base)
     assert hand == {"h01"} and [r["id"] for r in pass_a] == ["w01"] and picks == [{"id": "w01"}]
+
+
+def test_thinking_models_are_estimated_with_their_thinking():
+    assert compare.out_tokens("claude-haiku-5-5", "medium", "a") == compare.A_OUT_TOKENS
+    assert compare.out_tokens("openrouter:deepseek/deepseek-v4.1-flash", "none", "a") == compare.A_OUT_TOKENS
+    assert compare.out_tokens("openrouter:deepseek/deepseek-v4.1-flash", "medium", "a") == 2500
+    assert compare.out_tokens("openrouter:deepseek/deepseek-v4-pro-0813", "high", "b") == 16000

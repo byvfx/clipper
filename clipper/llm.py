@@ -14,9 +14,10 @@ stage is one config line. The prompts are tuned on Claude: if another model need
 wording, give that stage a new prompt version rather than editing one.
 
 What differs per provider:
-- effort: Claude's output_config.effort; OpenAI-compatible servers get reasoning_effort
-  (low/medium/high; OpenRouter's reasoning.effort), and a model that rejects it is asked
-  again without it.
+- effort: Claude's output_config.effort ("none" is "low" there); OpenAI-compatible servers
+  get reasoning_effort (none/low/medium/high; OpenRouter's reasoning.effort), and a model
+  that rejects it is asked again without it. "none" turns a reasoning model's thinking off
+  (DeepSeek V4 Flash thinks by default and is cheaper and quicker without).
 - structured output: native JSON schema on both; a server without json_schema gets JSON mode
   with the schema in the prompt. Answers from OpenAI-compatible servers are checked against
   the schema and sent back once with what was wrong.
@@ -45,7 +46,11 @@ PROVIDERS = {  # prefix -> (base URL, key env var)
     "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     "local": ("", "LOCAL_LLM_API_KEY"),
 }
-EFFORT = {"low": "low", "medium": "medium", "high": "high", "xhigh": "high", "max": "high"}
+EFFORT = {"none": "none", "low": "low", "medium": "medium", "high": "high", "xhigh": "high", "max": "high"}
+
+
+def claude_effort(effort: str) -> str:
+    return "low" if effort == "none" else effort
 RETRY_STATUS = (408, 429, 500, 502, 503, 504, 529)
 MODEL_KEY = re.compile(r"(^|_)model(_[ab])?$")
 
@@ -256,7 +261,7 @@ class LLM:
         kwargs = {
             "model": split(model)[1], "max_tokens": 64000 if stream else 16000, "system": system,
             "messages": [{"role": "user", "content": user}],
-            "output_config": {"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+            "output_config": {"effort": claude_effort(effort), "format": {"type": "json_schema", "schema": schema}},
         }
         if fallback:
             # Server-side refusal fallback (Claude API only); routes by refusal category.
@@ -288,7 +293,7 @@ class LLM:
             return (data["choices"][0]["message"].get("content") or "").strip(), meta
         resp = self.client.messages.create(
             model=split(model)[1], max_tokens=max_tokens, system=system,
-            output_config={"effort": effort}, messages=[{"role": "user", "content": user}])
+            output_config={"effort": claude_effort(effort)}, messages=[{"role": "user", "content": user}])
         meta = self._claude_meta(model, resp)
         if resp.stop_reason == "refusal":
             return "", meta
@@ -307,7 +312,7 @@ class LLM:
             return parse_json(data["choices"][0]["message"].get("content") or ""), meta
         with self.client.messages.stream(
                 model=split(model)[1], max_tokens=max_tokens, system=system,
-                output_config={"effort": effort}, messages=[{"role": "user", "content": user}]) as st:
+                output_config={"effort": claude_effort(effort)}, messages=[{"role": "user", "content": user}]) as st:
             resp = st.get_final_message()
         meta = self._claude_meta(model, resp)
         if resp.stop_reason == "refusal":

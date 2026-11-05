@@ -942,7 +942,9 @@ SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "C
 SHOW_KEYS = ("channel", "channels")  # a [shows.<key>] table's own settings; the rest are sections
 
 
-EFFORTS = ("low", "medium", "high", "xhigh", "max")  # every *effort* key (clipper/llm.py maps them per provider)
+# Every *effort* key (clipper/llm.py maps them per provider); "none" turns reasoning off on
+# other providers and is Claude's "low".
+EFFORTS = ("none", "low", "medium", "high", "xhigh", "max")
 
 
 def check_choices(cfg: dict, where: str = "") -> None:
