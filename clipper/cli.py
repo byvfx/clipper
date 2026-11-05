@@ -283,11 +283,48 @@ def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
         print(f"for {e['show']}'s next stream: {e['text']}")
 
 
+def cmd_compare(cfg: dict, args: argparse.Namespace) -> None:
+    from . import compare
+
+    if args.action == "list":
+        compare.list_reports(stream_dir(cfg, args.stream))
+        return
+    compare.compare_score(stream_dir(cfg, args.stream), cfg, args.model, args.which, args.budget, args.dry_run,
+                          args.model_b, args.effort, args.prompt_version, args.repeat)
+
+
+def cmd_models(cfg: dict, args: argparse.Namespace) -> None:
+    from . import models
+
+    if args.action == "list":
+        models.list_tests(cfg)
+        return
+    if args.action == "gold":
+        from . import gold
+
+        if args.gold_action == "propose":
+            gold.propose(cfg, args.streams)
+        elif args.gold_action == "confirm":
+            gold.confirm(cfg, jsonstate.load(Path(args.file)))
+        else:
+            gold.run(cfg, args.model, args.effort, args.prompt_version, args.budget, args.dry_run)
+        return
+    models.test_model(cfg, args.model, args.effort, args.budget, not args.no_long, args.dry_run)
+
+
 def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
     from . import costs
 
     if args.backfill:
         costs.backfill(cfg, args.dry_run)
+        return
+    if args.providers:
+        from . import usage
+
+        if args.json:
+            print(json.dumps(usage.status(cfg), indent=2))
+        else:
+            usage.print_status(cfg)
         return
     rep = costs.report(cfg, args.month or "")
     if args.json:
@@ -866,7 +903,7 @@ COMMAND_GROUPS = [
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
-                'costs']),
+                'costs', 'compare', 'models']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
@@ -1513,7 +1550,62 @@ def add_extras(sub) -> None:
     p.add_argument("--backfill", action="store_true",
                    help="add model spend earlier runs recorded in their output files, once")
     p.add_argument("--dry-run", action="store_true", help="with --backfill: list, write nothing")
+    p.add_argument("--providers", action="store_true",
+                   help="this month by the Claude API's and OpenRouter's own count, next to our log")
     p.set_defaults(fn=cmd_costs)
+
+    p = sub.add_parser("compare", help="another model on a stage that already ran, side by side with "
+                                       "its output and the review decisions (#72)")
+    rsub = p.add_subparsers(dest="action", required=True)
+    q = rsub.add_parser("score", help="score a stream again with --model; candidates.json is left alone")
+    add_stream(q)
+    q.add_argument("--model", required=True,
+                   help="the candidate, e.g. openai:gpt-5-mini, openrouter:google/gemini-3-flash, local:qwen3")
+    q.add_argument("--pass", dest="which", choices=("a", "b", "ab"), default="a",
+                   help="a: the candidate judges every window, Pass B stays (default); b: the candidate "
+                        "ranks the stream's own Pass A results; ab: both")
+    q.add_argument("--model-b", default="", help="with --pass ab: a different candidate for Pass B")
+    q.add_argument("--effort", default="", help="the candidate's effort instead of [scoring] effort_a/_b; "
+                                                "none = reasoning off (other providers)")
+    q.add_argument("--prompt-version", default="",
+                   help="try another prompt version (prompts/score_a_<v>.md ...) on the stream's own windows")
+    q.add_argument("--repeat", action="store_true",
+                   help="allow the stream's own model and prompt: what a rerun alone changes")
+    q.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
+    q.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    q.set_defaults(fn=cmd_compare)
+    q = rsub.add_parser("list", help="every comparison on a stream, one table, best first")
+    add_stream(q)
+    q.set_defaults(fn=cmd_compare)
+
+    p = sub.add_parser("models", help="can a model do clipper's jobs? built-in checks, no stream needed (#72)")
+    rsub = p.add_subparsers(dest="action", required=True)
+    q = rsub.add_parser("test", help="Pass A on made-up windows, JSON, vision, text, a long transcript; "
+                                     "which stages it could take")
+    q.add_argument("model", help="e.g. claude-haiku-5-5, openrouter:qwen/qwen3.8-flash, local:qwen3")
+    q.add_argument("--effort", default="", help="instead of [scoring] effort_a; none = reasoning off "
+                                                "(other providers)")
+    q.add_argument("--no-long", action="store_true", help="skip the ~130k-token transcript (most of the cost)")
+    q.add_argument("--budget", type=float, default=1.0, help="refuse when the estimate is over this many $ (1)")
+    q.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    q.set_defaults(fn=cmd_models)
+    q = rsub.add_parser("list", help="every saved test, newest first")
+    q.set_defaults(fn=cmd_models)
+    q = rsub.add_parser("gold", help="Pass A against windows a person labelled: propose them, then run a model")
+    gsub = q.add_subparsers(dest="gold_action", required=True)
+    g = gsub.add_parser("propose", help="windows from reviewed streams to label, into [paths] model_gold")
+    g.add_argument("--streams", type=int, default=12, help="the newest this many reviewed streams (12)")
+    g.set_defaults(fn=cmd_models)
+    g = gsub.add_parser("confirm", help='set labels from a JSON file: {"<stream>_<id>": {"label": "keep"}}')
+    g.add_argument("file")
+    g.set_defaults(fn=cmd_models)
+    g = gsub.add_parser("run", help="score the confirmed windows with a model; recall and precision per label")
+    g.add_argument("model")
+    g.add_argument("--effort", default="", help="instead of [scoring] effort_a; none = reasoning off")
+    g.add_argument("--prompt-version", default="", help="instead of [scoring] prompt_version")
+    g.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
+    g.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    g.set_defaults(fn=cmd_models)
 
 
 def add_setup(sub) -> None:

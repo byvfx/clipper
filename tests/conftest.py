@@ -19,6 +19,12 @@ def clean_env(monkeypatch):
         if name.startswith("CLIPPER_"):
             monkeypatch.delenv(name)
     config._CHANNELS.clear()
+    # OpenRouter's public model list stays unfetched: tests are offline.
+    from clipper import llm
+
+    monkeypatch.setattr(llm, "_OPENROUTER_PRICES", {})
+    monkeypatch.setattr(llm, "_OPENROUTER_CONTEXT", {})
+    monkeypatch.setattr(llm, "_OPENROUTER_MAX_OUT", {})
 
 
 @pytest.fixture

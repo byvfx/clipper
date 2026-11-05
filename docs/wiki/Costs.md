@@ -7,8 +7,27 @@ model spend earlier runs wrote into their output files (score, segments, receipt
 
 ```bash
 clipper costs [--month 2026-10]     # month's spend: models + Modal + fixed, by stage/show/stream
+clipper costs --providers           # the Claude API's and OpenRouter's own count, next to our log
 clipper modal                       # GPUs up, runs, spend, archive ETA
 ```
+
+## The providers' own numbers
+
+Our log prices each call from `[llm] prices` (OpenRouter reports its own cost). `clipper costs
+--providers` and the war room's [API usage panel](War-room#modal-costs-and-analytics) ask the
+providers instead, so spend the log missed (another tool on the same key, the Console's
+workbench, a crash before the line was written) shows up too. Each is asked at most every 5
+minutes.
+
+- **Claude API**: the Admin API's cost report, month to date by model. It needs an Admin API
+  key (`sk-ant-admin...`, Console > Settings > Admin keys; Console organizations only, not
+  individual accounts): set `ANTHROPIC_ADMIN_KEY`, or put it in
+  `secrets/anthropic_admin_secret.txt` (`[paths] anthropic_admin_key`). The normal
+  `ANTHROPIC_API_KEY` can't read it. Costs appear about 5 minutes after a call. Without the key
+  the panel shows our log for Claude and says what to set; `clipper doctor` warns.
+- **OpenRouter**: the key clipper uses (`OPENROUTER_API_KEY` or `secrets/openrouter_secret.txt`):
+  today, this week, this month, all time, what's left of the key's limit if it has one, and
+  the account balance when the key may read it.
 
 Modal's own billing is the real number for transcription ([Transcribe on Modal](Transcribe-on-Modal#watching-modal));
 the bot DMs each time the month passes a multiple of `[modal] alert_every_usd`.

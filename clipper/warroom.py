@@ -436,6 +436,16 @@ def modal_status(cfg: dict) -> dict:
         return {"error": f"{type(e).__name__}: {e}"[:300]}
 
 
+def usage_status(cfg: dict) -> dict:
+    """#72: the API usage panel, the Claude API's and OpenRouter's own numbers (clipper/usage.py)."""
+    try:
+        from . import usage
+
+        return usage.status(cfg)
+    except Exception as e:  # noqa: BLE001  # a panel, not a reason to fail the page
+        return {"error": f"{type(e).__name__}: {e}"[:300]}
+
+
 def start_retake(cfg: dict) -> bool:
     """A retake in the background: on `clipper serve`'s job runner when this page is its
     (HOOKS), else a detached `clipper retake` (the page run alone)."""
@@ -1140,6 +1150,7 @@ GET_API = {
     "/api/retakes": lambda cfg, qs: retakes(cfg, 50),
     "/api/modal": lambda cfg, qs: modal_status(cfg),
     "/api/costs": lambda cfg, qs: costs_status(cfg),
+    "/api/usage": lambda cfg, qs: usage_status(cfg),
     "/api/analytics": lambda cfg, qs: analytics_status(cfg, _q(qs, "month")),
     "/api/undo": lambda cfg, qs: {"actions": recent_actions(cfg)},
     "/api/cover": lambda cfg, qs: cover_get(cfg, _q(qs, "ref")),

@@ -46,6 +46,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - Titles/descriptions/cut points approved as-is; fun descriptions are liked.
 - Long video per recurring topic (compilations, e.g. "The Quartering" 3h13m) plus segments plus short picks.
 - `third_party_audio = "allow_reactions"`, `audience_knowledge = "fans"`, Victor/blackjack segments stay.
+- Shorts over `max_source_audio_s` of other voices (speaker tags) arrive **held** in review with the
+  seconds on the card, not dropped (user 11-04: "sounds good"); release it when the show carries it
+  (`[shorts] hold_source_audio`). Kino and, from its next stream, Channel 404 (diarized 11-04).
 - Kitsu is the record for review/edits (no separate DB). Discord approvals must keep working.
 - Thumbnails: `[thumbnail] style = "enquirer"` (1990s tabloid: KINO CASINO masthead, no "THE NEW" roundel,
   no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v5` (face = headline
@@ -84,8 +87,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - TikTok: **parked (2026-11-01)**. Auto-send off since 2026-10-28 (TikTok flagged bot activity); the user
   posts by hand. No direct posting: the app audit refuses own-account tools and the user won't release
   clipper to others (#62, #116 closed). Don't send drafts unless asked (`clipper tiktok --items ... [--resend]`).
-- Transcription on Modal (L40S, ~$0.34 per 8 h) since 2026-10-23; Kino streams are diarized
-  (`[shows.kino.transcribe] diarize = true`, ~$0.30 more) and the scoring v5 / segments v3 / meta v3
+- Transcription on Modal (L40S, ~$0.34 per 8 h) since 2026-10-23; Kino and (since 11-04, user) Channel
+  404 streams are diarized (`[shows.<key>.transcribe] diarize = true`, ~$0.30 more; Don enrolled from
+  kick-135875683 SPEAKER_06, one sample) and the scoring v5 / segments v3 / meta v3
   prompts read the speaker tags. Cut runs on the NAS (`[cut] backend = "nas"`) since 2026-10-26.
 - Whisper writes "Bearing" as "Baring": fix it whenever he comes up.
 - Weekly magazine (`clipper weekly`): Saturdays, cover can go full tabloid, inside pages modern; the user
@@ -149,7 +153,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   refs in mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
   (~1,550 credits; 18,457 Runway credits left on 10-24).
 - **Costs:** October ~$200 in model/GPU spend, ~$184 of it the Jer archive; `clipper costs`, war room
-  Costs and Modal panels. Monthly analytics check-in task runs on the 1st at 09:00; October's
+  Costs, Modal and API usage panels (`clipper costs --providers`: Claude's and OpenRouter's own count next
+  to our log; Claude's needs an Admin API key, `ANTHROPIC_ADMIN_KEY`, not set here: waiting on the user). Monthly analytics check-in task runs on the 1st at 09:00; October's
   (`reports/analytics/2026-10-checkin.md`) was gone through 11-02: 1-4 taken, 5 (titles without the
   show prefix) skipped; its Decisions section is what November's check-in follows up.
 - **Analytics:** YouTube Analytics API enabled 10-28; October so far 12.7k views, 68.5 h watch, +28 subs,
@@ -191,6 +196,32 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   found all 3 leads good (L03's $8,000 is Whisper: he said $1,000, noted on the lead). User 11-03: leave his old
   videos alone for now (no back-catalog facts; `investigate run jer` reads only new ones). Still open:
   whether a lead may ever become content.
+- Other model providers (#72, user 11-04: OpenAI, Gemini, local and OpenRouter): OpenRouter key in
+  secrets/openrouter_secret.txt; no OpenAI/Gemini key and no Ollama yet. Try Pass A first:
+  `clipper compare score <stream> --model openrouter:<vendor>/<model> --dry-run` for the estimate
+  (Wiki Model-providers). Haiku vs Sonnet on kick-135553454 Pass B ($0.003): Haiku kept 4 of the 5 approved.
+  User picked OpenRouter (11-04; key in secrets/openrouter_secret.txt). Sweep 11-04/05: 12 models x reasoning
+  none/medium on kick-135553454 Pass A, leaders on kick-134467434 + kick-134812118 (`clipper compare list <stream>`).
+  None near Haiku+Sonnet (18/18 approved): Gemini 4 Argon 7/18 (closest verdicts, fewest Haiku rejects kept,
+  ~20x Haiku's Pass A cost), Flash Lite 7/18 (5/5 was luck), DeepSeek V4 Pro 5/18, GPT-6 Luna ~5/18, DeepSeek
+  Flash 1-2/5. All keep 3-8x Haiku's windows, mostly ones Haiku rejected (third party, needs context). Reasoning
+  on/off a wash for Pass A. Single runs are noisy (Luna 4/5 then 2/5). The approved set only holds the baseline's
+  picks, so it favours Claude. Haiku scoring cost $0.67 in Oct-Nov; the spend is segments (~$16), thumbs, meta.
+  v6 (stricter score_a + rule files, 11-05; config stays v5) and the control: Haiku v5 rerun (`compare --repeat`)
+  picks only 7/18 of its own approved moments, so that metric is mostly noise. 18 approved on 3 streams: Haiku
+  rerun 7, Haiku v6 7, Argon v5 7, Qwen 3.8 Flash v6 6, Luna v6 5, DeepSeek Pro/Flash v6 4, MiniMax v6 4.
+  Verdicts shared with the original Haiku run: Haiku rerun ~73%, Haiku v6 ~59%, Argon ~57%, the cheap ones
+  34-43%. v6 made Haiku keep more, not less: not adopted. A fair test needs blind review of each model's picks.
+  User 11-05 (build it agnostically, "in case someone else ever wants to use it"): two tests (Wiki
+  Model-providers). `clipper models test <model>` = built-in conformance (made-up windows through real Pass A,
+  JSON, vision, text, 130k-token needle) + which configured stages it could take: Haiku, Qwen 3.8 Flash and
+  DeepSeek V4 Pro (all @none) 12/12 verdicts, long ok; V4 Pro has no image input (not for shorts layout or cast
+  labels). `clipper models gold propose|confirm|run` = answer key: logs/model_tests/gold.json has 66 windows
+  from the 12 newest reviewed streams, 24 approved keeps confirmed, 42 waiting on the user's labels in the
+  private label page https://claude.ai/artifact/Jre3fSSFVMDc51deRLSUoE (db collection `labels`, doc id
+  `<stream>_<id>`; read it with ArtifactData list, write a {key: {label, note}} file, `gold confirm` it). Then
+  `gold run` Haiku, Qwen, DeepSeek Pro (~2 cents each). Qwen on the 24 keeps alone: 18/24 (4 called third party,
+  read-aloud stricter than Haiku; 1 schema failure after the retry).
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
@@ -279,8 +310,8 @@ changed schedule values only (`schedule --kitsu-all` for everything), doctor che
 **#101 (weekly split) merged 2026-11-02** as d9e1477: `clipper/weekly/` package (gather, draft, render,
 faces, style), prompts through Prompts, the look as data in `<paths.weekly>/style.toml` (doctor checks
 it). Issue 04 (11-07) is the first one built from it. Worktree and branch removed (GitHub too).
-Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (provider side-by-side,
-`clipper edit`), #50 (revenue once monetized); #42 closed 11-02 after the October check-in. #77 is done
+Tracked as GitHub issues (byvfx/clipper). Still open from the 10-23/10-24 audits: #72 (`clipper compare score` built
+11-04 with `openrouter:`; left: a stage moved after a compare, `clipper edit`), #50 (revenue once monetized); #42 closed 11-02 after the October check-in. #77 is done
 (#106, 10-30): YouTube quota counted per Pacific day in `logs/youtube_quota.json` (each upload run
 ends with the total; link updates and caption retries only spend what's left after `upload_units`
 per upload still allowed today), worker takeover under a lock, pick numbers kept across re-scores

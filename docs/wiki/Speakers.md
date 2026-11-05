@@ -22,3 +22,5 @@ The model is gated on Hugging Face:
    speaker tags in the transcript (the v5 scoring and v3 segments/meta prompts explain them;
    a `clipper.toml` that pins older `prompt_version`s gets tags the prompt doesn't expect, so
    keep the pins current). Streams without names give the same text as before.
+7. Shorts with more than `[scoring] max_source_audio_s` of other voices arrive held in review
+   ([Review](Review#shorts-held-for-other-voices)); a show without speaker names isn't checked.

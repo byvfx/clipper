@@ -39,6 +39,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "x_token": "secrets/x_token.json",              # written by `clipper x --sign-in`
         "warroom_token": "secrets/warroom_token.txt",   # war room token, if not [warroom] token
         "brave_key": "secrets/brave_secret.txt",        # Brave Search API key, if not $BRAVE_API_KEY
+        # Model provider keys (#72), each if its env var isn't set: $OPENAI_API_KEY, ...
+        "openai_key": "secrets/openai_secret.txt",
+        "gemini_key": "secrets/gemini_secret.txt",
+        "openrouter_key": "secrets/openrouter_secret.txt",
+        # Anthropic Admin API key, if not $ANTHROPIC_ADMIN_KEY: the Claude bill in the war room's
+        # API usage panel and `clipper costs --providers` (clipper/usage.py)
+        "anthropic_admin_key": "secrets/anthropic_admin_secret.txt",
         "rumble": "rumble",       # `clipper rumble` ready-to-upload folders
         "bot_log": "logs/bot.log",  # `clipper bot` log (rotated); "" = console only
         "serve_log": "logs/serve.log",  # `clipper serve` log (rotated); "" = console only
@@ -47,6 +54,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "youtube_cookies": "secrets/youtube_cookies.txt",  # optional, Netscape cookies.txt: `archive` age-restricted items, pre-shows on a bot check
         "modal_runs": "logs/modal_runs.jsonl",  # every Modal call's start and end (`clipper modal`)
         "costs": "logs/costs.jsonl",  # every model call's cost (`clipper costs`, the war room)
+        "model_tests": "logs/model_tests",  # `clipper models test` results, one file a model and effort
+        "model_gold": "logs/model_tests/gold.json",  # labelled windows for `clipper models gold`
         "warroom_undo": "logs/warroom_undo.json",  # the war room's last 20 actions, for Undo
         "warroom_layouts": "logs/warroom_layouts.json",  # the war room's saved panel layouts
         "news": "news",           # `clipper news`: news.sqlite (headlines, stories), context.json
@@ -656,6 +665,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "keep_work": False,       # keep shorts/work/ (intermediate cut, .ass captions)
         "pad_s": 0.15,            # room before the first and after the last word
         "window": "short",        # short: scoring's 15-60 s short window | clip: the pick's in/out
+        # Propose Hold in review for a Short whose voices other than [meta] cast (speaker
+        # tags) run over [scoring] max_source_audio_s; release it if the show carries it.
+        "hold_source_audio": True,
         "min_s": 15,              # widen shorter windows by whole transcript lines to this
         "max_s": 59,              # longest Short: over 60 s, any Content ID claim blocks it worldwide
         "end_pause_s": 0.7,       # window "short": end on a sentence end or a pause this long; 0 = off
@@ -835,9 +847,13 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "llm": {
         # Which provider answers is the model string's prefix (clipper/llm.py): bare or
         # "anthropic:" = Claude, "openai:<model>" (OPENAI_API_KEY), "gemini:<model>"
-        # (GEMINI_API_KEY), "local:<model>" = an OpenAI-compatible server at local_base_url.
+        # (GEMINI_API_KEY), "openrouter:<vendor>/<model>" (OPENROUTER_API_KEY), "local:<model>" =
+        # an OpenAI-compatible server at local_base_url.
         "local_base_url": "",     # e.g. http://<host>:11434/v1 for Ollama; set in clipper.toml
         "timeout_s": 600,         # per OpenAI-compatible request
+        # Output room for a reasoning model on another provider (effort above "none"): it thinks
+        # in output tokens, and V4 Pro spent all 16,000 of Pass B before answering (#72).
+        "thinking_max_tokens": 64000,
         # $ per 1M input/output tokens, by model string, for cost lines only (a model not
         # listed costs $0). A [llm.prices] table in clipper.toml adds to these.
         "prices": {
@@ -937,7 +953,9 @@ SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "C
 SHOW_KEYS = ("channel", "channels")  # a [shows.<key>] table's own settings; the rest are sections
 
 
-EFFORTS = ("low", "medium", "high", "xhigh", "max")  # every *effort* key (clipper/llm.py maps them per provider)
+# Every *effort* key (clipper/llm.py maps them per provider); "none" turns reasoning off on
+# other providers and is Claude's "low".
+EFFORTS = ("none", "low", "medium", "high", "xhigh", "max")
 
 
 def check_choices(cfg: dict, where: str = "") -> None:
