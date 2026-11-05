@@ -12,6 +12,18 @@ is re-cut or re-thumbnailed and comes back for review. Approved items are schedu
 uploaded ([Scheduling and uploads](Scheduling-and-uploads)). `clipper review status` shows the
 decisions and what's scheduled.
 
+## Shorts held for other voices
+
+A Short whose voices other than the show's own people (`[meta] cast`) run over `[scoring]
+max_source_audio_s` (5 s) arrives held: the speaker tags count the seconds of `[?]` voices
+(usually a video being played) and other names, and the Kitsu "Other voices" column and the
+Discord card show them ("22 s of other voices (limit 5 s)"). Pass B is meant to drop those, but
+some got through. Watch it: if the show's commentary carries the moment, release the hold and
+it schedules as usual; otherwise reject it or ask for a trim. A hold you release isn't put back,
+and a re-cut under the limit comes off hold by itself. It needs speaker names
+([Speakers](Speakers)); a show without them is not checked. `[shorts] hold_source_audio = false`
+turns it off.
+
 ## Alerts
 
 The bot also DMs you when something needs you (`[notify]`): a stream ready for review, an

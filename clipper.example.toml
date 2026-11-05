@@ -449,6 +449,8 @@ cut_codec = ""                 # the trimmed, bleeped intermediate; empty = cut.
 cut_crf = 16
 keep_work = false              # keep shorts/work/ (intermediate cut, .ass captions)
 window = "short"               # short: scoring's 15-60 s window | clip: the pick's in/out
+hold_source_audio = true       # hold a Short in review when voices other than [meta] cast (speaker
+                               # tags) run over [scoring] max_source_audio_s; release it if the show carries it
 min_s = 15                     # widen shorter windows by whole transcript lines (setup first)
 max_s = 59                     # longest Short: over 60 s, any Content ID claim blocks it worldwide
 end_pause_s = 0.7              # window "short": end on a sentence end or a pause this long; 0 = off

@@ -129,6 +129,10 @@ def card(r: dict) -> tuple[dict, list[dict]]:
                        "value": when, "inline": True})
     if r.get("thumb_text"):
         fields.append({"name": "Thumbnail", "value": r["thumb_text"], "inline": True})
+    if r.get("other_voices"):  # held for it unless released ([shorts] hold_source_audio)
+        fields.append({"name": "Held: other voices" if r["hold"] else "Other voices",
+                       "value": r["other_voices"] + (". Release the hold if the show carries it."
+                                                     if r["hold"] else ""), "inline": False})
     if r["comment"]:
         fields.append({"name": "Note", "value": r["comment"][:1000], "inline": False})
     color = COLORS["held"] if r["hold"] else COLORS.get(r["decision"], COLORS["pending"])
