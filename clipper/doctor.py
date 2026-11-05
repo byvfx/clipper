@@ -368,8 +368,11 @@ def check_llm_keys(cfg: dict) -> None:
                      "set it in clipper.toml to the server's OpenAI-compatible /v1 URL")
         elif os.environ.get(env):
             ok("keys", f"{what}: {env} set")
+        elif llm.provider_key(prov, cfg["paths"]):
+            ok("keys", f"{what}: key in {cfg['paths'][f'{prov}_key']}")
         else:
-            fail("keys", f"{what}: {env} not set", "set it as a user environment variable")
+            fail("keys", f"{what}: {env} not set",
+                 f"set it as a user environment variable, or put the key in {cfg['paths'].get(f'{prov}_key')}")
 
 
 def check_llm_prices(cfg: dict) -> None:
@@ -377,7 +380,9 @@ def check_llm_prices(cfg: dict) -> None:
     from . import llm
 
     table = llm.prices(cfg)  # the defaults plus [llm.prices], as the client accounts
-    unpriced = sorted({m for m in llm.configured(cfg).values() if llm.price_of(table, m) is None})
+    # OpenRouter reports each call's cost, so its models need no entry.
+    unpriced = sorted({m for m in llm.configured(cfg).values()
+                       if llm.price_of(table, m) is None and llm.split(m)[0] != "openrouter"})
     if unpriced:
         warn("keys", f"no [llm] prices entry for {', '.join(unpriced)}: costs count them as $0",
              'add [llm.prices] "<model>" = [<$ per 1M in>, <$ per 1M out>] to clipper.toml')
@@ -394,7 +399,7 @@ def check_llm_online(cfg: dict) -> None:
     for prov, uses in llm_providers(cfg).items():
         base, env = llm.PROVIDERS[prov]
         base = (cfg["llm"]["local_base_url"] if prov == "local" else base).rstrip("/")
-        key = os.environ.get(env, "")
+        key = llm.provider_key(prov, cfg["paths"]) if prov != "local" else os.environ.get(env, "")
         if not base or (prov != "local" and not key):
             continue  # already a failure under keys
         try:
@@ -406,6 +411,17 @@ def check_llm_online(cfg: dict) -> None:
         if not r.ok:
             fail("online", f"{prov}: HTTP {r.status_code} from {base}/models", f"check {env}")
             continue
+        if prov == "openrouter":  # its /models answers anyone; /key only a good key
+            try:
+                k = requests.get(f"{base}/key", timeout=15, headers={"Authorization": f"Bearer {key}"})
+            except requests.RequestException as e:
+                fail("online", f"openrouter: {base}/key unreachable ({type(e).__name__})")
+                continue
+            if not k.ok:
+                fail("online", f"openrouter refused the key (HTTP {k.status_code})",
+                     f"check {env} or {cfg['paths'].get('openrouter_key')}")
+                continue
+            ok("online", "openrouter key accepted")
         have = {m.get("id", "").removeprefix("models/") for m in r.json().get("data", [])}
         for use in uses:
             name = llm.split(use.split(" = ", 1)[1])[1]
@@ -415,8 +431,12 @@ def check_llm_online(cfg: dict) -> None:
 
 def check_keys(cfg: dict, role: str) -> None:
     if role != "nas":
+        from .llm import claude_model
+
         if os.environ.get("ANTHROPIC_API_KEY"):
             ok("keys", "ANTHROPIC_API_KEY set")
+        elif not claude_model(cfg):
+            ok("keys", "ANTHROPIC_API_KEY not set; no stage uses Claude")
         else:
             fail("keys", "ANTHROPIC_API_KEY not set", "clipper setup --step keys (or set it as a user env var)")
         check_llm_keys(cfg)
@@ -453,6 +473,14 @@ def check_keys(cfg: dict, role: str) -> None:
                  f"copy {p['youtube_client_secret'].name} and {p['youtube_token'].name} into secrets/")
         check_tiktok(cfg)
         check_x(cfg)
+        from .usage import ADMIN_ENV, admin_key
+
+        if admin_key(cfg):
+            ok("keys", "Anthropic Admin key found (the war room's API usage panel reads Claude's bill)")
+        else:
+            warn("keys", "no Anthropic Admin key: the API usage panel shows our log for Claude, not its bill",
+                 f"Console -> Settings -> Admin keys (organizations only); set {ADMIN_ENV} "
+                 f"or put it in {cfg['paths'].get('anthropic_admin_key')}")
 
 
 def check_youtube_cookies(cfg: dict) -> None:
@@ -617,12 +645,14 @@ def online_youtube(cfg: dict) -> None:
 
 
 def online_anthropic(cfg: dict) -> None:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    from .llm import Claude, claude_model
+
+    model = claude_model(cfg)  # [scoring] model_a may be another provider's
+    if not os.environ.get("ANTHROPIC_API_KEY") or not model:
         return
     try:
-        from .llm import Claude
-        Claude(cfg).client.models.retrieve(cfg["scoring"]["model_a"])
-        ok("online", f"Anthropic API answers ({cfg['scoring']['model_a']} available)")
+        Claude(cfg).client.models.retrieve(model)
+        ok("online", f"Anthropic API answers ({model} available)")
     except Exception as e:  # noqa: BLE001
         fail("online", f"Anthropic API: {type(e).__name__}: {str(e)[:120]}",
              "check the key, or set [scoring] workspace_id / $ANTHROPIC_WORKSPACE_ID")

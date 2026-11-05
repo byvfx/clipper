@@ -12,7 +12,8 @@ $ClipperExe = Join-Path $ClipperRoot '.venv\Scripts\clipper.exe'
 # alert webhook). A new key a stage reads belongs here too.
 $ClipperKeys = 'ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE_ID', 'KITSU_TOKEN', 'DISCORD_BOT_TOKEN',
                'CLIPPER_ALERT_WEBHOOK', 'MODAL_TOKEN_ID', 'MODAL_TOKEN_SECRET', 'ELEVENLABS_API_KEY',
-               'OPENAI_API_KEY', 'GEMINI_API_KEY', 'HF_TOKEN', 'BRAVE_API_KEY'
+               'OPENAI_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'HF_TOKEN', 'BRAVE_API_KEY',
+               'ANTHROPIC_ADMIN_KEY'
 
 function Import-ClipperKeys {
     foreach ($name in $ClipperKeys) {

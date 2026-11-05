@@ -19,6 +19,10 @@ x_client = "secrets/x_client.json"             # {"client_id": ...} (+ "client_s
 x_token = "secrets/x_token.json"               # written by clipper x --sign-in
 warroom_token = "secrets/warroom_token.txt"    # made by clipper warroom --tailnet on, if [warroom] token is ""
 brave_key = "secrets/brave_secret.txt"        # Brave Search API key for cast image search, if not $BRAVE_API_KEY
+openai_key = "secrets/openai_secret.txt"      # model provider keys, each if its env var isn't set
+gemini_key = "secrets/gemini_secret.txt"      # ($OPENAI_API_KEY, $GEMINI_API_KEY, $OPENROUTER_API_KEY)
+openrouter_key = "secrets/openrouter_secret.txt"
+anthropic_admin_key = "secrets/anthropic_admin_secret.txt"  # Admin API key (sk-ant-admin...) for Claude's own bill, if $ANTHROPIC_ADMIN_KEY is unset
 discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
 elevenlabs_key = "secrets/elevenlabs_api_key.txt"  # if $ELEVENLABS_API_KEY ([narrate] key_env) is unset
 sync_key = "secrets/sync_api_key.txt"          # sync.so lip-sync key, if $SYNC_API_KEY ([perform] sync_key_env) is unset
@@ -33,6 +37,8 @@ faces = "faces"                                # known faces for every show (cli
 streamers = "research_notes/streamers.json"    # people and their channels by platform (clipper story)
 people = "people.json"                         # one record per person: names, channels, archive subject (clipper people)
 costs = "logs/costs.jsonl"                     # every model call's cost, one line each (clipper costs, war room)
+model_tests = "logs/model_tests"               # `clipper models test` results, one file a model and effort
+model_gold = "logs/model_tests/gold.json"      # labelled windows for `clipper models gold` (propose, label, run)
 warroom_undo = "logs/warroom_undo.json"        # the war room's last 20 actions, for Undo
 warroom_layouts = "logs/warroom_layouts.json"  # the war room's saved panel layouts (Layout button)
 weekly = "weekly"                              # clipper weekly issues, one folder per week's Saturday
@@ -231,9 +237,11 @@ credits = {}               # monthly credits per provider, as above
 [llm]
 # Any stage's model key can name another provider by prefix (see the wiki, "Model
 # providers"): "openai:<model>" (OPENAI_API_KEY), "gemini:<model>" (GEMINI_API_KEY),
-# "local:<model>" (the OpenAI-compatible server below). Bare names are Claude.
+# "openrouter:<vendor>/<model>" (OPENROUTER_API_KEY), "local:<model>" (the OpenAI-compatible
+# server below). Bare names are Claude. `clipper compare score` tries one on a reviewed stream.
 local_base_url = ""        # e.g. "http://<host>:11434/v1" (Ollama); only for local: models
 timeout_s = 600            # seconds per request to an OpenAI-compatible provider
+thinking_max_tokens = 64000  # output room for another provider's reasoning model (thinking counts)
 # [llm.prices]             # $ per 1M input/output tokens for cost lines; adds to the built-in Claude ones
 # "openai:gpt-5-mini" = [0.25, 2.00]
 [llm.prices]               # the built-in Claude prices; a model not listed costs $0

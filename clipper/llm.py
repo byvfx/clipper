@@ -4,6 +4,8 @@ The model string picks the provider by its prefix:
     claude-sonnet-5-5, anthropic:claude-...  the Claude API (ANTHROPIC_API_KEY)
     openai:<model>                           OpenAI (OPENAI_API_KEY)
     gemini:<model>                           Google, OpenAI-compatible endpoint (GEMINI_API_KEY)
+    openrouter:<vendor>/<model>              OpenRouter, one key for many vendors (OPENROUTER_API_KEY),
+                                             e.g. openrouter:openai/gpt-5-mini
     local:<model>                            any OpenAI-compatible server at [llm] local_base_url
                                              (Ollama, vLLM, LM Studio; LOCAL_LLM_API_KEY if it
                                              wants one)
@@ -12,8 +14,10 @@ stage is one config line. The prompts are tuned on Claude: if another model need
 wording, give that stage a new prompt version rather than editing one.
 
 What differs per provider:
-- effort: Claude's output_config.effort; OpenAI-compatible servers get reasoning_effort
-  (low/medium/high), and a model that rejects it is asked again without it.
+- effort: Claude's output_config.effort ("none" is "low" there); OpenAI-compatible servers
+  get reasoning_effort (none/low/medium/high; OpenRouter's reasoning.effort), and a model
+  that rejects it is asked again without it. "none" turns a reasoning model's thinking off
+  (DeepSeek V4 Flash thinks by default and is cheaper and quicker without).
 - structured output: native JSON schema on both; a server without json_schema gets JSON mode
   with the schema in the prompt. Answers from OpenAI-compatible servers are checked against
   the schema and sent back once with what was wrong.
@@ -21,7 +25,8 @@ What differs per provider:
   server-side refusal fallback exists on the Claude API only.
 - images: Claude content blocks ({"type": "image", "source": {"type": "base64", ...}}) are
   converted to image_url data URLs.
-Prices are [llm] prices ($ per 1M input/output tokens, by model string), for cost lines only.
+Prices are [llm] prices ($ per 1M input/output tokens, by model string), for cost lines only;
+OpenRouter reports what each call cost, and that wins over the table.
 """
 from __future__ import annotations
 
@@ -30,6 +35,7 @@ import os
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from .errors import ClipperError
@@ -37,9 +43,14 @@ from .errors import ClipperError
 PROVIDERS = {  # prefix -> (base URL, key env var)
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
+    "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     "local": ("", "LOCAL_LLM_API_KEY"),
 }
-EFFORT = {"low": "low", "medium": "medium", "high": "high", "xhigh": "high", "max": "high"}
+EFFORT = {"none": "none", "low": "low", "medium": "medium", "high": "high", "xhigh": "high", "max": "high"}
+
+
+def claude_effort(effort: str) -> str:
+    return "low" if effort == "none" else effort
 RETRY_STATUS = (408, 429, 500, 502, 503, 504, 529)
 MODEL_KEY = re.compile(r"(^|_)model(_[ab])?$")
 
@@ -65,8 +76,73 @@ def price_of(prices: dict, model: str) -> tuple[float, float] | None:
     return tuple(prices[best]) if best else None
 
 
+_OPENROUTER_PRICES: dict[str, tuple[float, float]] | None = None
+_OPENROUTER_CONTEXT: dict[str, int] = {}
+_OPENROUTER_MAX_OUT: dict[str, int] = {}
+
+
+def openrouter_prices() -> dict[str, tuple[float, float]]:
+    """OpenRouter's published $ per 1M input/output tokens by model id (its /models list is
+    public), fetched once per process; {} when it can't be reached."""
+    global _OPENROUTER_PRICES
+    if _OPENROUTER_PRICES is None:
+        import requests
+
+        try:
+            data = requests.get(PROVIDERS["openrouter"][0] + "/models", timeout=15).json()["data"]
+            _OPENROUTER_PRICES = {m["id"]: (float(m["pricing"]["prompt"]) * 1e6,
+                                            float(m["pricing"]["completion"]) * 1e6)
+                                  for m in data if m.get("pricing")}
+            _OPENROUTER_CONTEXT.update({m["id"]: int(m["context_length"])
+                                        for m in data if m.get("context_length")})
+            _OPENROUTER_MAX_OUT.update({m["id"]: int(m["top_provider"]["max_completion_tokens"])
+                                        for m in data if (m.get("top_provider") or {}).get("max_completion_tokens")})
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            return {}  # not cached: the next estimate tries again
+    return _OPENROUTER_PRICES
+
+
+def context_length(model: str) -> int | None:
+    """How many tokens a model takes in, where it is published (OpenRouter's list); None
+    when unknown (Claude, OpenAI, Gemini, local servers)."""
+    if split(model)[0] != "openrouter":
+        return None
+    openrouter_prices()
+    return _OPENROUTER_CONTEXT.get(split(model)[1])
+
+
+def max_output(model: str) -> int | None:
+    """The most a model writes in one answer, where it is published (OpenRouter's list)."""
+    if split(model)[0] != "openrouter":
+        return None
+    openrouter_prices()
+    return _OPENROUTER_MAX_OUT.get(split(model)[1])
+
+
+def known_price(cfg: dict, model: str) -> tuple[float, float] | None:
+    """[llm] prices for a model, else OpenRouter's own list for an openrouter: model."""
+    p = price_of(prices(cfg), model)
+    if p is None and split(model)[0] == "openrouter":
+        p = openrouter_prices().get(split(model)[1])
+    return p
+
+
+def provider_key(prov: str, paths: dict | None = None) -> str:
+    """A provider's key: its env var ($OPENROUTER_API_KEY, ...), else the file [paths]
+    <prov>_key (secrets/openrouter_secret.txt, ...); "" if neither."""
+    key = os.environ.get(PROVIDERS[prov][1], "").strip()
+    path = (paths or {}).get(f"{prov}_key")
+    if key or not path:
+        return key
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def split(model: str) -> tuple[str, str]:
-    """("anthropic" | "openai" | "gemini" | "local", the provider's own model name)."""
+    """("anthropic" | "openai" | "gemini" | "openrouter" | "local", the provider's own model
+    name)."""
     prefix, _, name = model.partition(":")
     if name and (prefix in PROVIDERS or prefix == "anthropic"):
         return prefix, name
@@ -76,7 +152,7 @@ def split(model: str) -> tuple[str, str]:
 def is_llm(key: str, value: Any) -> bool:
     """A config value that names a chat model (not a TTS, Whisper or lip-sync model)."""
     return (isinstance(value, str) and bool(MODEL_KEY.search(key))
-            and (value.startswith("claude-") or split(value)[0] != "anthropic"))
+            and (value.startswith(("claude-", "anthropic:claude-")) or split(value)[0] != "anthropic"))
 
 
 def configured(cfg: dict) -> dict[str, str]:
@@ -88,6 +164,12 @@ def configured(cfg: dict) -> dict[str, str]:
         for s, sec in prof.get("overrides", {}).items():
             out.update({f"shows.{show}.{s}.{k}": v for k, v in sec.items() if is_llm(k, v)})
     return out
+
+
+def claude_model(cfg: dict) -> str:
+    """A Claude model the config uses, by its API name (to check the Anthropic key against);
+    "" when every stage is on another provider."""
+    return next((split(m)[1] for m in configured(cfg).values() if split(m)[0] == "anthropic"), "")
 
 
 def check_schema(schema: dict, v: Any, path: str = "$") -> list[str]:
@@ -152,8 +234,9 @@ class LLM:
         if isinstance(cfg, dict):
             workspace_id, lc = cfg["scoring"]["workspace_id"], cfg.get("llm") or DEFAULTS["llm"]
             self.ledger = cfg["paths"].get("costs")  # [paths] costs: one line per call
+            self.paths = cfg["paths"]
         else:
-            workspace_id, lc, self.ledger = cfg, DEFAULTS["llm"], None
+            workspace_id, lc, self.ledger, self.paths = cfg, DEFAULTS["llm"], None, {}
         # Keys not scoped to a workspace must name one on every request.
         self.workspace_id = workspace_id or os.environ.get("ANTHROPIC_WORKSPACE_ID", "")
         self.lc = {**DEFAULTS["llm"], **lc}
@@ -174,11 +257,15 @@ class LLM:
             self._client = anthropic.Anthropic(max_retries=4, default_headers=headers)
         return self._client
 
-    def _account(self, model: str, tokens_in: int, tokens_out: int) -> dict:
+    def _account(self, model: str, tokens_in: int, tokens_out: int,
+                 usd: float | None = None) -> dict:
+        """Add a call to the cost and the ledger. usd: what the provider says it cost
+        (OpenRouter), else the [llm] prices table's figure."""
         from . import costs
 
-        pin, pout = price_of(self.prices, model) or (0.0, 0.0)
-        usd = (tokens_in * pin + tokens_out * pout) / 1e6
+        if usd is None:
+            pin, pout = price_of(self.prices, model) or (0.0, 0.0)
+            usd = (tokens_in * pin + tokens_out * pout) / 1e6
         with self._lock:
             self.cost += usd
         costs.llm_call(self.ledger, split(model)[0], model, tokens_in, tokens_out, usd)
@@ -197,7 +284,7 @@ class LLM:
         kwargs = {
             "model": split(model)[1], "max_tokens": 64000 if stream else 16000, "system": system,
             "messages": [{"role": "user", "content": user}],
-            "output_config": {"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+            "output_config": {"effort": claude_effort(effort), "format": {"type": "json_schema", "schema": schema}},
         }
         if fallback:
             # Server-side refusal fallback (Claude API only); routes by refusal category.
@@ -229,7 +316,7 @@ class LLM:
             return (data["choices"][0]["message"].get("content") or "").strip(), meta
         resp = self.client.messages.create(
             model=split(model)[1], max_tokens=max_tokens, system=system,
-            output_config={"effort": effort}, messages=[{"role": "user", "content": user}])
+            output_config={"effort": claude_effort(effort)}, messages=[{"role": "user", "content": user}])
         meta = self._claude_meta(model, resp)
         if resp.stop_reason == "refusal":
             return "", meta
@@ -248,7 +335,7 @@ class LLM:
             return parse_json(data["choices"][0]["message"].get("content") or ""), meta
         with self.client.messages.stream(
                 model=split(model)[1], max_tokens=max_tokens, system=system,
-                output_config={"effort": effort}, messages=[{"role": "user", "content": user}]) as st:
+                output_config={"effort": claude_effort(effort)}, messages=[{"role": "user", "content": user}]) as st:
             resp = st.get_final_message()
         meta = self._claude_meta(model, resp)
         if resp.stop_reason == "refusal":
@@ -262,7 +349,7 @@ class LLM:
         run with one clear line instead of 60 identical failures."""
         if split(model)[0] != "anthropic":
             try:
-                self._compat(model, [{"role": "user", "content": "Say OK."}], "low", 16)
+                self._compat(model, [{"role": "user", "content": "Say OK."}], "", 256, length_ok=True)
             except RuntimeError as e:
                 raise ClipperError(f"{model} unavailable: {e}") from None
             return
@@ -282,7 +369,7 @@ class LLM:
                 "stop_reason": resp.stop_reason,
                 **self._account(model, resp.usage.input_tokens, resp.usage.output_tokens)}
 
-    # ---------- OpenAI-compatible (OpenAI, Gemini, local servers) ----------
+    # ---------- OpenAI-compatible (OpenAI, Gemini, OpenRouter, local servers) ----------
 
     @staticmethod
     def _messages(system: str, user: str | list[dict]) -> list[dict]:
@@ -310,6 +397,7 @@ class LLM:
             except ValueError as e:
                 out, errs = None, [f"not JSON ({e})"]
             if not errs:
+                meta["retried"] = attempt > 0  # the first answer broke the schema
                 return out, meta
             if attempt == 0:  # once more, with what was wrong
                 msgs += [{"role": "assistant", "content": text},
@@ -324,9 +412,10 @@ class LLM:
         return {"type": "json_object"}
 
     def _compat(self, model: str, messages: list[dict], effort: str, max_tokens: int,
-                response_format: dict | None = None) -> tuple[dict, dict]:
+                response_format: dict | None = None, length_ok: bool = False) -> tuple[dict, dict]:
         """One chat/completions request with retries. Returns (response JSON, meta); meta has
-        "refusal" when the model refused."""
+        "refusal" when the model refused. length_ok: running out of max_tokens isn't an error
+        (the preflight, where a reasoning model can spend them all thinking)."""
         import requests
 
         prov, name = split(model)
@@ -335,16 +424,30 @@ class LLM:
         if not base:
             raise ClipperError(f"{model}: set [llm] local_base_url in clipper.toml "
                              "(an OpenAI-compatible server, e.g. http://<host>:11434/v1)")
-        key = os.environ.get(env, "")
+        key = provider_key(prov, self.paths)
         if not key and prov != "local":
-            raise ClipperError(f"{model}: set the {env} environment variable")
-        body: dict[str, Any] = {"model": name, "messages": messages,
-                                ("max_completion_tokens" if prov == "openai" else "max_tokens"): max_tokens}
+            raise ClipperError(f"{model}: set the {env} environment variable "
+                               f"(or put the key in [paths] {prov}_key)")
+        asked = max_tokens
+        if effort and effort != "none" and model not in self._no_effort:
+            # Thinking is output: room for it and the answer, within what the model can write
+            # (published for OpenRouter; elsewhere a 400 about it falls back to what was asked).
+            cap = max_output(model)
+            max_tokens = max(asked, min(self.lc["thinking_max_tokens"], cap or self.lc["thinking_max_tokens"]))
+        limit = "max_completion_tokens" if prov == "openai" else "max_tokens"
+        body: dict[str, Any] = {"model": name, "messages": messages, limit: max_tokens}
         if response_format:
             body["response_format"] = response_format
         if effort and model not in self._no_effort:
-            body["reasoning_effort"] = EFFORT.get(effort, "medium")
+            if prov == "openrouter":
+                body["reasoning"] = {"effort": EFFORT.get(effort, "medium")}
+            else:
+                body["reasoning_effort"] = EFFORT.get(effort, "medium")
+        if prov == "openrouter":
+            body["usage"] = {"include": True}  # the call's cost in the answer
         headers = {"Authorization": f"Bearer {key}"} if key else {}
+        if prov == "openrouter":
+            headers["X-Title"] = "clipper"
         for attempt in range(6):
             try:
                 r = requests.post(f"{base}/chat/completions", json=body, headers=headers,
@@ -359,9 +462,14 @@ class LLM:
                 continue
             if r.status_code == 400:
                 text = r.text.lower()
-                if "reasoning_effort" in body and "reasoning" in text:
+                if ("reasoning_effort" in body or "reasoning" in body) and "reasoning" in text:
                     self._no_effort.add(model)  # not a reasoning model
-                    body.pop("reasoning_effort")
+                    body.pop("reasoning_effort", None)
+                    body.pop("reasoning", None)
+                    body[limit] = asked  # no thinking, so no room for it
+                    continue
+                if body[limit] > asked and ("max_tokens" in text or "max_completion_tokens" in text):
+                    body[limit] = asked  # more than this model writes: the caller's own figure
                     continue
                 if (response_format or {}).get("type") == "json_schema" and (
                         "response_format" in text or "json_schema" in text):
@@ -372,13 +480,15 @@ class LLM:
         data = r.json()
         choice = data["choices"][0]
         usage = data.get("usage") or {}
+        cost = usage.get("cost")
         meta = {"model": f"{prov}:{data.get('model') or name}", "request_id": data.get("id"),
                 "stop_reason": choice.get("finish_reason"),
-                **self._account(model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))}
+                **self._account(model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0),
+                                cost if isinstance(cost, (int, float)) else None)}
         refusal = choice["message"].get("refusal")
         if refusal or choice.get("finish_reason") == "content_filter":
             meta["refusal"] = refusal or "content_filter"
-        elif choice.get("finish_reason") == "length":
+        elif choice.get("finish_reason") == "length" and not length_ok:
             raise RuntimeError(f"{model} hit max_tokens ({meta['request_id']})")
         return data, meta
 
@@ -425,5 +535,5 @@ class Budget:
 
 
 def estimate(cfg: dict, model: str, tokens_in: float, tokens_out: float) -> float:
-    pin, pout = price_of(prices(cfg), model) or (0.0, 0.0)
+    pin, pout = known_price(cfg, model) or (0.0, 0.0)
     return (tokens_in * pin + tokens_out * pout) / 1e6
