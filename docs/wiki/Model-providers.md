@@ -33,6 +33,9 @@ with, the same windows (chat and transcript scan) and the cached summary, so onl
 | `b` | ranks the stream's own Pass A results (Pass B) | one call |
 | `ab` | both (`--model-b` gives Pass B its own candidate) | both |
 
+`--prompt-version v6` tries another prompt version on the same windows and summary (the
+stream's own caches); with the stream's own model it shows what the prompt alone changes.
+
 `--effort` sets the candidate's effort instead of `[scoring] effort_a`/`effort_b`. `none` turns a
 reasoning model's thinking off on the other providers (and is `low` on Claude): DeepSeek V4 Flash
 thinks by default, about 2,200 output tokens a window, which cost more than Haiku on 11-04, and

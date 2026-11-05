@@ -181,13 +181,13 @@ def report_md(res: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def score_windows(sdir: Path, cfg: dict, prompts: Prompts, base_a: list[dict]) -> tuple[list[dict], list[str]]:
+def score_windows(sdir: Path, cfg: dict, version: str, base_a: list[dict]) -> tuple[list[dict], list[str]]:
     """The windows Pass A saw: windows.json plus the transcript-scan windows rebuilt from the
     cached scan. Returns (windows in candidates.json's order, ids that couldn't be rebuilt)."""
     from .scoring import load_chat, load_signals, scan_windows
 
     windows = jsonstate.load(sdir / "windows.json")["windows"]
-    scan = jsonstate.read(sdir / f"scan_{prompts.version}.json")
+    scan = jsonstate.read(sdir / f"scan_{version}.json")
     if scan:
         meta = jsonstate.load(sdir / "meta.json")
         windows = windows + scan_windows(scan, windows, load_signals(sdir), load_chat(sdir, meta),
@@ -230,7 +230,7 @@ def estimate(cfg: dict, prompts: Prompts, which: str, windows: list[dict], n_kep
 
 
 def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: float = 2.0,
-                  dry_run: bool = False, model_b: str = "", effort: str = "") -> dict:
+                  dry_run: bool = False, model_b: str = "", effort: str = "", prompt_version: str = "") -> dict:
     """Score `sdir` again with `model` in the passes `which` names; see the module doc."""
     from .scoring import load_signals, run_pass_a, run_pass_b, stream_summary
     from .transcript import load_words
@@ -242,18 +242,23 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     if not base:
         raise ClipperError(f"{sdir.name} isn't scored yet (no candidates.json): nothing to compare with")
     sc = cfg["scoring"]
-    sc["prompt_version"] = base.get("prompt_version") or sc["prompt_version"]
+    # The windows and summary are the stream's own (its prompt version's caches); the calls use
+    # --prompt-version when given, so a new prompt can be tried on the same windows.
+    base_version = base.get("prompt_version") or sc["prompt_version"]
+    sc["prompt_version"] = prompt_version or base_version
     prompts = Prompts(cfg)
+    new_prompt = prompts.version != base_version
     base_a_model, base_b_model = baseline_models(base, cfg)
     if model_b and which != "ab":
         raise ClipperError("--model-b goes with --pass ab (--pass b takes --model)")
     if effort and effort not in EFFORTS:
         raise ClipperError(f"--effort {effort}: one of {', '.join(EFFORTS)}")
-    label = (f"{model} + {model_b}" if model_b and model_b != model else model) + (f" @{effort}" if effort else "")
+    label = ((f"{model} + {model_b}" if model_b and model_b != model else model) + (f" @{effort}" if effort else "")
+             + (f" {prompts.version}" if new_prompt else ""))
     model_b = model_b or model
     model_a = model if "a" in which else base_a_model
     model_b = model_b if "b" in which else base_b_model
-    if model_a == base_a_model and model_b == base_b_model:
+    if model_a == base_a_model and model_b == base_b_model and not new_prompt:
         raise ClipperError(f"{label} is what scored {sdir.name} already ({which}): pick another model")
     sc["model_a"], sc["model_b"] = model_a, model_b
     if effort:  # the candidate's passes only; the stream's own model keeps its effort
@@ -265,11 +270,11 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
     if base.get("windows_sha") not in (None, file_sha(sdir / "windows.json")):
         notes.append("windows.json changed since the stream was scored: only windows that still match are compared")
     words, sig = load_words(sdir), load_signals(sdir)
-    windows, missing = score_windows(sdir, cfg, prompts, base_a) if "a" in which else ([], [])
+    windows, missing = score_windows(sdir, cfg, base_version, base_a) if "a" in which else ([], [])
     if missing:
         notes.append(f"{len(missing)} window(s) not rebuilt, left out: {', '.join(missing[:8])}")
     base_kept = [r for r in base_a if r["status"] == "kept"]
-    cached = sdir / f"summary_{prompts.version}.json"
+    cached = sdir / f"summary_{base_version}.json"
     summary_model = "" if cached.exists() else base_a_model
     duration = jsonstate.load(sdir / "meta.json")["duration_s"]
     est = estimate(cfg, prompts, which, windows, len(base_kept), model_a, model_b, words, sig,
@@ -313,7 +318,7 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
 
     decided = {k: v for k, v in decisions(jsonstate.read(sdir / "review.json", {})).items() if k not in hand}
     res = {
-        "stream": sdir.name, "which": "score", "pass": which, "prompt_version": prompts.version,
+        "stream": sdir.name, "which": "score", "pass": which, "prompt_version": prompts.version, "baseline_prompt_version": base_version,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"), "estimate_usd": round(est, 4), "notes": notes,
         "baseline": {"label": base_a_model if which == "a" else base_b_model if which == "b"
                      else f"{base_a_model} + {base_b_model}",
