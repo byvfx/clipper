@@ -29,7 +29,7 @@ startup gives up after about a minute and restarts with a new link. Sign in from
 daemon on the same volumes instead, then start the service:
 
 ```bash
-ssh nas 'cd clipper-hub && docker compose stop tailscale && docker run -d --name ts-login --network host -v clipper-hub_tailscale-state:/var/lib/tailscale -v clipper-hub_tailscale-socket:/var/run/tailscale tailscale/tailscale:v1.104.4 tailscaled --tun=userspace-networking --statedir=/var/lib/tailscale --socket=/var/run/tailscale/tailscaled.sock'
+ssh nas 'cd clipper-hub && docker compose stop tailscale && docker run -d --name ts-login --network host -v clipper-hub_tailscale-state:/var/lib/tailscale -v clipper-hub_tailscale-socket:/var/run/tailscale --entrypoint tailscaled tailscale/tailscale:v1.104.4 --tun=userspace-networking --statedir=/var/lib/tailscale --socket=/var/run/tailscale/tailscaled.sock'
 ```
 
 ```bash
