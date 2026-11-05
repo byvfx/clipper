@@ -107,7 +107,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 
 ## State now (2026-10-30)
 - **Running on the NAS** since 2026-11-05 (#9/#12, PR #152; wiki NAS-hub): containers `serve` (war room on
-  127.0.0.1:8765, on the tailnet via the `tailscale` container as `clipper.taile415cd.ts.net` once signed in;
+  127.0.0.1:8765, on the tailnet via the `tailscale` container as https://clipper.taile415cd.ts.net/ (signed in 11-05);
   hourly replan + upload, pre-show polls every 5 min, retakes, daily cast / news / analytics jobs;
   heartbeat `streams/.serve/status.json`), `bot` (Discord; heartbeat `streams/.bot/status.json`) and
   `worker` (each finished recording, every stage; cuts locally, QSV on the iGPU), compose project

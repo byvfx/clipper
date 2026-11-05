@@ -1536,12 +1536,15 @@ def _ts(*args: str, timeout: int = 20) -> subprocess.CompletedProcess:
 
 def tailnet_status(cfg: dict) -> dict:
     """Is Tailscale installed and up here, this machine's tailnet name, and the https URL
-    `tailscale serve` proxies to the war room (if it does)."""
+    `tailscale serve` proxies to the war room (if it does). userspace: tailscaled has no tun
+    device (the NAS hub's container), so this machine's own programs can't reach tailnet
+    addresses, its own name included."""
     if not tailscale_exe():
-        return {"installed": False, "state": "", "name": "", "served": ""}
+        return {"installed": False, "state": "", "name": "", "served": "", "userspace": False}
     st = json.loads(_ts("status", "--json").stdout or "{}")
     out = {"installed": True, "state": st.get("BackendState", ""),
-           "name": ((st.get("Self") or {}).get("DNSName") or "").rstrip("."), "served": ""}
+           "name": ((st.get("Self") or {}).get("DNSName") or "").rstrip("."), "served": "",
+           "userspace": st.get("TUN") is False}
     port = _root(cfg)["warroom"]["port"]
     sv = json.loads(_ts("serve", "status", "--json").stdout or "{}")
     for hostport, web in (sv.get("Web") or {}).items():  # {"name:443": {"Handlers": {"/": {"Proxy": ...}}}}
