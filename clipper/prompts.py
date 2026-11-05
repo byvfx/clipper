@@ -66,9 +66,10 @@ class Prompts:
                      "known_figures": figures(cfg), "cast": cast_names(cfg)}
         self.vars["cast_note"] = f" ({self.vars['cast']})" if self.vars["cast"] else ""
         # Swappable rule files, <kind>_<mode>_<version>.md, split into "## <section>" parts
-        # that fill {<kind>_<section>} placeholders. v3+: third_party; v4+: audience.
+        # that fill {<kind>_<section>} placeholders. v3+: third_party; v4+: audience; v7+: gambling.
         for kind, key, modes in (("third_party", "third_party_audio", ("reject", "allow_reactions")),
-                                 ("audience", "audience_knowledge", ("strangers", "fans"))):
+                                 ("audience", "audience_knowledge", ("strangers", "fans")),
+                                 ("gambling", "gambling", ("reject", "commentary"))):
             if sc[key] not in modes:
                 raise ClipperError(f"scoring.{key} must be one of {modes}, not {sc[key]!r}")
             rule = self.dir / f"{kind}_{sc[key]}_{self.version}.md"

@@ -216,12 +216,18 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Model-providers). `clipper models test <model>` = built-in conformance (made-up windows through real Pass A,
   JSON, vision, text, 130k-token needle) + which configured stages it could take: Haiku, Qwen 3.8 Flash and
   DeepSeek V4 Pro (all @none) 12/12 verdicts, long ok; V4 Pro has no image input (not for shorts layout or cast
-  labels). `clipper models gold propose|confirm|run` = answer key: logs/model_tests/gold.json has 66 windows
-  from the 12 newest reviewed streams, 24 approved keeps confirmed, 42 waiting on the user's labels in the
-  private label page https://claude.ai/artifact/Jre3fSSFVMDc51deRLSUoE (db collection `labels`, doc id
-  `<stream>_<id>`; read it with ArtifactData list, write a {key: {label, note}} file, `gold confirm` it). Then
-  `gold run` Haiku, Qwen, DeepSeek Pro (~2 cents each). Qwen on the 24 keeps alone: 18/24 (4 called third party,
-  read-aloud stricter than Haiku; 1 schema failure after the retry).
+  labels). `clipper models gold propose|confirm|run` = answer key: logs/model_tests/gold.json, 66 windows from
+  the 12 newest reviewed streams, all labelled by the user 11-05 (label page
+  https://claude.ai/artifact/Jre3fSSFVMDc51deRLSUoE, db collection `labels`; 45 keep, 9 third party, 6 needs
+  context, 6 no clip). The user's notes: keep Jer's gambling (they mock it), "Kino Casino" is the show's name,
+  harsh/outrageous is fine (slurs get bleeped). Labels right, v5 / v6 / v7: Haiku 26 / 28 / 39, Qwen 3.8 Flash
+  44 / 36 / 40, DeepSeek V4 Pro 46 / 44 / 48 (about 3, 3 and 27 cents a run). Prompt v7 (PR on branch
+  prompt-v7): show setting `[scoring] gambling = reject|commentary` (rule files gambling_<mode>_v7), the cast
+  reading a post/chat/statement aloud is their own audio (matches the #146 hold; this alone took Haiku's
+  keep-called-third-party from 11 to 1), regulars' running stories count as known to fans, outrageous counts
+  for a clip. Not live: needs `prompt_version = "v7"` and `[shows.kino.scoring]` / `[shows.c404.scoring]`
+  `gambling = "commentary"` in clipper.toml (backup first) after the PR merges, user's call. Left: Haiku now
+  over-calls needs_context (8 keeps); every model misses needs_context and keeps 5-11 of the 21 non-keeps.
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the

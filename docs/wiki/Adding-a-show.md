@@ -11,6 +11,16 @@ hand with `clipper shorts <stream> --items <vNN> --layout <name>`, the Kitsu Lay
 Add the slug to `[record] channels` to record it live. `clipper shows` lists every show and
 its streams; the show's Kitsu production is created on its first publish.
 
+Three `[shows.<key>.scoring]` settings decide what a Short may be (see clipper.example.toml):
+`third_party_audio` (`reject`, or `allow_reactions` for reaction clips the show's own
+commentary carries, with at most `max_source_audio_s` of the source), `audience_knowledge`
+(`strangers`, or `fans` who know `known_figures` and their running drama) and, from prompt
+v7, `gambling` (`reject`, or `commentary`: gambling as a topic is fine and only a Short that
+promotes gambling is rejected). From v7 a post, chat message or statement the show's own
+people read aloud is their own audio, not third party, matching the [other-voices hold](Review#shorts-held-for-other-voices).
+`clipper models gold` grades a model and prompt against
+windows you labelled ([Model providers](Model-providers#grading-a-model-against-your-own-calls)).
+
 ## Pre-show channel
 
 If the show posts a [pre-show](Pre-shows) on YouTube, add `[shows.<key>.preshow] youtube_channel =
