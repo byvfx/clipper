@@ -88,6 +88,17 @@ def test_release_keeps_trying_in_the_background(tmp_path, monkeypatch):
     assert not fails and not lock.exists()
 
 
+def test_release_leaves_a_successors_lock(tmp_path):
+    # Held past STALE_S, another process may have reclaimed the lock and made its own:
+    # releasing must not delete that one.
+    p = tmp_path / "s.json"
+    lock = tmp_path / "s.json.lock"
+    with jsonstate.locked(p):
+        lock.unlink()
+        lock.write_text("other host pid 1 2026-11-04 00:00:00 abc\n")
+    assert lock.read_text() == "other host pid 1 2026-11-04 00:00:00 abc\n"
+
+
 def test_unwritable_folder_fails_instead_of_spinning(tmp_path, monkeypatch):
     def refuse(*a, **kw):
         raise PermissionError(13, "Access is denied")

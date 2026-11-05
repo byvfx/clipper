@@ -19,6 +19,7 @@ import os
 import socket
 import threading
 import time
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -76,7 +77,7 @@ def write_text(path: Path, text: str) -> None:
 
 def _local(lock_path: Path) -> list:
     with _held_guard:
-        return _held.setdefault(str(lock_path.resolve()), [threading.RLock(), 0])
+        return _held.setdefault(str(lock_path.resolve()), [threading.RLock(), 0, None])
 
 
 @contextmanager
@@ -87,41 +88,53 @@ def locked(path: Path, wait_s: float = WAIT_S) -> Iterator[None]:
     local[0].acquire()
     try:
         if local[1] == 0:
-            _acquire_file(lock_path, wait_s)
+            local[2] = _acquire_file(lock_path, wait_s)
         local[1] += 1
         try:
             yield
         finally:
             local[1] -= 1
             if local[1] == 0:
-                _release_file(lock_path)
+                _release_file(lock_path, *local[2])
     finally:
         local[0].release()
 
 
-def _release_file(lock_path: Path) -> None:
-    if not _unlink(lock_path, 10):
-        # Still busy: keep trying from a thread (exit waits for it, this caller doesn't), so a
-        # waiter gets the lock as soon as it can be deleted. ~60 s, under STALE_S, so nobody
-        # can have reclaimed it and made a new one by then.
-        threading.Thread(target=_unlink, args=(lock_path, 120), name=f"release {lock_path.name}",
-                         daemon=False).start()
+def _release_file(lock_path: Path, token: str, acquired: float) -> None:
+    """Delete the lock if it is still ours. A busy one (another process is looking at it, on
+    Windows or the NAS share) is retried from a thread (exit waits for it, this caller doesn't),
+    so a waiter gets it as soon as it can be deleted, but only until shortly before others may
+    take it as stale: past that it may be theirs, and they reclaim ours anyway."""
+    give_up = acquired + STALE_S - 10
+    if (not _unlink_own(lock_path, token, min(time.monotonic() + 5, give_up))
+            and time.monotonic() < give_up):
+        threading.Thread(target=_unlink_own, args=(lock_path, token, give_up),
+                         name=f"release {lock_path.name}", daemon=False).start()
 
 
-def _unlink(lock_path: Path, tries: int) -> bool:
-    for attempt in range(tries):
+def _unlink_own(lock_path: Path, token: str, until: float) -> bool:
+    attempt = 0
+    while True:
         try:
-            lock_path.unlink(missing_ok=True)
+            if lock_path.read_text(encoding="utf-8") == token:
+                lock_path.unlink()
             return True
-        except PermissionError:  # another process is looking at it (Windows, the NAS share)
-            time.sleep(min(0.1 * (attempt + 1), 0.5))
-    return False
+        except FileNotFoundError:
+            return True
+        except PermissionError:
+            if time.monotonic() >= until:
+                return False
+            attempt += 1
+            time.sleep(min(0.1 * attempt, 0.5))
 
 
-def _acquire_file(lock_path: Path, wait_s: float) -> None:
+def _acquire_file(lock_path: Path, wait_s: float) -> tuple[str, float]:
+    """Make the lock; return what it says (so release can tell it's ours) and when it was made
+    (monotonic, taken before the create, so on the early side of the file's mtime)."""
     deadline = time.monotonic() + wait_s
     delay = 0.05
     while True:
+        acquired = time.monotonic()
         try:
             fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except (FileExistsError, PermissionError) as e:
@@ -147,9 +160,11 @@ def _acquire_file(lock_path: Path, wait_s: float) -> None:
             time.sleep(delay)
             delay = min(delay * 2, 0.5)
             continue
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(f"{socket.gethostname()} pid {os.getpid()} {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-        return
+        token = (f"{socket.gethostname()} pid {os.getpid()} {time.strftime('%Y-%m-%d %H:%M:%S')} "
+                 f"{uuid.uuid4().hex}\n")
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(token)
+        return token, acquired
 
 
 def merge(path: Path, data: dict, keys, indent: int | None = 2) -> dict:
