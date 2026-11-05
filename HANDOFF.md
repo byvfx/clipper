@@ -48,7 +48,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - `third_party_audio = "allow_reactions"`, `audience_knowledge = "fans"`, Victor/blackjack segments stay.
 - Shorts over `max_source_audio_s` of other voices (speaker tags) arrive **held** in review with the
   seconds on the card, not dropped (user 11-04: "sounds good"); release it when the show carries it
-  (`[shorts] hold_source_audio`). Kino only until c404 is diarized (Don not enrolled; ~$0.30/stream).
+  (`[shorts] hold_source_audio`). Kino and, from its next stream, Channel 404 (diarized 11-04).
 - Kitsu is the record for review/edits (no separate DB). Discord approvals must keep working.
 - Thumbnails: `[thumbnail] style = "enquirer"` (1990s tabloid: KINO CASINO masthead, no "THE NEW" roundel,
   no barcode, small "AS SEEN ON LOLCOW CINEMA" badge). Prompt `thumbnail_enquirer_v5` (face = headline
@@ -87,8 +87,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - TikTok: **parked (2026-11-01)**. Auto-send off since 2026-10-28 (TikTok flagged bot activity); the user
   posts by hand. No direct posting: the app audit refuses own-account tools and the user won't release
   clipper to others (#62, #116 closed). Don't send drafts unless asked (`clipper tiktok --items ... [--resend]`).
-- Transcription on Modal (L40S, ~$0.34 per 8 h) since 2026-10-23; Kino streams are diarized
-  (`[shows.kino.transcribe] diarize = true`, ~$0.30 more) and the scoring v5 / segments v3 / meta v3
+- Transcription on Modal (L40S, ~$0.34 per 8 h) since 2026-10-23; Kino and (since 11-04, user) Channel
+  404 streams are diarized (`[shows.<key>.transcribe] diarize = true`, ~$0.30 more; Don enrolled from
+  kick-135875683 SPEAKER_06, one sample) and the scoring v5 / segments v3 / meta v3
   prompts read the speaker tags. Cut runs on the NAS (`[cut] backend = "nas"`) since 2026-10-26.
 - Whisper writes "Bearing" as "Baring": fix it whenever he comes up.
 - Weekly magazine (`clipper weekly`): Saturdays, cover can go full tabloid, inside pages modern; the user
