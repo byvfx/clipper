@@ -377,7 +377,9 @@ def check_llm_prices(cfg: dict) -> None:
     from . import llm
 
     table = llm.prices(cfg)  # the defaults plus [llm.prices], as the client accounts
-    unpriced = sorted({m for m in llm.configured(cfg).values() if llm.price_of(table, m) is None})
+    # OpenRouter reports each call's cost, so its models need no entry.
+    unpriced = sorted({m for m in llm.configured(cfg).values()
+                       if llm.price_of(table, m) is None and llm.split(m)[0] != "openrouter"})
     if unpriced:
         warn("keys", f"no [llm] prices entry for {', '.join(unpriced)}: costs count them as $0",
              'add [llm.prices] "<model>" = [<$ per 1M in>, <$ per 1M out>] to clipper.toml')

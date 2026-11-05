@@ -34,7 +34,8 @@ with, the same windows (chat and transcript scan) and the cached summary, so onl
 | `ab` | both | both |
 
 It prints the estimate first and refuses a run over `--budget` ($2 by default); `--dry-run` only
-prints it. The report goes to `<stream>/compare/score_<model>_<pass>.md` (and `.json`):
+prints it. An OpenRouter model with no `[llm.prices]` entry is estimated from OpenRouter's own
+price list. The report goes to `<stream>/compare/score_<model>_<pass>.md` (and `.json`):
 
 - Pass A: how many windows got the same verdict (kept, no clip, rejected, refused, error), and
   for windows both kept, the score difference and how much the clips overlap.

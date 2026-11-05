@@ -98,3 +98,17 @@ def test_doctor_names_the_openrouter_key(defaults, monkeypatch):
     defaults["scoring"]["model_a"] = "openrouter:openai/gpt-5-mini"
     (status, _, what, _), = doctor.collect(doctor.check_llm_keys, defaults)
     assert status == "FAIL" and "OPENROUTER_API_KEY" in what and "scoring.model_a" in what
+
+
+def test_an_openrouter_model_is_priced_from_its_list(defaults, monkeypatch):
+    monkeypatch.setattr(llm, "_OPENROUTER_PRICES", {"openai/gpt-6-luna": (0.1, 0.5)})
+    assert llm.known_price(defaults, "openrouter:openai/gpt-6-luna") == (0.1, 0.5)
+    assert llm.estimate(defaults, "openrouter:openai/gpt-6-luna", 1e6, 1e6) == pytest.approx(0.6)
+    assert llm.known_price(defaults, "openrouter:nobody/none") is None
+    assert llm.known_price(defaults, "openai:gpt-6-luna") is None  # only OpenRouter's own models
+
+
+def test_doctor_wants_no_price_for_openrouter(defaults):
+    defaults["scoring"]["model_a"] = "openrouter:openai/gpt-6-luna"
+    (status, _, what, _), = doctor.collect(doctor.check_llm_prices, defaults)
+    assert status == "OK", what

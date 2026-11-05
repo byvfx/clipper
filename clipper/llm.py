@@ -70,6 +70,34 @@ def price_of(prices: dict, model: str) -> tuple[float, float] | None:
     return tuple(prices[best]) if best else None
 
 
+_OPENROUTER_PRICES: dict[str, tuple[float, float]] | None = None
+
+
+def openrouter_prices() -> dict[str, tuple[float, float]]:
+    """OpenRouter's published $ per 1M input/output tokens by model id (its /models list is
+    public), fetched once per process; {} when it can't be reached."""
+    global _OPENROUTER_PRICES
+    if _OPENROUTER_PRICES is None:
+        import requests
+
+        try:
+            data = requests.get(PROVIDERS["openrouter"][0] + "/models", timeout=15).json()["data"]
+            _OPENROUTER_PRICES = {m["id"]: (float(m["pricing"]["prompt"]) * 1e6,
+                                            float(m["pricing"]["completion"]) * 1e6)
+                                  for m in data if m.get("pricing")}
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            return {}  # not cached: the next estimate tries again
+    return _OPENROUTER_PRICES
+
+
+def known_price(cfg: dict, model: str) -> tuple[float, float] | None:
+    """[llm] prices for a model, else OpenRouter's own list for an openrouter: model."""
+    p = price_of(prices(cfg), model)
+    if p is None and split(model)[0] == "openrouter":
+        p = openrouter_prices().get(split(model)[1])
+    return p
+
+
 def split(model: str) -> tuple[str, str]:
     """("anthropic" | "openai" | "gemini" | "openrouter" | "local", the provider's own model
     name)."""
@@ -451,5 +479,5 @@ class Budget:
 
 
 def estimate(cfg: dict, model: str, tokens_in: float, tokens_out: float) -> float:
-    pin, pout = price_of(prices(cfg), model) or (0.0, 0.0)
+    pin, pout = known_price(cfg, model) or (0.0, 0.0)
     return (tokens_in * pin + tokens_out * pout) / 1e6

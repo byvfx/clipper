@@ -228,8 +228,7 @@ def compare_score(sdir: Path, cfg: dict, model: str, which: str = "a", budget: f
         notes.append(f"{len(missing)} window(s) not rebuilt, left out: {', '.join(missing[:8])}")
     base_kept = [r for r in base_a if r["status"] == "kept"]
     est = estimate(cfg, prompts, which, windows, len(base_kept), model_a, model_b, words, sig)
-    # OpenRouter charges each call at its reported cost, but the estimate needs a price.
-    unpriced = sorted(m for m in {model_a, model_b} if llm.price_of(llm.prices(cfg), m) is None)
+    unpriced = sorted(m for m in {model_a, model_b} if llm.known_price(cfg, m) is None)
     print(f"compare {sdir.name}: pass {which}, Pass A {model_a}, Pass B {model_b}, prompt {prompts.version}; "
           f"{len(windows)} windows" + (f" ({len(missing)} not rebuilt)" if missing else "")
           + f"; estimate ${est:.3f}"
