@@ -203,6 +203,11 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Flash 1-2/5. All keep 3-8x Haiku's windows, mostly ones Haiku rejected (third party, needs context). Reasoning
   on/off a wash for Pass A. Single runs are noisy (Luna 4/5 then 2/5). The approved set only holds the baseline's
   picks, so it favours Claude. Haiku scoring cost $0.67 in Oct-Nov; the spend is segments (~$16), thumbs, meta.
+  v6 (stricter score_a + rule files, 11-05; config stays v5) and the control: Haiku v5 rerun (`compare --repeat`)
+  picks only 7/18 of its own approved moments, so that metric is mostly noise. 18 approved on 3 streams: Haiku
+  rerun 7, Haiku v6 7, Argon v5 7, Qwen 3.8 Flash v6 6, Luna v6 5, DeepSeek Pro/Flash v6 4, MiniMax v6 4.
+  Verdicts shared with the original Haiku run: Haiku rerun ~73%, Haiku v6 ~59%, Argon ~57%, the cheap ones
+  34-43%. v6 made Haiku keep more, not less: not adopted. A fair test needs blind review of each model's picks.
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
