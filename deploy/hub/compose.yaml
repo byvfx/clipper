@@ -52,9 +52,13 @@ services:
       TS_SOCKET: /var/run/tailscale/tailscaled.sock
       TS_HOSTNAME: ${TS_HOSTNAME:-clipper}
       TS_AUTHKEY: ${TS_AUTHKEY:-}   # empty: `docker compose logs tailscale` prints a sign-in link
+      # The war room on the tailnet, applied by tailscaled itself (root): the clipper
+      # containers run as PUID, which may read `tailscale status` but not change serve.
+      TS_SERVE_CONFIG: /config/serve.json
     volumes:
       - tailscale-state:/var/lib/tailscale
       - tailscale-socket:/var/run/tailscale
+      - ./tailscale-serve.json:/config/serve.json:ro
 
 volumes:
   tailscale-state:

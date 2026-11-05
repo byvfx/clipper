@@ -927,7 +927,9 @@ def check_tailnet(cfg: dict, offline: bool) -> None:
                     + wiki.page("Phone-access", "on-the-nas"))
     if not st["served"]:
         return fail("warroom", f"Tailscale is up as {st['name']}, but the war room isn't served",
-                    "clipper warroom --tailnet on")
+                    "clipper warroom --tailnet on" if sys.platform in ("win32", "darwin") else
+                    "the tailscale container serves it from deploy/hub/tailscale-serve.json (TS_SERVE_CONFIG): "
+                    "redeploy, then docker compose logs tailscale")
     if not token(cfg):
         warn("warroom", "no war room token: any device on the tailnet can open it",
              "clipper warroom --tailnet on makes one in secrets/")

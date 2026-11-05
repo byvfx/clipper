@@ -10,7 +10,7 @@ working on clipper. This has been the setup here since 2026-11-05.
 | `serve` | `clipper serve` | war room on 127.0.0.1:8765, hourly replan and upload, retakes, daily jobs |
 | `bot` | `clipper bot` | Discord; reaches serve on 127.0.0.1 |
 | `worker` | `clipper worker` | every stage of each finished recording; cuts locally (`CLIPPER_CUT_BACKEND=local`) |
-| `tailscale` | tailscaled, userspace | `tailscale serve` puts the war room on the tailnet ([Phone access](Phone-access)) |
+| `tailscale` | tailscaled, userspace | serves the war room on the tailnet from `tailscale-serve.json` ([Phone access](Phone-access)) |
 
 All four use host networking and their own compose project (`clipper-hub`), so a deploy never
 restarts the recorder. The image is Debian 13 (ffmpeg 7.1) with Intel's media driver:

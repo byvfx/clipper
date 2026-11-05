@@ -38,7 +38,7 @@ cp "$ROOT/pyproject.toml" "$ROOT/uv.lock" "$HERE/Dockerfile" "$TMP/src/"
 cp -r "$ROOT/clipper" "$TMP/src/clipper"
 cp -r "$ROOT/prompts" "$TMP/src/prompts"
 find "$TMP/src" -name __pycache__ -prune -exec rm -rf {} +
-cp "$HERE/compose.yaml" "$TMP/"
+cp "$HERE/compose.yaml" "$HERE/tailscale-serve.json" "$TMP/"
 cp "$ENV_LOCAL" "$TMP/.env"
 
 tar -C "$TMP" -czf - . | ssh "$HOST" "mkdir -p '$DIR' && rm -rf '$DIR/src' && tar -C '$DIR' -xzf - \

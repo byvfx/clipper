@@ -24,6 +24,9 @@ Check: `clipper doctor --role serve` (fetches the war room through the tailnet n
 With serve on the NAS ([NAS hub](NAS-hub)), the `tailscale` container is the tailnet machine
 (`clipper.<tailnet>.ts.net`, `TS_HOSTNAME` in `deploy/hub/env.local`). Its first start prints a
 sign-in link: `ssh nas 'cd clipper-hub && docker compose logs tailscale'`, open it and approve
-(or put an auth key in `TS_AUTHKEY` before deploying). Then
-`ssh nas 'cd clipper-hub && docker compose exec serve clipper warroom --tailnet on'` and open the
-link it prints on the phone. Turn the laptop's off (`clipper warroom --tailnet off` there).
+(or put an auth key in `TS_AUTHKEY` before deploying). The container serves the war room itself
+from `deploy/hub/tailscale-serve.json`, so `clipper warroom --tailnet on` isn't used there (the
+clipper containers aren't root and can't change Tailscale's settings; `--tailnet status` works).
+Open `https://clipper.<tailnet>.ts.net/?key=<token>` once on the phone, with the token from
+`secrets/warroom_token.txt` in the NAS folder. Turn the laptop's off (`clipper warroom --tailnet
+off` there).

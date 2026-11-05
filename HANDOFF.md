@@ -106,14 +106,19 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - The taste layer is the asset (prompts, clipper.toml show tables, house_style, Kitsu): see "Back up".
 
 ## State now (2026-10-30)
-- **Running on this laptop** as scheduled tasks (since 2026-11-03, PR #128 merged as 71f29f9): `clipper-serve`
-  (war room on :8765 and https://thor.taile415cd.ts.net/, hourly replan + upload, pre-show polls every
-  5 min, retakes, daily cast / news / analytics jobs; heartbeat `streams/.serve/status.json`),
-  `clipper-bot` (Discord cards, buttons, DMs, news posts; asks serve over `[serve] url` to replan and
-  start retakes; heartbeat `streams/.bot/status.json`) and `clipper-worker` (runs each finished NAS
-  recording). `clipper services status` shows all three with the heartbeats.
-  Restart serve after scheduler/war-room Python changes, the bot after Discord changes (see Gotchas);
-  stages run as fresh processes, so most other changes need no restart.
+- **Running on the NAS** since 2026-11-05 (#9/#12, PR #152; wiki NAS-hub): containers `serve` (war room on
+  127.0.0.1:8765, on the tailnet via the `tailscale` container as `clipper.taile415cd.ts.net` once signed in;
+  hourly replan + upload, pre-show polls every 5 min, retakes, daily cast / news / analytics jobs;
+  heartbeat `streams/.serve/status.json`), `bot` (Discord; heartbeat `streams/.bot/status.json`) and
+  `worker` (each finished recording, every stage; cuts locally, QSV on the iGPU), compose project
+  `clipper-hub` in `~/clipper-hub` on the NAS. Code changes go out with `bash deploy/hub/deploy.sh` from a
+  main checkout (replaces restarting serve/the bot); `clipper services status|restart ...` runs docker
+  compose there (`[serve] hub`). The laptop's three scheduled tasks are disabled, not removed (rollback:
+  wiki NAS-hub). **The config and all state are on the NAS too:** `//192.168.0.155/docker/clipper`
+  (`/data`) holds `clipper.toml` (the one copy; `CLIPPER_CONFIG` user var on the laptop points at it),
+  `schedule.json` (files stored relative to streams/), secrets/, logs/, faces/, voices/, news/, weekly/,
+  archive/, layouts/, rumble/, people.json, fonts/ (Impact etc. for the containers). The laptop's old
+  copies are in C:\clipper\backups\laptop-state-2026-11-05\.
 - **NAS** (192.168.0.155): recorder container (`deploy/record`, redeployed 2026-10-30 15:09 at 1e4f724,
   watching kinocasinogaming + donflurgundy + chudlogic since 2026-11-04 09:55), Kitsu :8090, the streams share, photos share, cut container.
 - **Shows:** kino and c404 live through review → schedule; `chud` (ChudLogic, Kick `chudlogic`; user
@@ -323,8 +328,8 @@ ends with the total; link updates and caption retries only spend what's left aft
 per upload still allowed today), worker takeover under a lock, pick numbers kept across re-scores
 (pass_b `numbers`), Short retakes grown to min_s, failed captions retried hourly (3 tries,
 `upload --captions`). Write "#77 L6" rather than "fix #77" in commit messages: GitHub closes
-the issue on "fix". Roadmaps, issues only: NAS hub #14 (#9 war room on
-the NAS, #12 worker/bot on the NAS, #64 single-owner daemon `clipper serve`, #65 Claude Code on the NAS),
+the issue on "fix". Roadmaps, issues only: NAS hub #14 (#9 war room and #12 worker/bot on the NAS done 2026-11-05,
+#64 single-owner daemon `clipper serve` (split done 11-03), #65 Claude Code on the NAS, #13 chat panel),
 transcript-framed edits #66 (#67-#71), YouTube Posts magazine #30 (#32-#38), cast library #41,
 lore-order playlists #43, archive fun #63, news watcher #110 (off since 2026-11-03 at the user's word: `[news] check_minutes = 0` in clipper.toml and no terms; since #127 only `[news] watch` / `[shows.<key>.news] watch` terms are watched, none = nothing fetched, `auto_watch = true` brings back the cast/figures/library list; #news exists), Udder Truth #58/#59/#60, Modal ideas #53, #55, #56.
 **Faces #54 (merged 2026-11-01, PR #117):** `clipper faces <stream>` runs locally on the CPU (no Modal:
@@ -379,10 +384,10 @@ thumbs: reject a picked frame with no face, `--frame-at <s>`; Discord excerpts f
 start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 
 ## Recipes (how we did it last time; details in the log)
-- **Restart serve / the bot:** `clipper services restart serve|bot` (or the task scripts; stopping the task
-  alone leaves the supervisor's process alive). Worker: `clipper services status|restart worker`.
-  A serve restart kills a running upload: `clipper services status serve` lists its jobs; wait until none
-  is running.
+- **Restart serve / the bot:** `clipper services restart serve|bot|worker` (docker compose on the NAS over
+  ssh); code changes: `bash deploy/hub/deploy.sh [serve|bot|worker]` from a main checkout (Git Bash).
+  A serve restart or deploy kills a running upload: `clipper services status serve` lists its jobs; wait
+  until none is running.
 - **Upload one item now:** approve in Kitsu, `clipper schedule` (back up schedule.json first), then
   `clipper upload --max 1`; asap items go public at once. Logs in `logs/upload_*.log`.
 - **One-off from a YouTube video:** `clipper --show <key> preshow fetch <url> --from H:MM:SS --about "..."`
@@ -409,7 +414,7 @@ The Python is replaceable; the months of editorial judgement are in prompts and 
 like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built).
 - **In git (push it):** `prompts/` (every version, never edit one that produced reviewed output),
   `clipper.example.toml`, `mockups/`, `research_notes/` (with `streamers.json`), `reports/`, this file.
-- **Not in git, copy by hand or script:** `clipper.toml` and the `backups/` folder (`clipper.before_*`,
+- **Not in git, copy by hand or script** (all in the NAS folder since 2026-11-05): `clipper.toml` and the `backups/` folder (`clipper.before_*`,
   `schedule.before_*`; hand-edit backups go there now, not the repo root)
   (show tables, house_style, stream_context, scoring rules), each `streams/<id>/config.toml`
   (per-stream overrides; lost with the stream folder), `secrets/` (YouTube/TikTok tokens are a
