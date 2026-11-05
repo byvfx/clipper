@@ -31,7 +31,7 @@ import numpy as np
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .llm import LLM, preflight, split
+from .llm import LLM, preflight, price_of, split
 from .prompts import Prompts, read_sections
 from .states import split_key
 
@@ -153,7 +153,7 @@ def ask(stream_dir: Path, cfg: dict, model: str, llm: LLM, force: bool = False) 
 
     def usd(api: dict, m: str) -> float:
         """A call's cost from its recorded tokens and [llm] prices."""
-        pin, pout = llm.prices.get(m) or llm.prices.get(split(m)[1]) or (0.0, 0.0)
+        pin, pout = price_of(llm.prices, m) or (0.0, 0.0)
         return round((api.get("input_tokens", 0) * pin + api.get("output_tokens", 0) * pout) / 1e6, 6)
 
     def a_usd(rec: dict) -> float:

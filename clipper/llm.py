@@ -161,7 +161,7 @@ class LLM:
         # Keys not scoped to a workspace must name one on every request.
         self.workspace_id = workspace_id or os.environ.get("ANTHROPIC_WORKSPACE_ID", "")
         self.lc = {**DEFAULTS["llm"], **lc}
-        self.prices = prices(cfg)
+        self.prices = prices(cfg if isinstance(cfg, dict) else {})
         self.cost = 0.0
         self._lock = threading.Lock()
         self._client = None
