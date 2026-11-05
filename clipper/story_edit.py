@@ -182,7 +182,7 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
     if claude is None:
         claude = Claude(cfg)
         preflight(claude, sc["edit_model"])
-    prompts = Prompts(cfg)
+    prompts = Prompts(shc)   # the show's own house style, however the show was picked
     prompts.version = sc["edit_prompt_version"]
     narrated = prompts.version != "v1"
     show_name = shc["meta"]["show_name"] or key
@@ -363,12 +363,13 @@ def source_line(p: dict, t: float) -> dict:
             "link": source_link(p)}
 
 
-def signature(data: dict, used: list[dict], seq: list[dict] | None = None, nc: dict | None = None) -> list:
+def signature(data: dict, used: list[dict], seq: list[dict] | None = None, nc: dict | None = None,
+              timing: list | None = None) -> list:
     sig = [[p["item"], p["start"], p["end"], p["channel"], p["date"], p["title"]] for p in used]
     cards = [[x["card"], x["header"], x.get("title", ""), x["text"]] for x in seq or [] if "card" in x]
-    if cards:  # the narration: its words, where the cards sit, and the voice reading them
+    if cards:  # the narration: its words, where the cards sit, the voice reading them, how long they stay up
         sig.append(["narration", [x.get("card") or x["part"]["id"] for x in seq or []], cards,
-                    nc and [nc["voice_id"], nc["tts_model"], nc["tts_settings"]]])
+                    nc and [nc["voice_id"], nc["tts_model"], nc["tts_settings"]], timing])
     return sig
 
 
@@ -485,7 +486,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
         raise ClipperError(f"story {slug}: no part has use = true in story.json")
     seq = sequence(data, used, sc["narrate"])
     nc = narrator(cfg) if any("card" in x for x in seq) else None
-    sig = signature(data, used, seq, nc)
+    sig = signature(data, used, seq, nc, [rc["card_s"], rc["vo_pad_s"], sc["read_wpm"]])
     work = sdir / "work"
     work.mkdir(parents=True, exist_ok=True)
     (sdir / "segments").mkdir(exist_ok=True)
@@ -540,8 +541,8 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
         dur = media.duration(f)
         if "card" in x:
             marks.append((x, t))
-            if nc:   # the read ends vo_pad_s before the card does
-                w, seg0 = read_words(x["text"], t, max(dur - rc["vo_pad_s"], 0.5), seg0)
+            if nc:   # over the read itself (cached, not paid again), not the card's pad or card_s floor
+                w, seg0 = read_words(x["text"], t, min(media.duration(read(nc, x["text"], sdir / "vo")), dur), seg0)
                 words += w
         else:
             p = x["part"]

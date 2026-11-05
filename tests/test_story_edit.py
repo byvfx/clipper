@@ -304,12 +304,15 @@ def test_cut_reads_the_narration_as_cards(cfg, planned, monkeypatch):
     monkeypatch.setattr(receipts, "first_font", lambda paths: ROOT)
     monkeypatch.setattr(receipts, "join", lambda parts, lst, dst: dst.write_bytes(b"v"))
     monkeypatch.setattr(story_edit, "fetch", lambda cfg, p, dst: dst.write_bytes(b"s") and "")
-    monkeypatch.setattr(media, "duration", lambda p: 10.0 if p.stem.endswith(("tldr", "_lead", "close")) else 20.0)
+    monkeypatch.setattr(media, "duration", lambda p: 4.0 if p.stem == "vo" else    # a read: shorter than its card
+                        10.0 if p.stem.endswith(("tldr", "_lead", "close")) else 20.0)
     final = story_edit.cut(cfg, planned, review=False)
     # the short version, P01's lead-in, P01, P02 (no lead-in: its chapter starts at the clip), the close
     assert [n for n, *_ in stills] == ["tldr", "P01_lead", "close"]
     assert stills[0][1] == "THE SHORT VERSION" and stills[1][1] == "PART M01" and stills[0][2]
-    assert [v for v, _, _ in reads] == ["narrator1"] * 3 and reads[0][1] == {"speed": 1.0}  # not Mother Moo
+    # read to render, then again (from the cache) to time the captions
+    assert {v for v, _, _ in reads} == {"narrator1"} and reads[0][1] == {"speed": 1.0}   # not Mother Moo
+    assert [x for _, _, x in reads[:3]] == [x for _, _, x in reads[3:]]
     seg = jsonstate.load(final.with_suffix(".json"))
     assert seg["duration_s"] == 10 + 10 + 20 + 20 + 10
     assert [(c["t"], c["title"]) for c in seg["chapters"]] == \
@@ -319,7 +322,7 @@ def test_cut_reads_the_narration_as_cards(cfg, planned, monkeypatch):
     words = [json.loads(x) for x in (sdir / "words.jsonl").read_text(encoding="utf-8").splitlines()]
     tldr = [w for w in words if w["start"] < 10]
     assert " ".join(w["word"] for w in tldr) == "DSP says his score is 590. Nobody buys it."
-    assert tldr[-1]["end"] <= 10 - cfg["receipts"]["vo_pad_s"] + 0.01 and len({w["seg"] for w in tldr}) == 2
+    assert tldr[-1]["end"] == 4.0 and len({w["seg"] for w in tldr}) == 2   # over the read, not the card
     stills.clear()
     story_edit.cut(cfg, planned, review=False)      # nothing changed
     assert stills == []
@@ -333,6 +336,11 @@ def test_cut_reads_the_narration_as_cards(cfg, planned, monkeypatch):
     stills.clear()
     story_edit.cut(cfg, planned, review=False)
     assert stills and all(not voiced and min_s > 2 for _, _, voiced, min_s in stills)
+    cfg["story"]["read_wpm"] = 100                  # a slower pace: the cards again
+    cfg["_resolved"].clear()
+    stills.clear()
+    story_edit.cut(cfg, planned, review=False)
+    assert len(stills) == 3
     assert not any(w["start"] < 10 for w in
                    map(json.loads, (sdir / "words.jsonl").read_text(encoding="utf-8").splitlines()))
 

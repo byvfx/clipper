@@ -39,7 +39,9 @@ cut again (unchanged parts aren't re-rendered). Approved, it goes out as soon as
 (`[story] publish = "asap"`), with the hourly uploads.
 
 `clipper story cut <slug> --no-review` renders the video alone (no meta, thumbs or Kitsu card), for
-watching it yourself: with no Kitsu card it can never be approved, so it never uploads.
+watching it yourself. It skips sending the story to review; it doesn't block uploads. A story
+that was never sent to review has no card to approve, so it never uploads, but re-cutting one that
+was already approved replaces the video that approval covers, and the hourly uploads can pick it up.
 
 ## Narration
 
