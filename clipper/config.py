@@ -843,6 +843,9 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # an OpenAI-compatible server at local_base_url.
         "local_base_url": "",     # e.g. http://<host>:11434/v1 for Ollama; set in clipper.toml
         "timeout_s": 600,         # per OpenAI-compatible request
+        # Output room for a reasoning model on another provider (effort above "none"): it thinks
+        # in output tokens, and V4 Pro spent all 16,000 of Pass B before answering (#72).
+        "thinking_max_tokens": 64000,
         # $ per 1M input/output tokens, by model string, for cost lines only (a model not
         # listed costs $0). A [llm.prices] table in clipper.toml adds to these.
         "prices": {

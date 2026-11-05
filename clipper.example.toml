@@ -238,6 +238,7 @@ credits = {}               # monthly credits per provider, as above
 # server below). Bare names are Claude. `clipper compare score` tries one on a reviewed stream.
 local_base_url = ""        # e.g. "http://<host>:11434/v1" (Ollama); only for local: models
 timeout_s = 600            # seconds per request to an OpenAI-compatible provider
+thinking_max_tokens = 64000  # output room for another provider's reasoning model (thinking counts)
 # [llm.prices]             # $ per 1M input/output tokens for cost lines; adds to the built-in Claude ones
 # "openai:gpt-5-mini" = [0.25, 2.00]
 [llm.prices]               # the built-in Claude prices; a model not listed costs $0

@@ -404,6 +404,8 @@ class LLM:
         if not key and prov != "local":
             raise ClipperError(f"{model}: set the {env} environment variable "
                                f"(or put the key in [paths] {prov}_key)")
+        if effort and effort != "none":  # thinking is output: room for it and the answer
+            max_tokens = max(max_tokens, self.lc["thinking_max_tokens"])
         body: dict[str, Any] = {"model": name, "messages": messages,
                                 ("max_completion_tokens" if prov == "openai" else "max_tokens"): max_tokens}
         if response_format:

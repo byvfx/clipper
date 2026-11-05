@@ -183,3 +183,14 @@ def test_effort_none_turns_reasoning_off(posted, monkeypatch, defaults):
     assert sent[0]["body"]["reasoning"] == {"effort": "none"}
     assert sent[1]["body"]["reasoning_effort"] == "none"
     assert llm.claude_effort("none") == "low" and llm.claude_effort("high") == "high"
+
+
+def test_reasoning_gets_room_to_think(posted, monkeypatch, defaults):
+    sent, replies = posted
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    replies += [FakeResponse(answer("a")), FakeResponse(answer("b"))]
+    client = llm.LLM(defaults)
+    client.text_call("openrouter:deepseek/deepseek-v4-pro-0813", "sys", "hi", "high", max_tokens=4000)
+    client.text_call("openrouter:deepseek/deepseek-v4-pro-0813", "sys", "hi", "none", max_tokens=4000)
+    assert sent[0]["body"]["max_tokens"] == defaults["llm"]["thinking_max_tokens"]
+    assert sent[1]["body"]["max_tokens"] == 4000
