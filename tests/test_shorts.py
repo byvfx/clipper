@@ -105,3 +105,80 @@ def test_a_retake_trim_over_min_s_with_little_speech_is_grown(tmp_path, defaults
     st = {"kind": "short", "id": "t1", "file": "shorts/v01_t1_x.mp4"}
     a, b = retake.snap_trim(cfg, tmp_path, st, {"start_s": 22, "end_s": 38})
     assert b - a >= 15
+
+
+def test_a_compilation_retake_trims_its_first_and_last_segments(tmp_path):
+    """A compilation's ends are its first segment's start and last segment's end."""
+    import json
+
+    import pytest
+
+    from clipper import retake
+    from clipper.errors import ClipperError
+    segs = [{"id": "s1", "start_s": 100.0, "end_s": 200.0, "title": "a", "file": "s1_x.mp4"},
+            {"id": "s2", "start_s": 300.0, "end_s": 400.0, "title": "b", "file": "s2_x.mp4"},
+            {"id": "s3", "start_s": 399.5, "end_s": 500.0, "title": "c", "file": "s3_x.mp4"}]
+    (tmp_path / "segments.json").write_text(json.dumps({"segments": segs, "compilations": [
+        {"topic": "X", "segments": ["s2", "s3"], "file": "x.mp4"}]}), encoding="utf-8")
+    st = {"kind": "compilation", "id": "comp-x", "file": "compilations\\x.mp4"}
+    assert retake.window(tmp_path, st) == (300.0, 500.0)
+    s2, s3 = segs[1], segs[2]
+    assert retake.comp_edits([s2, s3], 310.0, 500.0) == [(s2, 310.0, 400.0)]
+    assert retake.comp_edits([s2, s3], 300.0, 480.0) == [(s3, 399.5, 480.0)]
+    assert retake.comp_edits([s2, s3], 310.0, 480.0) == [(s2, 310.0, 400.0), (s3, 399.5, 480.0)]
+    assert retake.comp_edits([s2], 310.0, 390.0) == [(s2, 310.0, 390.0)]
+    assert retake.comp_edits([s2, s3], 300.1, 500.0) == []
+    with pytest.raises(ClipperError):
+        retake.comp_edits([s2, s3], 399.0, 500.0)
+
+
+def test_a_segment_retake_snaps_only_the_end_it_moves(tmp_path, defaults):
+    """A trimmed start lands in a word gap; the end the note didn't move stays put even
+    with silence before it."""
+    import json
+
+    from clipper import retake
+    ws = words(*[(t, t + 0.8) for t in range(10, 40)], seg_every=1)
+    (tmp_path / "words.jsonl").write_text("\n".join(json.dumps(w) for w in ws), encoding="utf-8")
+    (tmp_path / "meta.json").write_text(json.dumps({"duration_s": 100}), encoding="utf-8")
+    (tmp_path / "segments.json").write_text(json.dumps({"segments": [
+        {"id": "s1", "start_s": 5.0, "end_s": 60.0}]}), encoding="utf-8")
+    st = {"kind": "segment", "id": "s1", "file": "segments\\s1_x.mp4"}
+    a, b = retake.snap_trim(defaults, tmp_path, st, {"start_s": 15.4, "end_s": 60.0})
+    assert 14.8 <= a <= 15.0 and b == 60.0
+
+
+def test_a_retake_trim_snapped_under_3_s_is_refused(tmp_path, defaults):
+    """Copilot on #151: a 10 s trim holding one short word snaps to under a second."""
+    import json
+
+    import pytest
+
+    from clipper import retake
+    ws = words((25.0, 25.5), seg_every=1)
+    (tmp_path / "words.jsonl").write_text(json.dumps(ws[0]), encoding="utf-8")
+    (tmp_path / "meta.json").write_text(json.dumps({"duration_s": 100}), encoding="utf-8")
+    (tmp_path / "candidates.json").write_text(json.dumps({"pass_a": [{"id": "t1", "in_s": 0, "out_s": 60}]}),
+                                              encoding="utf-8")
+    with pytest.raises(ValueError):
+        retake.snap_trim(defaults, tmp_path, {"kind": "pick", "id": "t1"}, {"start_s": 20, "end_s": 30})
+
+
+def test_trimming_both_ends_of_a_compilation_re_cuts_it_once(tmp_path, monkeypatch):
+    """Copilot on #151: both segments are cut, then the compilation, once."""
+    import json
+
+    from clipper import cut, retake
+    segs = [{"id": "s1", "start_s": 0.0, "end_s": 100.0, "file": "s1_x.mp4"},
+            {"id": "s2", "start_s": 100.0, "end_s": 200.0, "file": "s2_x.mp4"}]
+    (tmp_path / "segments.json").write_text(json.dumps({"segments": segs, "compilations": [
+        {"topic": "X", "segments": ["s1", "s2"], "file": "x.mp4"}]}), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(cut, "cut_segments", lambda sdir, cfg, ids: calls.append(("seg", sorted(ids))))
+    monkeypatch.setattr(cut, "cut_compilations", lambda sdir, cfg, topics: calls.append(("comp", topics)))
+    st = {"kind": "compilation", "id": "comp-x", "file": "compilations/x.mp4"}
+    out = retake.trim_compilation({}, tmp_path, st, 10.0, 190.0)
+    assert calls == [("seg", ["s1", "s2"]), ("comp", ["X"])]
+    assert out == [("s1_x", "s1"), ("s2_x", "s2"), ("comp-x", "comp-x")]
+    got = {s["id"]: (s["start_s"], s["end_s"]) for s in json.loads((tmp_path / "segments.json").read_text())["segments"]}
+    assert got == {"s1": (10.0, 100.0), "s2": (100.0, 190.0)}

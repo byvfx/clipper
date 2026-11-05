@@ -8,7 +8,9 @@ schedule, with bulk edits, undo, a cover editor and a drag-and-drop schedule.
 ## Decisions
 
 Approve, reject, hold, or leave a note asking for a change. A note becomes a retake: the item
-is re-cut or re-thumbnailed and comes back for review. Approved items are scheduled and
+is re-cut or re-thumbnailed and comes back for review. A note to start or end a compilation
+earlier or later trims its first or last segment, which comes back for review too; the middle
+of a compilation can't be changed by a note. Approved items are scheduled and
 uploaded ([Scheduling and uploads](Scheduling-and-uploads)). `clipper review status` shows the
 decisions and what's scheduled.
 

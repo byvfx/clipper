@@ -763,7 +763,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "auto": True,             # `clipper bot` runs it after card refreshes and Changes buttons
         "model": "claude-sonnet-5-5",
         "effort": "medium",
-        "prompt_version": "v1",   # prompts/retake_<v>.md
+        "prompt_version": "v2",   # prompts/retake_<v>.md (v2: compilations can be trimmed at the ends)
         "context_s": 90,          # transcript this far around the cut points
         "max_per_run": 10,
     },

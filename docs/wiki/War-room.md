@@ -114,9 +114,22 @@ The command line: `clipper cast list|grab|find|add|keep|drop|label|set|auto` ([C
 
 ## Schedule and uploads
 
-The schedule shows the open slots of the next two weeks and the approved items with no slot.
+The schedule shows the open slots of the next two weeks and the approved items with no slot,
+newest stream first. The ones the scheduler let go are listed too, tagged "over budget" or
+"stale" (see [Staying current](Scheduling-and-uploads#staying-current)): a pin sends one anyway.
 Drag an item or a scheduled slot onto an open slot (or a day) to pin it, or onto "unpin"; the
 page warns before a drop breaks the spacing rules.
+
+Or let clipper pick the slot: ⇥ beside an item (or **⇥ Next open slot** in its window) finds
+the first open slot of its kind that the scheduler's rules allow: the slot times, `max_per_day`,
+`min_gap_minutes`, `kick_first_hours` after the stream and `[youtube] min_lead_minutes` from
+now. **⇥ Segments to open slots…** does that for every approved segment without a slot, but
+only into a slot before its `stale_days` cutoff, as the scheduler would. Both show a preview
+first and pin through Kitsu ("Publish at"), like the Pin button, then replan; Undo takes the
+pins back. A pin counts against its stream's `stream_budget` first, so pinning a segment from a
+stream whose budget is full bumps that stream's weakest automatic one: the preview names it.
+The bulk button leaves those streams out, since a pin there would only swap one for another.
+Raise `stream_budget` to send more of a stream.
 
 Above it, the upload panel shows uploads in the last 24 h against the cap, the last automatic
 run and its errors, and what goes next. Uploaded slots show views and a YouTube link.

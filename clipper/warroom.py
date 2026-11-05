@@ -43,6 +43,7 @@ from zoneinfo import ZoneInfo
 from . import actions, daemon, jsonstate, review, schedule, wiki, worker
 from .config import _root, for_stream
 from .errors import ClipperError
+from .states import RELEASE_KIND
 
 WEB = Path(__file__).with_name("web")
 PAGE = WEB / "warroom.html"   # markup only: its style is warroom.css, its code web/js/*.js
@@ -900,6 +901,119 @@ def do_bulk(cfg: dict, body: dict) -> dict:
     return {"done": len(done), "failed": failed, "rows": rows, "undo": uid}
 
 
+# ---------- next open slot ----------
+# The schedule's "next open slot" buttons: each item gets the first open slot of its kind that
+# the scheduler's own rules allow (slot times, max_per_day, min_gap_minutes, kick_first_hours,
+# [youtube] min_lead_minutes) and is pinned there like the Pin button (Kitsu "Publish at"),
+# then one replan. A pin counts against its stream's budget first, so pinning an item that is
+# over budget bumps that stream's weakest automatic entry: the preview names those. One item
+# is pinned however old it is (a pin is never stale) and may bump one; "every approved
+# segment" takes only slots before each one's stale_days cutoff, as the scheduler would, and
+# leaves out a stream whose budget is full (pinning there would only swap one for another).
+
+SLOT_KINDS = ("clip", "short", "segment")  # a compilation waits for its segments: pin it by hand
+
+
+def slot_plan(cfg: dict, refs: list[str] | None = None, kind: str = "") -> dict:
+    """refs: these items; or kind: every approved one of that kind without a slot, not held.
+    {"plan": [{ref, title, kind, at, text, let_go}], "refused": [{ref, title, why}],
+    "bumped": [{ref, title, at, why}]}; let_go: why the scheduler won't send it (a pin will)."""
+    sc = cfg["schedule"]
+    tz = ZoneInfo(sc["timezone"])
+    now = datetime.now(tz)
+    rows = {r["ref"]: r for r in all_rows(cfg)}
+    every = refs is None
+    if every:
+        refs = [ref for ref, r in rows.items() if RELEASE_KIND[r["kind"]] == kind
+                and r["decision"] == "approved" and not r["scheduled"] and not r["hold"]]
+    entries = (load(cfg["paths"]["schedule"], {}) or {}).get("entries", [])
+    mine = set(refs)
+    lead = now + timedelta(minutes=cfg["youtube"]["min_lead_minutes"])
+    windows: dict[str, tuple] = {}
+    refused, todo = [], []
+    for ref in refs:
+        r = rows.get(ref)
+        k = RELEASE_KIND[r["kind"]] if r else ""
+        why = ("not in review" if not r else "not approved" if r["decision"] != "approved"
+               else "held" if r["hold"] else "already on YouTube" if r["uploaded"]
+               else f"a {k} goes after its segments: pin it by hand" if k not in SLOT_KINDS else "")
+        if why:
+            refused.append({"ref": ref, "title": r["title"] if r else ref, "why": why})
+        else:
+            todo.append(r)
+    keeps, full = None, set()  # full: streams where a pin would bump an automatic entry
+    while True:
+        taken = [datetime.fromisoformat(e["publish_at"]).astimezone(tz) for e in entries
+                 if e["key"] not in mine]
+        plan, late = [], []
+        for r in todo:
+            k, stream = RELEASE_KIND[r["kind"]], r["stream"]
+            if stream not in windows:
+                sdir = cfg["paths"]["streams"] / stream
+                windows[stream] = schedule.release_window(cfg, sdir, load(sdir / "meta.json", {}))
+            earliest, expires = windows[stream]
+            when = schedule.next_free(k, taken, sc, tz, max(lead, earliest))
+            why = ("its stream's budget is full: a pin would only bump another" if stream in full
+                   else f"no open {k} slot in {sc['horizon_days']} days" if not when
+                   else f"stale: no open {k} slot before {expires.astimezone(tz):%m-%d %H:%M}"
+                   if every and expires and when > expires else "")
+            if why:
+                late.append({"ref": r["ref"], "title": r["title"], "why": why})
+                continue
+            taken.append(when)
+            plan.append({"ref": r["ref"], "title": r["title"], "kind": k, "at": when.isoformat(),
+                         "text": f"{when:%Y-%m-%d %H:%M}", "let_go": r.get("dropped") or ""})
+        bumped = []
+        if plan:  # what a replan with the pins drops that one without them keeps
+            keeps = keeps if keeps is not None else schedule.with_pins(cfg, {})[0]
+            placed, skipped = schedule.with_pins(cfg, {p["ref"]: p["text"] for p in plan})
+            reason = {s["key"]: s["reason"] for s in skipped}
+            bumped = [{"ref": k, "title": e["title"], "at": e["publish_at"], "why": reason.get(k, "")}
+                      for k, e in keeps.items() if k not in placed and k not in mine]
+        more = ({b["ref"].split("/")[0] for b in bumped}
+                & {p["ref"].split("/")[0] for p in plan}) - full
+        if not every or not more:
+            return {"plan": plan, "refused": refused + late, "bumped": bumped}
+        full |= more
+
+
+def slot_print(out: dict) -> str:
+    """What a preview showed, to tell whether Apply would do the same: the pins and the bumps."""
+    return json.dumps([sorted((p["ref"], p["text"]) for p in out["plan"]),
+                       sorted(b["ref"] for b in out["bumped"])])
+
+
+def do_slot(cfg: dict, body: dict) -> dict:
+    """{"refs": [...]} or {"kind": "segment"} (every one without a slot); dry_run: only the
+    plan, with its "print". Otherwise pin each item to its slot and replan once, if the plan
+    is still the previewed one (body "print"); if not: the new plan, "changed", nothing done."""
+    refs = [checked_ref(r) for r in body["refs"]] if body.get("refs") else None
+    kind = body.get("kind", "")
+    if refs is None and kind not in SLOT_KINDS:
+        raise ClipperError("slot what? refs, or a kind: " + ", ".join(SLOT_KINDS))
+    if body.get("dry_run"):
+        out = slot_plan(cfg, refs, kind)
+        return {**out, "print": slot_print(out)}
+    done, failed, rows = [], [], []
+    with LOCK:  # planned again: the schedule may have moved since the preview
+        out = slot_plan(cfg, refs, kind)
+        if slot_print(out) != body.get("print"):
+            return {**out, "print": slot_print(out), "changed": True, "done": 0}
+        for p in out["plan"]:
+            try:
+                item = actions.resolve(cfg, p["ref"])
+                before = _before(cfg, item)
+                rows.append(row_json(item.stream_dir, _apply(cfg, item, "pin", p, WHO)))
+                done.append({"ref": item.ref, "before": before})
+            except Exception as e:  # noqa: BLE001  # report each, do the rest
+                failed.append({"ref": p["ref"], "error": str(e)[:200]})
+        if done and cfg["discord"]["replan"]:
+            schedule.run(cfg, sync_first=False)
+    uid = remember(cfg, "pin", f"pin {len(done)} to the next open slot{'s' * (len(done) > 1)}",
+                   done) if done else ""
+    return {**out, "done": len(done), "failed": failed, "rows": rows, "undo": uid}
+
+
 def replace_plan(rows: list[dict], fields: list[str], find: str, repl: str, regex: bool,
                  case: bool, word: bool = False) -> list[dict]:
     """[{ref, short, values: {column: new}, lines: [{field, before, after}]}] for the rows
@@ -1168,6 +1282,7 @@ POST_API = {
     "/api/undo": lambda cfg, body: do_undo(cfg, body.get("id", "")),
     "/api/cover": cover_post,
     "/api/bulk": do_bulk,
+    "/api/slot": do_slot,
     "/api/replace": do_replace,
     "/api/sync": _sync,
     "/api/replan": _replan,
