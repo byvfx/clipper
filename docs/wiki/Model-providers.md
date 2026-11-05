@@ -3,6 +3,7 @@ its provider by prefix; a bare name like `claude-sonnet-5-5` is Claude, as befor
 
 | Model string | Provider | Needs |
 |---|---|---|
+| `claude-<model>` (or `anthropic:claude-<model>`) | Claude | `ANTHROPIC_API_KEY`, or `secrets/anthropic_secret.txt` (`[paths] anthropic_key`; [Claude on the NAS](Claude-on-the-NAS) uses the file) |
 | `openai:<model>` | OpenAI | `OPENAI_API_KEY` (user env var), or `secrets/openai_secret.txt` |
 | `gemini:<model>` | Google Gemini (its OpenAI-compatible endpoint) | `GEMINI_API_KEY`, or `secrets/gemini_secret.txt` |
 | `openrouter:<vendor>/<model>` | OpenRouter: one key for most vendors' models, e.g. `openrouter:openai/gpt-5-mini` | `OPENROUTER_API_KEY`, or the key in `secrets/openrouter_secret.txt` (`[paths] openrouter_key`) |

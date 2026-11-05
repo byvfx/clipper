@@ -129,8 +129,11 @@ def known_price(cfg: dict, model: str) -> tuple[float, float] | None:
 
 def provider_key(prov: str, paths: dict | None = None) -> str:
     """A provider's key: its env var ($OPENROUTER_API_KEY, ...), else the file [paths]
-    <prov>_key (secrets/openrouter_secret.txt, ...); "" if neither."""
-    key = os.environ.get(PROVIDERS[prov][1], "").strip()
+    <prov>_key (secrets/openrouter_secret.txt, ...); "" if neither. "anthropic" is
+    $ANTHROPIC_API_KEY, else [paths] anthropic_key (the claude container on the NAS keeps it
+    out of Claude Code's own environment, where it would stop Remote Control)."""
+    env = "ANTHROPIC_API_KEY" if prov == "anthropic" else PROVIDERS[prov][1]
+    key = os.environ.get(env, "").strip()
     path = (paths or {}).get(f"{prov}_key")
     if key or not path:
         return key
@@ -254,7 +257,8 @@ class LLM:
             import anthropic
 
             headers = {"anthropic-workspace-id": self.workspace_id} if self.workspace_id else None
-            self._client = anthropic.Anthropic(max_retries=4, default_headers=headers)
+            self._client = anthropic.Anthropic(api_key=provider_key("anthropic", self.paths) or None,
+                                               max_retries=4, default_headers=headers)
         return self._client
 
     def _account(self, model: str, tokens_in: int, tokens_out: int,

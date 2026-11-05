@@ -1,7 +1,7 @@
 """`clipper doctor`: check that this machine can run clipper, and say what to fix.
 
 Usage:
-    clipper doctor [--offline] [--role all|gpu|serve|bot|nas]
+    clipper doctor [--offline] [--role all|gpu|serve|bot|nas|claude]
 
 Checks Python, the config and prompt files, ffmpeg (filters and the configured encoders),
 fonts, the GPU stack (torch + WhisperX, only needed where transcribe runs), API keys and
@@ -10,7 +10,7 @@ OK, WARN (works, but something is missing or slow) or FAIL (a stage will break);
 code is 1 when anything fails. --role skips what that machine doesn't run: gpu (a worker:
 everything but serve and the bot), serve (`clipper serve`: the war room, uploads, pre-shows,
 retakes, the daily jobs), bot (the Discord bot, which needs serve to answer), nas (the
-recorder only).
+recorder only), claude (Claude Code on the NAS: what a worker needs, plus its sign-in and clone).
 """
 
 from __future__ import annotations
@@ -426,10 +426,12 @@ def check_llm_online(cfg: dict) -> None:
 
 def check_keys(cfg: dict, role: str) -> None:
     if role != "nas":
-        from .llm import claude_model
+        from .llm import claude_model, provider_key
 
         if os.environ.get("ANTHROPIC_API_KEY"):
             ok("keys", "ANTHROPIC_API_KEY set")
+        elif provider_key("anthropic", cfg["paths"]):
+            ok("keys", f"Anthropic key in {cfg['paths']['anthropic_key']}")
         elif not claude_model(cfg):
             ok("keys", "ANTHROPIC_API_KEY not set; no stage uses Claude")
         else:
@@ -601,7 +603,7 @@ def check_online(cfg: dict, role: str) -> None:
         online_discord(cfg)
     if role in ("all", "bot"):
         online_serve(cfg, role)
-    if role in ("all", "gpu"):
+    if role in ("all", "gpu", "claude"):
         online_modal(cfg)
         online_nas_cut(cfg)
         online_preshow_feeds(cfg)  # the worker grabs pre-shows
@@ -650,10 +652,10 @@ def online_youtube(cfg: dict) -> None:
 
 
 def online_anthropic(cfg: dict) -> None:
-    from .llm import Claude, claude_model
+    from .llm import Claude, claude_model, provider_key
 
     model = claude_model(cfg)  # [scoring] model_a may be another provider's
-    if not os.environ.get("ANTHROPIC_API_KEY") or not model:
+    if not provider_key("anthropic", cfg["paths"]) or not model:
         return
     try:
         Claude(cfg).client.models.retrieve(model)
@@ -910,6 +912,70 @@ def check_faces(cfg: dict) -> None:
              "clipper faces <stream>, then --name F01=Name --enroll (or --enroll-photos)")
 
 
+def repo_state(porcelain: str) -> tuple[str, int, int]:
+    """`git status --porcelain --branch` → (branch, commits ahead of upstream, changed files);
+    branch "" when HEAD is detached."""
+    head, *changed = porcelain.splitlines() or [""]
+    m = re.match(r"## (?:No commits yet on )?(\S+?)(?:\.\.\.\S+)?(?: \[(.*)\])?$", head)
+    branch = m.group(1) if m and m.group(1) != "HEAD" else ""
+    ahead = re.search(r"ahead (\d+)", m.group(2) or "") if m else None
+    return branch, int(ahead.group(1)) if ahead else 0, len([c for c in changed if c.strip()])
+
+
+def claude_auth(stdout: str, returncode: int) -> tuple[bool, str]:
+    """`claude auth status` (JSON, exit 0 when signed in) → (signed in, its authMethod)."""
+    try:
+        data = json.loads(stdout)
+    except ValueError:
+        data = {}
+    method = data.get("authMethod", "") if isinstance(data, dict) else ""
+    return returncode == 0, str(method)
+
+
+def check_claude(cfg: dict) -> None:
+    """--role claude: Claude Code on the NAS (deploy/claude) can sign in, work in its own
+    clone of the repo and run every stage against the share."""
+    hint = wiki.page("Claude-on-the-NAS")
+    if not shutil.which("claude"):
+        fail("claude", "Claude Code (`claude`) not on PATH", "deploy/claude installs it; " + hint)
+    else:
+        ok("claude", "Claude Code " + run(["claude", "--version"]).stdout.strip())
+        r = run(["claude", "auth", "status"])
+        signed_in, method = claude_auth(r.stdout, r.returncode)
+        if not signed_in:
+            fail("claude", "Claude Code isn't signed in",
+                 "docker compose exec claude claude auth login; " + wiki.page("Claude-on-the-NAS", "sign-in"))
+        else:
+            (ok if method in ("", "claude.ai") else warn)(
+                "claude", f"Claude Code signed in ({method or 'method not given'})",
+                "" if method in ("", "claude.ai") else "Remote Control needs a claude.ai login: claude auth login")
+    for env in ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+        if os.environ.get(env):
+            fail("claude", f"{env} is set: Remote Control refuses to start with it",
+                 "deploy/claude/deploy.sh passes the Anthropic key as a file ([paths] anthropic_key); "
+                 f"take {env} out of the container's environment")
+    root = Path(__file__).resolve().parent.parent
+    r = run(["git", "-C", str(root), "status", "--porcelain", "--branch"]) if shutil.which("git") else None
+    if r is None or r.returncode:
+        fail("claude", f"{root} isn't a git clone", "deploy/claude clones the repo into /app on first start")
+    else:
+        branch, ahead, changed = repo_state(r.stdout)
+        (ok if branch else fail)("claude", f"repo on {branch}" if branch else "repo HEAD detached",
+                                 "" if branch else "git switch main (or the branch you were on)")
+        if changed or ahead:
+            warn("claude", f"repo has {changed} changed file(s), {ahead} unpushed commit(s)",
+                 "commit and push, or git stash, before leaving it")
+    streams = Path(cfg["paths"]["streams"])
+    probe = streams / f".doctor-{os.getpid()}"
+    try:
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+        ok("claude", f"streams writable at {streams}")
+    except OSError as e:
+        fail("claude", f"can't write to {streams} ({type(e).__name__})",
+             "the container mounts CLIPPER_DATA at /data as PUID:PGID, the owner of the NAS folder")
+
+
 def check_tailnet(cfg: dict, offline: bool) -> None:
     """[warroom] tailnet: the phone reaches the war room through `tailscale serve` here."""
     if not cfg["warroom"]["tailnet"]:
@@ -1020,7 +1086,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     if role != "nas":
         check_prompts(cfg)
     check_ffmpeg(cfg, role)
-    if role in ("all", "gpu"):
+    if role in ("all", "gpu", "claude"):
         check_fonts(cfg)
         check_photos(cfg)
         check_faces(cfg)
@@ -1028,7 +1094,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     check_keys(cfg, role)
     if role != "nas":
         check_youtube_cookies(cfg)
-    if role in ("all", "gpu"):
+    if role in ("all", "gpu", "claude"):
         check_narrate(cfg)
     if role in ("all", "serve"):
         check_tailnet(cfg, offline)
@@ -1038,6 +1104,8 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_people(cfg)
     if role in ("all", "serve", "bot"):
         check_news(cfg, offline)
+    if role == "claude":
+        check_claude(cfg)
     if not offline:
         check_online(cfg, role)
     n = report(RESULTS)

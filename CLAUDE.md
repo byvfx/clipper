@@ -89,6 +89,28 @@ the same PR as the change.
 - Before a hand edit of `schedule.json` or `clipper.toml` (both on the NAS share), copy it to
   `backups/<file>.before_<what>_<date>` beside it, not the repo root.
 
+## Running on the NAS
+
+When the working directory is `/app` on Linux you are the `claude` container on the NAS
+(`deploy/claude`, wiki Claude-on-the-NAS), usually driven from the user's phone; the
+Windows notes above don't apply.
+
+- `clipper` is on PATH (the clone's venv, `/app/.venv`); no `.venv/Scripts`, no `uv run`. The
+  keys are already in the environment; the config is `/data/clipper.toml` and the streams
+  `/data/streams`, the same files serve, the bot and the worker use.
+- `/app` is your own clone: work on a branch, commit, push and open PRs with `gh` as on the
+  laptop. After pulling a change to `pyproject.toml` or `uv.lock`, run
+  `uv sync --frozen --extra modal --extra faces --extra discord` (it is safe here).
+- You can't reach Docker or ssh: no `clipper services`, no deploys. serve, the bot and the
+  worker run the code of the last hub deploy, not your clone's; a merged change reaches them
+  when the user runs `bash deploy/hub/deploy.sh` from the laptop. Say so when it matters.
+- The worker is processing streams at the same time: leave a stream whose `.run.lock`
+  heartbeat is fresh (`run.json`) alone. The NAS has 6 CPU threads shared with the recorder:
+  transcription goes to Modal, encodes use QSV (`/dev/dri`), and nothing heavy runs while a
+  show is live (`clipper record status`).
+- The user reads on a phone: keep replies short, give the cost before any model rerun and
+  wait for a yes, and never deploy or restart the recorder from here.
+
 ## Checks
 
 - `clipper doctor --role gpu --offline` after changing config, ffmpeg, fonts or dependencies.
