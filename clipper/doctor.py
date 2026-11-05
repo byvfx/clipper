@@ -573,13 +573,14 @@ def check_narrate(cfg: dict) -> None:
     nc = settings(cfg)
     where = f"${nc['key_env']} or {nc['key_file']}"
     # a show can set its own narrator (and key), so each show's story settings are checked
-    unread = []
+    unread = []   # each with where its own key would be
     for key in ["", *_root(cfg)["shows"]]:
         c = for_show(cfg, key)
-        if c["story"]["narrate"] and c["story"]["voice_id"] and not find_key(settings(c)):
-            unread.append(key or "base")
+        sn = settings(c)
+        if c["story"]["narrate"] and c["story"]["voice_id"] and not find_key(sn):
+            unread.append(f"{key or 'base'}: ${sn['key_env']} or {sn['key_file']}")
     if unread:
-        fail("keys", f"[story] voice_id is set ({', '.join(unread)}) but there's no ElevenLabs key ({where}): "
+        fail("keys", f"[story] voice_id is set but there's no ElevenLabs key ({'; '.join(unread)}): "
              "story narration can't be read", wiki.page("Story-dossiers", "narration"))
     if not find_key(nc):
         if nc["voice_id"]:
