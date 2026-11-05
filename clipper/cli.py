@@ -293,6 +293,15 @@ def cmd_compare(cfg: dict, args: argparse.Namespace) -> None:
                           args.model_b, args.effort, args.prompt_version, args.repeat)
 
 
+def cmd_models(cfg: dict, args: argparse.Namespace) -> None:
+    from . import models
+
+    if args.action == "list":
+        models.list_tests(cfg)
+        return
+    models.test_model(cfg, args.model, args.effort, args.budget, not args.no_long, args.dry_run)
+
+
 def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
     from . import costs
 
@@ -884,7 +893,7 @@ COMMAND_GROUPS = [
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
-                'costs', 'compare']),
+                'costs', 'compare', 'models']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
 ]
 
@@ -1558,6 +1567,20 @@ def add_extras(sub) -> None:
     q = rsub.add_parser("list", help="every comparison on a stream, one table, best first")
     add_stream(q)
     q.set_defaults(fn=cmd_compare)
+
+    p = sub.add_parser("models", help="can a model do clipper's jobs? built-in checks, no stream needed (#72)")
+    rsub = p.add_subparsers(dest="action", required=True)
+    q = rsub.add_parser("test", help="Pass A on made-up windows, JSON, vision, text, a long transcript; "
+                                     "which stages it could take")
+    q.add_argument("model", help="e.g. claude-haiku-5-5, openrouter:qwen/qwen3.8-flash, local:qwen3")
+    q.add_argument("--effort", default="", help="instead of [scoring] effort_a; none = reasoning off "
+                                                "(other providers)")
+    q.add_argument("--no-long", action="store_true", help="skip the ~130k-token transcript (most of the cost)")
+    q.add_argument("--budget", type=float, default=1.0, help="refuse when the estimate is over this many $ (1)")
+    q.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    q.set_defaults(fn=cmd_models)
+    q = rsub.add_parser("list", help="every saved test, newest first")
+    q.set_defaults(fn=cmd_models)
 
 
 def add_setup(sub) -> None:
