@@ -490,11 +490,11 @@ def retire_numbers(old_b: dict, hand_ids: set[str]) -> dict:
 
 
 def moved_ids(old_a: list[dict], new_a: list[dict]) -> list[str]:
-    """Ids that name a different window than in the last score (a rescan's t01 can be
-    another moment)."""
+    """Ids that name a different window than in the last score, or are gone from it (a
+    rescan's t01 can be another moment, or come back as one later)."""
     was = {r["id"]: r["window"] for r in old_a if r.get("source") != "hand" and r.get("window")}
-    return [r["id"] for r in new_a if r.get("source") != "hand" and r["id"] in was
-            and was[r["id"]] != r.get("window")]
+    now = {r["id"]: r.get("window") for r in new_a if r.get("source") != "hand"}
+    return [i for i, w in was.items() if now.get(i) != w]
 
 
 def file_sha(path: Path) -> str:

@@ -193,3 +193,4 @@ def test_a_rescan_that_moves_a_transcript_id_retires_its_number():
     rescanned = same[:1] + [{"id": "t01", "source": "transcript", "window": [40, 90]},
                             {"id": "t02", "source": "transcript", "window": [100, 160]}]
     assert scoring.moved_ids(old, rescanned) == ["t01"]  # t02 had no window recorded: not counted
+    assert scoring.moved_ids(old, same[:1]) == ["t01"]  # gone: its number goes before t01 can return
