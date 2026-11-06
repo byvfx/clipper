@@ -82,9 +82,17 @@ if (-not (Test-Path $clipper)) {
 # PowerShell and cmd, a sh script for Git Bash). Bootstrapping another folder points it there.
 $bin = Join-Path $env:USERPROFILE '.local\bin'
 New-Item -ItemType Directory -Force $bin | Out-Null
-Set-Content -Encoding ascii (Join-Path $bin 'clipper.cmd') "@`"$clipper`" %*"
+# cmd reads a .cmd in the OEM code page: a path with other characters goes in as its 8.3 name.
+$exe = $clipper
+if ($exe -match '[^\x20-\x7e]') { $exe = (New-Object -ComObject Scripting.FileSystemObject).GetFile($clipper).ShortPath }
+if ($exe -match '[^\x20-\x7e]') {
+    Write-Host "== No clipper.cmd: cmd can't read this folder's path (no 8.3 name). Run $clipper, or move clipper to a plain folder such as C:\clipper"
+} else {
+    Set-Content -Encoding ascii (Join-Path $bin 'clipper.cmd') "@`"$($exe.Replace('%', '%%'))`" %*"
+}
+# Git Bash reads UTF-8; the path goes in single quotes so $ and ` stay literal
 $unix = '/' + $clipper.Substring(0, 1).ToLower() + $clipper.Substring(2).Replace('\', '/')
-[IO.File]::WriteAllText((Join-Path $bin 'clipper'), "#!/bin/sh`nexec `"$unix`" `"`$@`"`n")
+[IO.File]::WriteAllText((Join-Path $bin 'clipper'), "#!/bin/sh`nexec '$($unix.Replace("'", "'\''"))' `"`$@`"`n")
 Add-UserPath $bin
 Write-Host "== clipper command in $bin (runs $clipper)"
 
