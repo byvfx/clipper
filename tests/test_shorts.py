@@ -1,6 +1,7 @@
 import pytest
 
 from clipper import shorts
+from clipper.errors import ClipperError
 
 
 def words(*spans, seg_every=3):
@@ -182,3 +183,14 @@ def test_trimming_both_ends_of_a_compilation_re_cuts_it_once(tmp_path, monkeypat
     assert out == [("s1_x", "s1"), ("s2_x", "s2"), ("comp-x", "comp-x")]
     got = {s["id"]: (s["start_s"], s["end_s"]) for s in json.loads((tmp_path / "segments.json").read_text())["segments"]}
     assert got == {"s1": (10.0, 100.0), "s2": (100.0, 190.0)}
+
+
+def test_panel_crops_keeps_every_panel_height_even():
+    # Channel 404's "watch" (545 + 1375): odd 4:2:0 panels made vstack overrun its frame
+    layout = {"panels": [{"src": [0.3542, 0.1389, 0.6094, 0.5463], "h": 545},
+                         {"src": [0.0521, 0.2315, 0.2917, 0.6602], "h": 1375}]}
+    crops = shorts.panel_crops(layout, 1920, 1080, 1080, 1920)
+    assert [c[4] for c in crops] == [544, 1376]
+    assert all(v % 2 == 0 for c in crops for v in c)
+    with pytest.raises(ClipperError):
+        shorts.panel_crops({"panels": [{"src": [0, 0, 1, 1], "h": 900}]}, 1920, 1080, 1080, 1920)

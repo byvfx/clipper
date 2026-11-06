@@ -167,9 +167,15 @@ def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tu
     fixed = sum(p.get("h", 0) for p in panels)
     free = [p for p in panels if not p.get("h")]
     rest = (out_h - fixed) // max(1, len(free))
+    heights = [p.get("h") or rest for p in panels]
+    if sum(heights) != out_h:
+        raise ClipperError(f"layout panels add up to {sum(heights)} px, not {out_h}")
+    # Even heights, the last panel taking the difference: vstack of odd-height 4:2:0
+    # panels writes a chroma row past its frame (ffmpeg 7.1 aborts, malloc corrupted).
+    heights = [h // 2 * 2 for h in heights[:-1]]
+    heights.append(out_h - sum(heights))
     crops = []
-    for p in panels:
-        ph = p.get("h") or rest
+    for p, ph in zip(panels, heights):
         x, y, w, h = (p["src"][0] * W, p["src"][1] * H, p["src"][2] * W, p["src"][3] * H)
         fx, fy = p.get("focus", [0.5, 0.5])
         aspect = out_w / ph
@@ -183,8 +189,6 @@ def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tu
             h = nh
         even = lambda v: int(v) // 2 * 2
         crops.append((even(x), even(y), even(w), even(h), ph))
-    if sum(c[4] for c in crops) != out_h:
-        raise ClipperError(f"layout panels add up to {sum(c[4] for c in crops)} px, not {out_h}")
     return crops
 
 
