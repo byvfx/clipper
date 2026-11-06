@@ -177,14 +177,21 @@ def stream_info(cfg: dict, sdir: Path) -> dict:
             "published": (sdir / "review_state.json").exists(), "faces": (sdir / "faces.json").exists()}
 
 
+def shown_shows(cfg: dict) -> dict:
+    """The [shows.<key>] tables the page lists: all but [warroom] hide_shows."""
+    root = _root(cfg)
+    hide = set(root["warroom"]["hide_shows"])
+    return {k: s for k, s in root["shows"].items() if k not in hide}
+
+
 def kick_live(cfg: dict) -> list[dict]:
     """Each show's channels' live status from Kick, cached for a minute."""
     import requests
 
     if time.time() - LIVE_CACHE["at"] < 60:
         return LIVE_CACHE["data"]
-    root, out = _root(cfg), []
-    for key, show in root["shows"].items():
+    out = []
+    for key, show in shown_shows(cfg).items():
         name = for_stream_show_name(cfg, key)
         for ch in show["channels"]:
             item = {"show": key, "show_name": name, "channel": ch, "live": False}
@@ -395,7 +402,7 @@ def overview(cfg: dict) -> dict:
     return {"generated_at": now.isoformat(), "timezone": sc["timezone"],
             "free_slots": free, "rules": {"max_per_day": sc["max_per_day"], "min_gap_minutes": sc["min_gap_minutes"]},
             "shows": [{"key": k, "name": for_stream_show_name(cfg, k), "channels": s["channels"]}
-                      for k, s in _root(cfg)["shows"].items()],
+                      for k, s in shown_shows(cfg).items()],
             "counts": {**counts, "scheduled_7d": sum(
                 1 for e in entries if now <= datetime.fromisoformat(e["publish_at"]) <= now + timedelta(days=7)),
                 "uploaded": sum(e.get("status") == "uploaded" for e in sched.get("entries", []))},

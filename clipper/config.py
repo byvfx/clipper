@@ -756,6 +756,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "lowres_height": 360,     # phones play a copy this tall (short side), in lowres/ beside the preview
         "lowres_prewarm": True,   # make those copies ahead for items waiting for review
         "tailnet": False,         # served on this machine's tailnet (clipper warroom --tailnet on); doctor checks it
+        "hide_shows": [],         # [shows.<key>] keys left off the live strip and the show filter
+                                  # (their streams and items still show); e.g. ["trish"]
     },
     "retake": {
         # `clipper retake`: a "retake" note -> edits (trim, layout, title, thumbnail) ->
@@ -968,7 +970,8 @@ CHOICES = {
 }
 # CLIPPER_* variables that aren't settings.
 SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "CLIPPER_ALERT_WEBHOOK",
-               "CLIPPER_DATA", "CLIPPER_TOML"}  # the last two: the NAS recorder's deploy (deploy/record)
+               "CLIPPER_DATA", "CLIPPER_TOML",  # these two: the NAS recorder's deploy (deploy/record)
+               "CLIPPER_REPO"}  # the claude container's clone URL (deploy/claude)
 SHOW_KEYS = ("channel", "channels")  # a [shows.<key>] table's own settings; the rest are sections
 
 
@@ -1007,6 +1010,8 @@ def problems(cfg: dict) -> list[str]:
                 if "budget_hours" in (s.get("overrides") or {}).get("schedule", {})]
     out += [f"{where} budget_hours = {v!r} must be a positive number (it divides in every replan)"
             for where, v in budgets if not (isinstance(v, int | float) and v > 0)]
+    out += [f"[warroom] hide_shows: no [shows.{k}]" for k in (root.get("warroom") or {}).get("hide_shows", [])
+            if k not in (root.get("shows") or {})]
     return out
 
 
@@ -1039,6 +1044,14 @@ def _resolve_paths(paths: dict, base: Path, keys=None) -> None:
     for key in keys if keys is not None else list(paths):
         p = Path(paths[key]).expanduser()
         paths[key] = p if p.is_absolute() else base / p
+
+
+def _resolve_photos(cfg: dict, base: Path) -> None:
+    """[thumbnail] photos, a folder outside [paths]: relative to the config file like [paths],
+    not to wherever the command runs ("" stays unset). Kept a str."""
+    d = (cfg.get("thumbnail") or {}).get("photos")
+    if d and not Path(d).expanduser().is_absolute():
+        cfg["thumbnail"]["photos"] = str(base / Path(d).expanduser())
 
 
 LOCAL_CONFIG = "clipper.local.toml"
@@ -1121,6 +1134,7 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
     local = _load_local(lpath, cfg, base) if use_local else {}
     _apply_env(cfg, local=local)
     _resolve_paths(cfg["paths"], base)
+    _resolve_photos(cfg, base)
     if not cfg["paths"]["prompts"].exists() and CHECKOUT_PROMPTS.exists():
         cfg["paths"]["prompts"] = CHECKOUT_PROMPTS
 
@@ -1209,6 +1223,7 @@ def for_show(cfg: dict, key: str, channel: str = "") -> dict:
     _apply_env(out, set(overrides), root["_local"])
     if "paths" in overrides:
         _resolve_paths(out["paths"], root["_dir"], list(overrides["paths"]))
+    _resolve_photos(out, root["_dir"])  # a show's own, or an env var re-applied over it
     if key and not channel:
         channel = (root["shows"][key]["channels"] or [""])[0]
     out["kick"]["channel"] = channel or out["kick"]["channel"]

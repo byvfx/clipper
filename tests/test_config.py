@@ -223,3 +223,27 @@ def test_prompts_fall_back_to_the_checkout(tmp_path):
     assert config.load(path, use_local=False)["paths"]["prompts"] == config.CHECKOUT_PROMPTS
     (tmp_path / "prompts").mkdir()
     assert config.load(path, use_local=False)["paths"]["prompts"] == tmp_path / "prompts"
+
+
+def test_photos_is_beside_the_config_not_the_cwd(tmp_path, monkeypatch):
+    """The claude container runs in /app, the hub in /data: photos = "photos" is /data/photos."""
+    conf = tmp_path / "conf"
+    conf.mkdir()
+    path = conf / "clipper.toml"
+    path.write_text('[thumbnail]\nphotos = "photos"\n[shows.kino]\nchannels = ["k"]\n'
+                    '[shows.kino.thumbnail]\nphotos = "kino_photos"\n', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    cfg = config.load(path)
+    assert cfg["thumbnail"]["photos"] == str(conf.resolve() / "photos")
+    assert config.for_show(cfg, "kino")["thumbnail"]["photos"] == str(conf.resolve() / "kino_photos")
+    path.write_text('[thumbnail]\nphotos = ""\n', encoding="utf-8")
+    assert config.load(path)["thumbnail"]["photos"] == ""
+
+
+def test_container_variables_and_hidden_shows(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLIPPER_REPO", "https://github.com/x/clipper")   # deploy/claude's clone URL
+    path = tmp_path / "clipper.toml"
+    path.write_text('[warroom]\nhide_shows = ["kino"]\n[shows.kino]\nchannels = ["k"]\n', encoding="utf-8")
+    assert config.problems(config.load(path)) == []
+    path.write_text('[warroom]\nhide_shows = ["knio"]\n[shows.kino]\nchannels = ["k"]\n', encoding="utf-8")
+    assert config.problems(config.load(path)) == ["[warroom] hide_shows: no [shows.knio]"]

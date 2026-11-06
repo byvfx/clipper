@@ -21,7 +21,8 @@ for every [pre-show](Pre-shows) and one-off cover only.
 Tabloid covers can use a portrait of someone the show talks about who is never on screen.
 Make a folder every machine can reach (e.g. `photos` beside `streams` on the NAS), add one
 head-and-shoulders crop per person named `<Person>.jpg` (the whole picture is treated as the
-face, so crop out watermarks and logos), and set `[thumbnail] photos` to it. The model may then
+face, so crop out watermarks and logos), and set `[thumbnail] photos` to it (a relative
+folder is beside `clipper.toml`, like `[paths]`). The model may then
 use one for a cover's face or teaser box; `clipper thumbs <stream> --items s04 --teaser-photo
 "Hasan Piker"` sets one by hand. The [cast library](Cast-library) keeps several labelled photos
 per person in the same folder and fills itself.

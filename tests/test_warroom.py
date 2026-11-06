@@ -213,3 +213,11 @@ def test_next_slot_for_every_segment_leaves_out_a_full_budget(tmp_path, defaults
     assert shown["plan"][0]["let_go"] == "" and shown["print"]
     moved = warroom.do_slot(cfg, {"kind": "segment", "print": "an older preview"})  # Apply pins nothing
     assert moved["changed"] and moved["done"] == 0 and moved["print"] == shown["print"]
+
+
+def test_hidden_shows_leave_the_page(tmp_path):
+    from clipper import config
+    path = tmp_path / "clipper.toml"
+    path.write_text('[warroom]\nhide_shows = ["trish"]\n[shows.kino]\nchannels = ["k"]\n'
+                    '[shows.trish]\nchannels = ["t"]\n', encoding="utf-8")
+    assert list(warroom.shown_shows(config.load(path))) == ["kino"]

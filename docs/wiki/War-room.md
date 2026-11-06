@@ -8,6 +8,8 @@ schedule. Press <kbd>?</kbd> on the page for every keyboard shortcut.
 
 Click a live show's chip to watch it in a player on the page or on kick.com in a new window;
 the chip also says whether the NAS is recording it.
+Shows in `[warroom] hide_shows` (e.g. `["trish", "blade"]`) are left off these chips and the
+show filter; their streams and items still appear.
 
 ## Review queue
 

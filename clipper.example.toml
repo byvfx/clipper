@@ -427,7 +427,7 @@ condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf",
 condensed_variation = "Bold Condensed"
 # Folder of head-and-shoulders photos, "<Person>.jpg", for people talked about but not on
 # screen; enquirer covers may use one for the face or the teaser box. "" = none.
-# photos = "//nas/share/clipper/photos"
+# photos = "//nas/share/clipper/photos"   (a relative folder is beside this file, like [paths])
 photos = ""
 
 [shorts]
@@ -568,6 +568,9 @@ token = ""
 # (one ffmpeg at a time, low priority).
 lowres_height = 360
 lowres_prewarm = true
+# Shows left off the live strip and the show filter, e.g. ones not clipped for now
+# ([shows.<key>] keys; their streams and items still show).
+hide_shows = []
 # The phone, away from home: `clipper warroom --tailnet on` serves it at
 # https://<this machine>.<tailnet>.ts.net/ through Tailscale (tailnet devices only). Set true
 # afterwards so `clipper doctor` checks it. See the wiki, Phone-access.
