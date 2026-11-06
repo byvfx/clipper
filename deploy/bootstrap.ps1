@@ -78,6 +78,16 @@ if (-not (Test-Path $clipper)) {
     if ($LASTEXITCODE -ne 0) { throw 'uv sync failed' }
 }
 
+# `clipper` typed anywhere: a command in ~/.local/bin that runs this folder's venv (a .cmd for
+# PowerShell and cmd, a sh script for Git Bash). Bootstrapping another folder points it there.
+$bin = Join-Path $env:USERPROFILE '.local\bin'
+New-Item -ItemType Directory -Force $bin | Out-Null
+Set-Content -Encoding ascii (Join-Path $bin 'clipper.cmd') "@`"$clipper`" %*"
+$unix = '/' + $clipper.Substring(0, 1).ToLower() + $clipper.Substring(2).Replace('\', '/')
+[IO.File]::WriteAllText((Join-Path $bin 'clipper'), "#!/bin/sh`nexec `"$unix`" `"`$@`"`n")
+Add-UserPath $bin
+Write-Host "== clipper command in $bin (runs $clipper)"
+
 $env:CLIPPER_BOOTSTRAP = '1'
 for ($i = 0; $i -lt 3; $i++) {
     & $clipper setup @args

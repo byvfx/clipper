@@ -21,8 +21,8 @@ From the clipper folder on a new machine (keep the folder path short on Windows,
 powershell -ExecutionPolicy Bypass -File deploy\bootstrap.ps1   # macOS/Linux: bash deploy/bootstrap.sh
 ```
 
-It installs uv, Python 3.12 and ffmpeg if they're missing, then runs `clipper setup` and
-`clipper doctor`. Then:
+It installs uv, Python 3.12 and ffmpeg if they're missing, puts a `clipper` command on PATH,
+then runs `clipper setup` and `clipper doctor`. Then, in a new terminal:
 
 ```bash
 clipper fetch <kick vod url>

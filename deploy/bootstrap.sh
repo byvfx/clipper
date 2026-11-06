@@ -34,6 +34,12 @@ if [ ! -x .venv/bin/clipper ]; then
   uv sync
 fi
 
+# `clipper` typed anywhere: a link in ~/.local/bin to this folder's venv (uv's installer puts
+# that folder on PATH). Bootstrapping another folder points it there.
+mkdir -p "$HOME/.local/bin"
+ln -sf "$PWD/.venv/bin/clipper" "$HOME/.local/bin/clipper"
+echo "== clipper command in ~/.local/bin (runs $PWD/.venv/bin/clipper)"
+
 export CLIPPER_BOOTSTRAP=1
 for _ in 1 2 3; do
   code=0

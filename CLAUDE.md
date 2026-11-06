@@ -62,8 +62,9 @@ the same PR as the change.
 
 ## Running things here
 
-- Windows dev machine: the venv is `.venv` (uv). Run commands as `.venv/Scripts/clipper.exe ...`
-  or `uv run clipper ...`. There is no `python` on PATH outside the venv.
+- Windows dev machine: the venv is `.venv` (uv). `clipper ...` works where the bootstrap's command
+  in `~/.local/bin` is on PATH (a shell started before it may not have it); `.venv/Scripts/clipper.exe ...`
+  always does. There is no `python` on PATH outside the venv.
 - Keys are Windows *user* environment variables, which agent shells do not inherit. Load
   them first, for example in PowerShell:
   `$env:KITSU_TOKEN = [Environment]::GetEnvironmentVariable("KITSU_TOKEN","User")`.
