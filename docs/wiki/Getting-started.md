@@ -9,7 +9,8 @@ From the clipper folder on a new machine (keep the folder path short on Windows,
 powershell -ExecutionPolicy Bypass -File deploy\bootstrap.ps1   # macOS/Linux: bash deploy/bootstrap.sh
 ```
 
-It installs uv, Python 3.12 and ffmpeg if they're missing, then runs `clipper setup`, a
+It installs uv, Python 3.12 and ffmpeg if they're missing, puts a `clipper` command on PATH
+(open a new terminal to use it), then runs `clipper setup`, a
 walkthrough that asks whether this machine joins an existing install or starts a new one,
 what it runs, where it transcribes, its streams folder and encoder, and the keys (checked as
 you enter them), then runs `clipper doctor`. Run it again to carry on; `clipper setup --step

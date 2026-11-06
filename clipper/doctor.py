@@ -98,6 +98,17 @@ def check_python() -> None:
                  "folder such as C:\\clipper, or turn long paths on")
 
 
+def check_command() -> None:
+    """`clipper` typed bare: the bootstrap puts a command in ~/.local/bin that runs this venv's."""
+    found = shutil.which("clipper")
+    if found:
+        ok("command", f"clipper -> {found}")
+    else:
+        warn("command", "`clipper` isn't on PATH (only the venv's own clipper works)",
+             "run the bootstrap again (deploy\\bootstrap.ps1 or deploy/bootstrap.sh): it adds a "
+             "clipper command to ~/.local/bin, then open a new terminal")
+
+
 def check_config(cfg: dict) -> None:
     root = _root(cfg)
     if root.get("_file"):
@@ -1081,6 +1092,7 @@ def check_role_settings(cfg: dict, role: str) -> None:
 def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     RESULTS.clear()
     check_python()
+    check_command()
     check_config(cfg)
     check_role_settings(cfg, role)
     if role != "nas":

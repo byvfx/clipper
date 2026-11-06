@@ -53,3 +53,12 @@ def test_claude_auth_reads_the_status():
     assert doctor.claude_auth('{"loggedIn": true, "authMethod": "claude.ai"}', 0) == (True, "claude.ai")
     assert doctor.claude_auth('{"authMethod": "api_key"}', 0) == (True, "api_key")
     assert doctor.claude_auth("Not logged in", 1) == (False, "")
+
+
+def test_a_missing_clipper_command_points_at_the_bootstrap(monkeypatch):
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: None)
+    (status, _, _, hint), = doctor.collect(doctor.check_command)
+    assert status == "WARN" and "bootstrap" in hint
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/home/me/.local/bin/clipper")
+    (status, _, what, _), = doctor.collect(doctor.check_command)
+    assert status == "OK" and what.endswith(".local/bin/clipper")
