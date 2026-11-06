@@ -188,7 +188,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   v01_w10, v04_t28 and v02_t12, kick-133940023 v14_t35, kick-132380636 v01_t29 and kick-132733064
   v01_t27 match no scheduled segment (pick one by hand or leave them). Doing it in the built-in browser
   (signed in to Studio): the field is `#linked-video-editor-link`; click its trigger, search the
-  segment's video id, pick the one result, Save. Verify whether `thumbnails.set` works on Shorts before turning on
+  segment's video id, pick the one result, Save. A weekly scheduled Claude task does exactly this,
+  Sundays 10:00 while the app is open (`clipper-weekly-related-videos`, set up 11-04). Verify whether `thumbnails.set` works on Shorts before turning on
   `[youtube] short_thumbnails`.
 - Old approved Short titles/descriptions that still say "hosts" (Kitsu text; uploads go as written).
   A war-room find-and-replace dry run found 14; not applied.
@@ -231,8 +232,9 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   prompt-v7): show setting `[scoring] gambling = reject|commentary` (rule files gambling_<mode>_v7), the cast
   reading a post/chat/statement aloud is their own audio (matches the #146 hold; this alone took Haiku's
   keep-called-third-party from 11 to 1), regulars' running stories count as known to fans, outrageous counts
-  for a clip. Not live: needs `prompt_version = "v7"` and `[shows.kino.scoring]` / `[shows.c404.scoring]`
-  `gambling = "commentary"` in clipper.toml (backup first) after the PR merges, user's call. Left: Haiku now
+  for a clip. LIVE 11-05 (PR #150): `prompt_version = "v7"`, `gambling = "commentary"` in
+  [shows.kino.scoring] and [shows.c404.scoring] (backup backups/clipper.before_prompt_v7_2026-11-05.toml);
+  chud and the rest stay on v5. Left: Haiku now
   over-calls needs_context (8 keeps); every model misses needs_context and keeps 5-11 of the 21 non-keeps.
 - Papa Meat permission (#45), Ben Avery archive pull (#47), Jerry Banfield pull waits on desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
@@ -271,7 +273,13 @@ a lower third; one segment s00 with a chapter per part and retimed words.jsonl) 
 `[story] credit` + a source line per part) → thumbs → Kitsu (episode "<date> story-<slug>"); schedule
 asap. Weekly skips stories; a retake trim refuses one (edit story.json, cut again). 4) `investigate
 check` on the swarm (branch `investigate-swarm`): the old four searches are the seeds of a small swarm
-per lead (`[investigate] swarm`), then his own titles; the verdict as before.
+per lead (`[investigate] swarm`), then his own titles; the verdict as before. 5) narration (PR #149,
+merged 11-05 as 7c2862e, services restarted on it): story_edit_v2 plans in the dossier's timeline order and
+writes `tldr`, a `lead_in` per part and `close`; `story cut` reads them as cards in `[story] voice_id` =
+Eric (cjVigY5qzO86Huf0OWal, set in clipper.toml 11-05, backup in backups/). The user's catch-up format for
+any drama: `story new` → `story run` → `story plan` → `story cut --no-review` (never sent to review, so
+never uploads), a <30 MB 720p copy to the phone. Check lead-ins against the dossier (one stated a
+self-claimed role as fact). First: kevin-langue-show-drama (Kino show, 5:28).
 **Investigate anyone (#138, user 11-04; part 1 merged 11-04, PR #141):** investigate on a person not yet archived (swarm
 finds their channels and X handles, the user approves, a sample spread over time is transcribed into a normal
 subject, then `investigate run`), cross-referenced with others' videos and X posts (API, not scraping),
