@@ -236,6 +236,11 @@ def test_photos_is_beside_the_config_not_the_cwd(tmp_path, monkeypatch):
     cfg = config.load(path)
     assert cfg["thumbnail"]["photos"] == str(conf.resolve() / "photos")
     assert config.for_show(cfg, "kino")["thumbnail"]["photos"] == str(conf.resolve() / "kino_photos")
+    sdir = tmp_path / "streams" / "kick-1"
+    sdir.mkdir(parents=True)
+    (sdir / "meta.json").write_text('{"channel": "k"}', encoding="utf-8")
+    (sdir / config.STREAM_CONFIG).write_text('[thumbnail]\nphotos = "night_photos"\n', encoding="utf-8")
+    assert config.for_stream(cfg, sdir)["thumbnail"]["photos"] == str(conf.resolve() / "night_photos")
     path.write_text('[thumbnail]\nphotos = ""\n', encoding="utf-8")
     assert config.load(path)["thumbnail"]["photos"] == ""
 

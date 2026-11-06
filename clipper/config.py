@@ -1305,6 +1305,7 @@ def _for_stream(cfg: dict, sdir: Path) -> dict:
             raise ClipperError(f"{path}: unknown setting [{section}] {', '.join(unknown)}")
         res[section].update(copy.deepcopy(values))
     _apply_env(res, set(overrides), root["_local"])
+    _resolve_photos(res, root["_dir"])  # the stream's own, or local/env re-applied over it
     res["_root"] = root
     check_choices(res, f"{path}: ")
     root["_resolved"][cache_key] = res
