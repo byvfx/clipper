@@ -132,7 +132,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   with burned-in captions (https://x.com/lolcowcinema/status/2118120833046741152); files and recipe in
   reports/8bitguy-explainer/ and its draft. ElevenLabs reads default to lossless pcm_48000 WAV since
   PR #143 (merged 11-04); dsp and blade are config-only tests; `trish` is a
-  placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI).
+  placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI). trish and blade are
+  off the war room (`[warroom] hide_shows`, user 2026-11-05: "i doubt we will ever clip either right now").
 - **Schedule: stay current, no backlog (live 2026-10-29 09:51).** 15/day couldn't keep up (~140
   approved a week vs 105 slots, newest stream 15 days behind). `stale_days = 3`, `[scoring]
   max_picks` 14 (was 10). **Since the October check-in (2026-11-02, #42):** `stream_budget = { segment
@@ -329,7 +330,7 @@ per upload still allowed today), worker takeover under a lock, pick numbers kept
 (pass_b `numbers`), Short retakes grown to min_s, failed captions retried hourly (3 tries,
 `upload --captions`). Write "#77 L6" rather than "fix #77" in commit messages: GitHub closes
 the issue on "fix". Roadmaps, issues only: NAS hub #14 (#9 war room and #12 worker/bot on the NAS done 2026-11-05,
-#64 single-owner daemon `clipper serve` (split done 11-03), #65 Claude Code on the NAS (built 11-05 on branch `nas-claude`, not deployed: `deploy/claude`, wiki Claude-on-the-NAS; the user signs in once), #13 chat panel),
+#64 single-owner daemon `clipper serve` (split done 11-03), #65 Claude Code on the NAS (PR #155, running since 11-05: `deploy/claude`, wiki Claude-on-the-NAS; doctor --role claude clean after PR #156), #13 chat panel),
 transcript-framed edits #66 (#67-#71), YouTube Posts magazine #30 (#32-#38), cast library #41,
 lore-order playlists #43, archive fun #63, news watcher #110 (off since 2026-11-03 at the user's word: `[news] check_minutes = 0` in clipper.toml and no terms; since #127 only `[news] watch` / `[shows.<key>.news] watch` terms are watched, none = nothing fetched, `auto_watch = true` brings back the cast/figures/library list; #news exists), Udder Truth #58/#59/#60, Modal ideas #53, #55, #56.
 **Faces #54 (merged 2026-11-01, PR #117):** `clipper faces <stream>` runs locally on the CPU (no Modal:
@@ -425,6 +426,10 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   that never made it into HANDOFF.
 
 ## Gotchas learned
+- The claude container (2026-11-05): its clone sits on a mount where every file is executable, so ruff
+  there needs `--extend-ignore EXE002` (CI is unaffected); its GitHub token can't read checks or Actions
+  (403), so the user confirms CI on the PR. Relative config paths outside `[paths]` must resolve against
+  the config's folder: the hub runs in /data, this container in /app (`[thumbnail] photos`, PR #156).
 - New Windows installs (found by `clipper setup`, 2026-10-28): keep the folder short (anthropic's files
   sit ~160 characters deep in .venv; past 260 imports fail with long paths off), and `tzdata` must be a
   direct dependency (Windows has no zone database; the laptop only had it through pandas).
