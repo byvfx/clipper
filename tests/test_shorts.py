@@ -194,3 +194,39 @@ def test_panel_crops_keeps_every_panel_height_even():
     assert all(v % 2 == 0 for c in crops for v in c)
     with pytest.raises(ClipperError):
         shorts.panel_crops({"panels": [{"src": [0, 0, 1, 1], "h": 900}]}, 1920, 1080, 1080, 1920)
+
+
+def test_a_face_panel_is_framed_on_the_face():
+    # A 1.49:1 cam box (Chud's) into a 1080x1178 slot keeps 62% of its width.
+    layout = {"panels": [{"src": [0.0, 0.0, 1.0, 0.4], "h": 742},
+                         {"src": [0.7708, 0.6519, 0.2292, 0.2741], "focus": "face"}]}
+    plain = shorts.panel_crops(layout, 1920, 1080, 1080, 1920)
+    assert plain[1][2] == 270 and plain[1][0] == 1480 + int((440 - 270.6) * 0.5)  # no face: the middle
+    on_face = shorts.panel_crops(layout, 1920, 1080, 1080, 1920, {1: (0.6, 0.6)})
+    x, _, w, _, _ = on_face[1]
+    assert w == 270 and abs(x + w / 2 - (1480 + 0.6 * 440)) <= 2  # centred on the face
+    at_edge = shorts.panel_crops(layout, 1920, 1080, 1080, 1920, {1: (0.9, 0.6)})
+    assert at_edge[1][0] + at_edge[1][2] >= 1918  # too far right to centre: the box's edge
+    assert on_face[0] == plain[0]  # the other panel is untouched
+
+
+def test_face_centers_take_the_faces_in_the_box_during_the_window():
+    layout = {"panels": [{"src": [0.0, 0.0, 0.7, 1.0]},
+                         {"src": [0.7, 0.6, 0.3, 0.4], "focus": "face"}]}
+    face = lambda t, x, y: {"t": t, "box": [x - 0.05, y - 0.05, 0.1, 0.1]}
+    faces = [face(10, 0.3, 0.5),    # in the video panel: not counted
+             face(12, 0.91, 0.8), face(14, 0.85, 0.8), face(16, 0.88, 0.76),
+             face(500, 0.76, 0.7)]  # another time: only a fallback
+    got = shorts.face_centers(layout, faces, 10, 20)
+    assert list(got) == [1] and got[1] == (0.6, 0.5)  # median of 0.5/0.6/0.7 of the box
+    assert shorts.face_centers(layout, faces, 400, 600)[1] == (0.2, 0.25)
+    assert shorts.face_centers(layout, [face(1, 0.3, 0.5)], 0, 5) == {}
+    assert shorts.face_centers({"panels": [{"src": [0.7, 0.6, 0.3, 0.4]}]}, faces, 10, 20) == {}
+
+
+def test_signature_changes_with_the_face_and_not_without(sc):
+    layouts = {"cam": {"panels": [{"src": [0.7, 0.6, 0.3, 0.4], "focus": "face"}]}}
+    base = shorts.short_signature(sc, "h264", 1.0, 31.0, [[0.0, 30.0, "cam"]], layouts)
+    assert base == shorts.short_signature(sc, "h264", 1.0, 31.0, [[0.0, 30.0, "cam"]], layouts, [{}])
+    assert base != shorts.short_signature(sc, "h264", 1.0, 31.0, [[0.0, 30.0, "cam"]], layouts,
+                                          [{0: (0.6, 0.5)}])

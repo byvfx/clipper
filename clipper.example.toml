@@ -437,7 +437,9 @@ photos = ""
 # loudness normalized. Layouts are per show: [shows.<key>.shorts.layouts.<name>] with
 # description (what the layout picker looks for), caption_y and panels = [{src = [x, y,
 # w, h] (fractions of the frame), h = px tall, focus = [fx, fy]}, ...]; "center" (a 9:16
-# crop of the middle) always exists. The picker labels a frame every scene_step_s, so a
+# crop of the middle) always exists. A panel narrower than its box is cut around focus
+# (the middle by default); focus = "face" centres it on the face `clipper faces` found in
+# the box during the scene (a webcam whose streamer sits off-centre or moves about). The picker labels a frame every scene_step_s, so a
 # Short that spans a scene cut switches layout at the cut ("cams 0:00 > watch 0:39").
 # Give it a reference screenshot of each layout (`clipper shorts <stream> --save-example
 # <layout> --at <seconds>`, kept in [paths] layouts/<show>/); without them it confuses
