@@ -48,7 +48,9 @@ EXIT_SYNC = 3                     # packages missing: the bootstrap script syncs
 ROLES = {"worker": "worker: transcribe, score, cut, Shorts, covers (`clipper worker`)",
          "serve": "serve: the war room, hourly uploads, pre-shows, retakes, daily jobs (`clipper serve`, one machine only)",
          "bot": "bot: Discord review cards, buttons and DMs (`clipper bot`, one machine only)",
-         "recorder": "recorder: records the Kick shows live (Docker on the NAS)"}
+         "recorder": "recorder: records the Kick shows live (Docker on the NAS)",
+         "control": "control: a dev/control station; runs nothing unattended (`clipper services`, deploys, "
+                    "review, one-off commands)"}
 BACKENDS = {"whisperx": "WhisperX on this machine's NVIDIA GPU",
             "mlx": "mlx-whisper on this Mac's Apple GPU",
             "modal": "WhisperX on a Modal cloud GPU (any machine; ~$0.34 per 8 h stream)"}
@@ -203,9 +205,16 @@ def save_state(cfg: dict, st: dict) -> None:
 
 def doctor_role(roles: list[str]) -> str:
     """`clipper doctor --role` for these setup roles."""
-    mapped = {"worker": "gpu", "serve": "serve", "bot": "bot", "recorder": "nas"}
+    mapped = {"worker": "gpu", "serve": "serve", "bot": "bot", "recorder": "nas", "control": "control"}
     picked = {mapped[r] for r in roles if r != "recorder"}  # the recorder isn't installed here
+    if len(picked) > 1:
+        picked.discard("control")  # the service roles check more than control does
     return picked.pop() if len(picked) == 1 else "all" if picked else "nas"
+
+
+def control_only(roles: list[str]) -> bool:
+    """Nothing runs here unattended: control, with the recorder (on the NAS) at most."""
+    return "control" in roles and set(roles) <= {"control", "recorder"}
 
 
 # ---------- TOML, edited in place (comments kept) ----------
@@ -480,6 +489,8 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
     roles = st.get("roles") or ["worker"]
 
     def streams_ok(v: str) -> str | None:
+        if v == "-" and control_only(roles):
+            return None
         p = user_path(v)
         if str(p).startswith("~"):
             return f"can't find the home folder in {p} (a path from your home folder starts with ~/)"
@@ -500,10 +511,17 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
     else:
         say("Where recordings and everything made from them go (~20-30 GB per stream).")
     current = str(cfg["paths"]["streams"])
+    if control_only(roles):
+        say("A control station only needs it for commands on a stream (- skips it for now).")
+        if not user_path(current).exists():
+            current = "-"
     streams = ask.text("streams", "Streams folder", current, check=streams_ok)
-    p = user_path(streams)
-    p = p if p.is_absolute() else _root(cfg)["_dir"] / p
-    set_local(cfg, "paths", "streams", str(p), str(shared["paths"]["streams"]))
+    if streams == "-":
+        say("No streams folder here; `clipper setup --step machine` adds one later.")
+    else:
+        p = user_path(streams)
+        p = p if p.is_absolute() else _root(cfg)["_dir"] / p
+        set_local(cfg, "paths", "streams", str(p), str(shared["paths"]["streams"]))
 
     if st.get("mode") == "new":
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -522,8 +540,8 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
     if not shutil.which("ffmpeg"):
         raise ClipperError("ffmpeg isn't on PATH: run deploy/bootstrap (or winget install Gyan.FFmpeg / "
                          "brew install ffmpeg), open a new terminal, then clipper setup --step machine")
-    if roles == ["recorder"]:
-        return
+    if roles == ["recorder"] or control_only(roles):
+        return  # nothing encodes here
     hw = hardware()
     codec = cfg["cut"]["clip_codec"]
     if doctor.encoder_works(codec)[0]:
@@ -641,7 +659,7 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
     have_host = cfg["review"]["host"] and "<" not in cfg["review"]["host"]
     ensure_env_key(cfg, ask, cfg["review"]["token_env"], "a Kitsu bot token",
                    "Kitsu -> Bots -> New bot (Supervisor) -> copy its token", check=bool(have_host))
-    if cfg["transcribe"]["backend"] == "modal":
+    if cfg["transcribe"]["backend"] == "modal" and not control_only(roles):
         if (Path.home() / ".modal.toml").exists() and not user_env("MODAL_TOKEN_ID"):
             say("Modal: token in ~/.modal.toml")
         else:
@@ -649,7 +667,7 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
                 ensure_env_key(cfg, ask, name, "transcription on Modal",
                                "modal.com -> Settings -> API Tokens -> New token", check=False)
             say("The Modal app is deployed with `clipper transcribe --deploy` (several minutes, once).")
-    if "bot" in roles or cfg["discord"]["enabled"]:  # enabled: the worker posts review cards too
+    if "bot" in roles or (cfg["discord"]["enabled"] and not control_only(roles)):  # the worker posts cards too
         path: Path = cfg["paths"]["discord_token"]
         good, msg = check_key("discord", cfg) if (user_env(cfg["discord"]["token_env"]) or path.exists()) \
             else (False, "")
@@ -686,6 +704,9 @@ def step_check(cfg: dict, st: dict, ask: Ask, offline: bool = False) -> int:
         if "bot" in roles:
             say("  bot, unattended:    " + (r"deploy\discord\bot-task.ps1 -Install" if win
                                             else "clipper bot (in a terminal or launchd for now)"))
+        if control_only(roles):
+            say("  control: clipper services status (the hub's containers over ssh), "
+                "bash deploy/hub/deploy.sh to ship main, the war room in a browser")
         say("  What setup doesn't do yet (Discord ids, YouTube sign-in, adding a show): " + wiki.page("Install"))
     return code
 
@@ -708,7 +729,7 @@ def checks_for(cfg: dict, st: dict, step: str) -> list:
                  + (" installed" if installed(e) else " not installed"),
                  "" if installed(e) else f"uv sync {sync_args(st)}") for e in st.get("extras", [])]
     if step == "machine":
-        return doctor.collect(doctor.check_config, cfg) + doctor.collect(doctor.check_ffmpeg, cfg, role)
+        return doctor.collect(doctor.check_config, cfg, role) + doctor.collect(doctor.check_ffmpeg, cfg, role)
     if step == "keys":  # check_gpu: CUDA, or the Modal token
         return (doctor.collect(doctor.check_gpu, cfg) if "worker" in roles else []) \
             + doctor.collect(doctor.check_keys, cfg, role)

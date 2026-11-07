@@ -1,5 +1,5 @@
 Installing clipper on a machine for one or more of its [roles](Roles-and-services). After any
-setup, run `clipper doctor` (add `--role gpu`, `--role serve`, `--role bot` or `--role nas`): it
+setup, run `clipper doctor` (add `--role gpu`, `--role serve`, `--role bot`, `--role nas` or `--role control`): it
 checks everything on these pages and prints a fix for each problem.
 
 Per platform: [Windows](Install-Windows) (GPU worker, serve, bot), [macOS](Install-macOS)
@@ -29,7 +29,9 @@ packages, adds a `clipper` command to `~/.local/bin` (on PATH; it runs this fold
    `secrets/` beside it) from a path or the share (`~/Downloads/clipper.toml`, the folder that holds it, or
    the file dragged into the terminal); new writes a short starter (only what differs from the defaults; clipper.example.toml lists every setting).
 2. **Roles.** Worker, serve, bot, recorder (the recorder is the NAS's Docker container; setup only
-   points at `deploy/record/deploy.sh`). It looks at the GPU and offers WhisperX (NVIDIA), mlx
+   points at `deploy/record/deploy.sh`), control (a dev/control station that runs nothing
+   unattended: no extra packages, no encoder, no Modal or Discord token, and the streams folder
+   is optional; doctor checks the keys, the war room and ssh to the [hub](NAS-hub)). It looks at the GPU and offers WhisperX (NVIDIA), mlx
    (Apple Silicon) or Modal, keeping the shared choice when this machine can run it. If the
    roles need packages that aren't installed, it exits with code 3 and the bootstrap runs
    `uv sync --extra ...` and starts setup again.

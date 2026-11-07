@@ -1,7 +1,7 @@
 """`clipper doctor`: check that this machine can run clipper, and say what to fix.
 
 Usage:
-    clipper doctor [--offline] [--role all|gpu|serve|bot|nas|claude]
+    clipper doctor [--offline] [--role all|gpu|serve|bot|nas|claude|control]
 
 Checks Python, the config and prompt files, ffmpeg (filters and the configured encoders),
 fonts, the GPU stack (torch + WhisperX, only needed where transcribe runs), API keys and
@@ -10,7 +10,8 @@ OK, WARN (works, but something is missing or slow) or FAIL (a stage will break);
 code is 1 when anything fails. --role skips what that machine doesn't run: gpu (a worker:
 everything but serve and the bot), serve (`clipper serve`: the war room, uploads, pre-shows,
 retakes, the daily jobs), bot (the Discord bot, which needs serve to answer), nas (the
-recorder only), claude (Claude Code on the NAS: what a worker needs, plus its sign-in and clone).
+recorder only), claude (Claude Code on the NAS: what a worker needs, plus its sign-in and clone),
+control (a dev/control station: the keys, the war room, and ssh to the hub for `clipper services`).
 """
 
 from __future__ import annotations
@@ -109,7 +110,7 @@ def check_command() -> None:
              "clipper command to ~/.local/bin, then open a new terminal")
 
 
-def check_config(cfg: dict) -> None:
+def check_config(cfg: dict, role: str = "all") -> None:
     root = _root(cfg)
     if root.get("_file"):
         ok("config", f"{root['_file']}")
@@ -143,7 +144,7 @@ def check_config(cfg: dict) -> None:
             ok("shorts", f"{key}: reference screenshots for {', '.join(lays)}")
     streams: Path = cfg["paths"]["streams"]
     if not streams.exists():
-        fail("paths", f"streams folder {streams} doesn't exist",
+        (warn if role == "control" else fail)("paths", f"streams folder {streams} doesn't exist",
              "create it, or point [paths] streams at the NAS share")
     else:
         probe = streams / ".doctor_write_test"
@@ -227,9 +228,11 @@ def check_ffmpeg(cfg: dict, role: str) -> None:
         if f" {f} " in filters:
             ok("ffmpeg", f"filter {f} ({why})")
         else:
-            fail("ffmpeg", f"no {f} filter: {why} won't work", "install a full ffmpeg build (gyan.dev 'full')")
-    if role == "nas":
-        return
+            (warn if role == "control" else fail)(
+                "ffmpeg", f"no {f} filter: {why} won't work",
+                "install a full ffmpeg build (Windows: gyan.dev 'full'; macOS: brew install ffmpeg-full)")
+    if role in ("nas", "control"):
+        return  # nothing encodes there
     codecs = {cfg["cut"]["clip_codec"], cfg["shorts"]["codec"] or cfg["cut"]["clip_codec"],
               cfg["review"]["preview_codec"] or cfg["cut"]["clip_codec"]}
     for codec in sorted(c for c in codecs if c and c != "copy"):
@@ -457,7 +460,7 @@ def check_keys(cfg: dict, role: str) -> None:
         (ok if os.environ.get(rc["token_env"]) else fail)(
             "keys", f"${rc['token_env']} (Kitsu bot token) " + ("set" if os.environ.get(rc["token_env"]) else "not set"),
             "" if os.environ.get(rc["token_env"]) else "Kitsu > Bots > new token; clipper setup --step keys")
-    if cfg["discord"]["enabled"] or role == "bot":
+    if (cfg["discord"]["enabled"] and role != "control") or role == "bot":
         from .notify import token
         try:
             token(cfg)
@@ -610,10 +613,12 @@ def check_online(cfg: dict, role: str) -> None:
         check_llm_online(cfg)
         online_anthropic(cfg)
         online_kitsu(cfg)
-    if cfg["discord"]["enabled"] or role == "bot":
+    if (cfg["discord"]["enabled"] and role != "control") or role == "bot":
         online_discord(cfg)
-    if role in ("all", "bot"):
+    if role in ("all", "bot", "control"):
         online_serve(cfg, role)
+    if role == "control":
+        online_hub(cfg)
     if role in ("all", "gpu", "claude"):
         online_modal(cfg)
         online_nas_cut(cfg)
@@ -723,6 +728,28 @@ def online_serve(cfg: dict, role: str) -> None:
             "online", f"clipper serve isn't answering at {serve.url(cfg)} ({e})",
             r"start it: clipper serve, or deploy\serve\serve-task.ps1 -Install (set [serve] url when it "
             "runs on another machine)")
+
+
+def online_hub(cfg: dict) -> None:
+    """With [serve] hub: ssh to the NAS works and finds the compose project, which
+    `clipper services` and deploy/hub/deploy.sh need."""
+    import shlex
+
+    from .services import recorder_ssh, ssh
+
+    folder = cfg["serve"]["hub"]
+    if not folder:
+        warn("online", "[serve] hub not set: `clipper services` runs Windows tasks, not the NAS containers",
+             "set [serve] hub in clipper.toml (the compose folder on the NAS): " + wiki.page("NAS-hub"))
+        return
+    host, _, sudo = recorder_ssh(cfg)
+    r = ssh(host, f"cd {shlex.quote(folder)} && {sudo} docker compose ps --services".strip())
+    if r.returncode == 0:
+        ok("online", f"hub on {host}:{folder}: " + (", ".join(r.stdout.split()) or "no containers up"))
+    else:
+        fail("online", f"hub on {host}:{folder}: {(r.stderr or r.stdout).strip()[-160:] or 'ssh failed'}",
+             f"key login to the NAS (ssh -o BatchMode=yes {host}; ~/.ssh/config Host {host}): "
+             + wiki.page("NAS-hub"))
 
 
 def online_modal(cfg: dict) -> None:
@@ -1093,7 +1120,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     RESULTS.clear()
     check_python()
     check_command()
-    check_config(cfg)
+    check_config(cfg, role)
     check_role_settings(cfg, role)
     if role != "nas":
         check_prompts(cfg)
@@ -1104,8 +1131,8 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_faces(cfg)
         check_gpu(cfg)
     check_keys(cfg, role)
-    if role != "nas":
-        check_youtube_cookies(cfg)
+    if role not in ("nas", "control"):
+        check_youtube_cookies(cfg)  # archive fetches; a control station doesn't run them
     if role in ("all", "gpu", "claude"):
         check_narrate(cfg)
     if role in ("all", "serve"):

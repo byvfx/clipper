@@ -44,5 +44,5 @@ there; `clipper doctor --role bot` checks).
 ## Logs and alerts
 
 Logs go to `logs\` (`serve.log`, `bot.log`, `worker.log`). The bot DMs you when something needs
-you ([Review](Review), "Alerts"). `clipper doctor --role gpu|serve|bot|nas|claude` checks a machine
+you ([Review](Review), "Alerts"). `clipper doctor --role gpu|serve|bot|nas|claude|control` checks a machine
 and prints a fix for each problem.
