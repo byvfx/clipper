@@ -178,14 +178,22 @@ def fetch(cfg: dict, url: str, key: str, window: dict | None = None) -> Path:
 
 
 def new_entries(cfg: dict) -> list[tuple[str, dict]]:
-    """(show key, feed entry) for recent matching uploads not grabbed yet."""
+    """(show key, feed entry) for recent matching uploads not grabbed yet. Feeds are newest
+    first, so an undated entry (yt-dlp's listing) below a grabbed pre-show is older than it:
+    skipped without a lookup, which hits the bot check and would read as new (11-06: the
+    8/12 pre-show, under 11/6 and 11/4 on the channel Kino moved to)."""
     out = []
     now = datetime.now(UTC)
     for key, sc in watched(cfg):
         pc = sc["preshow"]
+        below_grabbed = False
         for e in feed(pc["youtube_channel"], sc["kick"]["user_agent"]):
-            if (re.search(pc["title_pattern"], e["title"]) and not grabbed(cfg, e["video_id"])
-                    and now - published_at(e) <= timedelta(hours=pc["max_age_hours"])):
+            if not re.search(pc["title_pattern"], e["title"]):
+                continue
+            if grabbed(cfg, e["video_id"]):
+                below_grabbed = True
+            elif not (below_grabbed and not e["published"]) and \
+                    now - published_at(e) <= timedelta(hours=pc["max_age_hours"]):
                 out.append((key, e))
     return out
 
