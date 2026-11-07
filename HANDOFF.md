@@ -489,6 +489,10 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   `[youtube] cookies_from_browser = "firefox:clipper"` (11-04) reads a dedicated Firefox profile live
   instead, so rotation can't strand an export (wiki Archives#signed-in-through-a-browser-profile); doctor
   checks the profile is signed in.
+- Kino's pre-shows moved to the main channel @TheKinoCasino (UCt26i2K9JN7cPtEX5qjdwIw) on 11-04; the
+  old @TheKinoCasinoIncognito pulled its 11/4 copy. `clipper.toml` points there since 11-06 (backup in
+  backups/). That feed's RSS 404s from the NAS, so the check reads yt-dlp's undated listing: entries
+  below a grabbed pre-show count as older (#162). After a channel switch, grab the latest by hand.
 - A cut killed half way can leave `clipper-cut-<id>` running on the NAS: `ssh nas docker rm -f clipper-cut-<id>`.
 - `uv sync` can't replace the running clipper.exe while the bot is up (`uv pip install` instead, and
   include `--extra modal` later). yt-dlp needs deno for YouTube.
