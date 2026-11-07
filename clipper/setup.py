@@ -57,18 +57,31 @@ EXTRA_MODULE = {"gpu": "whisperx", "mac": "mlx_whisper", "modal": "modal", "disc
 
 # ---------- questions ----------
 
+def _expand(v: str) -> Path:
+    try:
+        return Path(v).expanduser()
+    except RuntimeError:          # ~name for a user that doesn't exist: left as typed
+        return Path(v)
+
+
 def user_path(raw: str) -> Path:
-    """A path as people type or paste it: `~` expanded, and the quotes or backslash-escaped
-    spaces that dragging a file into the terminal (macOS) or "Copy as path" (Windows) adds."""
+    """A path as people type or paste it: `~` expanded, and the shell quoting that dragging a
+    file into the terminal (macOS/Linux) or the quotes that "Copy as path" (Windows) adds.
+    Of the readings that differ, the first that exists wins, so a literal apostrophe works too."""
     v = raw.strip()
-    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
-        v = v[1:-1]
-    elif os.name != "nt" and "\\" in v:
+    readings = []
+    if os.name != "nt" and any(c in v for c in "'\"\\"):
         try:
-            v = " ".join(shlex.split(v))
-        except ValueError:
-            pass
-    return Path(v).expanduser()
+            words = shlex.split(v)
+        except ValueError:        # an unclosed quote: a literal apostrophe, most likely
+            words = []
+        if len(words) == 1:
+            readings.append(words[0])
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        readings.append(v[1:-1])
+    readings.append(v)
+    paths = [_expand(r) for r in readings]
+    return next((p for p in paths if p.exists()), paths[0])
 
 
 def config_file(raw: str) -> Path:
@@ -81,6 +94,8 @@ def config_file_ok(raw: str) -> str | None:
     p = config_file(raw)
     if p.is_file():
         return None
+    if str(p).startswith("~"):
+        return f"can't find the home folder in {p} (a path from your home folder starts with ~/)"
     if not p.is_absolute():
         return f"no file at {p.resolve()} (a path from your home folder starts with ~/)"
     return f"no file at {p}"
@@ -466,6 +481,8 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
 
     def streams_ok(v: str) -> str | None:
         p = user_path(v)
+        if str(p).startswith("~"):
+            return f"can't find the home folder in {p} (a path from your home folder starts with ~/)"
         p = p if p.is_absolute() else _root(cfg)["_dir"] / p
         if not p.exists():
             if not p.parent.exists():
