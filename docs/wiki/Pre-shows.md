@@ -6,6 +6,9 @@ whole video** (less `[preshow] trim_end_s`, 3 s, off the end): transcribe, one s
 meta, thumbs, review. No clips and no Shorts. Once approved, `clipper schedule` places it
 "asap", outside the release slots, and the next `clipper upload` publishes it at once.
 `clipper preshow list` shows the feed; `clipper preshow fetch <url>` grabs an older one.
+When the channel's RSS feed fails (it can 404 for hours), the check lists the channel's videos
+page instead, which has no dates: a pre-show listed below one already grabbed counts as older
+and is left alone, so after a channel switch grab the latest by hand.
 
 When YouTube's bot check stops a grab, `clipper preshow` retries it signed in with the YouTube
 cookies file, or with a browser profile's cookies when `[youtube] cookies_from_browser` is set

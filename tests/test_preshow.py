@@ -32,3 +32,35 @@ def test_bot_check_with_a_browser_profile_says_to_open_it(monkeypatch):
 
 def test_other_grab_failures_stay_in_the_log(monkeypatch):
     assert run_check(monkeypatch, "yt-dlp: ERROR: Premieres in 2 hours") == []
+
+
+def test_undated_entries_below_a_grabbed_preshow_are_old(monkeypatch):
+    def e(vid, title, published=""):
+        return {"video_id": vid, "title": title, "published": published, "url": f"https://youtu.be/{vid}"}
+    listing = [e("new", "Preshow 11/8"), e("ep", "Full Episode 11/6"), e("got", "Preshow 11/6"),
+               e("aug", "Preshow 8/12")]
+    looked_up = []
+
+    def published_at(entry):
+        looked_up.append(entry["video_id"])
+        return preshow.datetime.now(preshow.UTC)
+    monkeypatch.setattr(preshow, "watched", lambda cfg: [("kino", {
+        "preshow": {"youtube_channel": "UC", "title_pattern": "(?i)pre.?show", "max_age_hours": 36},
+        "kick": {"user_agent": "ua"}})])
+    monkeypatch.setattr(preshow, "feed", lambda channel, ua: listing)
+    monkeypatch.setattr(preshow, "grabbed", lambda cfg, vid: vid == "got")
+    monkeypatch.setattr(preshow, "published_at", published_at)
+    assert [x["video_id"] for _, x in preshow.new_entries({})] == ["new"]
+    assert looked_up == ["new"]
+
+
+def test_dated_entries_below_a_grabbed_preshow_still_count(monkeypatch):
+    now = preshow.datetime.now(preshow.UTC).isoformat()
+    listing = [{"video_id": "got", "title": "Preshow", "published": now, "url": ""},
+               {"video_id": "missed", "title": "Preshow", "published": now, "url": ""}]
+    monkeypatch.setattr(preshow, "watched", lambda cfg: [("kino", {
+        "preshow": {"youtube_channel": "UC", "title_pattern": "(?i)pre.?show", "max_age_hours": 36},
+        "kick": {"user_agent": "ua"}})])
+    monkeypatch.setattr(preshow, "feed", lambda channel, ua: listing)
+    monkeypatch.setattr(preshow, "grabbed", lambda cfg, vid: vid == "got")
+    assert [x["video_id"] for _, x in preshow.new_entries({})] == ["missed"]

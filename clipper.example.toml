@@ -977,8 +977,9 @@ Mr. Morrow and other online creators the show covers."""
 known_figures = "Jer, DSP, Blade, Geezer, Mr. Morrow"
 
 [shows.kino.preshow]
-# "The Kino Casino" (@TheKinoCasinoIncognito): pre-shows Mon/Wed/Fri, usually 11:45-14:45 PT
-youtube_channel = "UCy58OcrZ-Y6ebDYKcJAHyxw"
+# "Kino Casino" (@TheKinoCasino) since 11/4; before that "The Kino Casino"
+# (@TheKinoCasinoIncognito, UCy58OcrZ-Y6ebDYKcJAHyxw). Pre-shows Mon/Wed/Fri, usually 11:45-14:45 PT
+youtube_channel = "UCt26i2K9JN7cPtEX5qjdwIw"
 
 # [shows.<key>.thumbnail], [shows.<key>.discord] etc. work the same way, e.g. a
 # different masthead or review channel for one show.
