@@ -8,6 +8,10 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-08: a heartbeat read that lands while its writer replaces the file no longer counts as "no
+  heartbeat": `daemon.read_heartbeat` reads a missing or unreadable heartbeat again (three reads,
+  0.3 s apart) when its folder exists. `clipper record status` (exit 3 while a show is recorded,
+  which `deploy/record/deploy.sh` trusts), `clipper status`, doctor and the war room read through it.
 - 11-08: `clipper/defaults.toml` is the one source of the defaults, every setting with a comment
   (`config.py` loads it; a None default is a commented line there plus `config.NONE_DEFAULTS`);
   config.py is 900 lines shorter, and `clipper.example.toml` is a starter clipper.toml with the

@@ -15,6 +15,7 @@ import logging.handlers
 import os
 import socket
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -80,13 +81,31 @@ def beat(cfg: dict, name: str, started_at: str, **extra) -> None:
         log.warning(f"heartbeat not written ({e})")
 
 
+def read_heartbeat(path: Path, tries: int = 3, wait_s: float = 0.3) -> dict:
+    """The heartbeat file's JSON, {} when there is none. The writer replaces the file every few
+    seconds (a temp file, then a rename), and a read over the share can land in that gap and find
+    no file, or half of one. So a missing or unreadable heartbeat whose folder exists is read
+    again, up to `tries` times `wait_s` apart, before it counts as absent; a service that never
+    ran here has no folder and is answered at once. (2026-11-08: one such read made `clipper
+    record status` say "no heartbeat", exit 0, mid-show, which would have let
+    deploy/record/deploy.sh restart the recorder.)"""
+    for attempt in range(tries):
+        try:
+            data = jsonstate.read(path, None)
+        except (OSError, ValueError):
+            data = None
+        if isinstance(data, dict):
+            return data
+        if attempt + 1 == tries or not path.parent.is_dir():
+            break
+        time.sleep(wait_s)
+    return {}
+
+
 def heartbeat(cfg: dict, name: str, now: datetime | None = None) -> dict:
     """{up, age_s (None = no heartbeat), at, host, data: the whole file, path}."""
     path = heartbeat_path(cfg, name)
-    try:
-        data = jsonstate.read(path, {})
-    except (OSError, ValueError):
-        data = {}
+    data = read_heartbeat(path)
     at = data.get("at") or ""
     try:
         age = ((now or datetime.now(UTC)) - datetime.fromisoformat(at)).total_seconds()

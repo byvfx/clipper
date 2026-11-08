@@ -29,7 +29,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import daemon, jsonstate
+from . import daemon
 from .errors import ClipperError
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,7 +44,7 @@ def recorder(cfg: dict, now: datetime | None = None) -> dict:
     """The recorder's heartbeat: {up, age_s, at, channels: {slug: state}, live: [slug ...]}.
     A channel's state is "<stream id> recording|paused|finalizing" or "offline"."""
     path = cfg["paths"]["streams"] / ".record" / "status.json"
-    hb = jsonstate.read(path, {})
+    hb = daemon.read_heartbeat(path)
     at = hb.get("at") or ""
     try:
         age = ((now or datetime.now(UTC)) - datetime.fromisoformat(at)).total_seconds()
