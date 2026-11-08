@@ -247,6 +247,14 @@ def check_ffmpeg(cfg: dict, role: str) -> None:
             fail("ffmpeg", f"encoder {codec} failed: {err[:120]}", hint)
 
 
+# Linux has none of the fonts Windows and macOS come with; deploy/bootstrap.sh installs these.
+LINUX_FONTS = "sudo apt-get install ttf-mscorefonts-installer fonts-roboto-unhinted"
+
+
+def font_hint(hint: str) -> str:
+    return f"{hint} (Linux: {LINUX_FONTS})" if sys.platform.startswith("linux") else hint
+
+
 def check_fonts(cfg: dict) -> None:
     from .draw import first_font, font_dirs
 
@@ -255,17 +263,18 @@ def check_fonts(cfg: dict) -> None:
     if found:
         ok("fonts", f"thumbnail font {found}")
     else:
-        fail("fonts", "none of [thumbnail] fonts exist", "install Impact (ttf-mscorefonts) or set [thumbnail] font")
+        fail("fonts", "none of [thumbnail] fonts exist", font_hint("install Impact or set [thumbnail] font"))
     if tc["style"] == "enquirer":
         cond = first_font(tc["condensed_fonts"])
         (ok if cond else warn)("fonts", f"condensed font {cond}" if cond else "no condensed font for enquirer covers",
-                               "" if cond else "install Bahnschrift / Roboto Condensed or set [thumbnail] condensed_fonts")
+                               "" if cond else font_hint("install Bahnschrift / Roboto Condensed or set "
+                                                         "[thumbnail] condensed_fonts"))
     wc = cfg["weekly"]
     missing = [k for k in ("headline", "condensed", "serif_italic", "serif_bold_italic", "black", "bold")
                if not first_font(wc[f"{k}_fonts"])]
     if missing:
         warn("fonts", f"weekly issue fonts missing: {', '.join(missing)}",
-             "install Impact, Bahnschrift (or Roboto Condensed), Georgia and Arial, or set [weekly] *_fonts")
+             font_hint("install Impact, Bahnschrift (or Roboto Condensed), Georgia and Arial, or set [weekly] *_fonts"))
     else:
         ok("fonts", "weekly issue fonts (Impact, condensed, Georgia italic, Arial)")
     look = Path(cfg["paths"]["weekly"]) / "style.toml"
@@ -286,7 +295,7 @@ def check_fonts(cfg: dict) -> None:
         ok("fonts", f"caption font {sc['caption_font']!r}: {hit}")
     else:
         warn("fonts", f"caption font {sc['caption_font']!r} not found; libass falls back to another font",
-             "install it, or set [shorts] caption_fontsdir to a folder with the .ttf")
+             font_hint("install it, or set [shorts] caption_fontsdir to a folder with the .ttf"))
 
 
 def diarizing(cfg: dict) -> list[str]:

@@ -62,3 +62,10 @@ def test_a_missing_clipper_command_points_at_the_bootstrap(monkeypatch):
     monkeypatch.setattr(doctor.shutil, "which", lambda name: "/home/me/.local/bin/clipper")
     (status, _, what, _), = doctor.collect(doctor.check_command)
     assert status == "OK" and what.endswith(".local/bin/clipper")
+
+
+def test_font_hints_name_the_linux_packages_only_on_linux(monkeypatch):
+    monkeypatch.setattr(doctor.sys, "platform", "linux")
+    assert doctor.LINUX_FONTS in doctor.font_hint("install Impact")
+    monkeypatch.setattr(doctor.sys, "platform", "darwin")
+    assert doctor.font_hint("install Impact") == "install Impact"
