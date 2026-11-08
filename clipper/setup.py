@@ -432,7 +432,8 @@ def step_mode(cfg: dict, st: dict, ask: Ask) -> None:
         say(f"Wrote a starter {target.name} (only what differs from the defaults; clipper.example.toml "
             "lists every setting). The next steps fill in this machine's part.")
     else:
-        say("Copy the main machine's clipper.toml here (it is gitignored, so it isn't in the code).")
+        say("The main machine's clipper.toml: on the share it's used where it is, a copy elsewhere is copied "
+            "here (it's gitignored, so it isn't in the code).")
         src = config_file(ask.text("from", "Path to the main machine's clipper.toml (a share or a copy; "
                                    "you can drag the file in)", check=config_file_ok)).resolve()
         on_share = not src.is_relative_to(Path.home().resolve())  # /Volumes/..., \\nas\..., a mapped drive
