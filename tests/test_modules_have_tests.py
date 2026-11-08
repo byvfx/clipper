@@ -48,42 +48,55 @@ def reexports(pkg: str) -> dict[str, str]:
     return out
 
 
+def imports_in(tree: ast.AST, all_modules: set[str], packages: set[str]) -> tuple[set[str], dict[str, str]]:
+    """The clipper modules one test file imports, and the packages it binds to a local name."""
+    named, aliases = set(), {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and n.module and n.module.split(".")[0] == "clipper":
+            named.add(n.module)
+            for a in n.names:
+                full = f"{n.module}.{a.name}"
+                if full in all_modules:
+                    named.add(full)
+                elif n.module in packages:   # from clipper.warroom import faces_get
+                    named.add(reexports(n.module).get(a.name, n.module))
+                if full in packages:
+                    aliases[a.asname or a.name] = full
+        elif isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name.split(".")[0] == "clipper":
+                    named.add(a.name)
+                    if a.name in packages:
+                        aliases[a.asname or a.name.split(".")[-1]] = a.name
+    return named, aliases
+
+
+def used_through(src: str, local: str, pkg: str, all_modules: set[str]) -> set[str]:
+    """The submodules behind `local.<attr>` uses of a package in one test file: a submodule
+    named outright, a re-exported name, or an object whose __module__ is inside the package."""
+    table, module, named = reexports(pkg), importlib.import_module(pkg), set()
+    for attr in set(re.findall(rf"{re.escape(local)}\.(\w+)", src)):
+        if f"{pkg}.{attr}" in all_modules:
+            named.add(f"{pkg}.{attr}")
+        elif attr in table:
+            named.add(table[attr])
+        else:
+            obj = getattr(module, attr, None)
+            mod = inspect.getmodule(obj) if obj is not None else None
+            if mod and mod.__name__.startswith(pkg + "."):
+                named.add(mod.__name__)
+    return named
+
+
 def named_by_tests(all_modules: set[str]) -> set[str]:
     named = set()
     packages = {m for m in all_modules if any(x.startswith(m + ".") for x in all_modules)}
     for t in (ROOT / "tests").glob("*.py"):
         src = t.read_text(encoding="utf-8")
-        aliases = {}   # a package's local name in this test -> the package
-        for n in ast.walk(ast.parse(src)):
-            if isinstance(n, ast.ImportFrom) and n.module and n.module.split(".")[0] == "clipper":
-                named.add(n.module)
-                for a in n.names:
-                    full = f"{n.module}.{a.name}"
-                    if full in all_modules:
-                        named.add(full)
-                    elif n.module in packages:   # from clipper.warroom import faces_get
-                        named.add(reexports(n.module).get(a.name, n.module))
-                    if full in packages:
-                        aliases[a.asname or a.name] = full
-            elif isinstance(n, ast.Import):
-                for a in n.names:
-                    if a.name.split(".")[0] == "clipper":
-                        named.add(a.name)
-                        if a.name in packages:
-                            aliases[a.asname or a.name.split(".")[-1]] = a.name
-        for local, pkg in aliases.items():   # warroom.faces_get(...), warroom.faces.for_stream
-            table = reexports(pkg)
-            module = importlib.import_module(pkg)
-            for attr in set(re.findall(rf"\b{re.escape(local)}\.(\w+)", src)):
-                if f"{pkg}.{attr}" in all_modules:
-                    named.add(f"{pkg}.{attr}")
-                elif attr in table:
-                    named.add(table[attr])
-                else:
-                    obj = getattr(module, attr, None)
-                    mod = inspect.getmodule(obj) if obj is not None else None
-                    if mod and mod.__name__.startswith(pkg + "."):
-                        named.add(mod.__name__)
+        found, aliases = imports_in(ast.parse(src), all_modules, packages)
+        named |= found
+        for local, pkg in aliases.items():
+            named |= used_through(src, local, pkg, all_modules)
     return named
 
 
