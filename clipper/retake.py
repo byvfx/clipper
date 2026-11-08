@@ -175,7 +175,6 @@ def plan(cfg: dict, sdir: Path, key: str, st: dict, row: dict, note: str) -> tup
 
     rc = cfg["retake"]
     prompts = Prompts(cfg)
-    prompts.version = rc["prompt_version"]
     prompts.vars["shorts_max_s"] = cfg["shorts"]["max_s"]
     schema = json.loads(json.dumps(SCHEMA_BASE))
     if st["kind"] == "short":

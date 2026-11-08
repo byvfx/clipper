@@ -341,7 +341,6 @@ def label_photo(cfg: dict, path: Path, claude) -> dict:
 
     cc = cfg["cast"]
     prompts = Prompts(cfg)
-    prompts.version = cc["prompt_version"]
     schema = {**LABEL_SCHEMA, "properties": {**LABEL_SCHEMA["properties"],
                                             "label": {"type": "string", "enum": list(cc["labels"])}}}
     content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",

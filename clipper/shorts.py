@@ -721,7 +721,6 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     if wants_faces(layouts) and not faces:
         print(f"  no faces.json in {stream_dir.name}: face panels keep their middle (clipper faces {stream_dir.name})")
     layout_prompts = Prompts(cfg)
-    layout_prompts.version = sc["layout_prompt_version"]
     claude = None
 
     def need_claude() -> Claude:

@@ -327,7 +327,6 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
     stretches = stretches_asked(pc, clock, duration, about, start, end, at)
 
     prompts = Prompts(cfg)
-    prompts.version = pc["prompt_version"]
     prompts.vars.update(pick_max_clips=pc["max_clips"], short_min_s=cfg["shorts"]["min_s"],
                         short_max_s=cfg["shorts"]["max_s"])
     prompts.vars.setdefault("audience_viewer", cfg["scoring"]["audience"])  # pre-v4 scoring prompts

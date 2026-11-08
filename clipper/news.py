@@ -431,7 +431,6 @@ def _judge(cfg: dict, db: sqlite3.Connection, watch: dict[str, Watch], todo: lis
         claude = Claude(cfg)
         preflight(claude, nc["judge_model"])
     prompts = Prompts(cfg)
-    prompts.version = nc["prompt_version"]
     system = prompts.get("news_judge")
     names = show_names(cfg)
     done = 0

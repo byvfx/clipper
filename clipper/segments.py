@@ -103,7 +103,7 @@ def split(stream_dir: Path, cfg: dict, claude: Claude, prompts: Prompts) -> dict
     gaps = [(a["id"], b["id"], round(b["start_s"] - a["end_s"], 1))
             for a, b in pairwise(segs) if abs(b["start_s"] - a["end_s"]) > 30]
     return {"stream_id": stream_dir.name, "model": seg_cfg["model"],
-            "prompt_version": prompts.version, "api": meta, "gaps": gaps, "segments": segs}
+            "prompt_version": prompts.version_of("segments"), "api": meta, "gaps": gaps, "segments": segs}
 
 
 def compilations(data: dict, cfg: dict, claude: Claude, prompts: Prompts) -> list[dict]:
@@ -141,7 +141,6 @@ def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     cfg = for_stream(cfg, stream_dir)
     seg_cfg = cfg["segments"]
     prompts = Prompts(cfg)
-    prompts.version = seg_cfg["prompt_version"]
     prompts.vars["min_aside_s"] = seg_cfg["min_aside_s"]
     path = stream_dir / "segments.json"
     claude = Claude(cfg)

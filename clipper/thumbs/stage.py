@@ -231,13 +231,11 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         claude = Claude(cfg)
         preflight(claude, tc["model"])
         prompts = Prompts(cfg)
-        prompts.version = tc["enquirer_prompt_version"] if style == "enquirer" else tc["prompt_version"]
         prompts.vars.update(show_name=cfg["meta"]["show_name"] or "the show",
                             max_words=tc["max_words"], max_words_min=min(2, tc["max_words"]),
                             min_crop=tc["min_crop"])
         system = prompts.get("thumbnail_enquirer" if style == "enquirer" else "thumbnail")
         retry = Prompts(cfg)  # the retry and reviewer-feedback wording
-        retry.version = tc["retry_prompt_version"]
         sig = load_signals(stream_dir) if (stream_dir / "signals.parquet").exists() else None
         faces = jsonstate.read(stream_dir / "faces.json", None) if style == "enquirer" else None
 
@@ -260,7 +258,8 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
                 "title": info["title"],
                 "frames": [{**f, "path": f["path"].name} for f in fr], **choice,
                 "style": style, "topic": info["playlist"], "duration_s": round(duration(x), 1),
-                "model": tc["model"], "prompt_version": prompts.version,
+                "model": tc["model"],
+                "prompt_version": prompts.version_of("thumbnail_enquirer" if style == "enquirer" else "thumbnail"),
                 **({"feedback": note} if note else {})}
 
         def safe(x: dict) -> tuple[str, dict | None]:

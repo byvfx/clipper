@@ -389,8 +389,7 @@ class Run:
         self.found = {f["key"]: f for f in trail["findings"]}
         self.words = terms(goal)
         self.seen = {task_key(t["kind"], t["target"]) for t in trail["tasks"]}
-        self.prompts = Prompts(cfg)
-        self.prompts.version = s["prompt_version"]
+        self.prompts = Prompts({**cfg, "swarm": s})  # s: [swarm] with the caller's overrides, prompt_version too
         kinds = {k: v for k, v in KINDS.items() if k in tools and (k != "archive_search" or archives)}
         self.kinds = kinds
         self.prompts.vars.update(
