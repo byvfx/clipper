@@ -108,3 +108,19 @@ def test_record_status_stays_live_across_a_read_mid_replace(tmp_path, monkeypatc
     with pytest.raises(ClipperError) as e:
         services.record_status(cfg, NOW)
     assert e.value.status == 3
+
+
+def test_record_status_refuses_when_the_heartbeat_cannot_be_read(tmp_path, monkeypatch):
+    """Unknown isn't quiet: exit 1, which deploy/record/deploy.sh refuses on too, and the stop/restart
+    guard holds (Copilot on #183)."""
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    cfg = cfg_with(tmp_path, {})
+    (tmp_path / ".record" / "status.json").write_text("{", encoding="utf-8")
+    rec = services.recorder(cfg, NOW)
+    assert rec["error"] and rec["live"] == [] and "unreadable" in services.recorder_lines(rec)[0]
+    with pytest.raises(ClipperError, match="can't tell") as e:
+        services.record_status(cfg, NOW)
+    assert e.value.status == 1
+    monkeypatch.setattr(services, "recorder_compose", lambda cfg, action: pytest.fail("recorder touched"))
+    with pytest.raises(ClipperError, match="can't tell"):
+        services.run(cfg, "restart", "recorder")

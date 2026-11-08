@@ -69,4 +69,18 @@ def test_no_heartbeat_is_read_again_only_where_the_service_has_run(tmp_path, mon
     (tmp_path / ".serve").mkdir()
     assert daemon.read_heartbeat(tmp_path / ".serve" / "status.json") == {} and slept == [0.3, 0.3]
     (tmp_path / ".serve" / "status.json").write_text("not json", encoding="utf-8")
-    assert daemon.read_heartbeat(tmp_path / ".serve" / "status.json") == {} and slept == [0.3] * 4
+    with pytest.raises(ValueError):                  # there but unreadable after the retries: unknown, not empty
+        daemon.read_heartbeat(tmp_path / ".serve" / "status.json")
+    assert slept == [0.3] * 4
+
+
+def test_an_unreadable_heartbeat_is_unknown_not_absent(tmp_path, monkeypatch):
+    """Health and the status lines say so instead of "not running" (Copilot on #183)."""
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    (tmp_path / ".serve").mkdir()
+    (tmp_path / ".serve" / "status.json").write_text("{", encoding="utf-8")
+    hb = daemon.heartbeat(cfg_at(tmp_path), "serve")
+    assert not hb["up"] and hb["age_s"] is None and hb["error"].startswith("JSONDecodeError")
+    assert daemon.state(hb)[0] == "bad" and "unreadable" in daemon.state(hb)[1]
+    assert "unreadable" in daemon.heartbeat_lines("serve", hb)[0]
+    assert daemon.heartbeat(cfg_at(tmp_path), "bot")["error"] == ""      # no file: absent, not an error

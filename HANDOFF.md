@@ -389,7 +389,9 @@ The hub was deployed with all of it on 2026-11-08 13:14, right after chudlogic's
 worker on the new image, heartbeats fresh, the image loads the 626 defaults). Found while waiting for that
 stream: one read of the recorder's heartbeat landed mid-replace and `clipper record status` said "no heartbeat"
 (exit 0), which `deploy/record/deploy.sh` would have taken as "not live"; `daemon.read_heartbeat` now reads a
-missing or unreadable heartbeat again (three reads, 0.3 s apart) when its folder exists.
+missing or unreadable heartbeat again (three reads, 0.3 s apart) when its folder exists, and a file still
+unreadable after that is unknown, not absent (`record status` exits 1; stop, restart and deploy refuse without
+`--force`).
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
