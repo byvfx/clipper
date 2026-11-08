@@ -24,7 +24,11 @@ flowchart TB
 
 Everything is a `clipper <stage>` subcommand working on one stream's folder, `streams/<id>/`.
 Stages are idempotent: `clipper run <id>` does every stage the stream still needs, and
-`clipper run <id> --from cut` redoes from a stage on.
+`clipper run <id> --from cut` redoes from a stage on (`clipper run -h` lists the stages). Four
+of them are the fast lane's early versions for the picks, what the Shorts need first: `clips`,
+`clips_meta`, `clips_thumbs` and `clips_review` are `cut`, `meta`, `thumbs` and `review
+publish` run on the picks alone, before the slow stages do the segments and compilations. So
+`--only clips_thumbs` redoes the picks' covers and `--from thumbs` the segment covers on.
 
 ## Stages
 

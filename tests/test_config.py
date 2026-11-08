@@ -322,7 +322,7 @@ INSTALL = re.compile(r"(?<![a-z])(kino|lolcow|andy|ppp|jer|jeremy|hambly|quarter
 
 def test_defaults_example_and_setup_name_no_install():
     hits = []
-    for f in ("clipper/config.py", "clipper.example.toml", "clipper/setup.py"):
+    for f in ("clipper/config.py", "clipper.example.toml", "clipper/setup.py", "clipper/cli.py"):
         for i, line in enumerate((ROOT / f).read_text(encoding="utf-8").splitlines(), 1):
             m = INSTALL.search(line)
             if m:

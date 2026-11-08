@@ -42,7 +42,8 @@ scripts, which also stop the supervisor and stage processes (stopping the task a
 The bot reaches serve at `[serve] url` (empty = this machine). On different machines set it,
 give both the same `[warroom] token` (or `secrets/warroom_token.txt`), and put `[paths]
 schedule` and `[paths] news` under the streams share on both (the bot reads what serve writes
-there; `clipper doctor --role bot` checks).
+there; `clipper doctor --role bot` checks, and warns when `[discord] enabled` is false, since no
+cards get posted then).
 
 ## Logs and alerts
 

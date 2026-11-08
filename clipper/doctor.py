@@ -1111,6 +1111,14 @@ def check_role_settings(cfg: dict, role: str) -> None:
         (ok if local or token(cfg) else fail)(
             "config", f"[warroom] host {wc['host']}" + ("" if local or token(cfg) else " with no token"),
             "" if local or token(cfg) else "set [warroom] token (serve refuses to start without it off localhost)")
+    if role in ("all", "serve"):
+        m = cfg["youtube"]["auto_upload_minutes"]
+        (ok if m else warn)("config", f"[youtube] auto_upload_minutes {m}" + ("" if m else ": nothing uploads by itself"),
+                            "" if m else "set it (60 is usual): `clipper serve` then replans and uploads approved items on "
+                                         "that timer; 0 leaves it to `clipper upload` by hand")
+    if role == "bot" and not dc["enabled"]:
+        warn("config", "[discord] enabled = false on a bot machine: `review publish` posts no cards, so the bot "
+                       "has none to show", "set [discord] enabled = true (with the ids above), or don't run `clipper bot` here")
     if role in ("all", "bot"):
         u = cfg["serve"]["url"]
         (ok if not u or u.startswith(("http://", "https://")) else fail)(
