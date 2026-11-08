@@ -110,7 +110,10 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   feature; `mockups/`, `reports/` media and `research_notes/` move under `studio/`, out of the package, no
   history rewrite; Kitsu stays the record, with a one-machine Kitsu (page + local compose) to document, and
   Kitsu-optional is not a goal. Claude's pick, not objected to: the Windows task scripts stay for a GPU worker
-  only; serve and the bot are compose-only in the docs.
+  only; serve and the bot are compose-only in the docs. Tier 2 answers (user, 2026-11-08): merge each PR once CI
+  is green on both OSes and every Copilot comment is handled, delete the merged branches; pin this install's
+  values into the NAS clipper.toml (with a backup) before scrubbing the defaults; order 13, 17, 16, the doc
+  items, then 19.
 
 ## State now (2026-10-30)
 - **Running on the NAS** since 2026-11-05 (#9/#12, PR #152; wiki NAS-hub): containers `serve` (war room on
@@ -186,6 +189,12 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
+- **Deploy the hub:** the NAS containers (serve, bot, worker) still run the code from before tier 1 (the 11-07
+  deploy). `bash deploy/hub/deploy.sh` from a main checkout once #182 is in, not during a show and not while an
+  upload runs (`clipper services status serve` lists its jobs).
+- Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/` until
+  then). The stale worktrees (`C:\clipper-wt`, `C:\clipper-jevlab`, `.claude/worktrees/*`) can go: delete the
+  folders, then `git worktree prune`. PR #169 (the user's own) is still open and mergeable.
 - The DSP story video is in Kitsu for review (Kino Casino / "2026-11-04 story-dsp-credit-score-590",
   Discord card posted, user's go 11-04): "DSP Says the 590 Credit Score Letter Is Fake", 3:14.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
@@ -365,10 +374,21 @@ doctor and a test); #175 `studio/` (mockups, research notes, media reports; `[pa
 the old `mockups/udder_truth/` leftovers stay on the laptop until Fusion is closed, ignored by `/mockups/`);
 #176 the war room as a package (`clipper/warroom/`: data, review, panels, lowres, tailscale, httpd, state);
 #177 tests where the risk is (bot, describe, sync, worker failure, digest, signals, segments, transcribe),
-`tests/test_modules_have_tests.py` (7 modules still untested, list may only shrink), `config.base`, the alias
-rule, CI installs the discord extra. Left for tier 2 (report §6, items 13-19): scrub the deployment from
-DEFAULTS/example, setup phase-2 pages (Discord app, Google OAuth, one-machine Kitsu), a Reviewing page,
-pre-spend estimates and `clipper status`, one deploy path per role, defaults as TOML, prompts in the package.
+`tests/test_modules_have_tests.py` (13 modules still untested, list may only shrink), `config.base`, the alias
+rule, CI installs the discord extra. **Tier 2 the same day, five PRs, same policy:** #178 this install out of the
+defaults and the example (`[receipts]` and `[weekly] masthead`/`byline` empty until set, with guards and a doctor
+warning; the install's values pinned into the NAS clipper.toml first, backup
+`backups/clipper.before_defaults_scrub_2026-11-08.toml`; a test fails on its names in config, example, setup, cli);
+#179 help on every argument (test), `run -h` explains the fast lane's twins and that `--only`/`--from` choose
+stages, not what they redo, doctor warns on `auto_upload_minutes = 0` (serve) and on a bot role with `[discord]
+enabled = false`; #180 `--dry-run` estimates on score/segments/meta/thumbs (offline prices, the Pass A and
+metadata checkpoints honoured), per-stream costs on Costs, `clipper status` (files only; `--sync` for Kitsu);
+#181 pages Kitsu (+ `deploy/kitsu/local.sh`), Discord app, YouTube sign-in, Reviewing, `clipper review invite
+<discord id>`, compose the one way to run serve and the bot (the Windows serve/bot task scripts removed,
+`deploy/worker` stays), product pages without this install's names; #182 `clipper/defaults.toml` as the one
+source of defaults (config.py 1,330 → 446 lines), `clipper.example.toml` a 58-line starter. Copilot had 1/2/5/4
+comments on #178-#181, all taken. Not done from the plan: prompts into the package (`importlib.resources`).
+The NAS containers run the pre-tier-1 code until `bash deploy/hub/deploy.sh`.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
@@ -445,6 +465,9 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
   ssh); code changes: `bash deploy/hub/deploy.sh [serve|bot|worker]` from a main checkout (Git Bash).
   A serve restart or deploy kills a running upload: `clipper services status serve` lists its jobs; wait
   until none is running.
+- **What is going on:** `clipper status` (serve's and the bot's heartbeats and the recorder's, the worker's
+  streams, review counts, the next releases, this month's spend; `--sync` reads Kitsu first). Before a model
+  rerun, `clipper score|segments|meta|thumbs <stream> --dry-run` prices it from the prompts it would send.
 - **Upload one item now:** approve in Kitsu, `clipper schedule` (back up schedule.json first), then
   `clipper upload --max 1`; asap items go public at once (serve's hourly runs log to `logs/serve.log`).
 - **One-off from a YouTube video:** `clipper --show <key> preshow fetch <url> --from H:MM:SS --about "..."`
