@@ -1,9 +1,10 @@
 Nothing goes out before a person approves it. Review happens in
 [Kitsu](https://www.cg-wire.com/kitsu), the record for every decision, with one production per
-show and one episode per stream. `deploy/kitsu` runs it in Docker. The Discord bot mirrors each
+show and one episode per stream ([Kitsu](Kitsu) sets it up). The Discord bot mirrors each
 item as a card with buttons, and the [war room](War-room) (a web page `clipper serve` serves)
 shows what is live, where each stream is in the pipeline, the review queue and the upload
-schedule, with bulk edits, undo, a cover editor and a drag-and-drop schedule.
+schedule, with bulk edits, undo, a cover editor and a drag-and-drop schedule. A second person
+reviewing from a phone starts at [Reviewing](Reviewing).
 
 ## Decisions
 

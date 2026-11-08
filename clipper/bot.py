@@ -19,8 +19,7 @@ and edits cards whose status, hold, pin, title or schedule changed outside Disco
 (clipper/alerts.py), and every few minutes it posts the stories `clipper news check`
 found. It logs to paths.bot_log as well as the console, only one bot runs per streams
 folder (a lock file), and it writes a heartbeat (clipper/daemon.py) that the war room's
-Health panel and `clipper services status` read. deploy/discord/bot-task.ps1 runs it at
-logon.
+Health panel and `clipper services status` read. deploy/hub runs it as a container.
 
 Everything that isn't Discord is `clipper serve` (clipper/serve.py): the war room, the
 hourly replan and upload, pre-show grabs, retakes and the daily jobs. The bot asks it over
@@ -46,7 +45,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord import app_commands
 
-from . import actions, alerts, cardsync, daemon, news, notify, schedule, serve
+from . import actions, alerts, cardsync, daemon, digest, news, notify, schedule, serve
 from .errors import ClipperError
 from .timefmt import length
 
@@ -240,7 +239,7 @@ class Bot(discord.Client):
             try:
                 if not link and self.cfg["warroom"]["tailnet"]:
                     link = await asyncio.to_thread(serve.tailnet_link, self.cfg)
-                msgs, files, st = await asyncio.to_thread(alerts.pending, self.cfg, link)
+                msgs, files, st = await asyncio.to_thread(alerts.pending, self.cfg, link, digest.text)
                 if msgs:
                     user = self.get_user(uid) or await self.fetch_user(uid)
                     for m in msgs:
@@ -482,7 +481,7 @@ class Bot(discord.Client):
         await interaction.followup.send(f"{verb} `{row['short']}` in Kitsu{note}.", ephemeral=True)
 
 
-def register_commands(bot: Bot) -> None:
+def register_commands(bot: Bot) -> None:  # noqa: C901
     tree, cfg = bot.tree, bot.cfg
 
     async def streams(interaction: discord.Interaction, current: str):

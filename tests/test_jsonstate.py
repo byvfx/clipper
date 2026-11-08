@@ -144,3 +144,19 @@ def test_unwritable_folder_fails_instead_of_spinning(tmp_path, monkeypatch):
     monkeypatch.setattr(jsonstate.os, "open", refuse)
     with pytest.raises(PermissionError), jsonstate.locked(tmp_path / "s.json", wait_s=0.2):
         pass
+
+
+def test_read_or_gives_the_default_for_a_missing_or_broken_file(tmp_path):
+    """The services' reader: a vanished or half-written file is the default, never a crash;
+    `read` keeps raising on a broken one, so a stage sees it."""
+    p = tmp_path / "state.json"
+    default = {"sent": {}}
+    got = jsonstate.read_or(p, default)
+    assert got == default and got is not default          # a copy: callers mutate it
+    p.write_text("{not json", encoding="utf-8")
+    assert jsonstate.read_or(p, {"x": 1}) == {"x": 1}
+    with pytest.raises(ValueError):
+        jsonstate.read(p, {})
+    jsonstate.write(p, {"ok": True})
+    assert jsonstate.read_or(p, {}) == {"ok": True}
+    assert jsonstate.read_or(tmp_path / "none.json", None) is None

@@ -6,12 +6,14 @@ this page is the short version.
 ```
 clipper/              the package, one module per stage, cli.py wires them
 prompts/              versioned prompt files; the version in use is set in clipper.toml
-deploy/               bootstrap (new machine), NAS recorder (Docker), Kitsu (Docker), Windows worker, serve and bot tasks
+deploy/               bootstrap (new machine); compose stacks for the NAS hub (serve, bot, worker), the recorder, Kitsu and Claude; Windows task scripts for a GPU worker
 streams/<id>/         one folder per stream: source, transcript, cuts, metadata, review state
 clipper.example.toml  every setting, documented (a test checks it against config.py)
 tests/                offline tests (pytest); CI runs them and ruff on every push
 docs/wiki/            these pages; pushed to the wiki on every push to main
 HANDOFF.md            current state between work sessions (short); docs/log/ has the dated diary
+studio/               the studio's working files: mockups, research notes, media-heavy reports (not the package)
+reports/              the audits and the monthly analytics reports
 ```
 
 ## Shape
@@ -22,14 +24,36 @@ HANDOFF.md            current state between work sessions (short); docs/log/ has
 - Stages read and write files in `streams/<id>/` and are idempotent. JSON state goes through
   `clipper/jsonstate.py`.
 - Config: defaults in `clipper/config.py` < `clipper.toml` < `clipper.local.toml` < `CLIPPER_*`
-  env ([Configuration](Configuration)). Use `config.for_stream(cfg, sdir)` whenever a stream is known.
+  env ([Configuration](Configuration)). Use `config.for_stream(cfg, sdir)` whenever a stream is known; `config.base(cfg)` is the config
+  before any override. A two-letter section alias (`sc`, `rc`, `wc`) only in a module that reads
+  one section; elsewhere spell the section out.
 - Model calls go through `clipper/llm.py`; the provider is the model string's prefix
   ([Model providers](Model-providers)).
 - Library code raises `ClipperError` (`clipper/errors.py`); only `cli.main` exits.
-- Prompts are `prompts/<name>_<version>.md`; add a new version rather than editing one that
+- Prompts are `prompts/<name>_<version>.md`; `prompts.VERSIONS` names the config key that holds each
+  one's version (doctor and a test read it). Add a new version rather than editing one that
   produced reviewed output.
 - Kitsu is the record for review decisions; the bot and the war room act through
   `clipper/actions.py`.
+- Stages print, services log. A `clipper <stage>` prints its progress (the worker and serve copy
+  a child's output into `run_<stage>.log` and `serve.log`); serve, the bot, the worker and the
+  recorder log through `logging`, never `print`. The processes share state through the streams
+  folder: [How the processes talk](How-the-processes-talk) lists the locks, heartbeats, the DM
+  outbox and serve's API, and which log answers which question.
+
+## Adding a command or a stage
+
+Each step is checked by a test where it can be, so a missing one fails `pytest`, not a user:
+
+1. The parser and `cmd_<name>` in `clipper/cli.py`, in its group's `add_<group>`, and the name in
+   `COMMAND_GROUPS` (test).
+2. Its settings in `config.DEFAULTS`, a comment on each, and the same keys in
+   `clipper.example.toml` (test). Nothing machine- or show-specific in a default.
+3. A pipeline stage is also a row in `clipper/stages.py` (test).
+4. A `clipper doctor` check when it needs a key, a service or a file, with the fix in the message.
+5. A wiki page or section, in the sidebar (test), and `wiki.page(...)` links in its messages (test).
+6. Tests for its pure logic in `tests/`, and the cost printed before any model call it makes. A
+   new module needs a test that names it (`tests/test_modules_have_tests.py` fails otherwise).
 
 ## Checks
 
@@ -38,8 +62,9 @@ uvx ruff@0.17.3 check clipper tests
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-Tests are offline and take under a second; new pure logic gets a test. CI runs both on every
-push (`.github/workflows/check.yml`). Try risky changes on the test stream `kick-131151926`
+Tests are offline and take about 25 s; new pure logic gets a test. CI runs both on every
+push, on Linux and Windows (`.github/workflows/check.yml`). The ruff rules are the defaults plus
+the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on a short test stream
 first. Before merging a PR, wait for Copilot's automatic review and handle each comment.
 
 ## Editing these docs

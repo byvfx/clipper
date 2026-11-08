@@ -21,7 +21,8 @@ the same PR as the change.
   `clipper/stages.py`, which the worker and `clipper run` read.
 - A stream is `streams/<id>/`; stages read and write files there and are idempotent, so
   `clipper run` can skip what is done. Review state is `review.json`, retakes `retakes.json`.
-  JSON files go through `clipper/jsonstate.py`: `load`/`read` (retry a file mid-replace),
+  JSON files go through `clipper/jsonstate.py`: `load`/`read` (retry a file mid-replace), `read_or`
+  (a default for a missing or broken file: services and the page only),
   `write` (tmp + replace), `update`/`merge` (under a lock). A test fails on a raw
   `json.loads(path.read_text())`.
 - Config: defaults in `clipper/config.py` < `clipper.toml` < `clipper.local.toml` (this machine's
@@ -29,7 +30,9 @@ the same PR as the change.
   over show and stream overrides.
   `config.for_stream(cfg, sdir)` resolves the show from the stream's `meta.json` channel,
   then the stream's own `streams/<id>/config.toml` if any; use it rather than the base config
-  whenever a stream is known.
+  whenever a stream is known. `config.base(cfg)` is the config before any override (the old `_root`).
+  A two-letter section alias (`sc`, `rc`, `wc`) only in a module that reads one section; elsewhere
+  spell the section out, since `sc` is scoring in one file and story or schedule in the next.
 - Shows: `[shows.<key>]` tables; a show's sub-tables override base sections. Each show has
   its own Kitsu production. Everything uploads to one YouTube channel.
 - Model calls go through `clipper/llm.py` (`llm.Claude` is an alias of `LLM`); the provider is the
@@ -37,8 +40,12 @@ the same PR as the change.
 - Errors: library code raises `ClipperError` (`clipper/errors.py`) with a one-line message, never
   `SystemExit`; only `cli.main` turns it into an exit. The bot, war room and worker catch it
   like any exception. A test fails on a new `raise SystemExit` outside cli.py.
-- Prompts are `prompts/<name>_<version>.md` (loaded by `clipper/prompts.py`); the version in use is a config key. Add a new
-  version rather than editing one that produced reviewed output.
+- Prompts are `prompts/<name>_<version>.md` (loaded by `clipper/prompts.py`); the version in use is a config key, and
+  `prompts.VERSIONS` says which one for each prompt (doctor and a test read it; a stage never assigns a version by
+  hand). Add a new version rather than editing one that produced reviewed output.
+- Stages print, services (serve, bot, worker, recorder) log through `logging`. How the processes share
+  state (locks, heartbeats, the DM outbox, serve's API) is the wiki page How-the-processes-talk; the
+  six-step checklist for a new command is in Developing.
 
 ## Rules
 
@@ -78,8 +85,10 @@ the same PR as the change.
   `clipper services status|stop|restart serve|bot|worker|all` runs `docker compose` there over
   ssh (`[serve] hub`). Code changes reach them with `bash deploy/hub/deploy.sh` from a checkout
   of main (Git Bash): that replaces restarting serve or the bot, and never touches the recorder.
-  The laptop's scheduled tasks (`deploy/serve`, `deploy/discord`, `deploy/worker`) are disabled;
-  never run them alongside the containers (their single-instance locks don't see each other).
+  The laptop's worker task (`deploy/worker`) is disabled; never run serve, the bot or the worker
+  on the laptop alongside the containers (their single-instance locks don't see each other). The
+  serve and bot task scripts are gone (2026-11-08): compose (`deploy/hub`) is the one way to run
+  them unattended, on any Docker host.
 - The NAS recorder is deployed with `bash deploy/record/deploy.sh`, only when no show is live:
   the restart starts a new recording part. The script refuses while `clipper record status`
   shows a recording (exit 3); `--force` overrides it.
@@ -117,9 +126,11 @@ Windows notes above don't apply.
 - `clipper doctor --role gpu --offline` after changing config, ffmpeg, fonts or dependencies.
 - Try risky changes on the test stream `kick-131151926` before a real one.
 - Before committing: `uvx ruff@0.17.3 check clipper tests` and `.venv/Scripts/python.exe -m pytest -q`.
-  The rules are ruff's defaults for the version pinned in pyproject (`required-version`); bump
-  the pin there and in the dev group together. Tests are offline and take under a second; new
-  pure logic gets a test in `tests/`. CI runs both on every push (`.github/workflows/check.yml`).
+  The rules are ruff's defaults plus the few in pyproject's `[tool.ruff.lint]` (import order,
+  bugbear, pyupgrade, blind excepts, stale noqa, McCabe over 15), pinned to the version in
+  `required-version`; bump the pin there and in the dev group together. Tests are offline and
+  take about 25 s; new pure logic gets a test in `tests/`. CI runs both on every push, on Linux
+  and Windows (`.github/workflows/check.yml`).
   Merging a PR: wait for Copilot's automatic review (a few minutes after the PR opens), handle
   each comment and show the user, then merge. Green CI alone isn't enough.
   Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running

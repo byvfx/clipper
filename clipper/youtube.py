@@ -81,11 +81,11 @@ def credentials(paths: dict, sign_in: bool = False, force_refresh: bool = False)
     if creds and creds.refresh_token and (creds.expired or force_refresh):
         try:
             creds.refresh(Request())
-        except Exception as e:  # noqa: BLE001  # revoked, or a 7-day Testing-mode token that expired
+        except Exception as e:  # revoked, or a 7-day Testing-mode token that expired
             why = e.args[0] if e.args else e
             raise ClipperError(f"YouTube sign-in no longer works ({why}); run: clipper upload --sign-in. "
                                "If it lapses every 7 days, the Google OAuth app is still in Testing: "
-                               "publish it (Google Cloud > Google Auth Platform > Audience)")
+                               "publish it (Google Cloud > Google Auth Platform > Audience)") from e
     if not creds or not creds.valid:
         if not sign_in:
             raise ClipperError("not signed in to YouTube; run: clipper upload --sign-in")
@@ -703,7 +703,7 @@ def run(cfg: dict, sign_in: bool = False, dry_run: bool = False, limit: int | No
         raise ClipperError(f"{len(failed)} upload(s) failed: {'; '.join(failed)}"[:900])
 
 
-def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: int | None):
+def upload_due(cfg: dict, sched: dict, sched_path: Path, dry_run: bool, limit: int | None):  # noqa: C901
     """Upload what's due; returns the YouTube client if it made one, and "key: error" for
     each upload that failed."""
     yc, paths = cfg["youtube"], cfg["paths"]

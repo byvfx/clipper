@@ -81,9 +81,10 @@ once the steps below and the ones in the next section are done.
 **Join:** these already live in the shared config, so there's nothing to redo.
 
 **New:** each needs doing by hand:
-- [ ] The Discord bot app and its ids ([Review](Review)).
+- [ ] Kitsu and clipper's account on it ([Kitsu](Kitsu)).
+- [ ] The Discord bot app and its ids ([Discord app](Discord-app)).
 - [ ] The YouTube sign-in to the new channel, `clipper upload --sign-in`
-      ([YouTube channel](YouTube-channel)).
+      ([YouTube sign-in](YouTube-sign-in)).
 - [ ] The shows, each with its own Kitsu production ([Adding a show](Adding-a-show)).
 
 ## Afterwards

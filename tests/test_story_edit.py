@@ -184,7 +184,7 @@ def test_cut_writes_one_segment_with_its_words_chapters_and_sources(cfg, planned
     from clipper import thumbs
     monkeypatch.setattr(thumbs, "run", lambda sdir, cfg, force=False, missing=False:
                         calls.append(("thumbs", force, missing)))
-    monkeypatch.setattr(review, "publish", lambda sdir, cfg, only=None: calls.append(("review",)))
+    monkeypatch.setattr(review, "publish", lambda sdir, cfg, force=False, only=None: calls.append(("review",)))
     story_edit.cut(cfg, planned)      # after --no-review: meta and thumbs still to do
     assert calls == [("meta", False), ("thumbs", True, False), ("review",)]
     calls.clear()

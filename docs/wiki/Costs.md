@@ -50,5 +50,22 @@ the bot DMs each time the month passes a multiple of `[modal] alert_every_usd`.
 | Cast photo label | ~$0.0002 a photo; Brave image search ~$5 per 1,000 |
 | X post | ~$0.015 (a link post $0.20, so clipper never adds one) |
 
-A rerun of `score`, `segments`, `meta` or `thumbs` on a long stream pays again; `score` refuses
-without `--force`. Use `--dry-run` where a command offers it for the estimate.
+### One stream, stage by stage
+
+Median spend per stream over this install's logged runs (27 streams, most 7-9 h, October to
+November 2026; `clipper costs` has the live numbers):
+
+| Stage | Median | Upper quartile |
+|---|---|---|
+| `transcribe` (Modal) | $0.45 | $0.60 |
+| `--diarize`, on top | $0.16 | $0.18 |
+| `score` (both passes) | $0.18 | $0.21 |
+| `segments` (one call over the whole transcript) | $0.81 | $0.92 |
+| `meta` | $0.88 | $1.05 |
+| `thumbs` (a pick per video, frames as images) | $1.01 | $1.36 |
+| `shorts`, `x` | about a cent | ~$0.04 |
+
+So a full run on an evening show is about $3.50. A rerun of `score`, `segments`, `meta` or
+`thumbs` pays again (`score` refuses without `--force`); each of the four prints what a run
+would cost with `--dry-run`, from the prompts it would send (four characters a token, times
+`[llm] prices`), calling nothing. `clipper status` ends with the month's spend by stage.

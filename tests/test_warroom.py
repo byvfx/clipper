@@ -5,7 +5,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from clipper import warroom
+from clipper import actions, warroom
 from clipper.errors import ClipperError
 
 
@@ -60,7 +60,7 @@ def test_a_refused_post_still_gets_its_answer(serve, monkeypatch):
     port = serve("")
     for _ in range(20):
         assert status(port, "/api/nope", "evil.example", method="POST") == 403
-    monkeypatch.setattr(warroom, "MAX_POST", 1)
+    monkeypatch.setattr(warroom.httpd, "MAX_POST", 1)
     assert status(port, "/api/nope", "localhost", method="POST") == 413
 
 
@@ -71,7 +71,8 @@ def test_saved_layouts(tmp_path):
     assert warroom.save_layout(cfg, {"name": "Mine", "layout": lay})["layouts"]["Mine"] == lay
     assert warroom.layouts(cfg)["layouts"]["Mine"] == lay
     for bad in ({"zones": {"sideways": []}}, {"zones": {"top": "schedule"}}, {"zones": {"top": ['"]']}},
-                {"zones": {"top": []}, "widths": {"left": 5000}}):
+                {"zones": {"top": []}, "widths": {"left": 5000}}, {"zones": {"top": []}, "widths": [300]},
+                ["top"]):   # widths and the layout itself must be dicts (Copilot on #176)
         with pytest.raises(ClipperError, match="not a layout"):
             warroom.save_layout(cfg, {"name": "Bad", "layout": bad})
     with pytest.raises(ClipperError, match="name"):
@@ -107,7 +108,7 @@ def test_faces_window(tmp_path, defaults, monkeypatch):
     from clipper import faces, jsonstate
 
     cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path, "faces": str(tmp_path / "known")}}
-    monkeypatch.setattr(warroom, "for_stream", lambda c, sdir: cfg)
+    monkeypatch.setattr(warroom.faces, "for_stream", lambda c, sdir: cfg)
     sdir = tmp_path / "kick-1"
     (sdir / "faces").mkdir(parents=True)
     jsonstate.write(sdir / "meta.json", {"channel": "x"})
@@ -139,7 +140,7 @@ def test_faces_window(tmp_path, defaults, monkeypatch):
 
 
 def test_face_pick_grabs_the_cut_or_a_compilations_preview(tmp_path, defaults, monkeypatch):
-    from clipper import actions, faces
+    from clipper import faces
 
     cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path}}
     sdir = tmp_path / "kick-1"
@@ -148,11 +149,11 @@ def test_face_pick_grabs_the_cut_or_a_compilations_preview(tmp_path, defaults, m
     (sdir / "review" / "c01_t20.mp4").write_bytes(b"")
     states = {"c01_t20": {"kind": "pick", "file": r"clips\01_t20.mp4"},
               "comp-x": {"kind": "compilation", "file": r"compilations\x.mp4"}}
-    monkeypatch.setattr(warroom.actions, "resolve", lambda c, ref: actions.Item(sdir, ref.split("/")[1], states[ref.split("/")[1]]))
+    monkeypatch.setattr(actions, "resolve", lambda c, ref: actions.Item(sdir, ref.split("/")[1], states[ref.split("/")[1]]))
     grabbed = []
     monkeypatch.setattr(faces, "grab", lambda video, t, dst: grabbed.append(video) or dst)
     monkeypatch.setattr(faces, "pick", lambda img, box, c: {"box": box, "px": 90, "embedding": [], "closest": "", "match": 0.0, "tile": b"jpg"})
-    monkeypatch.setattr(warroom, "for_stream", lambda c, d: cfg)
+    monkeypatch.setattr(warroom.faces, "for_stream", lambda c, d: cfg)
     box = {"x": 0.1, "y": 0.1, "width": 0.2, "height": 0.2}
     got = warroom.faces_pick(cfg, {"ref": "kick-1/c01_t20", "t": 3.0, "box": box})
     assert got["tile"].startswith("data:image/jpeg;base64,") and got["stream"] == "kick-1"
@@ -188,7 +189,7 @@ def test_next_slot_for_every_segment_leaves_out_a_full_budget(tmp_path, defaults
     jsonstate.write(cfg["paths"]["schedule"], {"entries": []})
     row = lambda ref, **kw: {"ref": ref, "stream": ref.split("/")[0], "kind": "segment", "title": ref,
                              "decision": "approved", "hold": False, "scheduled": "", "uploaded": False, **kw}
-    monkeypatch.setattr(warroom, "all_rows", lambda c: [row("a/x"), row("b/y"), row("b/held", hold=True),
+    monkeypatch.setattr(warroom.review, "all_rows", lambda c: [row("a/x"), row("b/y"), row("b/held", hold=True),
                                                         row("b/no", decision="pending")])
     monkeypatch.setattr(schedule, "release_window", lambda c, sdir, meta: (datetime.now(UTC) - timedelta(days=1), None))
     auto = {"key": "a/auto", "title": "a/auto", "publish_at": "2026-11-09T16:00:00-08:00"}
@@ -221,3 +222,58 @@ def test_hidden_shows_leave_the_page(tmp_path):
     path.write_text('[warroom]\nhide_shows = ["trish"]\n[shows.kino]\nchannels = ["k"]\n'
                     '[shows.trish]\nchannels = ["t"]\n', encoding="utf-8")
     assert list(warroom.shown_shows(config.load(path))) == ["kino"]
+
+
+def test_bad_headers_and_queries_are_bad_requests_not_crashes(serve, defaults, tmp_path):
+    """A malformed Content-Length, Range or ?t= answers with a status, never a 500 (Copilot on #176)."""
+    defaults["paths"]["streams"] = tmp_path / "streams"   # before serve(): the handler reads it then
+    port = serve("")
+    root = defaults["paths"]["streams"]
+    (root / "kick-1").mkdir(parents=True)
+    (root / "kick-1" / "c.mp4").write_bytes(b"0123456789")
+
+    def get(path: str, **headers) -> tuple[int, bytes, dict]:
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        c.request("GET", path, headers={"Host": "localhost", **headers})
+        r = c.getresponse()
+        return r.status, r.read(), dict(r.getheaders())
+
+    assert get("/media/kick-1/c.mp4", Range="bytes=2-4")[:2] == (206, b"234")
+    assert get("/media/kick-1/c.mp4", Range="bytes=2-4")[2]["Content-Range"] == "bytes 2-4/10"
+    assert get("/media/kick-1/c.mp4", Range="bytes=abc-def")[:2] == (200, b"0123456789")   # ignored
+    code, body, hdrs = get("/media/kick-1/c.mp4", Range="bytes=100-")
+    assert (code, body, hdrs["Content-Range"]) == (416, b"", "bytes */10")
+    assert get("/watch?src=/media/kick-1/c.mp4&t=abc")[0] == 200   # from the start
+
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    c.putrequest("POST", "/api/nope")
+    c.putheader("Host", "localhost")
+    c.putheader("Content-Length", "abc")
+    c.endheaders()
+    assert c.getresponse().status == 400
+
+
+def test_tailscale_json_that_isnt_is_an_empty_status():
+    from types import SimpleNamespace
+
+    j = warroom.tailscale._json
+    assert j(SimpleNamespace(stdout='{"BackendState": "Running"}')) == {"BackendState": "Running"}
+    assert j(SimpleNamespace(stdout="Log in at https://login.tailscale.com/...")) == {}
+    assert j(SimpleNamespace(stdout="")) == {} and j(SimpleNamespace(stdout="[1, 2]")) == {}
+
+
+def test_sync_all_starts_one_sync_for_two_requests(defaults, monkeypatch):
+    import time
+
+    calls = []
+
+    def slow_sync(d, cfg, quiet=False):
+        calls.append(d)
+        time.sleep(0.3)
+    monkeypatch.setattr(warroom.review.review, "sync", slow_sync)
+    monkeypatch.setattr(warroom.review.actions, "review_dirs", lambda cfg: [defaults["paths"]["streams"] / "kick-1"])
+    warroom.SYNC.update(running=False, error="")
+    warroom.sync_all(defaults)
+    warroom.sync_all(defaults)   # the same instant: still one thread
+    time.sleep(0.6)
+    assert len(calls) == 1 and warroom.SYNC["running"] is False and warroom.SYNC["last"]

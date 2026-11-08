@@ -65,7 +65,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
         "faces": "faces",         # known faces, every show: known.json (`clipper faces --enroll`) + models/
-        "streamers": "research_notes/streamers.json",  # people and their channels (`clipper story`)
+        "streamers": "studio/research_notes/streamers.json",  # people and their channels (`clipper story`)
         "people": "people.json",  # one record per person (`clipper people`); folds in streamers.json and the cast library
     },
     "modal": {
@@ -111,7 +111,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "youtube_format": "bestaudio[abr<=96]/bestaudio",  # ~40 MB per hour of audio
         "stop_after_failures": 20,  # in a row (e.g. YouTube's bot check); 0 = never stop
         "diarize": False,         # speaker turns per item too (#52): diarization.json, words named against
-                                  # [paths] voices/<subject>.json; ~+80% GPU time (jer all: ~$70 more on L4)
+                                  # [paths] voices/<subject>.json; ~+80% GPU time (a 2,700 h archive: ~$70 more on L4)
         "link_parallel": 4,       # `archive check`: oEmbed requests at once
         "link_recheck_days": 7,   # `archive check` skips links checked more recently
         "index_window_s": 30,     # `archive index`: seconds of transcript per searchable window
@@ -127,13 +127,14 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "receipts": {
         # `clipper receipts`: a stream's stories about an archive subject -> old clips of him
         # saying it (#48), cut into one video with source and date on screen, uploaded private.
-        "subject": "jer",         # the archive subject (paths.archive/<subject>)
-        "topics": ["The Quartering"],  # segments with one of these topics...
-        "figures": ["Jeremy Hambly", "Jer", "The Quartering"],  # ...or one of these figures
+        "subject": "",            # the archive subject (paths.archive/<subject>); "" = not set up,
+                                  # and `clipper receipts` says so
+        "topics": [],             # segments with one of these topics...
+        "figures": [],            # ...or one of these figures: the subject's names, as the show says them
         # These two go with the subject: the video title's start ("" = "<subject> receipts")
         # and its YouTube tags (the show's name is added).
-        "title": "The Quartering Receipts",
-        "tags": ["The Quartering", "Jeremy Hambly", "receipts"],
+        "title": "",
+        "tags": ["receipts"],
         "model": "claude-sonnet-5-5",  # reads the segments, writes the stories and questions
         "effort": "medium",
         "prompt_version": "v2",   # prompts/receipts_stories_<v>.md
@@ -290,8 +291,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "face_frames": 3,         # each person named in a stream's faces.json: their best faces, frames for the pages; 0 = off
         "first_issue": 1,         # number of the first issue this install makes
         "formats": ["tiktok", "youtube"],  # tiktok: 1080x1440 pages; youtube: the same pages square (youtube/)
-        "masthead": ["LOLCOW", "CINEMA"],  # red word, chrome word (then "WEEKLY" inside)
-        "byline": "BY THE LOLCOW DESK",
+        "masthead": [],           # the cover's two words, red then chrome ("WEEKLY" follows); `clipper weekly` needs them
+        "byline": "",             # under each article's deck, e.g. "BY THE NEWS DESK"; "" = none
         "price": "$1.39 US",      # on the cover's barcode block
         # Words counted in the week's transcripts for the numbers page (the model picks from them).
         "words": ["grift", "coffee", "cameo", "sub", "clip", "lawsuit", "divorce"],
@@ -330,7 +331,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "max_age_hours": 72,      # --auto skips Shorts from streams older than this (--items still can); 0 = any
         "hashtags": [],           # added after the Short's own
         "max_hashtags": 3,        # the Short's subject tags, then the show's
-        "show_hashtag": True,     # end the hashtags with the show's name (#KinoCasino), never dropped first
+        "show_hashtag": True,     # end the hashtags with the show's name (#MyShow), never dropped first
         "hook_first": True,       # drop [meta] title_format's show prefix: the feed shows the first words
         "mentions": [],           # @handles of whose footage it is (per show: [shows.<key>.x]); each is notified
         "credit": "From {show}: {mentions}",  # last line, when the show has mentions
@@ -400,8 +401,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "stale_minutes": 10,      # a run with no heartbeat this long is taken over
     },
     "preshow": {
-        # `clipper preshow`: whole videos a show posts on its own YouTube channel (Kino
-        # Casino's pre-recorded pre-show). Set youtube_channel per show, in [shows.<key>.preshow].
+        # `clipper preshow`: whole videos a show posts on its own YouTube channel (a
+        # pre-recorded pre-show). Set youtube_channel per show, in [shows.<key>.preshow].
         "youtube_channel": "",    # channel id (UC...) whose uploads feed is watched; "" = off
         "title_pattern": r"(?i)pre.?show",  # uploads whose title matches are grabbed
         "max_age_hours": 36,      # feed entries older than this are left alone (fetch by hand)
@@ -587,7 +588,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "prompt_version": "v3",   # prompts/meta_<v>.md, chapters_<v>.md (v3: speaker tags, #52)
         "concurrency": 4,
         "show_name": "",
-        "cast": [],               # per show: its own people by name, e.g. ["Andy", "PPP"]; prompts name them, never "host"
+        "cast": [],               # per show: its own people by name, e.g. ["Alex", "Sam"]; prompts name them, never "host"
         # Upload titles: {title}, {show} or {SHOW} (upper case). Not applied to a title
         # it would push past 100 characters, or one already starting with the show name.
         "title_format": "{title}",
@@ -742,8 +743,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # retakes, the daily jobs). The bot and `clipper doctor` reach it here.
         "url": "",                # "" = this machine, http://127.0.0.1:<[warroom] port>/; else e.g. "http://nas:8765/" (needs [warroom] token on both)
 
-        # Where serve, the bot and the worker run, for `clipper services`: "" = this machine's
-        # scheduled tasks (deploy/serve, deploy/discord, deploy/worker); else the compose folder
+        # Where serve, the bot and the worker run, for `clipper services`: "" = this machine (the
+        # worker's scheduled task on Windows, deploy/worker; serve and the bot by hand); else the compose folder
         # on the NAS that deploy/hub/deploy.sh uses (relative to the ssh user's home, e.g.
         # "clipper-hub"), reached over ssh like the recorder ([record] ssh_host, sudo).
         "hub": "",
@@ -899,9 +900,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # Style rules appended to every prompt that writes viewer-facing text (titles,
         # descriptions, hooks, chapters, thumbnails). Add your own notes here.
         "house_style": [("Never use the word \"hosts\", or \"host\" for a co-host; it "
-                         'reads as machine-written. Name the person (Andy, PPP, Jer...) or make '
-                         'the subject the actor '
-                         '("Nobody buys it").')],
+                         'reads as machine-written. Name the person or make the subject the '
+                         'actor ("Nobody buys it").')],
         "third_party_audio": "reject",  # or "allow_reactions"; v3+ prompts
         "max_source_audio_s": 5,  # allow_reactions: most source audio a Short may carry
         "audience_knowledge": "strangers",  # or "fans" (know known_figures); v4+ prompts
@@ -1173,7 +1173,7 @@ def _unknown(data: dict, where: str) -> list[str]:
 # ---------- shows ----------
 # One clipper.toml serves several shows. Each [shows.<key>] table names the show's Kick
 # channels and holds sub-tables that override the same sections for that show's streams,
-# e.g. [shows.kino.meta] show_name = "Kino Casino". A stream belongs to the show whose
+# e.g. [shows.myshow.meta] show_name = "My Show". A stream belongs to the show whose
 # channels include the "channel" in its meta.json; with no match it keeps the base settings.
 
 def show_of_channel(cfg: dict, channel: str) -> str:
@@ -1202,8 +1202,13 @@ def stream_channel(sdir: Path) -> str:
     return channel
 
 
-def _root(cfg: dict) -> dict:
+def base(cfg: dict) -> dict:
+    """The config as loaded, before any show or stream override (for_show and for_stream keep
+    it under "_root"): for settings that are about the whole install, [shows] included."""
     return cfg.get("_root") or cfg
+
+
+_root = base   # the old name; drop it after a release
 
 
 def for_show(cfg: dict, key: str, channel: str = "") -> dict:

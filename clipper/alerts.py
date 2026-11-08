@@ -146,14 +146,14 @@ def save_state(cfg: dict, st: dict) -> None:
     keep = timedelta(days=7)  # cooldowns are hours; don't let the file grow forever
     st["sent"] = {k: v for k, v in st["sent"].items() if now - datetime.fromisoformat(v) < keep}
     p = _state_path(cfg)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(st, indent=1), encoding="utf-8")
-    tmp.replace(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    jsonstate.write(p, st, indent=1)
 
 
-def checks(cfg: dict, st: dict, now: datetime) -> None:
+def checks(cfg: dict, st: dict, now: datetime, digest=None) -> None:
     """The bot's own checks, queued like any other alert: the disk once an hour, the
-    digest once a day at digest_time."""
+    digest once a day at digest_time. digest: (cfg, now) -> the text (the bot passes
+    clipper.digest.text); None queues no digest, so this module never reads the war room."""
     nc = cfg["notify"]
     if time.time() - st["disk_at"] >= 3600 and nc["disk_free_gb"]:
         st["disk_at"] = time.time()
@@ -162,7 +162,7 @@ def checks(cfg: dict, st: dict, now: datetime) -> None:
         if free < nc["disk_free_gb"]:
             send(cfg, "disk", f"the streams share ({root}) has {free:.0f} GB free "
                               f"(warning under {nc['disk_free_gb']} GB)", key="disk")
-    if nc["digest_time"] and st["digest"] != now.date().isoformat() \
+    if digest and nc["digest_time"] and st["digest"] != now.date().isoformat() \
             and (now.hour, now.minute) >= _hm(nc["digest_time"]):
         st["digest"] = now.date().isoformat()
         try:
@@ -180,13 +180,14 @@ def checks(cfg: dict, st: dict, now: datetime) -> None:
             log.debug("modal spend check: %s", e)
 
 
-def pending(cfg: dict, link: str = "") -> tuple[list[str], list[Path], dict]:
+def pending(cfg: dict, link: str = "", digest=None) -> tuple[list[str], list[Path], dict]:
     """What to DM now: the messages (each under Discord's 2000 characters), the outbox files
-    they cover and the state to save once they're sent. Nothing during quiet hours."""
+    they cover and the state to save once they're sent. Nothing during quiet hours.
+    digest: see checks()."""
     nc, tz = cfg["notify"], _tz(cfg)
     now = datetime.now(tz)
     st = load_state(cfg)
-    checks(cfg, st, now)
+    checks(cfg, st, now, digest)
     d = outbox(cfg)
     files = sorted(d.glob("*.json")) if d.is_dir() else []
     if not files or quiet(cfg, now):
@@ -228,59 +229,3 @@ def done(cfg: dict, files: list[Path], st: dict) -> None:
     for f in files:
         f.unlink(missing_ok=True)
     save_state(cfg, st)
-
-
-# ---------- the daily digest ----------
-
-def digest(cfg: dict, now: datetime | None = None) -> str:
-    from . import warroom
-
-    tz = _tz(cfg)
-    now = now or datetime.now(tz)
-    ov = warroom.overview(cfg)
-    day = lambda e: datetime.fromisoformat(e["publish_at"]).astimezone(tz).date()
-    today = [e for e in ov["schedule"] if day(e) == now.date()]
-    out = [e for e in today if e.get("status") == "uploaded"
-           and datetime.fromisoformat(e["publish_at"]) <= now]
-    tomorrow = sorted((e for e in ov["schedule"] if day(e) == now.date() + timedelta(days=1)),
-                      key=lambda e: e["publish_at"])
-
-    def by_show(es: list[dict]) -> str:
-        n: dict[str, int] = {}
-        for e in es:
-            n[e["show_name"] or "?"] = n.get(e["show_name"] or "?", 0) + 1
-        return ", ".join(f"{k} {v}" for k, v in sorted(n.items(), key=lambda kv: -kv[1]))
-
-    c = ov["counts"]
-    lines = [f"Daily digest, {now:%a %b %d}",
-             f"Out today: {len(out)} of {len(today)}" + (f" ({by_show(out)})" if out else ""),
-             f"Tomorrow: {len(tomorrow)} scheduled" + (
-                 f", first {datetime.fromisoformat(tomorrow[0]['publish_at']).astimezone(tz):%H:%M}: "
-                 f"{tomorrow[0]['title'][:80]}" if tomorrow else ""),
-             (f"Waiting for review: {c['pending']} · changes asked: {c.get('changes', 0)} · "
-              f"approved, no slot yet: {c['approved_unscheduled']}")]
-    failed = [s["id"] for s in ov["streams"] if s["run_status"] == "failed"]
-    if failed:
-        lines.append(f"Streams stuck on a failed stage: {', '.join(failed)}")
-    lines += related_lines(cfg, now)
-    return "\n".join(lines)
-
-
-def related_lines(cfg: dict, now: datetime, show: int = 5) -> list[str]:
-    """Shorts whose segment is out but whose related video isn't set yet (Studio only)."""
-    from . import youtube
-
-    try:
-        sched = jsonstate.load(cfg["paths"]["schedule"])
-        todo = youtube.related_todo(cfg, sched, now)
-    except (OSError, ValueError, KeyError) as e:  # the digest still goes out without this part
-        log.warning("digest related videos: %s: %s", type(e).__name__, e)
-        return []
-    if not todo:
-        return []
-    lines = [f"Shorts to link to their segment (Studio, Related video): {len(todo)}"]
-    lines += [f"  <https://studio.youtube.com/video/{e['video_id']}/edit> → search {p['video_id']}"
-              for e, p in todo[:show]]
-    if len(todo) > show:
-        lines.append(f"  +{len(todo) - show} more: clipper upload --related")
-    return lines + ["  Then: clipper upload --related <keys or links>"]

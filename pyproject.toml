@@ -53,12 +53,26 @@ dev = [
     "ruff==0.17.3",
 ]
 
-# The rules are ruff's own defaults for this version, so the pin is the rule set: the
+# The rule set is pinned to this ruff version (the dev group pins it too), so it is the
 # same on every machine and in CI. Change both pins together, then fix what the new
 # version reports.
 [tool.ruff]
 required-version = "==0.17.3"
 target-version = "py312"
+
+[tool.ruff.lint]
+# The defaults (E4, E7, E9, F) plus import order, bugbear, pyupgrade, blind excepts, stale
+# noqa comments, and McCabe complexity over 15. A deliberate `except Exception` that swallows
+# the error carries `# noqa: BLE001` with its reason; one that re-raises (as a ClipperError,
+# say) needs none: BLE001 skips it, and RUF100 would flag the noqa as unused. The functions
+# already over complexity 15 carry `# noqa: C901`: split them when touched, don't add to them.
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "BLE", "RUF100", "C901"]
+# B905: zip(strict=) on every call site would be noise (lengths are checked where they matter).
+# E731/E741: ruff's defaults leave these stylistic two out; selecting "E7" would bring them in.
+ignore = ["B905", "E731", "E741"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -66,6 +80,10 @@ testpaths = ["tests"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# A source distribution carries the code, prompts and docs, not the studio's working files.
+[tool.hatch.build.targets.sdist]
+exclude = ["studio/"]
 
 # PyPI's Windows torch wheels are CPU-only; pull the CUDA 12.8 builds instead.
 [tool.uv.sources]

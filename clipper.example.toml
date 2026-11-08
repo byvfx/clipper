@@ -35,7 +35,7 @@ archive = "archive"                            # clipper archive subjects (other
 modal_runs = "logs/modal_runs.jsonl"           # every Modal call's start and end (clipper modal, war room)
 voices = "voices"                              # enrolled voices per show (clipper speakers --enroll); the NAS share once it runs everything
 faces = "faces"                                # known faces for every show (clipper faces --enroll) + the face models
-streamers = "research_notes/streamers.json"    # people and their channels by platform (clipper story)
+streamers = "studio/research_notes/streamers.json"    # people and their channels by platform (clipper story)
 people = "people.json"                         # one record per person: names, channels, archive subject (clipper people)
 costs = "logs/costs.jsonl"                     # every model call's cost, one line each (clipper costs, war room)
 model_tests = "logs/model_tests"               # `clipper models test` results, one file a model and effort
@@ -64,8 +64,8 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 # streams with real-time chat into streams/kick-<livestream id>/, then finalize them into
 # source.mkv + chat.jsonl + meta.json + audio.wav, as `clipper fetch` would leave them.
 # One-off: `clipper record now <slug> [--max-s 300]`.
-channels = ["kinocasinogaming"]   # Kick slugs; or tables, e.g.
-                                  # {slug = "dspgamingreal", max_height = 720, enabled = false}
+channels = ["kick-channel-slug"]  # Kick slugs; or tables, e.g.
+                                  # {slug = "another-slug", max_height = 720, enabled = false}
 poll_s = 60                # live-status check per channel
 max_height = 1080          # best variant at or below this height; 0 = best
 end_grace_s = 300          # after the stream goes offline, wait this long for a restart
@@ -145,7 +145,7 @@ modal_audio = "flac"       # flac (lossless, ~60 MB/h) | opus (48 kbps, smaller 
 mlx_model = "mlx-community/whisper-large-v3-turbo"  # Hugging Face repo for the mlx backend
 mlx_align = true           # refine mlx word times with WhisperX alignment if installed
 # diarize = true           # speaker turns too (pyannote); needs the Hugging Face token: wiki, Speakers
-                           # "Speaker labels". Usually per show: [shows.kino.transcribe] diarize = true
+                           # "Speaker labels". Usually per show: [shows.myshow.transcribe] diarize = true
 diarize = false            # speaker turns (whisperx or modal backend); see the note above
 diarize_model = "pyannote/speaker-diarization-community-1"
 min_speakers = 0           # 0 = let pyannote decide
@@ -212,7 +212,7 @@ reddit = ["LivestreamFail"]
 google_news = true         # one Google News search per watched person with a full name
 # The terms: only these are watched (other names in the list; always searched); none = nothing
 # is fetched. [shows.<key>.news] watch = {...} ties terms to that show.
-watch = {}                 # e.g. { "Ethan Klein" = ["H3 Podcast"], "The Quartering" = ["Jeremy Hambly"] }
+watch = {}                 # e.g. { "Jane Doe" = ["JaneDoeLive"], "Acme" = ["Acme Corp"] }
 auto_watch = false         # also watch each show's cast, known figures and name, and the cast library
 ignore = []                # names never watched
 min_fetch_minutes = 20     # a feed or subreddit at most this often
@@ -273,7 +273,7 @@ stream_context = ""
 # Style rules appended to every prompt that writes viewer-facing text (titles,
 # descriptions, hooks, chapters, thumbnails). Add your own notes as more lines.
 house_style = [
-  'Never use the word "hosts", or "host" for a co-host; it reads as machine-written. Name the person (Andy, PPP, Jer...) or make the subject the actor ("Nobody buys it").',
+  'Never use the word "hosts", or "host" for a co-host; it reads as machine-written. Name the person or make the subject the actor ("Nobody buys it").',
 ]
 # Other creators' video/stream audio in a clip (Content ID risk):
 #   "reject"           any clip whose payoff or setup needs more than a few seconds of it
@@ -351,9 +351,9 @@ effort = "medium"
 prompt_version = "v3"          # prompts/meta_<v>.md and chapters_<v>.md (v2: better hashtag picks, v3: speaker tags)
 concurrency = 4                # model calls at once (the metadata draft and chapters)
 show_name = ""
-cast = []                      # per show: the show's own people by name, e.g. ["Andy", "PPP"]; the
+cast = []                      # per show: the show's own people by name, e.g. ["Alex", "Sam"]; the
                                # thumbnail prompts name them where they would say "host"
-title_format = "{SHOW} | {title}"   # KINO CASINO | <title>; {show} keeps its case
+title_format = "{SHOW} | {title}"   # MY SHOW | <title>; {show} keeps its case
 credit = "Clipped from {show}, streamed live on Kick {date}: https://kick.com/{channel}"
 chapters_min_s = 900           # segments at least this long get chapters from the transcript
 min_chapters = 3
@@ -399,7 +399,7 @@ margin_px = 48
 shade = 0.55                   # darken behind the text (0-1)
 saturation = 1.15
 contrast = 1.08
-badge_text = ""                # small fixed label top-left, e.g. "KINO CASINO"
+badge_text = ""                # small fixed label top-left, e.g. "MY SHOW"
 badge_font = ""                # empty = font
 logo = ""                      # PNG top-left instead of badge_text
 stripe_px = 10                 # accent stripe along the bottom; 0 = none
@@ -659,7 +659,7 @@ thumbnails = true              # set the .jpg beside each video (custom thumbnai
                                # phone-verified channel; then `clipper upload --thumbnails`)
 short_thumbnails = false       # Shorts' 9:16 covers too; off until the API is verified on a Short
 add_to_playlist = true         # the metadata draft's playlist, created on first use
-show_playlist = "{show}"       # ...and every upload in its show's playlist ("Kino Casino"); "" = off
+show_playlist = "{show}"       # ...and every upload in its show's playlist ("My Show"); "" = off
                                # backfill videos already up: clipper upload --playlists [--max N]
 playlist_privacy = "public"
 source_links = true            # clip -> its segment (?t=), segment -> its compilation, once public;
@@ -712,7 +712,7 @@ kinds = ["short"]
 max_per_24h = 3                # TikTok allows at most 5 pending drafts in 24 h; new accounts get throttled
 auto_send_minutes = 0          # the bot runs `clipper tiktok --auto` this often (next Shorts in
                                # YouTube-schedule order, up to max_per_24h); 0 = only by hand
-hashtags = []                  # added to every caption, e.g. ["lolcowcinema"]
+hashtags = []                  # added to every caption, e.g. ["mychannel"]
 max_caption_chars = 2200
 redirect_port = 3455
 caption_channel_id = ""        # Discord channel for captions; empty = [record] alert channel/webhook
@@ -728,12 +728,12 @@ max_per_24h = 6
 auto_post_minutes = 0          # the bot runs `clipper x --auto` this often; 0 = only by hand
 after_youtube = false          # true: --auto waits until a Short is public on YouTube
 max_age_hours = 72             # --auto skips Shorts from streams older than this (--items still posts them)
-hashtags = []                  # added after the Short's own, e.g. ["lolcowcinema"]
+hashtags = []                  # added after the Short's own, e.g. ["mychannel"]
 max_hashtags = 3               # the Short's subject tags, then the show's
-show_hashtag = true            # end the hashtags with the show's name (#KinoCasino), kept when others are cut
-hook_first = true              # drop the "KINO CASINO | " prefix: the feed shows the first words
+show_hashtag = true            # end the hashtags with the show's name (#MyShow), kept when others are cut
+hook_first = true              # drop the "MY SHOW | " prefix: the feed shows the first words
 mentions = []                  # @handles of whose footage it is, per show in [shows.<key>.x]
-                               # (e.g. ["Andywarski", "PoweroftheTruth"]); each gets notified
+                               # (e.g. ["janedoe", "acme"]); each gets notified
 credit = "From {show}: {mentions}"   # the post's last line, when the show has mentions
 max_chars = 280
 max_height = 1280              # taller Shorts are re-encoded to 720x1280 first; 0 = send as is
@@ -763,11 +763,11 @@ kick_format = "worst"          # a Kick VOD (`clipper story`): its HLS variants 
 [receipts]
 # `clipper receipts <stream>`: old clips of the archive subject for the night's stories (#48),
 # one video with source and date on screen, uploaded private for the user to send on.
-subject = "jer"
-topics = ["The Quartering"]
-figures = ["Jeremy Hambly", "Jer", "The Quartering"]  # segments with one of the topics, or one of these figures
-title = "The Quartering Receipts"  # the video title's start; "" = "<subject> receipts"
-tags = ["The Quartering", "Jeremy Hambly", "receipts"]  # YouTube tags; the show's name is added
+subject = ""                   # the archive subject (paths.archive/<subject>); "" = not set up, and `clipper receipts` says so
+topics = []                    # segments with one of these topics, e.g. ["Jane Doe"]...
+figures = []                   # ...or one of these figures, e.g. ["Jane Doe", "Jane"]: the subject's names as the show says them
+title = ""                     # the video title's start; "" = "<subject> receipts"
+tags = ["receipts"]            # YouTube tags; the show's name is added
 per_story = 3
 model = "claude-sonnet-5-5"    # reads the segments, writes the stories and questions
 effort = "medium"
@@ -935,8 +935,8 @@ article_example = "weekly_article_example.md"  # ...and this piece (in prompts/)
 quote_match = 0.75             # a hook this close to word for word in the Short is credited to its speaker
 face_frames = 3                # each person named in a stream's faces.json: their best faces for the pages; 0 = off
 formats = ["tiktok", "youtube"]  # tiktok: 1080x1440 pages | youtube: the same pages 1080x1080 in youtube/
-masthead = ["LOLCOW", "CINEMA"]  # red word, chrome word (then "WEEKLY")
-byline = "BY THE LOLCOW DESK"
+masthead = []                  # the cover's two words, red then chrome ("WEEKLY" follows), e.g. ["DAILY", "PLANET"]; `clipper weekly` needs them
+byline = ""                    # under each article's deck, e.g. "BY THE NEWS DESK"; "" = none
 price = "$1.39 US"             # on the cover's barcode block
 # Colours, the cover's geometry and the fixed copy: <paths.weekly>/style.toml (wiki, Weekly-issue).
 # Fonts, first that exists: the cover headline (Impact), a condensed family with named
@@ -964,24 +964,22 @@ bold_fonts = ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/msttcor
 # channel and release schedule above. `clipper shows` lists them; `--show <key>` forces
 # one. `clipper worker` skips recordings of channels no show claims.
 
-[shows.kino]
-channels = ["kinocasinogaming"]
+[shows.myshow]
+channels = ["kick-channel-slug"]
 
-[shows.kino.meta]
-show_name = "Kino Casino"
-cast = ["Andy", "PPP"]
+[shows.myshow.meta]
+show_name = "My Show"
+cast = ["Alex", "Sam"]
 
-[shows.kino.scoring]
-stream_context = """The show is called Kino Casino; "Welcome to the Kino Casino" is its \
-intro, and chat emotes starting with "kinocasinogaming" are the channel's own emotes. \
-Neither means gambling. Regulars and frequent topics include Jer, DSP, Blade, Geezer, \
-Mr. Morrow and other online creators the show covers."""
-known_figures = "Jer, DSP, Blade, Geezer, Mr. Morrow"
+[shows.myshow.scoring]
+stream_context = """The show is called My Show; "Welcome to My Show" is its intro, and chat
+emotes starting with "myshow" are the channel's own emotes. Regulars and frequent topics
+include the online creators the show covers."""
+known_figures = "Jane Doe, John Roe"   # people the model should recognise, by the names chat uses
 
-[shows.kino.preshow]
-# "Kino Casino" (@TheKinoCasino) since 11/4; before that "The Kino Casino"
-# (@TheKinoCasinoIncognito, UCy58OcrZ-Y6ebDYKcJAHyxw). Pre-shows Mon/Wed/Fri, usually 11:45-14:45 PT
-youtube_channel = "UCt26i2K9JN7cPtEX5qjdwIw"
+[shows.myshow.preshow]
+# The show's own YouTube channel (its id), when it posts a pre-show there before going live:
+# youtube_channel = "UC..."
 
 # [shows.<key>.thumbnail], [shows.<key>.discord] etc. work the same way, e.g. a
 # different masthead or review channel for one show.

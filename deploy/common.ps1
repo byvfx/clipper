@@ -1,5 +1,5 @@
-# Shared by the scheduled-task scripts of clipper serve (deploy\serve), the Discord bot
-# (deploy\discord) and the GPU worker (deploy\worker). Dot-source it, then call
+# Shared by the GPU worker's scheduled-task scripts (deploy\worker); serve and the bot run
+# under Docker compose (deploy\hub) instead. Dot-source it, then call
 # Invoke-ClipperTask (the *-task.ps1 scripts) or Start-ClipperSupervisor (the
 # *-supervisor.ps1 scripts). Windows PowerShell 5.1 runs these.
 

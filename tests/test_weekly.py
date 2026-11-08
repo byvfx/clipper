@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from clipper import jsonstate, weekly
 from clipper.errors import ClipperError
-from clipper.weekly import draft, style
+from clipper.weekly import draft, gather, style
 from clipper.weekly.render import Fonts, Renderer
 
 PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
@@ -18,6 +19,7 @@ PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 def cfg(defaults, tmp_path):
     cfg = copy.deepcopy(defaults)
     cfg["paths"]["weekly"] = tmp_path
+    cfg["weekly"]["masthead"], cfg["weekly"]["byline"] = ["DAILY", "PLANET"], "BY THE DESK"
     cfg["scoring"]["house_style"] = ["Never say the word on the banned list.", "No emoji."]
     return cfg
 
@@ -198,3 +200,48 @@ def test_a_photo_covers_fallback_frame_is_not_a_face(cfg):
     week = {"label": "Oct 25-31", "streams": {"kick-1": {"faces": [fallback, real]}}}
     faces = Faces(cfg, week)
     assert faces.best("Jer") is real and faces.best("Bakker") is None
+
+
+def test_a_bad_week_is_a_clipper_error():
+    with pytest.raises(ClipperError, match="--week"):
+        gather.week_of({"schedule": {"timezone": "UTC"}}, "11/07")
+
+
+def test_a_redraft_keeps_its_issue_number(tmp_path):
+    cfg = {"paths": {"weekly": tmp_path}, "weekly": {"first_issue": 2}}
+    (tmp_path / "2026-10-31").mkdir()
+    jsonstate.write(tmp_path / "2026-10-31" / "issue.json", {"issue": 2})
+    here = tmp_path / "2026-11-07"
+    here.mkdir()
+    assert gather.next_issue_number(cfg, here) == 3
+    jsonstate.write(here / "issue.before_2026-11-08_1000.json", {"issue": 3})  # a redraft's backup
+    (tmp_path / "2026-11-14").mkdir()
+    jsonstate.write(tmp_path / "2026-11-14" / "issue.json", {"issue": 4})
+    assert gather.next_issue_number(cfg, here) == 3
+
+
+def test_check_issue_wants_a_one_or_two_line_headline():
+    issue = {page: dict.fromkeys(keys, "x") for page, keys in draft.REQUIRED.items()}
+    art = dict.fromkeys(draft.ARTICLE, "x")
+    issue["feature"] = {**art, "headline": "ONE STRING"}
+    issue["articles"] = [{**art, "headline": ["A", "B"]}, {**art, "headline": ["A", "B", "C"]}]
+    missing = draft.check_issue(issue)
+    assert missing == ["feature.headline (one or two lines)", "articles[1].headline (one or two lines)"]
+
+
+def test_no_masthead_no_draft(cfg, monkeypatch):
+    """The default [weekly] masthead is empty: the weekly stops before the draft (the model call)
+    and says what to set, for no words and for one."""
+    monkeypatch.setattr(gather, "gather", lambda cfg, start, end, here: (
+        {"label": "w"}, {"shows": 0, "preshows": 0, "hours": 0.0, "chat_messages": 0}))
+    monkeypatch.setattr(draft, "draft", lambda *a, **k: pytest.fail("drafted without a masthead"))
+    for words in ([], ["DAILY"], ["", ""], ["   ", "PLANET"]):
+        cfg["weekly"]["masthead"] = words
+        with pytest.raises(ClipperError, match="masthead is not set.*two words"):
+            weekly.run(cfg)
+
+
+def test_masthead_is_two_stripped_words_or_nothing():
+    assert style.masthead({"masthead": [" DAILY ", "PLANET"]}) == ("DAILY", "PLANET")
+    for bad in ([], ["DAILY"], ["", ""], ["   ", "PLANET"], ["A", "B", "C"], [1, "B"], 42, "AB"):
+        assert style.masthead({"masthead": bad}) is None, bad

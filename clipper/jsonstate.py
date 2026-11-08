@@ -41,6 +41,17 @@ def read(path: Path, default: Any = None) -> Any:
         return json.loads(json.dumps(default)) if default is not None else None
 
 
+def read_or(path: Path, default: Any) -> Any:
+    """`read`, but a file that can't be read or isn't JSON gives `default` too (a copy).
+    For the services and the war room, which must carry on past one bad or vanished file
+    (a heartbeat, run.json mid-takeover); a stage uses `read` or `load`, so a broken state
+    file is seen rather than quietly replaced."""
+    try:
+        return read(path, default)
+    except (OSError, ValueError):
+        return json.loads(json.dumps(default)) if default is not None else None
+
+
 def load(path: Path) -> Any:
     """The file's JSON; FileNotFoundError if it doesn't exist. Use this (or `read`) for every
     JSON file rather than json.loads(path.read_text()): a file another process is replacing
@@ -156,7 +167,7 @@ def _acquire_file(lock_path: Path, wait_s: float) -> tuple[str, float]:
                 # no lock, yet creating one is refused: maybe it just went, maybe the folder
                 # isn't writable. Back off, and past the deadline say which.
                 if time.monotonic() > deadline:
-                    raise denied
+                    raise denied from None
             except PermissionError:
                 pass
             if time.monotonic() > deadline:

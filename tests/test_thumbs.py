@@ -4,9 +4,11 @@ import pytest
 from conftest import ROOT
 from PIL import Image
 
+from clipper import jsonstate
 from clipper.errors import ClipperError
 from clipper.prompts import Prompts
 from clipper.thumbs import enquirer, pick
+from clipper.thumbs import stage as thumbs_stage
 
 
 class Words:
@@ -175,3 +177,22 @@ def test_default_layout_is_the_old_geometry():
             1080 - 16 - 330 - 22, max(py + 40, 1920 - 16 - 296 - 380), 330, 296)
     ink = enquirer.palette(enquirer.LAYOUT)
     assert ink("green") == (16, 84, 62) and ink("red") == (214, 18, 32) and ink("#ffffff") == (255, 255, 255)
+
+
+def test_a_cover_goes_stale_on_the_cut_not_the_file(tmp_path):
+    video = tmp_path / "c.mp4"
+    video.write_bytes(b"x")
+    jsonstate.write(video.with_suffix(".json"), {"in_s": 10.0, "out_s": 40.0})
+    key = thumbs_stage.cut_key(video)
+    assert key == "10.0-40.0"
+    seg = tmp_path / "s01.mp4"
+    seg.write_bytes(b"x")
+    jsonstate.write(seg.with_suffix(".json"), {"start_s": 100.0, "end_s": 400.0, "cut_start_s": 98.5})
+    assert thumbs_stage.cut_key(seg) == "98.5-400.0"  # a segment's bounds, from its sidecar
+    video.write_bytes(b"re-encoded")  # same cut, new file: still fresh
+    assert not thumbs_stage.cut_changed({"cut_key": key, "video_mtime": 0}, video)
+    jsonstate.write(video.with_suffix(".json"), {"in_s": 12.0, "out_s": 40.0})
+    assert thumbs_stage.cut_changed({"cut_key": key}, video)
+    # a cover made before cut_key existed still goes by the mtime
+    assert thumbs_stage.cut_changed({"video_mtime": 0}, video)
+    assert not thumbs_stage.cut_changed({"video_mtime": video.stat().st_mtime}, video)

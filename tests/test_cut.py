@@ -1,5 +1,6 @@
 from pytest import approx
 
+from clipper import cut, jsonstate
 from clipper.cut import compilation_parts
 
 
@@ -32,3 +33,13 @@ def test_part_offsets_are_exact():
     from clipper.cut import part_offsets
     spans = [(98.0, 195.04), (195.04, 300.0), (497.0, 600.0)]
     assert part_offsets(spans) == [[98.0, 195.04, 0.0], [195.04, 300.0, 97.04], [497.0, 600.0, 202.0]]
+
+
+def test_an_unchanged_pick_is_not_cut_again(tmp_path):
+    dst = tmp_path / "03_t03_x.mp4"
+    p, c = {"id": "t03"}, {"in_s": 10.0, "out_s": 40.0}
+    assert not cut.unchanged_pick(dst, p, c)  # nothing cut yet
+    dst.write_bytes(b"x")
+    jsonstate.write(dst.with_suffix(".json"), {"id": "t03", "in_s": 10.0, "out_s": 40.0})
+    assert cut.unchanged_pick(dst, p, c)
+    assert not cut.unchanged_pick(dst, p, {"in_s": 12.0, "out_s": 40.0})  # a re-score moved it

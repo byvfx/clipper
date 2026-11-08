@@ -1,8 +1,10 @@
 import argparse
+import tomllib
 
 import pytest
+from conftest import ROOT
 
-from clipper import cli, stages
+from clipper import __version__, cli, stages
 from clipper.errors import ClipperError
 
 
@@ -71,3 +73,27 @@ def test_mode_flags_that_dont_combine():
     a = parse("thumbs", "kick-1", "--photo", "", "--items", "s02", "--force")
     with pytest.raises(ClipperError, match="--force"):
         cli.refuse(a, "--photo", "--force")
+
+
+def test_version_is_one_number(capsys):
+    """`clipper --version` prints the package version; __init__.py and pyproject.toml agree."""
+    with pytest.raises(SystemExit) as e:
+        parse("--version")
+    assert e.value.code == 0
+    assert capsys.readouterr().out.strip() == f"clipper {__version__}"
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert project["version"] == __version__
+
+
+def test_every_argument_and_command_has_help():
+    """`clipper <command> -h` explains every flag and positional (audit item 17); --version's
+    help is argparse's own."""
+    import ast
+
+    tree = ast.parse((ROOT / "clipper" / "cli.py").read_text(encoding="utf-8"))
+    bare = [f"cli.py:{n.lineno}" for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr in ("add_argument", "add_parser")
+            and not any(k.arg == "help" for k in n.keywords)
+            and not any(k.arg == "action" and getattr(k.value, "value", None) == "version" for k in n.keywords)]
+    assert not bare, "add help= to " + ", ".join(bare)

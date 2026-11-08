@@ -1,5 +1,5 @@
 > [!TIP]
-> Try anything risky on the test stream `kick-131151926` before a real one.
+> Try anything risky on a short test stream first: fetch any short VOD and run it end to end.
 
 ## Install a machine
 
@@ -35,16 +35,19 @@ auto_upload_minutes` (`clipper schedule`, `clipper upload` by hand when that's 0
 
 ## Check
 
-`clipper doctor --role gpu|serve|bot|nas` (this machine), `clipper worker --status` (each
-recording's stages), `clipper review status` (decisions and what's scheduled), `clipper costs`
-(the month's spend, [Costs](Costs)).
+`clipper status` is the one screen: the services' heartbeats and the recorder, each
+recording's stages, review counts, the next releases and the month's spend. Behind it:
+`clipper doctor --role gpu|serve|bot|nas` (this machine's setup), `clipper worker --status`,
+`clipper review status` (decisions and what's scheduled) and `clipper costs` ([Costs](Costs)).
 
 ## Stop and restart
 
-`clipper serve`, the bot and the GPU worker are Windows scheduled tasks:
-`clipper services status|stop|restart serve|bot|worker` ([Roles and services](Roles-and-services)).
-The recorder is a container on the NAS: `bash deploy/record/deploy.sh`, only when no show is
-live (a restart starts a new recording part).
+`clipper serve`, the bot and the worker run as containers on the NAS:
+`clipper services status|stop|restart serve|bot|worker` runs `docker compose` there, and code
+changes go out with `bash deploy/hub/deploy.sh` ([Roles and services](Roles-and-services#services),
+[NAS hub](NAS-hub)). On a single Windows machine without Docker they are scheduled tasks instead,
+driven by the same command. The recorder is its own container on the NAS:
+`bash deploy/record/deploy.sh`, only when no show is live (a restart starts a new recording part).
 
 ## When something breaks
 
@@ -53,8 +56,11 @@ The bot DMs you (`[notify]`, see [Review](Review)); logs are in `logs/` (`serve.
 
 ## Commands and flags
 
-`clipper -h` lists the commands by group; `clipper <command> -h` gives each one's flags. The
-same flag means the same thing everywhere: `--items s02,c03` picks items (the old `--ids`,
-`--keys`, `--item` and `--segments` still work), times are `H:MM:SS`, `H:MM` or seconds,
-`--limit N` caps a run, `--dry-run` changes nothing, and `--no-sync` skips the Kitsu read.
+`clipper -h` lists the commands by group; `clipper <command> -h` gives each one's flags, every
+one explained. A flag means the same thing wherever it appears: `--items s02,c03` picks items
+(the old `--ids`, `--keys`, `--item` and `--segments` still work), times are `H:MM:SS`, `H:MM`
+or seconds, `--dry-run` changes nothing and says what would happen, `--force` redoes what is
+already done, and `--no-sync` skips the Kitsu read. Two are command-specific: `--from` is a
+stage on `run` and `story run` but a time on `pick` and `preshow fetch`, and `--limit N` caps
+only `upload` and the `archive` and `investigate` commands.
 Flags for different jobs on one command (`upload --links` and `--next`, say) are refused together.

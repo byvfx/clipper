@@ -123,7 +123,7 @@ def access_token(paths: dict) -> str:
         tok = save_token(paths, token_request(client(paths), grant_type="refresh_token",
                                               refresh_token=tok["refresh_token"]))
     except ClipperError as e:
-        raise ClipperError(f"{e}; run: clipper tiktok --sign-in")
+        raise ClipperError(f"{e}; run: clipper tiktok --sign-in") from e
     return tok["access_token"]
 
 

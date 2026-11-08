@@ -19,8 +19,9 @@ from pathlib import Path
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .llm import Claude, preflight
+from .llm import Claude, estimate_lines, preflight, tokens
 from .prompts import Prompts
+from .states import is_preshow
 from .timefmt import hms
 from .transcript import load_words, snap, transcript_lines
 
@@ -102,7 +103,7 @@ def split(stream_dir: Path, cfg: dict, claude: Claude, prompts: Prompts) -> dict
     gaps = [(a["id"], b["id"], round(b["start_s"] - a["end_s"], 1))
             for a, b in pairwise(segs) if abs(b["start_s"] - a["end_s"]) > 30]
     return {"stream_id": stream_dir.name, "model": seg_cfg["model"],
-            "prompt_version": prompts.version, "api": meta, "gaps": gaps, "segments": segs}
+            "prompt_version": prompts.version_of("segments"), "api": meta, "gaps": gaps, "segments": segs}
 
 
 def compilations(data: dict, cfg: dict, claude: Claude, prompts: Prompts) -> list[dict]:
@@ -132,17 +133,35 @@ def compilations(data: dict, cfg: dict, claude: Claude, prompts: Prompts) -> lis
     return out
 
 
-def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
+def estimate(stream_dir: Path, cfg: dict, prompts: Prompts, split: bool) -> list[str]:
+    """`--dry-run`: the split call priced with [llm] prices, nothing called. The compilation
+    calls come after the split (one per topic with enough segments) and are small."""
+    seg_cfg = cfg["segments"]
+    tail = f"  plus one small call (~$0.02) per topic with {seg_cfg['compile_min_segments']}+ segments to cut"
+    if not split:
+        return ["  segments.json is kept (no --force): no split call", tail]
+    words = load_words(stream_dir)
+    transcript = "\n".join(transcript_lines(words, 0, words[-1]["end"] + 1))
+    rows = [("split", seg_cfg["model"], 1, tokens(prompts.get("segments") + transcript), 4000)]
+    return estimate_lines(cfg, rows) + [tail]
+
+
+def run(stream_dir: Path, cfg: dict, force: bool = False, dry_run: bool = False) -> list[dict]:
     from . import preshow
 
-    if preshow.is_preshow(stream_dir):  # one whole-video segment, no split
+    if is_preshow(stream_dir):  # one whole-video segment, no split
+        if dry_run:
+            print("estimate: a pre-show is one whole-video segment, no model call")
+            return []
         return preshow.write_segments(stream_dir, cfg, force=force)
     cfg = for_stream(cfg, stream_dir)
     seg_cfg = cfg["segments"]
     prompts = Prompts(cfg)
-    prompts.version = seg_cfg["prompt_version"]
     prompts.vars["min_aside_s"] = seg_cfg["min_aside_s"]
     path = stream_dir / "segments.json"
+    if dry_run:
+        print("\n".join(["estimate:"] + estimate(stream_dir, cfg, prompts, split=force or not path.exists())))
+        return []
     claude = Claude(cfg)
 
     if path.exists() and not force:

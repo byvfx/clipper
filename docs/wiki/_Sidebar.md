@@ -6,6 +6,7 @@
 - [Configuration](Configuration)
 - [Pipeline](Pipeline)
 - [Review](Review)
+- [Reviewing](Reviewing)
 - [War room](War-room)
 - [Scheduling and uploads](Scheduling-and-uploads)
 - [Costs](Costs)
@@ -13,6 +14,9 @@
 **🛠️ Install**
 - [Install](Install)
 - [Install checklist](Install-checklist)
+- [Kitsu](Kitsu)
+- [Discord app](Discord-app)
+- [YouTube sign-in](YouTube-sign-in)
 - [Windows](Install-Windows)
 - [macOS](Install-macOS)
 - [Transcribe on Modal](Transcribe-on-Modal)
@@ -46,3 +50,4 @@
 
 **💻 Working on clipper**
 - [Developing](Developing)
+- [How the processes talk](How-the-processes-talk)

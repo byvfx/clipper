@@ -22,7 +22,7 @@ from pathlib import Path
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .llm import Claude, preflight
+from .llm import Claude, estimate_lines, preflight, tokens
 from .prompts import Prompts
 from .timefmt import clock, hms
 from .transcript import load_words, snap, transcript_lines
@@ -154,13 +154,18 @@ def make_srt(words: list[dict], parts: list[tuple], mc: dict, mask=lambda s: s) 
 
 # ---------- chapters ----------
 
+def chapter_user(asset: dict, words: list[dict]) -> str:
+    """The chapters call's input: the segment's title, description and transcript."""
+    a, b, _ = asset["parts"][0]
+    return (f"Title: {asset['title']}\nDescription: {asset['body']}\n\n<transcript>\n"
+            + "\n".join(transcript_lines(words, a, b)) + "\n</transcript>")
+
+
 def segment_chapters(asset: dict, words: list[dict], mc: dict, claude: Claude,
                      prompts: Prompts) -> list[dict]:
     a, b, _ = asset["parts"][0]
-    user = (f"Title: {asset['title']}\nDescription: {asset['body']}\n\n<transcript>\n"
-            + "\n".join(transcript_lines(words, a, b)) + "\n</transcript>")
-    out, _ = claude.json_call(mc["model"], prompts.get("chapters"), user, CHAPTER_SCHEMA,
-                              mc["effort"])
+    out, _ = claude.json_call(mc["model"], prompts.get("chapters"), chapter_user(asset, words),
+                              CHAPTER_SCHEMA, mc["effort"])
     if not out:
         return []
     span = [w for w in words if a <= w["start"] < b]
@@ -257,11 +262,7 @@ def generate(stream_dir: Path, mc: dict, assets: list[dict], lines: list[str],
     (metadata, chapters by segment id, the checkpoint file)."""
     # #75: every call that succeeded is kept here until the drafts are written, so one failed
     # chapters call doesn't throw away the big metadata call (or the other chapters).
-    ckpt = stream_dir / "metadata" / f".checkpoint_{mc['prompt_version']}.json"
-    ids = sorted(x["id"] for x in assets)
-    saved = jsonstate.read(ckpt) or {}
-    if saved.get("ids") != ids:
-        saved = {"ids": ids, "gen": None, "chapters": {}}
+    ckpt, saved = checkpoint(stream_dir, mc, assets)
     errors = []
     with ThreadPoolExecutor(mc["concurrency"]) as pool:
         f_meta = None if saved["gen"] else pool.submit(
@@ -325,13 +326,45 @@ def draft(x: dict, g: dict, ch: list[dict], credit: str, playlist: str, mc: dict
     return out
 
 
-def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
+def checkpoint(stream_dir: Path, mc: dict, assets: list[dict]) -> tuple[Path, dict]:
+    """The metadata checkpoint (#75): the calls an earlier run already paid for, when its asset
+    ids are these; else a fresh one. (its path, {ids, gen, chapters})."""
+    ckpt = stream_dir / "metadata" / f".checkpoint_{mc['prompt_version']}.json"
+    ids = sorted(x["id"] for x in assets)
+    saved = jsonstate.read(ckpt) or {}
+    if saved.get("ids") != ids:
+        saved = {"ids": ids, "gen": None, "chapters": {}}
+    return ckpt, saved
+
+
+def estimate(stream_dir: Path, cfg: dict, mc: dict, prompts: Prompts, assets: list[dict], lines: list[str],
+             long_segs: list[dict], words: list[dict]) -> list[str]:
+    """`--dry-run`: the metadata call and a chapters call per long segment, priced with [llm]
+    prices, nothing called. What the checkpoint of a failed run already holds isn't counted,
+    as `generate` won't ask for it again."""
+    ckpt, saved = checkpoint(stream_dir, mc, assets)
+    rows = []
+    if not saved["gen"]:
+        rows.append(("metadata", mc["model"], 1, tokens(prompts.get("meta") + "\n\n".join(lines)),
+                     250 * len(assets)))
+    todo = [x for x in long_segs if x["id"] not in saved["chapters"]]
+    if todo:
+        rows.append(("chapters", mc["model"], len(todo),
+                     sum(tokens(prompts.get("chapters") + chapter_user(x, words)) for x in todo), 300 * len(todo)))
+    held = (len(long_segs) - len(todo)) + (1 if saved["gen"] else 0)
+    note = [f"  {held} call(s) already in {ckpt.name} from an earlier run: not counted"] if held else []
+    if not rows:
+        return note + ["  nothing to pay: a rerun writes the drafts from the checkpoint"]
+    return estimate_lines(cfg, rows) + note
+
+
+def run(stream_dir: Path, cfg: dict, missing: bool = False, dry_run: bool = False) -> list[dict]:
     """missing: only the videos with no draft yet (the worker's second pass, after the
-    clips went to review); the model is told which playlists the drafted ones use."""
+    clips went to review); the model is told which playlists the drafted ones use.
+    dry_run: print the estimate and write nothing."""
     cfg = for_stream(cfg, stream_dir)
     mc = cfg["meta"]
     prompts = Prompts(cfg)
-    prompts.version = mc["prompt_version"]
     prompts.vars.update(show_name=mc["show_name"], min_chapters=mc["min_chapters"],
                         max_chapters=mc["max_chapters"])
     meta = jsonstate.load(stream_dir / "meta.json")
@@ -352,13 +385,15 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
             return []
         print(f"{len(assets)} videos without a draft ({len(drafted)} kept)")
 
-    claude = Claude(cfg)
-    preflight(claude, mc["model"])
-
     lines = asset_lines(assets, words, drafted)
     # a story's segment has its chapters already (a part each, #84): no transcript call for it
     long_segs = [x for x in assets if x["kind"] == "segment" and duration(x) >= mc["chapters_min_s"]
                  and not x.get("chapters")]
+    if dry_run:
+        print("\n".join(["estimate:"] + estimate(stream_dir, cfg, mc, prompts, assets, lines, long_segs, words)))
+        return []
+    claude = Claude(cfg)
+    preflight(claude, mc["model"])
     gen, chapters, ckpt = generate(stream_dir, mc, assets, lines, long_segs, words, claude, prompts)
     chapters.update({x["id"]: x["chapters"] for x in assets if x.get("chapters")})
     by_id = {g["id"]: g for g in gen["assets"]}

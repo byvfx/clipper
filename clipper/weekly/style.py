@@ -152,3 +152,14 @@ def load(cfg: dict) -> Style:
         return Style(merge(DEFAULTS, over))
     except (TypeError, ValueError, KeyError, AttributeError) as e:  # a value of the wrong shape
         raise ClipperError(f"{path}: a value has the wrong shape ({type(e).__name__}: {e})") from None
+
+
+def masthead(wc: dict) -> tuple[str, str] | None:
+    """The cover's two words ([weekly] masthead: the red one, then the chrome one), stripped, or
+    None when the setting isn't two non-blank strings: the weekly then refuses to draft and
+    `clipper doctor` warns (Copilot on #178: a blank word must not reach the paid draft)."""
+    words = wc.get("masthead") or []
+    if (not isinstance(words, list | tuple) or len(words) != 2
+            or not all(isinstance(w, str) and w.strip() for w in words)):
+        return None
+    return words[0].strip(), words[1].strip()

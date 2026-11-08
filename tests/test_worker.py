@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from clipper import worker
+from clipper import jsonstate, stages, worker
 
 SLOW = ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts", "review"]
 
@@ -110,7 +110,7 @@ def test_release_after_a_takeover_leaves_the_new_holder_alone(tmp_path):
     assert old.save() is False  # a stage finishing after the takeover writes nothing either
     old.release()
     assert (tmp_path / ".run.lock").read_text(encoding="utf-8") == "other:1"
-    assert worker.read_json(tmp_path / "run.json")["worker"] == "other:1"
+    assert jsonstate.read_or(tmp_path / "run.json", {})["worker"] == "other:1"
 
 
 def test_a_takeover_is_serialized(tmp_path, monkeypatch):
@@ -119,9 +119,9 @@ def test_a_takeover_is_serialized(tmp_path, monkeypatch):
     (tmp_path / ".run.lock").write_text("gone:1", encoding="utf-8")
     worker.write_json(tmp_path / "run.json", {"worker": "gone:1", "heartbeat": "2026-01-01T00:00:00+00:00"})
     seen = []
-    real_read = worker.read_json
-    monkeypatch.setattr(worker, "read_json",
-                        lambda p: seen.append((tmp_path / ".run.lock.lock").exists()) or real_read(p))
+    real_read = jsonstate.read_or
+    monkeypatch.setattr(jsonstate, "read_or",
+                        lambda p, d: seen.append((tmp_path / ".run.lock.lock").exists()) or real_read(p, d))
     first = worker.Run(tmp_path, wcfg())
     seen.clear()
     first.acquire()
@@ -198,3 +198,40 @@ def test_face_framed_shorts_render_again_after_the_face_scan(tmp_path, defaults,
     plain = {**c, "shorts": {**c["shorts"], "layouts": {"cam": {"panels": [{"src": [0, 0, 1, 1]}]}}}}
     assert not worker.shorts_after_faces(plain, tmp_path, worker.default_stages(plain, tmp_path),
                                          worker.plan(plain, tmp_path, lane="slow"))
+
+
+def test_a_forced_run_passes_force_to_the_stages_that_refuse_reruns(defaults):
+    wc = defaults["worker"]
+    assert stages.argv("score", "kick-1", wc) == ["score", "kick-1"]
+    assert stages.argv("score", "kick-1", wc, force=True) == ["score", "kick-1", "--force"]
+    assert "--force" in stages.argv("cut", "kick-1", wc, force=True)
+    assert "--force" not in stages.argv("meta", "kick-1", wc, force=True)
+
+
+def test_a_pre_show_is_known_by_its_meta_kind(tmp_path):
+    """states.is_preshow: the worker and segments ask it, preshow.py no longer owns it."""
+    from clipper.states import PRESHOW_PREFIX, is_preshow
+
+    d = tmp_path / f"{PRESHOW_PREFIX}abc123"
+    d.mkdir()
+    assert not is_preshow(d)                       # no meta.json yet
+    jsonstate.write(d / "meta.json", {"kind": "preshow", "stream_id": d.name})
+    assert is_preshow(d)
+    jsonstate.write(d / "meta.json", {"stream_id": "kick-1"})
+    assert not is_preshow(d)
+
+
+def test_a_failed_stage_is_recorded_with_the_logs_last_lines(tmp_path, defaults, monkeypatch):
+    """A stage child that exits non-zero: run.json names the stage, its exit code and the log's
+    tail, and run_stream returns False so the worker moves on (wiki: How the processes talk)."""
+    def fake_call(cmd, stdout=None, **kw):
+        stdout.write("reading windows.json\nTraceback: boom\n")
+        return 3
+    monkeypatch.setattr(worker.subprocess, "call", fake_call)
+    monkeypatch.setattr(worker, "keep_awake", lambda on: None)
+    assert worker.run_stream(defaults, tmp_path, stages=["signals"], force=True) is False
+    run = jsonstate.read_or(tmp_path / "run.json", {})
+    assert run["status"] == "failed" and run["stages"]["signals"]["status"] == "failed"
+    assert run["stages"]["signals"]["exit"] == 3 and run["error"].startswith("signals exited 3: ") and "boom" in run["error"]
+    assert (tmp_path / "run_signals.log").read_text(encoding="utf-8").rstrip().endswith("boom")
+    assert not (tmp_path / ".run.lock").exists()   # released, so the next worker pass can retry

@@ -26,8 +26,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import jsonstate, wiki
-from .config import _root, for_show
+from . import jsonstate, prompts, wiki
+from .config import base, for_show
 from .errors import ClipperError
 
 RESULTS: list[tuple[str, str, str, str]] = []  # (status, area, what, hint)
@@ -111,7 +111,7 @@ def check_command() -> None:
 
 
 def check_config(cfg: dict, role: str = "all") -> None:
-    root = _root(cfg)
+    root = base(cfg)
     if root.get("_file"):
         ok("config", f"{root['_file']}")
     else:
@@ -161,43 +161,31 @@ def check_config(cfg: dict, role: str = "all") -> None:
 
 
 def prompt_files(cfg: dict) -> list[str]:
-    """Every file in prompts/ this (show's) config reads, for the versions it sets."""
+    """Every file in prompts/ this (show's) config reads: each prompt in prompts.VERSIONS at
+    the version its config key sets, the [scoring] rule files for that version, and the weekly
+    article example."""
     sc, v = cfg["scoring"], cfg["scoring"]["prompt_version"]
-    names = [f"score_a_{v}", f"score_b_{v}", f"summary_{v}"]
+    enquirer = cfg["thumbnail"]["style"] == "enquirer"
+    # Prompts a config may never read: the other thumbnail style's, and the cast and news
+    # labellers' when those features are off (Copilot on #174).
+    unread = {"thumbnail": enquirer, "thumbnail_retry": enquirer,
+              "thumbnail_enquirer": not enquirer, "thumbnail_enquirer_retry": not enquirer,
+              "cast_label": not cfg["cast"]["label_model"], "news_judge": not cfg["news"]["judge_model"]}
+    names = [f"{name}_{prompts.version_of(cfg, name)}" for name in prompts.VERSIONS if not unread.get(name)]
     # The scan and rule files came in v3/v4; before v4 they are read only if present.
-    if int(v.lstrip("v") or 0) >= 4:
-        names += [f"scan_{v}", f"third_party_{sc['third_party_audio']}_{v}",
-                  f"audience_{sc['audience_knowledge']}_{v}"]
+    if int(v.lstrip("v") or 0) < 4:
+        names.remove(f"scan_{v}")
+    else:
+        names += [f"third_party_{sc['third_party_audio']}_{v}", f"audience_{sc['audience_knowledge']}_{v}"]
     if int(v.lstrip("v") or 0) >= 7:
         names.append(f"gambling_{sc['gambling']}_{v}")
-    seg, mv = cfg["segments"]["prompt_version"], cfg["meta"]["prompt_version"]
-    pc, rc, ac, wc = cfg["preshow"], cfg["receipts"], cfg["archive"], cfg["weekly"]
-    tc = cfg["thumbnail"]
-    names += [f"segments_{seg}", f"compilation_{seg}", f"meta_{mv}", f"chapters_{mv}",
-              f"retake_{cfg['retake']['prompt_version']}",
-              f"pick_{cfg['pick']['prompt_version']}", f"pick_locate_{cfg['pick']['prompt_version']}",
-              f"preshow_{pc['prompt_version']}", f"oneoff_{pc['oneoff_prompt_version']}",
-              f"thumbnail_enquirer_{tc['enquirer_prompt_version']}" if tc["style"] == "enquirer"
-              else f"thumbnail_{tc['prompt_version']}",
-              f"thumbnail_enquirer_retry_{tc['retry_prompt_version']}" if tc["style"] == "enquirer"
-              else f"thumbnail_retry_{tc['retry_prompt_version']}",
-              f"thumbnail_feedback_{tc['retry_prompt_version']}",
-              f"shorts_layout_{cfg['shorts']['layout_prompt_version']}",
-              f"receipts_stories_{rc['prompt_version']}", f"receipts_script_{rc['script_prompt_version']}",
-              f"archive_expand_{ac['ask_prompt_version']}", f"archive_judge_{ac['ask_prompt_version']}",
-              f"weekly_{wc['prompt_version']}", f"weekly_article_{wc['article_prompt_version']}"]
-    iv = cfg["investigate"]["prompt_version"]
-    names += [f"investigate_{step}_{iv}" for step in ("facts", "leads", "check", "confirm")]
-    names += [f"swarm_{step}_{cfg['swarm']['prompt_version']}" for step in ("plan", "worker")]
-    names += [f"story_{step}_{cfg['story']['prompt_version']}" for step in ("triage", "expand", "moments", "dossier")]
-    names.append(f"story_edit_{cfg['story']['edit_prompt_version']}")
-    return [f"{n}.md" for n in names] + [wc["article_example"]]
+    return [f"{n}.md" for n in names] + [cfg["weekly"]["article_example"]]
 
 
 def check_prompts(cfg: dict) -> None:
     """Each show can set its own prompt versions, so every show's files are checked."""
     d: Path = cfg["paths"]["prompts"]
-    shows = list(_root(cfg)["shows"])
+    shows = list(base(cfg)["shows"])
     users: dict[Path, list[str]] = {}  # file -> the configs that read it
     for key in ["", *shows]:
         c = for_show(cfg, key)
@@ -273,6 +261,10 @@ def check_fonts(cfg: dict) -> None:
                                "" if cond else font_hint("install Bahnschrift / Roboto Condensed or set "
                                                          "[thumbnail] condensed_fonts"))
     wc = cfg["weekly"]
+    from .weekly import style as weekly_style
+    if weekly_style.masthead(wc) is None:
+        warn("config", "[weekly] masthead is not set: `clipper weekly` refuses until it has the cover's two words",
+             'masthead = ["DAILY", "PLANET"] (red word, chrome word; "WEEKLY" follows)')
     missing = [k for k in ("headline", "condensed", "serif_italic", "serif_bold_italic", "black", "bold")
                if not first_font(wc[f"{k}_fonts"])]
     if missing:
@@ -282,7 +274,6 @@ def check_fonts(cfg: dict) -> None:
         ok("fonts", "weekly issue fonts (Impact, condensed, Georgia italic, Arial)")
     look = Path(cfg["paths"]["weekly"]) / "style.toml"
     if look.exists():
-        from .weekly import style as weekly_style
         try:
             weekly_style.load(cfg)
             ok("fonts", f"weekly look: {look}")
@@ -303,7 +294,7 @@ def check_fonts(cfg: dict) -> None:
 
 def diarizing(cfg: dict) -> list[str]:
     """Shows (or "base") with [transcribe] diarize on."""
-    return [k or "base" for k in ["", *_root(cfg)["shows"]] if for_show(cfg, k)["transcribe"]["diarize"]]
+    return [k or "base" for k in ["", *base(cfg)["shows"]] if for_show(cfg, k)["transcribe"]["diarize"]]
 
 
 def check_gpu(cfg: dict) -> None:
@@ -599,7 +590,7 @@ def check_narrate(cfg: dict) -> None:
     where = f"${nc['key_env']} or {nc['key_file']}"
     # a show can set its own narrator (and key), so each show's story settings are checked
     unread = []   # each with where its own key would be
-    for key in ["", *_root(cfg)["shows"]]:
+    for key in ["", *base(cfg)["shows"]]:
         c = for_show(cfg, key)
         sn = settings(c)
         if c["story"]["narrate"] and c["story"]["voice_id"] and not find_key(sn):
@@ -707,7 +698,7 @@ def online_kitsu(cfg: dict) -> None:
         from . import review
         gazu = review.connect(rc)
         ok("online", f"Kitsu answers at {rc['host']}")
-        for key in _root(cfg)["shows"] or [""]:
+        for key in base(cfg)["shows"] or [""]:
             name = review.project_name(for_show(cfg, key))
             if gazu.project.get_project_by_name(name):
                 ok("online", f"Kitsu production {name!r}")
@@ -741,8 +732,8 @@ def online_serve(cfg: dict, role: str) -> None:
         serve.health(cfg)
         ok("online", f"clipper serve answers at {serve.url(cfg)}")
     except Exception as e:  # noqa: BLE001
-        hint = (r"start it: clipper serve, or deploy\serve\serve-task.ps1 -Install (set [serve] url when it "
-                "runs on another machine)")
+        hint = ("start it: clipper serve, or its container (deploy/hub); set [serve] url when it "
+                "runs on another machine")
         if role == "control":
             hint = ("set [serve] url to the hub's tailnet address: clipper setup --step machine ("
                     + wiki.page("Phone-access") + ")")
@@ -822,7 +813,7 @@ def online_nas_cut(cfg: dict) -> None:
 
 def online_preshow_feeds(cfg: dict) -> None:
     from . import preshow
-    for key, sc in preshow.watched(_root(cfg)):
+    for key, sc in preshow.watched(base(cfg)):
         ch = sc["preshow"]["youtube_channel"]
         try:
             hits = [e for e in preshow.feed(ch, sc["kick"]["user_agent"])
@@ -836,7 +827,7 @@ def online_preshow_feeds(cfg: dict) -> None:
 def online_kick(cfg: dict) -> None:
     import requests
 
-    chans = [c for s in _root(cfg)["shows"].values() for c in s["channels"]] or [cfg["kick"]["channel"]]
+    chans = [c for s in base(cfg)["shows"].values() for c in s["channels"]] or [cfg["kick"]["channel"]]
     chans = [c for c in chans if c]
     if not chans:
         return
@@ -872,8 +863,6 @@ def check_cast(cfg: dict) -> None:
     from . import cast
 
     cc = cfg["cast"]
-    if cc["label_model"] and not (Path(cfg["paths"]["prompts"]) / f"cast_label_{cc['prompt_version']}.md").exists():
-        fail("cast", f"prompts/cast_label_{cc['prompt_version']}.md missing", "set [cast] prompt_version to a version on file")
     people = cast.overview(cfg)["people"]
     few = [f"{p['name']} {p['kept']}" for p in people if p["kept"] < cc["min_photos"]]
     if few:
@@ -919,8 +908,6 @@ def check_news(cfg: dict, offline: bool) -> None:
     if not (nc["channel"] or nc["channel_id"] or cfg["discord"]["review_channel_id"]):
         fail("news", "[news] check_minutes is on but there is no channel to post to",
              "set [news] channel (a name the bot makes) or channel_id, or [news] check_minutes = 0")
-    if nc["judge_model"] and not (Path(cfg["paths"]["prompts"]) / f"news_judge_{nc['prompt_version']}.md").exists():
-        fail("news", f"prompts/news_judge_{nc['prompt_version']}.md missing", "set [news] prompt_version to a version on file")
     if offline:
         return
     bad = []
@@ -1124,6 +1111,14 @@ def check_role_settings(cfg: dict, role: str) -> None:
         (ok if local or token(cfg) else fail)(
             "config", f"[warroom] host {wc['host']}" + ("" if local or token(cfg) else " with no token"),
             "" if local or token(cfg) else "set [warroom] token (serve refuses to start without it off localhost)")
+    if role in ("all", "serve"):
+        m = cfg["youtube"]["auto_upload_minutes"]
+        (ok if m else warn)("config", f"[youtube] auto_upload_minutes {m}" + ("" if m else ": nothing uploads by itself"),
+                            "" if m else "set it (60 is usual): `clipper serve` then replans and uploads approved items on "
+                                         "that timer; 0 leaves it to `clipper upload` by hand")
+    if role == "bot" and not dc["enabled"]:
+        warn("config", "[discord] enabled = false on a bot machine: `review publish` posts no cards, so the bot "
+                       "has none to show", "set [discord] enabled = true (with the ids above), or don't run `clipper bot` here")
     if role in ("all", "bot"):
         u = cfg["serve"]["url"]
         (ok if not u or u.startswith(("http://", "https://")) else fail)(

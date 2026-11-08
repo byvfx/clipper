@@ -69,3 +69,35 @@ def test_font_hints_name_the_linux_packages_only_on_linux(monkeypatch):
     assert doctor.LINUX_FONTS in doctor.font_hint("install Impact")
     monkeypatch.setattr(doctor.sys, "platform", "darwin")
     assert doctor.font_hint("install Impact") == "install Impact"
+
+
+def test_doctor_prices_the_defaults_like_the_client(defaults):
+    """A [llm.prices] table replaces the nested default in load; the client merges the
+    defaults back, and so does the check."""
+    cfg = {**defaults, "llm": {**defaults["llm"], "prices": {"openai:gpt-5-mini": [1.0, 2.0]}}}
+    (status, _, what, _), = doctor.collect(doctor.check_llm_prices, cfg)
+    assert status == "OK", what
+
+
+def test_an_unset_masthead_is_a_warning(defaults):
+    """The default [weekly] masthead is empty: doctor warns, and stops once two words are set."""
+    for words in ([], ["", ""], ["   ", "PLANET"]):
+        defaults["weekly"]["masthead"] = words
+        rows = doctor.collect(doctor.check_fonts, defaults)
+        assert any(s == "WARN" and "[weekly] masthead" in what for s, _, what, _ in rows), words
+    defaults["weekly"]["masthead"] = ["DAILY", "PLANET"]
+    assert not any("masthead" in what for _, _, what, _ in doctor.collect(doctor.check_fonts, defaults))
+
+
+def test_role_settings_warn_on_uploads_by_hand_and_a_bot_with_discord_off(defaults):
+    """The defaults never upload by themselves and post no cards: a serve machine hears about the
+    first, a bot machine about the second (audit item 17)."""
+    def rows(role):
+        return doctor.collect(doctor.check_role_settings, defaults, role)
+    assert any(s == "WARN" and "auto_upload_minutes 0" in what for s, _, what, _ in rows("serve"))
+    defaults["youtube"]["auto_upload_minutes"] = 60
+    assert any(s == "OK" and "auto_upload_minutes 60" in what for s, _, what, _ in rows("serve"))
+    assert any(s == "WARN" and "[discord] enabled = false" in what for s, _, what, _ in rows("bot"))
+    assert not any("[discord] enabled" in what for _, _, what, _ in rows("all"))
+    defaults["discord"]["enabled"] = True
+    assert not any("[discord] enabled" in what for _, _, what, _ in rows("bot"))

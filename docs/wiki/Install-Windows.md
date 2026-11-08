@@ -18,7 +18,7 @@
    ```
 
 3. **Config**: copy `clipper.toml` from the main machine. Things to change per machine:
-   - `[paths] streams`: the NAS share, e.g. `"//192.168.0.155/docker/clipper/streams"` or a
+   - `[paths] streams`: the NAS share, e.g. `"//nas/clipper/streams"` or a
      mapped drive. Every machine must see the same streams folder.
    - `[cut] clip_codec`: `h264_qsv` needs an Intel GPU; on an NVIDIA-only desktop use
      `h264_nvenc` (driver 610+ for ffmpeg 8.1) or `libx264`. `clipper doctor` test-encodes it.
@@ -47,18 +47,18 @@
 
 7. **Check**: `clipper doctor --role gpu` (or `--role serve`, `--role bot`).
 
-8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed;
-   the scripts share `deploy\common.ps1`, which lists the user env vars a task copies in,
+8. **Run unattended.** Serve and the bot run as containers (Docker compose, `deploy/hub`, on
+   the NAS or any Docker host: [Roles and services](Roles-and-services#services)). On Windows
+   the scheduled task is for the GPU worker (at logon, restarted if it exits, no admin needed;
+   the scripts share `deploy\common.ps1`, which lists the user env vars the task copies in,
    since scheduled tasks don't always see ones set after logon: a new key goes there too):
    ```powershell
    deploy\worker\worker-task.ps1 -Install     # GPU worker
-   deploy\serve\serve-task.ps1 -Install       # clipper serve (only one machine runs it)
-   deploy\discord\bot-task.ps1 -Install       # Discord bot (only one machine runs it)
    ```
-   `-Status`, `-Restart`, `-Stop`, `-Uninstall` work on all three. Logs go to `logs\`.
-   `clipper services` shows them plus the recorder and any NAS cuts, with serve's and the
-   bot's heartbeats from the share; `clipper services restart serve` (or `bot`, `worker`,
-   `all`) runs the same scripts. The bot reaches serve at `[serve] url` (empty = this
+   `-Status`, `-Restart`, `-Stop`, `-Uninstall` work. Logs go to `logs\`. `clipper services`
+   shows the task plus the recorder and any NAS cuts, with serve's and the bot's heartbeats
+   from the share; `clipper services restart worker` runs the same script, and `serve` or `bot`
+   over ssh once `[serve] hub` names the compose folder. The bot reaches serve at `[serve] url` (empty = this
    machine); on different machines set it, give both the same `[warroom] token` (or
    `secrets/warroom_token.txt`), and put `[paths] schedule` and `[paths] news` under the
    streams share on both (the bot reads what serve writes there; `clipper doctor --role

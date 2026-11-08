@@ -25,7 +25,7 @@ photos (`luther morgan.jpg`); Mel Mac, Jerry Banfield and Ethan Ralph show initi
 frame this week). contact_sheet.jpg shows all ten.
 
 **tiktok/01_cover.jpg** (after the user chose a full-tabloid cover for TikTok):
-1080x1440 (3:4), the 2020s Enquirer template from research_notes/enquirer-covers.md, built
+1080x1440 (3:4), the 2020s Enquirer template from ../../research_notes/enquirer-covers.md, built
 from kick-133597196's real frames: top strip of three teasers (DSP, Blade, Ethan Ralph's
 tacos), small red LOLCOW over a chrome CINEMA, Jer cut out with torchvision DeepLabV3
 (person class) so his cap sits in front of the masthead, red kicker, Impact headline,
@@ -45,7 +45,7 @@ mockup copy written from the stream's segment titles.
 | 05 quote | Quote of the week, who and when, two runners-up | Quotes said on stream |
 | 06 numbers | Six stat cards | Hours live, clips, peak chat, running jokes |
 | 07 market | One big parody ad and four small ones, all riffing on the week's bits | Running jokes from the streams |
-| 08 back | Next week's schedule, reader poll ("Who had the worst week?") | `research_notes/streamers.ics`; three people from the issue |
+| 08 back | Next week's schedule, reader poll ("Who had the worst week?") | `../../research_notes/streamers.ics`; three people from the issue |
 
 ## Design system
 

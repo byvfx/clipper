@@ -9,12 +9,16 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]   # developed on Windows, deployed on Linux: both stay green
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0   # no floating major tags since v8: pin a release
-      - name: Install (base dependencies + dev group; no GPU extras)
-        run: uv sync --locked
+      - name: Install (base dependencies + dev group + the discord extra for the bot's tests; no GPU extras)
+        run: uv sync --locked --extra discord
       - name: Ruff
         run: uv run ruff check clipper tests
       - name: Tests

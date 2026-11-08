@@ -1,7 +1,11 @@
 import re
 from pathlib import Path
 
+import pytest
+from conftest import ROOT
+
 from clipper import prompts
+from clipper.errors import ClipperError
 
 PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -72,3 +76,25 @@ def test_a_scan_made_with_other_settings_is_scanned_again(defaults, tmp_path):
     old = [{"start_s": 1, "end_s": 30, "summary": "x"}]
     jsonstate.write(tmp_path / "scan_v7.json", old)  # cached before the digest: still current
     assert scoring.cached_scan(tmp_path / "scan_v7.json", "anything") == old
+
+
+def test_every_prompt_is_registered_and_its_default_version_is_on_file(defaults):
+    """prompts.VERSIONS is the one list: every prompt family in prompts/ (the rule files aside)
+    is in it, every name the code asks for is in it, and each one's default version exists."""
+    families = {f for f in latest() if not f.startswith(prompts.RULE_FILES)}
+    assert families == set(prompts.VERSIONS), families ^ set(prompts.VERSIONS)
+    code = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "clipper").rglob("*.py"))
+    asked = set(re.findall(r'\b(?:prompts|retry|layout_prompts)\.get\("([a-z_]+)"', code))
+    assert asked <= set(prompts.VERSIONS), asked - set(prompts.VERSIONS)
+    for name in prompts.VERSIONS:
+        assert (PROMPTS / f"{name}_{prompts.version_of(defaults, name)}.md").exists(), name
+
+
+def test_get_reads_each_stages_own_version(defaults):
+    p = prompts.Prompts(defaults)
+    assert p.version_of("meta") == defaults["meta"]["prompt_version"] != p.version   # not scoring's
+    cfg = {**defaults, "meta": {**defaults["meta"], "prompt_version": "v999"}}
+    with pytest.raises(ClipperError, match="meta_v999.md"):
+        prompts.Prompts(cfg).get("meta")        # the [meta] key decides the file, not [scoring]'s
+    with pytest.raises(ClipperError, match="VERSIONS"):
+        p.get("nope")

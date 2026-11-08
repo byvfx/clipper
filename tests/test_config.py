@@ -1,4 +1,5 @@
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -252,3 +253,78 @@ def test_container_variables_and_hidden_shows(tmp_path, monkeypatch):
     assert config.problems(config.load(path)) == []
     path.write_text('[warroom]\nhide_shows = ["knio"]\n[shows.kino]\nchannels = ["k"]\n', encoding="utf-8")
     assert config.problems(config.load(path)) == ["[warroom] hide_shows: no [shows.knio]"]
+
+
+# ---------- what load and problems refuse (the 11-03 audit's input edges) ----------
+
+def test_notify_times_and_budget_are_checked_at_load(defaults):
+    """A typo in [notify] used to kill the bot's DM loop every minute with no DM to say so."""
+    cfg = {**defaults, "notify": {**defaults["notify"], "quiet_hours": "9:00pm-07:00", "digest_time": "09:00"}}
+    assert [p for p in config.problems(cfg) if "quiet_hours" in p] == ["[notify] quiet_hours = '9:00pm-07:00': HH:MM-HH:MM (or empty)"]
+    cfg["notify"]["quiet_hours"], cfg["notify"]["digest_time"] = "23:00-07:00", "9:5"
+    assert [p for p in config.problems(cfg) if "notify" in p] == ["[notify] digest_time = '9:5': HH:MM (or empty)"]
+    cfg["notify"]["digest_time"] = ""
+    assert not [p for p in config.problems(cfg) if "notify" in p]
+    cfg["schedule"] = {**defaults["schedule"], "budget_hours": 0}
+    assert [p for p in config.problems(cfg) if "budget_hours" in p]
+
+
+def test_budget_hours_is_checked_per_show(defaults):
+    cfg = {**defaults, "shows": {"c404": {"channels": ["channel404"], "overrides": {"schedule": {"budget_hours": 0}}}}}
+    assert [p for p in config.problems(cfg) if "budget_hours" in p] == ["[shows.c404.schedule] budget_hours = 0 must be a positive number (it divides in every replan)"]
+    cfg["schedule"] = {**defaults["schedule"], "budget_hours": -1}
+    assert len([p for p in config.problems(cfg) if "budget_hours" in p]) == 2
+
+
+def test_a_missing_stream_is_one_error(defaults, tmp_path):
+    cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path}}
+    with pytest.raises(ClipperError, match="no stream 'kick-nope'"):
+        config.stream_dir(cfg, "kick-nope")
+    (tmp_path / "kick-1").mkdir()
+    assert config.stream_dir(cfg, "kick-1") == tmp_path / "kick-1"
+
+
+def test_stream_dir_still_accepts_a_directory(tmp_path):
+    d = tmp_path / "anywhere"
+    d.mkdir()
+    assert config.stream_dir({"paths": {"streams": Path("/nope")}}, str(d)) == d
+
+
+def test_effort_values_are_checked(defaults):
+    cfg = {**defaults, "meta": {**defaults["meta"], "effort": "med"}}
+    with pytest.raises(ClipperError, match=r"\[meta\] effort = 'med'"):
+        config.check_choices(cfg)
+
+
+def test_effort_values_of_any_type_are_checked(defaults):
+    for bad in (False, 3, ["high"]):
+        cfg = {**defaults, "meta": {**defaults["meta"], "effort": bad}}
+        with pytest.raises(ClipperError, match=r"\[meta\] effort"):
+            config.check_choices(cfg)
+
+
+def test_a_loose_key_in_the_toml_is_a_warning_not_a_crash(tmp_path):
+    path = tmp_path / "clipper.toml"
+    path.write_text('stale = 1\n[meta]\nshow_name = "x"\n', encoding="utf-8")
+    cfg = config.load(path, use_local=False)
+    assert any("outside any [section]" in p for p in cfg["_unknown"])
+    path.write_text("[shows]\nfoo = 1\n", encoding="utf-8")
+    with pytest.raises(ClipperError, match=r"\[shows\] holds"):
+        config.load(path, use_local=False)
+
+
+# This install's own names (its shows, people, channels and addresses), which the product's
+# defaults, example and setup must not carry: a new install's come from its own clipper.toml.
+# Audit of 2026-11-08, item 13; extend the pattern when a new one slips in.
+INSTALL = re.compile(r"(?<![a-z])(kino|lolcow|andy|ppp|jer|jeremy|hambly|quartering|dspgaming|donflurgundy"
+                     r"|byvfx|UCt26)|192\.168\.", re.I)
+
+
+def test_defaults_example_and_setup_name_no_install():
+    hits = []
+    for f in ("clipper/config.py", "clipper.example.toml", "clipper/setup.py", "clipper/cli.py"):
+        for i, line in enumerate((ROOT / f).read_text(encoding="utf-8").splitlines(), 1):
+            m = INSTALL.search(line)
+            if m:
+                hits.append(f"{f}:{i} {m.group(0)!r}")
+    assert not hits, "this install's names in the product's files (they belong in clipper.toml): " + ", ".join(hits)

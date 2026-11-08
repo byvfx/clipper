@@ -30,6 +30,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import jsonstate
+from .timefmt import now_iso
 
 log = logging.getLogger(__name__)
 
@@ -37,10 +38,6 @@ RUN_TIMEOUT = timedelta(hours=4, minutes=30)  # the app's call timeout, plus sla
 _WRITE = threading.Lock()
 _CACHE: dict = {}
 _CACHE_LOCK = threading.Lock()
-
-
-def now_iso() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 # ---------- the run log ----------

@@ -35,7 +35,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import jsonstate, review
-from .config import _root, for_stream, stream_dir
+from .config import base, for_stream, stream_dir
 from .errors import ClipperError
 from .timefmt import length
 
@@ -63,17 +63,13 @@ def review_dirs(cfg: dict) -> list[Path]:
     return sorted(p.parent for p in cfg["paths"]["streams"].glob("*/review_state.json"))
 
 
-def load_json(path: Path, default=None):
-    return jsonstate.read(path, default)
-
-
 def resolve(cfg: dict, ref: str, stream: str | None = None) -> Item:
     if "/" in ref:
         stream, ref = ref.rsplit("/", 1)
     dirs = [stream_dir(cfg, stream)] if stream else review_dirs(cfg)
     hits = []
     for d in dirs:
-        state = load_json(d / "review_state.json", {})
+        state = jsonstate.read(d / "review_state.json", {})
         keys = ([k for k in state if k == ref] or [k for k in state if k.split("_")[0] == ref]
                 or [k for k in state if k.startswith(ref)])
         hits += [Item(d, k, state[k]) for k in keys]
@@ -176,10 +172,6 @@ def check_title(title: str) -> str:
     if len(title) > 100:
         raise ClipperError(f"YouTube titles are at most 100 characters ({len(title)} given)")
     return title
-
-
-def retitle(cfg: dict, item: Item, title: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"YouTube title": title}, who)
 
 
 TAG_BUDGET = 480  # what clipper/youtube.py keeps of YouTube's ~500-character tag limit
@@ -296,29 +288,13 @@ def edit_meta(cfg: dict, item: Item, values: dict[str, str], who: str = "") -> d
     return refresh(cfg, item)
 
 
-def description(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"YouTube description": text}, who)
-
-
-def hashtags(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"Hashtags": text}, who)
-
-
-def tags(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"Tags": text}, who)
-
-
-def playlist(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"Playlist": text}, who)
-
-
 def thumbtext(cfg: dict, item: Item, text: str, who: str = "") -> dict:
     """The refresh's sync sees the new column value and re-renders the thumbnail."""
     cfg = for_stream(cfg, item.stream_dir)
     from .thumbs import check_text, video_key
 
     text = check_text(cfg, " ".join(text.split()))
-    thumbs = load_json(item.stream_dir / "thumbnails.json", {})
+    thumbs = jsonstate.read(item.stream_dir / "thumbnails.json", {})
     if video_key(item.stream_dir / item.state["file"].replace("\\", "/")) not in thumbs:
         raise ClipperError(f"{item.ref} has no thumbnail yet; run clipper thumbs first")
     _columns(cfg, item, {review.THUMB_COL: text}, f"Thumbnail text: {text}{_by(who)}")
@@ -338,13 +314,21 @@ ACTIONS = ("approve", "reject", "changes", "reopen", "hold", "pin", "edit", "thu
 REPLANS = ("approve", "reject", "changes", "reopen", "hold", "pin")  # these move the schedule
 
 
+# The review verbs that change one YouTube column, and the column each one edits. The CLI's
+# `clipper review <verb>`, the bot's forms and the war room all go through decide().
+EDITS = {"retitle": "YouTube title", "description": "YouTube description", "hashtags": "Hashtags",
+         "tags": "Tags", "playlist": "Playlist"}
+
+
 def decide(cfg: dict, item: Item, action: str, who: str, text: str = "", on: bool | None = None,
            values: dict[str, str] | None = None) -> dict:
-    """One review action on one item; returns its card data. text: the note, reason, pin
-    or thumbnail text; on: hold or release (None flips it); values: {Kitsu column: new
-    value} for "edit"."""
+    """One review action on one item; returns its card data. text: the note, reason, pin,
+    thumbnail text or (for an EDITS verb) the column's new value; on: hold or release (None
+    flips it); values: {Kitsu column: new value} for "edit"."""
     if action == "hold":
         return hold(cfg, item, (not refresh(cfg, item)["hold"]) if on is None else on, who)
+    if action in EDITS:
+        return edit_meta(cfg, item, {EDITS[action]: text}, who)
     fn = {"approve": lambda: approve(cfg, item, text, who),
           "reject": lambda: reject(cfg, item, text, who),
           "changes": lambda: changes(cfg, item, text, who),
@@ -386,15 +370,15 @@ def replan(cfg: dict, item: Item, action: str, row: dict, via=None) -> tuple[dic
 def clipper_cmd(cfg: dict) -> list[str]:
     """The command line for a background `clipper` run with this config."""
     cmd = [sys.executable, "-m", "clipper.cli"]
-    if _root(cfg).get("_file"):
-        cmd += ["--config", str(_root(cfg)["_file"])]
+    if base(cfg).get("_file"):
+        cmd += ["--config", str(base(cfg)["_file"])]
     return cmd
 
 
 # ---------- reading ----------
 
 def schedule_entries(cfg: dict) -> dict[str, dict]:
-    data = load_json(cfg["paths"]["schedule"], {}) or {}
+    data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
     return {e["key"]: e for e in data.get("entries", [])}
 
 
@@ -402,7 +386,7 @@ def schedule_dropped(cfg: dict) -> dict[str, str]:
     """Approved items the scheduler let go (stale, over the stream's budget): key -> reason."""
     from .schedule import DROPPED
 
-    data = load_json(cfg["paths"]["schedule"], {}) or {}
+    data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
     return {u["key"]: u["reason"] for u in data.get("unscheduled", [])
             if u["reason"].startswith(DROPPED)}
 
@@ -417,19 +401,20 @@ def other_voices(seconds, limit: float) -> str:
     return f"{s:.0f} s of other voices (limit {limit:g} s)" if s > limit else ""
 
 
-def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
+def describe(cfg: dict, sdir: Path, gazu=None, links: bool = True) -> dict[str, dict]:
     """Everything a card or list row shows, per item, from local files (review.json is
-    as of the last sync). Kitsu is only asked for links older publishes didn't save."""
+    as of the last sync). Kitsu is only asked for links older publishes didn't save, and not
+    even that with links=False (`clipper status`: files only)."""
     cfg = for_stream(cfg, sdir)
-    state = review.ensure_links(sdir, cfg, gazu)
-    decisions = load_json(sdir / "review.json", {})
+    state = review.ensure_links(sdir, cfg, gazu) if links else jsonstate.load(sdir / "review_state.json")
+    decisions = jsonstate.read(sdir / "review.json", {})
     sched = schedule_entries(cfg)
     dropped = schedule_dropped(cfg)
     try:
         outputs = {it["key"]: it for it in review.items(sdir, cfg["review"]["include"], cfg)}
     except FileNotFoundError:
         outputs = {}
-    meta = load_json(sdir / "meta.json", {})
+    meta = jsonstate.read(sdir / "meta.json", {})
     ls = review.Listing()
     out = {}
     for key, st in state.items():
@@ -460,7 +445,7 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
             "uploaded": bool(entry and entry.get("status") == "uploaded"),
             "dropped": "" if entry else dropped.get(f"{sdir.name}/{key}", ""),
             "youtube_url": fields.get("YouTube URL") or "",
-            "kitsu_url": st["kitsu_url"], "episode_url": st["episode_url"],
+            "kitsu_url": st.get("kitsu_url", ""), "episode_url": st.get("episode_url", ""),
             "thumb_text": fields.get(review.THUMB_COL) or proposed.get(review.THUMB_COL) or "",
             **{k: fields.get(n) or proposed.get(n) or "" for k, n in
                (("description", "YouTube description"), ("hashtags", "Hashtags"),
@@ -485,22 +470,23 @@ def list_items(cfg: dict, stream: str | None = None, everything: bool = False,
     return rows
 
 
-def status(cfg: dict, sync: bool = False) -> dict:
-    """Per stream: decision counts; plus what schedule.json has coming up."""
+def status(cfg: dict, sync: bool = False, links: bool = True) -> dict:
+    """Per stream: decision counts; plus what schedule.json has coming up. links=False never
+    asks Kitsu, not even for an old item's missing link."""
     streams = []
     for d in review_dirs(cfg):
         if sync:
             review.sync(d, cfg, quiet=True)
-        rows = describe(cfg, d).values()
+        rows = describe(cfg, d, links=links).values()
         counts: dict[str, int] = {}
         for r in rows:
             counts[r["decision"]] = counts.get(r["decision"], 0) + 1
-        meta = load_json(d / "meta.json", {})
+        meta = jsonstate.read(d / "meta.json", {})
         streams.append({"stream": d.name, "date": meta.get("started_at", "")[:10],
                         "title": meta.get("title", ""), "counts": counts,
                         "held": sum(r["hold"] for r in rows),
                         "episode_url": next(iter(rows))["episode_url"] if rows else ""})
-    data = load_json(cfg["paths"]["schedule"], {}) or {}
+    data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     now = datetime.now(tz)
     upcoming = [e for e in data.get("entries", [])

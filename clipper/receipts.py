@@ -48,7 +48,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import jsonstate, media, ytdl
+from . import jsonstate, media, wiki, ytdl
 from .archive import subject_dir
 from .bleep import Bleeper
 from .config import for_stream
@@ -140,6 +140,10 @@ def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
     cfg = for_stream(cfg, sdir)
     rc = cfg["receipts"]
     subject = rc["subject"]
+    if not subject:
+        raise ClipperError("[receipts] subject is not set: the archive subject (paths.archive/<subject>) whose "
+                           "old clips the receipts come from, with [receipts] topics or figures to pick a "
+                           "stream's segments about them; " + wiki.page("Receipts"))
     adir = subject_dir(cfg, subject)
     segs = jsonstate.load(sdir / "segments.json")["segments"]
     picked = [s for s in segs if (s["id"] in only if only else about_subject(s, rc))]
@@ -157,7 +161,6 @@ def find(sdir: Path, cfg: dict, only: list[str] | None = None) -> None:
           f"({', '.join(s['id'] for s in picked)}), ~{len(user) // 4 / 1000:.0f}k tokens to {rc['model']}")
 
     prompts = Prompts(cfg)
-    prompts.version = rc["prompt_version"]
     prompts.vars.update(subject=subject, max_stories=rc["max_stories"])
     claude = Claude(cfg)
     archive_index.quiet_http()
@@ -376,7 +379,6 @@ def script(sdir: Path, cfg: dict) -> None:
     if not blocks:
         raise ClipperError("no story has a receipt with use = true")
     prompts = Prompts(cfg)
-    prompts.version = rc["script_prompt_version"]
     prompts.vars.update(subject=data["subject"], show_name=data["show"])
     claude = Claude(cfg)
     preflight(claude, rc["script_model"])

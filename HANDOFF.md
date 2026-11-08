@@ -19,13 +19,13 @@ Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds 
   `export KITSU_TOKEN="$(powershell.exe -NoProfile -Command "[Environment]::GetEnvironmentVariable('KITSU_TOKEN','User')" | tr -d '\r')"`
 
 ## Pipeline (one stream = `streams/<id>/`, test stream `kick-131151926`)
-`clipper fetch <kick url>` → `transcribe` (WhisperX, GPU) → `signals` (chat/loudness heat) →
+`clipper fetch <kick url>` → `signals` (chat/loudness heat) → `transcribe` (WhisperX on the GPU, or Modal) →
 `score` (Haiku Pass A + transcript scan, Sonnet Pass B) → `segments` (Opus topic split + compilations) →
 `cut` (segments lossless w/ keyframe starts, compilations joined, picks re-encoded; slurs+"fuck" bleeped) →
 `meta` (SEO title/description/chapters/tags + .srt) → `thumbs` (Enquirer tabloid covers) →
 `review publish` (Kitsu on NAS 192.168.0.155:8090 + Discord cards) → `review sync` / Discord bot →
-`schedule` → `upload` (YouTube). Always on: `clipper serve` (task `clipper-serve`: the war room, hourly
-replan + upload, pre-show grabs, retakes, daily jobs) and the Discord bot (`clipper bot`, task `clipper-bot`).
+`schedule` → `upload` (YouTube). Always on, as NAS containers since 11-05: `clipper serve` (the war room, hourly
+replan + upload, pre-show grabs, retakes, daily jobs) and the Discord bot (`clipper bot`).
 
 Around it (each a subcommand; details in the wiki pages and the log): `record` (NAS Docker recorder),
 `worker` (GPU machine: fast lane clips/Shorts first, then segments), `shorts` (vertical, scene-aware
@@ -104,6 +104,12 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   and DMs (warnings only), so warnings arrive twice: kept on purpose (user, 2026-10-28).
 - Model calls are logged to `logs/costs.jsonl` (`clipper costs`); say what a rerun costs before doing it.
 - The taste layer is the asset (prompts, clipper.toml show tables, house_style, Kitsu): see "Back up".
+- Hand-over audit answers (user, 2026-11-08; `reports/code-audit-2026-11-08.md` §7): build as a public package
+  but this deployment first; the audit's tiers 0 and 1 (a hygiene day, a structure week) before any new
+  feature; `mockups/`, `reports/` media and `research_notes/` move under `studio/`, out of the package, no
+  history rewrite; Kitsu stays the record, with a one-machine Kitsu (page + local compose) to document, and
+  Kitsu-optional is not a goal. Claude's pick, not objected to: the Windows task scripts stay for a GPU worker
+  only; serve and the bot are compose-only in the docs.
 
 ## State now (2026-10-30)
 - **Running on the NAS** since 2026-11-05 (#9/#12, PR #152; wiki NAS-hub): containers `serve` (war room on
@@ -137,7 +143,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   own task 11-04). An 8-Bit Guy explainer (Mother Moo v4 reads, edited in DaVinci Resolve: project
   "8-Bit Guy explainer" on the laptop, timeline v6, Resolve MCP registered locally) went out on X 11-04
   with burned-in captions (https://x.com/lolcowcinema/status/2118120833046741152); files and recipe in
-  reports/8bitguy-explainer/ and its draft. ElevenLabs reads default to lossless pcm_48000 WAV since
+  studio/reports/8bitguy-explainer/ and its draft. ElevenLabs reads default to lossless pcm_48000 WAV since
   PR #143 (merged 11-04); dsp and blade are config-only tests; `trish` is a
   placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI). trish and blade are
   off the war room (`[warroom] hide_shows`, user 2026-11-05: "i doubt we will ever clip either right now").
@@ -163,7 +169,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   https://x.com/lolcowcinema/status/2116852491925254298. Issue 04 is
   Saturday 2026-11-07 (`clipper weekly --headline "..."`; on a Sunday add `--week <Saturday>`).
 - **The Udder Truth:** storyboard complete, voice and pipeline chosen; next is the newsroom set (Brass Eye
-  refs in mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
+  refs in studio/mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
   (~1,550 credits; 18,457 Runway credits left on 10-24).
 - **Costs:** October ~$200 in model/GPU spend, ~$184 of it the Jer archive; `clipper costs`, war room
   Costs, Modal and API usage panels (`clipper costs --providers`: Claude's and OpenRouter's own count next
@@ -269,7 +275,7 @@ investigate): merged 11-03 (PR #134; X credits PR #133 before it). Live test on 
 tasks, 109 findings (44 strong), $0.025. YouTube flat listings: `ytsearchdate` is gone from yt-dlp;
 search URL + upload-date filter `sp` + `youtubetab:approximate_date` instead (sort-by-date is ignored).
 2) `story` phase 1 (`clipper/story.py`, merged 11-03 as PR #135): brief
-(people from `research_notes/streamers.json` + `[story] people`, their channels seed the swarm) →
+(people from `studio/research_notes/streamers.json` + `[story] people`, their channels seed the swarm) →
 swarm → triage (Haiku, `--max-videos`/`--max-hours`; our own streams linked via the catalog's `dir`,
 not re-transcribed) → ingest (archive's Modal path; new Kick VOD branch: smallest HLS variant →
 flac) → find (Haiku queries + judge over `story-<slug>` and archive subjects the swarm hit; quotes
@@ -336,6 +342,32 @@ never goes stale; a passed slot never goes public at once from a long run; an X 
 "unknown" for a hand check, never retried; a cast grab is refused when another enrolled person fits
 better. Left for later: #15 (example toml commented), #24/#25 (lock edges), #29-#35, #37, #41, #46-#50
 (lows), #42's lock part.
+**Code audit 2026-11-08** (`reports/code-audit-2026-11-08.md`): architecture, maintainability and ease of
+use for hand-over; read-only, nothing changed or run against a service. Verdict: the core and the conventions
+are sound and the 10-28/11-03 fixes held; the risks are growth outrunning tests and docs (626 config keys,
+21 modules no test names, 17 functions over McCabe 15, this file at 539 lines), the product still shaped like
+this deployment (the author's shows in DEFAULTS and the example, Kitsu a hard requirement of `clipper run`, no
+Discord/OAuth/Kitsu setup pages, two deploy paths both documented), knowledge in seven places with drift, and
+four shapes to split (warroom.py, the config dict's bookkeeping keys, the five inter-process mechanisms only
+docstrings describe, prompt versions set by mutating `Prompts`). The report ends in a 20-item plan in three
+tiers (a day / a week / before anyone else installs it) and five questions for the user (release audience,
+a consolidation window, studio files in the repo, the Windows task scripts, Kitsu optional). Also: the suite
+is still red on Windows (`tests/test_setup_paths.py:47`, known since 11-07) and CI is Linux-only; all 77
+`# noqa` comments are unused. **Tier 0 is PR #170 (11-08):** Windows-green tests and a Linux + Windows CI
+matrix, ruff rules (I, B, UP, BLE, RUF100, C901 at 15; 77 stale noqa gone, the 17 complex functions marked
+`# noqa: C901` to split when touched), the doc drift, tests filed by subject, `clipper --version`, CHANGELOG.md.
+Tier 0 done 11-08 (the 54 merged remote branches deleted, LICENSE MIT). **Tier 1 the same day, seven PRs, each
+merging on green CI + Copilot handled (user's policy):** #171 wiki How-the-processes-talk + print/log rule + checklist
++ LICENSE; #172 the five import cycles (21 -> 7); #173 one JSON reader (`jsonstate.read_or`), `timefmt.now_iso/age_s`,
+serve `Job`, one review-verb table (`actions.EDITS`); #174 prompt registry (`prompts.VERSIONS`, read by `Prompts.get`,
+doctor and a test); #175 `studio/` (mockups, research notes, media reports; `[paths] streamers` default moved;
+the old `mockups/udder_truth/` leftovers stay on the laptop until Fusion is closed, ignored by `/mockups/`);
+#176 the war room as a package (`clipper/warroom/`: data, review, panels, lowres, tailscale, httpd, state);
+#177 tests where the risk is (bot, describe, sync, worker failure, digest, signals, segments, transcribe),
+`tests/test_modules_have_tests.py` (7 modules still untested, list may only shrink), `config.base`, the alias
+rule, CI installs the discord extra. Left for tier 2 (report §6, items 13-19): scrub the deployment from
+DEFAULTS/example, setup phase-2 pages (Discord app, Google OAuth, one-machine Kitsu), a Reviewing page,
+pre-spend estimates and `clipper status`, one deploy path per role, defaults as TOML, prompts in the package.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
@@ -413,7 +445,7 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
   A serve restart or deploy kills a running upload: `clipper services status serve` lists its jobs; wait
   until none is running.
 - **Upload one item now:** approve in Kitsu, `clipper schedule` (back up schedule.json first), then
-  `clipper upload --max 1`; asap items go public at once. Logs in `logs/upload_*.log`.
+  `clipper upload --max 1`; asap items go public at once (serve's hourly runs log to `logs/serve.log`).
 - **One-off from a YouTube video:** `clipper --show <key> preshow fetch <url> --from H:MM:SS --about "..."`
   (add a `[shows.<key>]` table with a placeholder channel if the show isn't on Kick), then
   `clipper run yt-<id>`. YouTube bot checks: a fresh cookie export into secrets/youtube_cookies.txt.
@@ -442,7 +474,7 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
 like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built).
 - **In git (push it):** `prompts/` (every version, never edit one that produced reviewed output),
-  `clipper.example.toml`, `mockups/`, `research_notes/` (with `streamers.json`), `reports/`, this file.
+  `clipper.example.toml`, `studio/` (mockups, research notes with `streamers.json`, the media reports), `reports/`, this file.
 - **Not in git, copy by hand or script** (all in the NAS folder since 2026-11-05): `clipper.toml` and the `backups/` folder (`clipper.before_*`,
   `schedule.before_*`; hand-edit backups go there now, not the repo root)
   (show tables, house_style, stream_context, scoring rules), each `streams/<id>/config.toml`

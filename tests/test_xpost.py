@@ -268,3 +268,10 @@ def test_discord_refuses_the_build_options(tmp_path, monkeypatch):
     args = cli.build_parser().parse_args(["weekly", "--render", "--discord"])
     with pytest.raises(ClipperError, match="on its own"):
         cli.cmd_weekly({}, args)
+
+
+def test_an_unknown_x_post_keeps_its_place_and_is_never_claimed():
+    now = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
+    x = {"status": "unknown", "failed_at": "2026-11-03T11:00:00+00:00"}
+    assert xpost.active(x, now) == datetime(2026, 11, 3, 11, 0, tzinfo=UTC)
+    assert xpost.active({"status": "failed", "failed_at": "2026-11-03T11:00:00+00:00"}, now) is None

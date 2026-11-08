@@ -105,7 +105,6 @@ def draft_user(week: dict, stats: dict, headline: str, issue: int, photos: dict[
 def draft_system(cfg: dict) -> str:
     """prompts/weekly_<v>.md with the house style."""
     prompts = Prompts(cfg)
-    prompts.version = cfg["weekly"]["prompt_version"]
     return prompts.get("weekly")
 
 
@@ -180,7 +179,6 @@ def article_system(cfg: dict, budget: tuple) -> str:
     example and the house style."""
     wc = cfg["weekly"]
     prompts = Prompts(cfg)
-    prompts.version = wc["article_prompt_version"]
     example = (Path(cfg["paths"]["prompts"]) / wc["article_example"]).read_text(encoding="utf-8")
     prompts.vars.update(example=example, col1_words=budget[0], col2_words=budget[1], deck_chars=budget[2])
     return prompts.get("weekly_article")

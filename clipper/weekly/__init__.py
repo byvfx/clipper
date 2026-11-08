@@ -1,4 +1,4 @@
-"""Lolcow Cinema Weekly: the week's streams -> a ten-page tabloid issue (issue #35).
+"""The weekly issue: the week's streams -> a ten-page tabloid issue (issue #35).
 
   clipper weekly                          this week (Sun-Sat, [schedule] timezone): gather,
                                           draft, render -> <paths.weekly>/<saturday>/
@@ -50,13 +50,48 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+from .. import wiki
 from ..errors import ClipperError
 from . import draft, gather, render, style
 
 # ---------- entry ----------
+
+ISSUE_PAGES = len(render.PAGES)   # an issue's pages, 01-10: a thread or a Discord post carries all or none
+
+
+def issue_folder(cfg: dict, day: str | None) -> Path:
+    """weekly/<Saturday>/ of the week holding `day`, or the newest issue drafted."""
+    root = Path(cfg["paths"]["weekly"])
+    if day:
+        d = datetime.strptime(day, "%Y-%m-%d")
+        here = root / (d + timedelta(days=(5 - d.weekday()) % 7)).strftime("%Y-%m-%d")
+    else:
+        drafted = sorted(p.parent for p in root.glob("*/issue.json"))
+        if not drafted:
+            raise ClipperError(f"no weekly issue in {root}; run: clipper weekly")
+        here = drafted[-1]
+    if not (here / "issue.json").exists():
+        raise ClipperError(f"no issue.json in {here}; run: clipper weekly --week {day}")
+    return here
+
+
+
+def issue_pages(here: Path) -> list[Path]:
+    """Pages 01-10 of an issue, each exactly once: a half-finished render would otherwise go
+    out as a complete thread and the missing page could never follow."""
+    pages = sorted(here.glob("[0-9][0-9]_*.jpg"))
+    nums = [p.name[:2] for p in pages]
+    want = [f"{n:02d}" for n in range(1, ISSUE_PAGES + 1)]
+    if nums != want:
+        missing = sorted(set(want) - set(nums))
+        extra = sorted(n for n in set(nums) if nums.count(n) > 1 or n not in want)
+        raise ClipperError(f"{here} needs pages 01-{ISSUE_PAGES:02d} once each (missing {missing or '-'}, "
+                           f"extra {extra or '-'}); run: clipper weekly --render")
+    return pages
+
 
 def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool = False,
         redraft: bool = False, render_only: bool = False, only: str = "", write: str = "",
@@ -77,6 +112,9 @@ def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool
               f"{stats['chat_messages']:,} chat messages")
     if gather_only:
         return here
+    if style.masthead(cfg["weekly"]) is None:
+        raise ClipperError('[weekly] masthead is not set: the cover needs two words, red then chrome '
+                           '("WEEKLY" follows), e.g. ["DAILY", "PLANET"]; ' + wiki.page("Weekly-issue"))
     ij = here / "issue.json"
     if render_only and not ij.exists():
         raise ClipperError(f"--render: no issue.json in {here} to render; a draft costs model calls, "

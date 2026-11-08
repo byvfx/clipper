@@ -171,5 +171,7 @@ on` ([Phone access](Phone-access)).
 
 ## For developers
 
-The page is in `clipper/web/` (`warroom.html` and what it loads). The server is `clipper/warroom.py`: its `GET_API` and `POST_API`
-tables map each `/api/...` path to a function; decisions go through `clipper/actions.py`.
+The page is in `clipper/web/` (`warroom.html` and what it loads). The server is the `clipper/warroom/`
+package. `httpd.py` holds the route tables `GET_API` and `POST_API`, which map each `/api/...` path to
+a function; `data.py` builds the page's data, `review.py` the decisions (through `clipper/actions.py`),
+and each panel has a module of its own.

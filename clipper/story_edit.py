@@ -190,8 +190,7 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
         claude = Claude(cfg)
         preflight(claude, sc["edit_model"])
     prompts = Prompts(shc)   # the show's own house style, however the show was picked
-    prompts.version = sc["edit_prompt_version"]
-    narrated = prompts.version != "v1"
+    narrated = prompts.version_of("story_edit") != "v1"
     show_name = shc["meta"]["show_name"] or key
     ms = "\n".join(f"{m['id']} | {m['role']}, {m['fit']} | {m['date'] or 'undated'} | {m['channel'] or '?'}"
                    f"{f' (our show, {show_name})' if m['ours'] else ''} | {m['title']}\n    \"{m['quote']}\"\n"
@@ -233,7 +232,7 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
             "topic": out["topic"].strip(), "summary": out["summary"].strip(),
             "description": out["description"].strip(), "figures": out["figures"],
             "tldr": out.get("tldr", "").strip(), "close": out.get("close", "").strip(), "parts": parts,
-            "model": sc["edit_model"], "prompt_version": prompts.version,
+            "model": sc["edit_model"], "prompt_version": prompts.version_of("story_edit"),
             "planned_at": datetime.now(UTC).isoformat(timespec="seconds"), "usd": round(claude.cost, 4)}
     sdir.mkdir(parents=True, exist_ok=True)
     if (sdir / "story.json").exists():
@@ -472,9 +471,9 @@ def retire(sdir: Path, keep: str) -> None:
                 f.unlink()
 
 
-def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
+def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:  # noqa: C901
     from . import meta as meta_stage
-    from . import review as review_stage
+    from . import notify as discord_notify
     from . import thumbs
     from .bleep import Bleeper
     from .config import for_show, for_stream
@@ -600,7 +599,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     thumbs.run(sdir, cfg, force=not fresh, missing=fresh)
     done["thumbs"] = video
     jsonstate.write(sdir / "story_state.json", done)
-    review_stage.publish(sdir, cfg, only=["segments"])
+    discord_notify.publish_and_post(sdir, cfg, only=["segments"])
     return final
 
 
