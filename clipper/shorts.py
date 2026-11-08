@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import statistics
 import subprocess
 import time
 from itertools import pairwise
@@ -159,10 +160,12 @@ def pickable(layouts: dict) -> dict[str, dict]:
     return {n: lay for n, lay in layouts.items() if lay.get("pick", True)}
 
 
-def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tuple]:
+def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int,
+                faces: dict[int, tuple[float, float]] | None = None) -> list[tuple]:
     """(x, y, w, h, panel_h) per panel: the panel's src box (fractions of the frame),
     cut down to the aspect of its slot (out_w x panel_h) around its focus point. Panels
-    without an "h" share what's left of out_h."""
+    without an "h" share what's left of out_h. faces: panel index -> where the face sits
+    in that panel's box (0-1 of the box, from face_centers); the window is centred on it."""
     panels = layout["panels"]
     fixed = sum(p.get("h", 0) for p in panels)
     free = [p for p in panels if not p.get("h")]
@@ -175,21 +178,58 @@ def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tu
     heights = [h // 2 * 2 for h in heights[:-1]]
     heights.append(out_h - sum(heights))
     crops = []
-    for p, ph in zip(panels, heights):
+    for i, (p, ph) in enumerate(zip(panels, heights)):
         x, y, w, h = (p["src"][0] * W, p["src"][1] * H, p["src"][2] * W, p["src"][3] * H)
-        fx, fy = p.get("focus", [0.5, 0.5])
+        focus = p.get("focus", [0.5, 0.5])
+        fx, fy = focus if isinstance(focus, list) else (0.5, 0.5)
+        face = (faces or {}).get(i)
         aspect = out_w / ph
         if w / h > aspect:  # too wide: keep the height, narrow around the focus
             nw = h * aspect
+            if face:  # the window centred on the face, kept inside the box
+                fx = min(max((face[0] * w - nw / 2) / max(w - nw, 1e-9), 0.0), 1.0)
             x += (w - nw) * fx
             w = nw
         else:
             nh = w / aspect
+            if face:
+                fy = min(max((face[1] * h - nh / 2) / max(h - nh, 1e-9), 0.0), 1.0)
             y += (h - nh) * fy
             h = nh
         even = lambda v: int(v) // 2 * 2
         crops.append((even(x), even(y), even(w), even(h), ph))
     return crops
+
+
+def wants_faces(layouts: dict) -> bool:
+    return any(p.get("focus") == "face" for lay in layouts.values() for p in lay.get("panels", []))
+
+
+def face_centers(layout: dict, faces: list[dict], a: float, b: float) -> dict[int, tuple[float, float]]:
+    """Panel index -> the median centre (0-1 of the panel's box) of the faces found in that
+    box during a..b of stream time, for panels with focus = "face". A face elsewhere
+    in the frame (the video being watched) doesn't count. Nothing in the window (the
+    streamer stepped out, a still) falls back to the whole stream: where they usually sit.
+    faces: faces.json "faces" (box = [x, y, w, h] as fractions of the frame)."""
+    out = {}
+    for i, p in enumerate(layout["panels"]):
+        if p.get("focus") != "face":
+            continue
+        bx, by, bw, bh = p["src"]
+        inside = [((f["box"][0] + f["box"][2] / 2 - bx) / bw, (f["box"][1] + f["box"][3] / 2 - by) / bh, f["t"])
+                  for f in faces]
+        inside = [(x, y, t) for x, y, t in inside if 0 <= x <= 1 and 0 <= y <= 1]
+        here = [(x, y) for x, y, t in inside if a <= t < b] or [(x, y) for x, y, _ in inside]
+        if here:
+            mid = statistics.median
+            out[i] = (round(mid([x for x, _ in here]), 2), round(mid([y for _, y in here]), 2))
+    return out
+
+
+def scene_faces(layouts: dict, scenes: list[list], faces: list[dict] | None, a: float) -> list[dict]:
+    """Per scene of a Short starting at a (stream time), the face centres of its layout's
+    face panels (face_centers), or {} when the stream has no faces.json."""
+    return [face_centers(layouts[n], faces, a + s, a + e) if faces else {} for s, e, n in scenes]
 
 
 def sample_frames(src: Path, a: float, dur: float, step: float, out_dir: Path,
@@ -394,11 +434,15 @@ def choose_layout(layout: str | None, rv: dict, prev: dict, layouts: dict, a: fl
 
 
 def short_signature(sc: dict, codec: str, a: float, b: float, scenes: list[list],
-                    layouts: dict) -> str:
-    """What a Short is made from; the file is rendered again when it changes."""
+                    layouts: dict, faces: list[dict] | None = None) -> str:
+    """What a Short is made from; the file is rendered again when it changes. faces: per
+    scene, the face centres its crop follows (scene_faces); left out when there are none,
+    so Shorts made before face framing keep their signature."""
     sig_base = {"a": a, "b": b, "captions": sc["captions"], "codec": codec,
                 "style": {k: v for k, v in sc.items() if k.startswith("caption_")},
                 "lufs": sc["lufs"], "w": sc["width"], "h": sc["height"]}
+    if faces and any(faces):
+        sig_base["faces"] = [{str(i): list(c) for i, c in f.items()} for f in faces]
     # One scene keeps the signature it always had, so Shorts made before scene
     # detection aren't re-rendered when it finds the same single layout.
     return signature({**sig_base, "layout": layouts[scenes[0][2]], "name": scenes[0][2]}
@@ -564,10 +608,11 @@ def render(src_cut: Path, dst: Path, parts: list[tuple], ass: Path | None, dur: 
 
 def cut_and_render(stream_dir: Path, cfg: dict, src: Path, words: list[dict], bleepers: tuple,
                    layouts: dict, scenes: list[list], a: float, b: float, work: Path,
-                   key: str, dst: Path, codec: str) -> tuple[int, int, dict]:
-    """Cut a..b from the source (audio bleeped), crop each scene to its layout, burn in
-    the captions and render dst. bleepers: (audio, captions). Returns (bleeps, captions,
-    loudness)."""
+                   key: str, dst: Path, codec: str,
+                   faces: list[dict] | None = None) -> tuple[int, int, dict]:
+    """Cut a..b from the source (audio bleeped), crop each scene to its layout (its face
+    panels framed on the face: faces, per scene, from scene_faces), burn in the captions
+    and render dst. bleepers: (audio, captions). Returns (bleeps, captions, loudness)."""
     sc = cfg["shorts"]
     audio_bleeper, bleeper = bleepers
     dur = round(b - a, 3)
@@ -577,7 +622,8 @@ def cut_and_render(stream_dir: Path, cfg: dict, src: Path, words: list[dict], bl
                           keyframe=keyframe_before(stream_dir, src, a),
                           bleep=(audio_bleeper, words))
     W, H = media.size(cut)
-    parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"])) for s, e, n in scenes]
+    parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"], (faces or [{}] * len(scenes))[j]))
+             for j, (s, e, n) in enumerate(scenes)]
     ass = work / f"{key}.ass" if sc["captions"] else None
     n_caps = write_ass(words, a, dur, sc, [(s, e, layouts[n]) for s, e, n in scenes],
                        bleeper, ass) if ass else 0
@@ -670,6 +716,10 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     out_dir, work = stream_dir / "shorts", stream_dir / "shorts" / "work"
     out_dir.mkdir(exist_ok=True)
     layouts = with_examples(layouts, cfg)
+    # Panels with focus = "face" follow the face found in their box (clipper faces).
+    faces = (jsonstate.read(stream_dir / "faces.json", {}).get("faces") or None) if wants_faces(layouts) else None
+    if wants_faces(layouts) and not faces:
+        print(f"  no faces.json in {stream_dir.name}: face panels keep their middle (clipper faces {stream_dir.name})")
     layout_prompts = Prompts(cfg)
     layout_prompts.version = sc["layout_prompt_version"]
     claude = None
@@ -710,14 +760,15 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
                   flush=True)
             continue
         t = time.time()
-        sig = short_signature(sc, codec, a, b, scenes, layouts)
+        in_scenes = scene_faces(layouts, scenes, faces, a)
+        sig = short_signature(sc, codec, a, b, scenes, layouts, in_scenes)
         if not force and dst.exists() and prev.get("sig") == sig:
             continue
         if dur < sc["min_s"]:  # grow_window found no whole lines to add (#77 L16)
             print(f"  {key}: {dur:.1f} s is under [shorts] min_s ({sc['min_s']} s)", flush=True)
         n_bleeps, n_caps, loud = cut_and_render(stream_dir, cfg, src, words,
                                                 (audio_bleeper, bleeper), layouts, scenes,
-                                                a, b, work, key, dst, codec)
+                                                a, b, work, key, dst, codec, in_scenes)
         clips = sorted((stream_dir / "clips").glob(f"{i:02d}_{p['id']}_*.mp4"))
         clip_video = clips[0] if clips else dst
         multi = {"scenes": scenes} if len(scenes) > 1 else {}
