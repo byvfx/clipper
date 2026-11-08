@@ -84,17 +84,25 @@ def test_unknown_show_is_refused(cfg_path):
         config.for_show(config.load(cfg_path), "nope")
 
 
-def test_example_documents_every_setting():
-    """Every DEFAULTS key appears in clipper.example.toml, and nothing else does."""
-    text = (ROOT / "clipper.example.toml").read_text(encoding="utf-8")
-    example = tomllib.loads(text)
-    # TOML has no null: a key whose default is None is documented as a commented line.
-    missing = [f"[{s}] {k}" for s, v in config.DEFAULTS.items() for k, d in v.items()
-               if k not in example.get(s, {}) and not (d is None and f"# {k} =" in text)]
-    assert not missing, "add to clipper.example.toml: " + ", ".join(missing)
+def test_defaults_toml_is_the_single_source():
+    """clipper/defaults.toml is DEFAULTS: every key there, documented, and the None defaults
+    (TOML has no null) as commented lines there plus config.NONE_DEFAULTS."""
+    text = (ROOT / "clipper" / "defaults.toml").read_text(encoding="utf-8")
+    data = tomllib.loads(text)
+    for (s, k), v in config.NONE_DEFAULTS.items():
+        assert v is None and k not in data[s] and f"# {k} =" in text, (s, k)
+        data[s][k] = v
+    assert data == config.DEFAULTS
+    assert "shows" not in data   # shows are an install's own tables
+
+
+def test_the_starter_example_only_uses_known_settings():
+    """clipper.example.toml is a starter clipper.toml: a few values, placeholders, a show."""
+    example = tomllib.loads((ROOT / "clipper.example.toml").read_text(encoding="utf-8"))
     unknown = [f"[{s}] {k}" for s, v in example.items() if s != "shows"
                for k in v if k not in config.DEFAULTS.get(s, {})]
-    assert not unknown, "clipper.example.toml has settings config.py doesn't know: " + ", ".join(unknown)
+    assert not unknown, "clipper.example.toml has settings defaults.toml doesn't know: " + ", ".join(unknown)
+    assert example["shows"] and example["record"]["channels"]
 
 
 def test_big_story_preset_only_has_known_settings():
@@ -322,7 +330,7 @@ INSTALL = re.compile(r"(?<![a-z])(kino|lolcow|andy|ppp|jer|jeremy|hambly|quarter
 
 def test_defaults_example_and_setup_name_no_install():
     hits = []
-    for f in ("clipper/config.py", "clipper.example.toml", "clipper/setup.py", "clipper/cli.py"):
+    for f in ("clipper/defaults.toml", "clipper/config.py", "clipper.example.toml", "clipper/setup.py", "clipper/cli.py"):
         for i, line in enumerate((ROOT / f).read_text(encoding="utf-8").splitlines(), 1):
             m = INSTALL.search(line)
             if m:

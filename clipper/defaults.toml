@@ -1,0 +1,1007 @@
+# clipper's defaults, every setting with what it does: config.py loads this file as DEFAULTS, and
+# clipper.toml, clipper.local.toml and CLIPPER_<SECTION>_<KEY> env vars override it in that
+# order ([shows.<key>.<section>] tables override per show). Change a default here; put an
+# install's own values in its clipper.toml (clipper.example.toml is a starter). A key whose
+# default is None (TOML has no null) is a commented line here and listed in config.NONE_DEFAULTS.
+# `clipper config get <section>.<key>` shows a value and which layer set it.
+
+[paths]
+# Relative paths resolve against the folder of the clipper.toml in use (the working directory
+# when there is none), never against this file's.
+streams = "streams"
+prompts = "prompts"
+schedule = "schedule.json"
+youtube_client_secret = "secrets/youtube_client_secret.json"
+youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sign-in
+youtube_quota = "logs/youtube_quota.json"      # YouTube Data API units spent per Pacific day
+youtube_cookies = "secrets/youtube_cookies.txt"  # optional Netscape cookies.txt for yt-dlp: age-restricted
+                                               # archive items and receipts, pre-shows stopped by YouTube's bot check
+tiktok_client = "secrets/tiktok_client.json"   # {"client_key": ..., "client_secret": ...}
+tiktok_token = "secrets/tiktok_token.json"     # written by clipper tiktok --sign-in
+x_client = "secrets/x_client.json"             # {"client_id": ...} (+ "client_secret" for a Web App)
+x_token = "secrets/x_token.json"               # written by clipper x --sign-in
+warroom_token = "secrets/warroom_token.txt"    # made by clipper warroom --tailnet on, if [warroom] token is ""
+brave_key = "secrets/brave_secret.txt"        # Brave Search API key for cast image search, if not $BRAVE_API_KEY
+openai_key = "secrets/openai_secret.txt"      # model provider keys, each if its env var isn't set
+gemini_key = "secrets/gemini_secret.txt"      # ($OPENAI_API_KEY, $GEMINI_API_KEY, $OPENROUTER_API_KEY)
+openrouter_key = "secrets/openrouter_secret.txt"
+anthropic_key = "secrets/anthropic_secret.txt"   # if $ANTHROPIC_API_KEY isn't set (the claude container on the NAS)
+anthropic_admin_key = "secrets/anthropic_admin_secret.txt"  # Admin API key (sk-ant-admin...) for Claude's own bill, if $ANTHROPIC_ADMIN_KEY is unset
+discord_token = "secrets/discord_token.txt"    # if $DISCORD_BOT_TOKEN is unset
+elevenlabs_key = "secrets/elevenlabs_api_key.txt"  # if $ELEVENLABS_API_KEY ([narrate] key_env) is unset
+sync_key = "secrets/sync_api_key.txt"          # sync.so lip-sync key, if $SYNC_API_KEY ([perform] sync_key_env) is unset
+bot_log = "logs/bot.log"                       # clipper bot log, rotated; "" = console only
+serve_log = "logs/serve.log"                   # clipper serve log (its jobs' output too), rotated; "" = console only
+rumble = "rumble"                              # clipper rumble upload folders
+layouts = "layouts"                            # reference screenshots per show layout (clipper shorts --save-example)
+archive = "archive"                            # clipper archive subjects (other channels' back catalogs)
+modal_runs = "logs/modal_runs.jsonl"           # every Modal call's start and end (clipper modal, war room)
+voices = "voices"                              # enrolled voices per show (clipper speakers --enroll); the NAS share once it runs everything
+faces = "faces"                                # known faces for every show (clipper faces --enroll) + the face models
+streamers = "studio/research_notes/streamers.json"    # people and their channels by platform (clipper story)
+people = "people.json"                         # one record per person: names, channels, archive subject (clipper people)
+costs = "logs/costs.jsonl"                     # every model call's cost, one line each (clipper costs, war room)
+model_tests = "logs/model_tests"               # `clipper models test` results, one file a model and effort
+model_gold = "logs/model_tests/gold.json"      # labelled windows for `clipper models gold` (propose, label, run)
+warroom_undo = "logs/warroom_undo.json"        # the war room's last 20 actions, for Undo
+warroom_layouts = "logs/warroom_layouts.json"  # the war room's saved panel layouts (Layout button)
+weekly = "weekly"                              # clipper weekly issues, one folder per week's Saturday
+news = "news"                                  # clipper news: news.sqlite and context.json
+
+[modal]
+# `clipper modal` and the war room's Modal panel: containers, runs, failures, archive
+# progress, and the month's spend from Modal's own billing (needs MODAL_TOKEN_ID/SECRET).
+monthly_budget_usd = 0       # your ceiling for a month's metered cost, shown against it; 0 = none
+alert_every_usd = 25         # the bot DMs ([notify] kind "spend") each time the month passes a multiple
+
+[kick]
+channel = ""               # set per show ([shows.<key>] channels); a stream uses its own
+max_height = 1080          # best HLS variant at or below this height
+download_fragments = 8     # parallel HLS fragment downloads
+chat_workers = 4           # parallel chat-history pagers
+chat_rps = 3.0             # total request rate across workers; Kick 429s above ~3-4/s
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36"  # sent with Kick API requests
+
+[record]
+# `clipper record watch` (Docker on the NAS, deploy/record): record each channel's live
+# streams with real-time chat into streams/kick-<livestream id>/, then finalize them into
+# source.mkv + chat.jsonl + meta.json + audio.wav, as `clipper fetch` would leave them.
+# One-off: `clipper record now <slug> [--max-s 300]`.
+channels = []                     # Kick slugs; or tables, e.g.
+                                  # {slug = "another-slug", max_height = 720, enabled = false}
+poll_s = 60                # live-status check per channel
+max_height = 1080          # best variant at or below this height; 0 = best
+end_grace_s = 300          # after the stream goes offline, wait this long for a restart
+stall_alert_s = 60         # alert when no video arrives this long while live
+segment_retry_s = 20       # keep retrying a failed video segment this long before leaving a gap
+container = "mkv"          # final source.<container>: mkv (stream-copy remux) or ts
+keep_parts = false         # keep live/partNNN.ts after joining them
+extract_audio = true       # audio.wav, so `clipper signals` runs before transcribe
+backfill_chat = true       # fill chat-socket outages from Kick's chat-history API
+backfill_min_s = 5
+# `clipper services stop|restart recorder` (and deploy/record/deploy.sh) reach the NAS by ssh:
+ssh_host = ""                # ssh host alias; "" = $RECORD_SSH_HOST, else "nas"
+compose_dir = ""             # the compose folder there, relative to the ssh user's home; "" = $RECORD_DIR, else "clipper-record"
+sudo = ""                    # prefix for docker there if the ssh user needs it ("sudo"); "" = $RECORD_SUDO
+chat_tail_s = 15           # chat kept past a part's end (chat trails the video)
+on_finish = ""             # command per finished recording, run without a shell: {stream_id} {stream_dir} {channel}
+# Alerts (recording started/finished, video drops, stalls, crashes) always go to the log;
+# also to Discord via a webhook URL in $CLIPPER_ALERT_WEBHOOK, or the review bot's token
+# posting into alert_channel_id.
+alert_webhook_env = "CLIPPER_ALERT_WEBHOOK"
+alert_channel_id = ""
+alert_mention = ""         # prepended to warnings, e.g. "<@123456789012345678>"
+
+[worker]
+# `clipper worker` on the GPU machine (deploy/worker/worker-task.ps1): every poll_s it
+# looks for recordings the NAS recorder finished (streams/<id>/live/state.json "done")
+# and runs `clipper run <id>`: signals, transcribe, score, segments, faces, cut, meta, thumbs,
+# review publish. Progress in <id>/run.json, logs in <id>/run_<stage>.log; a failed or
+# interrupted run resumes at its first unfinished stage. paths.streams must be the NAS
+# share the recorder writes to. `clipper worker --status` lists runs.
+poll_s = 300
+# faces (who is on screen, CPU) runs after the fast lane, before the slow cut; it needs
+# `uv sync --extra faces`: drop it from the list on a machine without that.
+stages = ["signals", "transcribe", "score", "segments", "faces", "cast", "cut", "meta", "thumbs", "shorts", "review"]
+fast_lane = true           # clips + Shorts to review first, then the long segments and compilations
+notify = true              # review stage posts Discord cards (needs [discord] enabled)
+channels = []              # only recordings of these Kick slugs; [] = all
+max_attempts = 3           # a failed run is retried this many times in all...
+retry_minutes = 60         # ...this long apart; alerts go where [record] alerts go
+stale_minutes = 10         # a run with no heartbeat this long is taken over
+
+[preshow]
+# `clipper preshow`: a show's pre-recorded pre-show, grabbed from its own YouTube channel
+# and run as ONE whole video (no clips, no Shorts): transcribe, one segment, cut, meta,
+# thumbs, review. The bot checks the feeds every poll_minutes. Set youtube_channel per show
+# ([shows.<key>.preshow]); `clipper preshow list` shows what the feed has.
+youtube_channel = ""       # channel id (UC...) whose uploads feed is watched; "" = off
+title_pattern = "(?i)pre.?show"   # uploads whose title matches are grabbed
+max_age_hours = 36         # older feed entries are left alone; `clipper preshow fetch <url>` for those
+poll_minutes = 5           # `clipper bot` checks the feeds this often and runs new ones; 0 = off
+format = "bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b"  # yt-dlp format for the whole video
+stages = ["transcribe", "segments", "cut", "meta", "thumbs", "review"]
+model = "claude-sonnet-5-5"  # writes the segment's title/description (~$0.03 each)
+effort = "medium"
+prompt_version = "v1"      # prompts/preshow_<v>.md
+trim_end_s = 3.0           # seconds dropped off the end of each pre-show; 0 = the whole video
+oneoff_prompt_version = "v1"   # prompts/oneoff_<v>.md: `preshow fetch --from/--to/--about`, one stretch of any video
+publish = "asap"           # asap: approved -> next `clipper upload` publishes it at once | slots
+band = "Pre-show {date}!"  # the cover's green band, {date} = M/D; "" = the model's own line
+# teasers = false          # pre-show covers: one story, no side boxes (unset = as [thumbnail] teasers)
+playlist = "{show} Pre-shows"   # one playlist for all of them; "" = the model's pick
+credit = "The {show} pre-show from {date}, first posted on their YouTube channel: {url}"
+
+[transcribe]
+# backend = "modal"        # cloud GPU instead of local CUDA; see the wiki, Transcribe-on-Modal
+model = "large-v3"
+language = "en"
+compute_type = "float16"   # int8_float16 if VRAM is tight
+batch_size = 8
+device = "cuda"
+backend = "whisperx"       # whisperx (CUDA) | mlx (Apple Silicon, `uv sync --extra mac`)
+                           # | modal (cloud GPU, `uv sync --extra modal`)
+modal_app = "clipper-whisperx"  # deployed Modal app (`clipper transcribe --deploy`)
+modal_gpu = "L40S"         # T4 | L4 | A10 | L40S | A100 | H100; "" = the app's default
+                           # (8 h stream: L40S ~10 min ~$0.34, L4 ~19 min ~$0.26, H100 ~8 min ~$0.59)
+modal_audio = "flac"       # flac (lossless, ~60 MB/h) | opus (48 kbps, smaller upload)
+mlx_model = "mlx-community/whisper-large-v3-turbo"  # Hugging Face repo for the mlx backend
+mlx_align = true           # refine mlx word times with WhisperX alignment if installed
+# diarize = true           # speaker turns too (pyannote); needs the Hugging Face token: wiki, Speakers
+                           # "Speaker labels". Usually per show: [shows.myshow.transcribe] diarize = true
+diarize = false            # speaker turns (whisperx or modal backend); see the note above
+diarize_model = "pyannote/speaker-diarization-community-1"
+min_speakers = 0           # 0 = let pyannote decide
+max_speakers = 0
+
+[speakers]
+# `clipper speakers`: SPEAKER_xx -> a name by voice, against the show's enrolled voices.
+match = 0.6                # lowest cosine similarity to name a speaker (same voice ~0.9, others < 0.5)
+min_talk_s = 20            # less talk than this: listed, never named
+max_refs = 10              # embeddings kept per enrolled voice (newest win)
+
+[faces]
+# `clipper faces`: who is on screen, by face, over the keyframes (CPU; the `faces` extra).
+workers = 0                # detection processes; 0 = half the CPU threads
+min_px = 40                # faces shorter than this (source pixels) are too small to name
+cluster = 0.4              # lowest average similarity inside one group of faces
+match = 0.7                # lowest similarity to a known face to name a group (same person ~0.9, lookalikes < 0.6)
+min_faces = 5              # smaller groups are dropped
+sheets = 60                # contact sheets faces/F01.jpg ... for the biggest groups
+max_refs = 10              # group averages kept per known face (newest win)
+
+[cast]
+# `clipper cast` (#41): a few head-and-shoulders photos of each regular in [thumbnail]
+# photos/<Person>/ (cast.json beside them), from streams and the web; the war room's Cast
+# window keeps or drops them. Needs the `faces` extra; image search also $BRAVE_API_KEY.
+min_px = 100               # faces shorter than this (pixels of the picture) aren't taken
+match = 0.5                # an enrolled person's photo: lowest similarity of its face to theirs
+max_px = 1600              # the longest side a photo is kept at
+per_source = 6             # most new photos one find adds from each source
+videos = 12                # recent videos whose thumbnails a YouTube channel offers
+search_count = 40          # image search results looked at
+min_photos = 3             # doctor flags anyone with fewer kept
+known_figures = true       # everyone with a kept photo is added to [scoring] known_figures
+# Automatic: the worker's `cast` stage grabs each new stream's named faces; the bot runs
+# `clipper cast auto` (a find from every source) for anyone short of photos.
+target = 6                 # photos (kept + new) the automation gathers per person
+auto_keep = 0.65           # keep without asking when an enrolled face matches this well and the
+                           # label has no doubt (0 = everything waits for review)
+auto_keep_sources = ["stream", "commons", "channel"]  # not "web": its licence is unknown
+auto_hours = 24            # serve's `cast auto` this often; 0 = off
+retry_days = 7             # someone a find added nothing for is tried again after this
+label_model = "claude-haiku-5-5"  # labels each new photo ("" = no labels)
+label_effort = "low"
+prompt_version = "v1"      # prompts/cast_label_<v>.md
+labels = ["neutral", "smiling", "laughing", "angry", "shocked", "smug", "sad", "serious"]
+# Never taken from image search: photo agencies, whose photographers file copyright claims.
+blocked_domains = ["gettyimages.com", "gettyimages.co.uk", "istockphoto.com", "apimages.com",
+                   "ap.org", "alamy.com", "shutterstock.com", "reuters.com", "wireimage.com",
+                   "zumapress.com", "dreamstime.com", "depositphotos.com", "123rf.com",
+                   "stock.adobe.com", "imago-images.com", "newscom.com", "agefotostock.com",
+                   "pond5.com", "eyevine.com", "rexfeatures.com", "photoshelter.com"]
+
+[news]
+# `clipper news` (#110): headlines about the shows' people (each show's [meta] cast,
+# [scoring] known_figures and name, the cast library, and watch below) from these feeds,
+# subreddits and Google News. A cheap model rates each match; the bot posts the stories
+# with Dismiss and "Tonight's context", and before a show suggests that day's stories.
+check_minutes = 0          # the bot's `news check` this often (30 is plenty); 0 = off
+channel = "news"           # Discord text channel for news, by name: the bot makes it if missing
+channel_id = ""            # or a channel by id (wins over channel); both "" = the review channel
+feeds = [{ name = "TMZ", url = "https://www.tmz.com/rss.xml" },
+         { name = "Dexerto", url = "https://www.dexerto.com/feed/" }]
+reddit = ["LivestreamFail"]
+google_news = true         # one Google News search per watched person with a full name
+# The terms: only these are watched (other names in the list; always searched); none = nothing
+# is fetched. [shows.<key>.news] watch = {...} ties terms to that show.
+watch = {}                 # e.g. { "Jane Doe" = ["JaneDoeLive"], "Acme" = ["Acme Corp"] }
+auto_watch = false         # also watch each show's cast, known figures and name, and the cast library
+ignore = []                # names never watched
+min_fetch_minutes = 20     # a feed or subreddit at most this often
+search_minutes = 120       # each Google News search at most this often
+max_age_hours = 48         # older items are skipped
+keep_days = 30             # items and stories are forgotten after this
+judge_model = "claude-haiku-5-5"  # rates each matched headline ("" = no judging)
+judge_effort = "low"
+prompt_version = "v1"      # prompts/news_judge_<v>.md
+max_judge = 60             # most headlines judged per check (newest first)
+post_maybe = true          # post "maybe" stories too, marked as such
+max_posts = 5              # most stories posted per check (strong ones first)
+context_days = 7           # a queued context note no stream of its show took by then is dropped
+preshow_minutes = 60       # suggest the day's stories this long before a show's usual start; 0 = off
+
+[costs]
+# `clipper costs` / the war room's Costs panel: what the logs can't know.
+# monthly = { "Runway Max" = 95 }   # fixed costs per month
+# credits = { "modal" = 30 }        # a provider's monthly credit against its spend
+monthly = {}               # fixed costs per month, as above
+credits = {}               # monthly credits per provider, as above
+
+[llm]
+# Any stage's model key can name another provider by prefix (see the wiki, "Model
+# providers"): "openai:<model>" (OPENAI_API_KEY), "gemini:<model>" (GEMINI_API_KEY),
+# "openrouter:<vendor>/<model>" (OPENROUTER_API_KEY), "local:<model>" (the OpenAI-compatible
+# server below). Bare names are Claude. `clipper compare score` tries one on a reviewed stream.
+local_base_url = ""        # e.g. "http://<host>:11434/v1" (Ollama); only for local: models
+timeout_s = 600            # seconds per request to an OpenAI-compatible provider
+thinking_max_tokens = 64000  # output room for another provider's reasoning model (thinking counts)
+# [llm.prices]             # $ per 1M input/output tokens for cost lines; adds to the built-in Claude ones
+# "openai:gpt-5-mini" = [0.25, 2.00]
+[llm.prices]               # the built-in Claude prices; a model not listed costs $0
+"claude-haiku-5-5" = [0.10, 0.50]
+"claude-sonnet-5-5" = [2.00, 10.00]
+"claude-opus-5-5" = [4.00, 20.00]
+
+[scoring]
+# Needs ANTHROPIC_API_KEY (or an `ant auth login` profile) in the environment.
+# A key not scoped to a workspace also needs the workspace id (wrkspc_...), here or
+# in $ANTHROPIC_WORKSPACE_ID.
+workspace_id = ""
+model_a = "claude-haiku-5-5"    # Pass A, one call per window + the stream summary
+model_b = "claude-sonnet-5-5"   # Pass B, one call per stream
+effort_a = "medium"
+effort_b = "high"
+prompt_version = "v5"           # prompts/<name>_<version>.md (v5: reads speaker tags, #52)
+concurrency = 4
+lead_in_s = 120                 # transcript before each window, for context
+max_picks = 10
+channel_name = "a clips channel"
+audience = "people who enjoy streamer commentary and drama"
+tone = "unfiltered, chaotic, funny"
+# Facts the models can't infer from a transcript (show name, regulars, channel emotes):
+# set per show in [shows.<key>.scoring] stream_context, at the end of this file.
+stream_context = ""
+
+# Style rules appended to every prompt that writes viewer-facing text (titles,
+# descriptions, hooks, chapters, thumbnails). Add your own notes as more lines.
+house_style = [
+  'Never use the word "hosts", or "host" for a co-host; it reads as machine-written. Name the person or make the subject the actor ("Nobody buys it").',
+]
+# Other creators' video/stream audio in a clip (Content ID risk):
+#   "reject"           any clip whose payoff or setup needs more than a few seconds of it
+#   "allow_reactions"  keep reaction clips the streamer's commentary carries, with at most
+#                      max_source_audio_s seconds of source audio in the Short
+third_party_audio = "reject"
+max_source_audio_s = 5
+
+# Who the clips are for, which sets what "needs context" means (v4+ prompts):
+#   "strangers"  never seen the show; rejects anything that needs to know the people
+#   "fans"       know the regulars in known_figures and their running drama; rejects only
+#                moments that depend on something earlier in the same stream
+audience_knowledge = "strangers"
+known_figures = ""             # plus the cast library's people ([cast] known_figures)
+
+# Gambling (v7+ prompts):
+#   "reject"      no Short about gambling play: slots, cards, bets, wins or losses on a site
+#   "commentary"  gambling as a topic is fine (mocking someone's bets, a show named "Casino");
+#                 only a Short that promotes gambling (a site, a code, "go play") is rejected
+gambling = "reject"
+
+# Transcript-first candidates: the Pass A model scans each 15-minute block for moments
+# carried by the hosts' own words, added to the chat-heat windows (scan prompt, v4+).
+transcript_scan = true
+scan_max_per_block = 3
+scan_pad_s = 30
+scan_max_overlap = 0.5     # skip scanned moments a chat window already covers this much
+
+[segments]
+# Topic segments ("the DSP segment") as long horizontal uploads: one call over the
+# whole transcript (~100k tokens for an 8 h stream).
+model = "claude-opus-5-5"
+effort = "medium"
+prompt_version = "v3"          # prompts/segments_<version>.md and compilation_<version>.md (v3: speaker tags)
+min_aside_s = 180              # fold shorter asides into the surrounding segment
+min_s = 180                    # only cut segments between min_s and max_s seconds
+max_s = 3600
+skip_kinds = ["intro", "break", "ad_read", "outro", "gambling"]
+source_share = ["none", "some", "most"]   # drop "most" to skip watch-along segments
+compile_min_segments = 2       # topics with this many segments also get one long video
+
+[cut]
+# Segments and compilations are always stream-copied (lossless; start on a keyframe).
+clip_codec = "libx264"          # picks: libx264 | h264_qsv | h264_nvenc (driver 610+) | h264_vaapi
+crf = 20                       # quality for re-encodes
+parallel = 3                   # segments cut at once
+# "nas": segments and compilations cut on the NAS beside the source, in a one-off container
+# of the recorder image over ssh (wiki, NAS-recorder); picks stay on this machine.
+backend = "local"              # local | nas
+nas_host = ""                   # ssh alias of the NAS, key login
+nas_data = ""                   # the recorder's CLIPPER_DATA, e.g. /volume1/docker/clipper
+nas_user = ""                   # the recorder's PUID:PGID, e.g. 1000:10
+nas_image = "clipper-record:latest"  # image of the one-off cut container
+
+[bleep]
+# Cover slurs in cut audio (`clipper cut`) and mask them in captions and metadata text.
+mode = "off"                # off | bleep (1 kHz tone) | mute
+pad_s = 0.08                   # cover this much either side of the word timing
+tone_hz = 1000
+tone_level = 0.25
+# Regexes matched against whole lowercased words, punctuation stripped.
+patterns = [
+  'n[i1]gg(?:a|as|az|er|ers|uh|uhs)', 'f[a@]g(?:s|got|gots|gy)?', 'retard(?:s|ed)?',
+  'tr[a@]nn(?:y|ies)', 'k[i1]kes?', 'spics?', 'chinks?', 'wetbacks?',
+]
+profanity = false               # also cover swearing below, not just slurs
+profanity_patterns = [
+  '(?:mother)?f+u+c+k+\w*',     # fuck, fucking, fuckin', motherfucker
+]
+
+[meta]
+# Upload metadata drafts (`clipper meta`): SEO titles, descriptions, chapters, tags, SRT.
+model = "claude-opus-5-5"
+effort = "medium"
+prompt_version = "v3"          # prompts/meta_<v>.md and chapters_<v>.md (v2: better hashtag picks, v3: speaker tags)
+concurrency = 4                # model calls at once (the metadata draft and chapters)
+show_name = ""
+cast = []                      # per show: the show's own people by name, e.g. ["Alex", "Sam"]; the
+                               # thumbnail prompts name them where they would say "host"
+title_format = "{title}"   # MY SHOW | <title>; {show} keeps its case
+credit = "Clipped from {show}, streamed live on Kick {date}: https://kick.com/{channel}"
+chapters_min_s = 900           # segments at least this long get chapters from the transcript
+min_chapters = 3
+max_chapters = 8
+chapter_min_gap_s = 60
+srt_line_chars = 42
+srt_max_s = 6
+
+[thumbnail]
+# `clipper thumbs`: candidate frames around each asset's key moments -> Claude picks the
+# frame, a zoom crop and 2-4 words -> <video>.jpg (1280x720, under max_bytes) beside the
+# video, used by `clipper upload` and shown in Kitsu. Choices go to thumbnails.json: edit
+# a "text" / "highlight" / "position" there, then `clipper thumbs <id> --compose-only`.
+model = "claude-opus-5-5"
+effort = "medium"
+prompt_version = "v2"          # prompts/thumbnail_<version>.md (v2: names [meta] cast, not "the hosts")
+concurrency = 4
+clip_frames = 8                # candidates per clip, around its hook and payoff
+even_frames = 5                # segments/compilations: evenly spaced candidates...
+heat_frames = 5                # ...plus their hottest chat moments
+min_gap_s = 20
+min_brightness = 28            # skip darker frames (mean luma 0-255)
+min_sharpness = 150.0          # skip blurrier frames (variance of the Laplacian)
+min_crop = 0.4                 # most zoom allowed: a 16:9 box this share of the frame wide
+max_words = 4
+retry_prompt_version = "v1"    # prompts/thumbnail_retry_<v>.md, thumbnail_enquirer_retry_<v>.md and
+                               # thumbnail_feedback_<v>.md: asking again for unusable text, a retake's note
+# Brand look. font: a bold TTF/OTF; empty = the first of `fonts` that exists
+# (Impact on Windows/macOS, DejaVu Sans Bold on Linux).
+font = ""
+fonts = ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
+         "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
+uppercase = true
+text_color = "#ffffff"
+accent_color = "#ffd400"       # highlight word, badge, bottom stripe
+outline_color = "#000000"
+outline_px = 10
+shadow_px = 8
+text_height = 0.17             # cap height per line, share of the frame height
+max_lines = 2
+margin_px = 48
+shade = 0.55                   # darken behind the text (0-1)
+saturation = 1.15
+contrast = 1.08
+badge_text = ""                # small fixed label top-left, e.g. "MY SHOW"
+badge_font = ""                # empty = font
+logo = ""                      # PNG top-left instead of badge_text
+stripe_px = 10                 # accent stripe along the bottom; 0 = none
+max_bytes = 2000000            # YouTube's limit
+kitsu = true                   # attach to each item's Kitsu revision and set it as its thumbnail
+
+# Thumbnail look: "classic" (frame + big text) or "enquirer" (1990s tabloid cover:
+# masthead, teaser band and boxes plugging the episode's other videos, big face, inset).
+style = "classic"
+enquirer_prompt_version = "v6"   # prompts/thumbnail_enquirer_<v>.md (v6: picks a cast photo by label, #41; v5: frames say whose face `clipper faces` found)
+face_frames = 2                # with faces.json: each named person's best frames offered for the cover...
+face_people = 4                # ...for this many people, the ones seen most in the video
+masthead = ""                  # empty = meta.show_name
+masthead_tagline = "LARGEST CIRCULATION OF ANY STREAM ON KICK"
+masthead_price = "$1.39"
+badge_kicker = "AS SEEN ON"
+badge_channel = ""             # empty = scoring.channel_name
+teasers = true                 # the three side boxes; false = the photo fills the left (one big moment)
+# Enquirer covers' condensed face (teasers, subheads, labels), first that exists; none = the
+# headline font. condensed_variation: the named instance of a variable font.
+condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf",
+                   "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                   "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf",
+                   "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"]
+condensed_variation = "Bold Condensed"
+# Folder of head-and-shoulders photos, "<Person>.jpg", for people talked about but not on
+# screen; enquirer covers may use one for the face or the teaser box. "" = none.
+# photos = "//nas/share/clipper/photos"   (a relative folder is beside clipper.toml, like [paths])
+photos = ""
+
+[shorts]
+# `clipper shorts`: each pick's short window (short_in_s..short_out_s from scoring) as a
+# 1080x1920 video in shorts/: snapped to word gaps, a layout crop (panels of the source
+# stacked top to bottom), burned-in captions with the spoken word highlighted, bleeps,
+# loudness normalized. Layouts are per show: [shows.<key>.shorts.layouts.<name>] with
+# description (what the layout picker looks for), caption_y and panels = [{src = [x, y,
+# w, h] (fractions of the frame), h = px tall, focus = [fx, fy]}, ...]; "center" (a 9:16
+# crop of the middle) always exists. A panel narrower than its box is cut around focus
+# (the middle by default); focus = "face" centres it on the face `clipper faces` found in
+# the box during the scene (a webcam whose streamer sits off-centre or moves about). The picker labels a frame every scene_step_s, so a
+# Short that spans a scene cut switches layout at the cut ("cams 0:00 > watch 0:39").
+# Give it a reference screenshot of each layout (`clipper shorts <stream> --save-example
+# <layout> --at <seconds>`, kept in [paths] layouts/<show>/); without them it confuses
+# a busy screen box with another layout, and with them "center" is never picked.
+# pick = false keeps a layout out of the picker (and needs no screenshot): another way
+# to frame a scene that has its own layout, e.g. only the webcams of a watch scene.
+# Force one layout for a whole Short with --layout, the Kitsu "Layout" column or
+# shorts.json, then rerun `clipper shorts` and `clipper review publish`. Older Shorts:
+# `clipper shorts <stream> --check` lists their scenes; --rescene re-renders those that change.
+width = 1080
+height = 1920
+fps = 30
+codec = ""                     # empty = cut.clip_codec
+crf = 20
+cut_codec = ""                 # the trimmed, bleeped intermediate; empty = cut.clip_codec
+cut_crf = 16
+keep_work = false              # keep shorts/work/ (intermediate cut, .ass captions)
+window = "short"               # short: scoring's 15-60 s window | clip: the pick's in/out
+hold_source_audio = true       # hold a Short in review when voices other than [meta] cast (speaker
+                               # tags) run over [scoring] max_source_audio_s; release it if the show carries it
+min_s = 15                     # widen shorter windows by whole transcript lines (setup first)
+max_s = 59                     # longest Short: over 60 s, any Content ID claim blocks it worldwide
+end_pause_s = 0.7              # window "short": end on a sentence end or a pause this long; 0 = off
+pad_s = 0.15                   # room before the first and after the last word
+lufs = -14.0                   # loudness target
+true_peak = -1.5               # loudnorm true peak (dBTP)...
+lra = 11                       # ...and loudness range
+fade_in_s = 0.05               # audio fades
+fade_out_s = 0.25              # at most a quarter of the Short
+default_layout = "center"
+layout_model = "claude-haiku-5-5"
+layout_effort = "low"
+layout_prompt_version = "v1"  # prompts/shorts_layout_<v>.md
+scene_step_s = 4               # one frame labelled this often (~$0.002 a Short)
+scene_batch = 8                # frames per call; more per call drifted
+min_scene_s = 6                # shorter runs join a neighbour (one odd frame can't flip it)
+captions = true                # burned-in captions; false = none
+caption_font = "Impact"        # a font family libass can find; or caption_fontsdir = "fonts"
+caption_fontsdir = ""          # a folder of font files to look in; empty = the system's
+caption_size = 96
+caption_color = "#ffffff"
+caption_highlight = "#ffd400"
+caption_pop = 115              # the spoken word's scale, in percent
+caption_outline = "#000000"
+caption_outline_px = 7
+caption_shadow_px = 3
+caption_uppercase = true
+caption_max_words = 3
+caption_max_chars = 18         # a group also ends before it would pass this many characters
+caption_gap_s = 0.6            # a pause this long starts a new group
+hashtag = "#Shorts"
+
+# Layouts for streams whose show sets none (a show's own layouts replace these); usually
+# per show instead, see above. Add [shorts.layouts.<name>] tables after this line.
+[shorts.layouts]
+
+[review]
+# Kitsu review server (deploy/kitsu). Token: a Kitsu bot token in $KITSU_TOKEN.
+host = ""   # your Kitsu URL + /api
+token_env = "KITSU_TOKEN"
+project = ""                   # Kitsu project; empty = [meta] show_name
+episode_name = "{date}"        # one episode per stream; {date} {stream_id} {title}
+include = ["segments", "picks", "shorts"]    # compilations become Kitsu playlists of their segments
+preview_height = 720
+preview_fps = 30
+preview_codec = ""             # empty = cut.clip_codec
+preview_quality = 28
+max_upload_mb = 480            # Kitsu's proxy rejects bigger uploads; longer previews re-encode to fit
+normalize = false              # true = Kitsu re-encodes uploads on the NAS
+
+[discord]
+# Review from Discord: `clipper review publish` posts one card per item (preview, title,
+# hook, Kitsu link) in a thread per stream; `clipper bot` answers the cards' buttons
+# (approve, reject, changes, hold, reopen, pin, retitle) and /status /pending /item
+# /schedule /post. Everything writes to Kitsu, which stays the record.
+# Token: $DISCORD_BOT_TOKEN, or the file at [paths] discord_token. Ids: Discord >
+# Settings > Advanced > Developer Mode, then right-click > Copy ID.
+enabled = false                # post cards at the end of `clipper review publish`
+token_env = "DISCORD_BOT_TOKEN"
+guild_id = ""                  # your server; slash commands are registered there only
+review_channel_id = ""         # text or forum channel; one thread (or post) per stream
+allowed_user_ids = []          # e.g. ["123456789012345678"]; nobody else can use the bot
+thread_name = "{show} {date}"  # {show} {date} {stream_id} {title}
+max_upload_mb = 10             # this server's upload limit: 10, or 50 / 100 with boosts
+preview_height = 480
+max_video_kbps = 1500          # cap for previews that fit easily
+min_video_kbps = 350           # below this an item gets only its first excerpt_s seconds
+excerpt_s = 60
+replan = true                  # rerun `clipper schedule` after each decision from Discord
+refresh_minutes = 10           # `clipper bot` updates cards for decisions made in Kitsu or the CLI; 0 = off
+refresh_days = 30              # ...on streams started within this many days (0 = all)
+weekly_channel = "weekly"      # `clipper weekly --discord` posts the pages here (made if missing)
+
+[notify]
+# The bot DMs you when something needs you: a stream ready for review, an upload or TikTok
+# failing (limits, expired sign-in), a stage failing after its retries, recorder trouble,
+# the streams share filling up, and a daily digest. Every machine queues them in
+# streams/.notify/outbox/; the bot sends them. `clipper alert test` sends a test DM.
+enabled = true
+user_id = ""                 # "" = the first [discord] allowed_user_ids
+kinds = ["ready", "upload", "failure", "recorder", "disk", "digest", "spend"]
+quiet_hours = "00:00-08:00"  # [schedule] timezone; held, then sent together; "" = never quiet
+cooldown_hours = 6           # the same problem at most once per this long
+digest_time = "09:00"        # "" = no digest
+disk_free_gb = 50            # 0 = no disk check
+
+[serve]
+# `clipper serve`: the always-on process (the war room, the hourly replan and upload,
+# pre-show grabs, retakes, the daily jobs). The bot and `clipper doctor` reach it at url;
+# "" = this machine (http://127.0.0.1:<[warroom] port>/). On another machine, e.g.
+# "http://nas:8765/", with the same [warroom] token (or secrets/warroom_token.txt) on both.
+url = ""
+# Where serve, the bot and the worker run, for `clipper services`. "" = this machine: only the
+# Windows worker has a scheduled task (deploy/worker); serve and the bot are whatever you
+# started by hand (status shows their heartbeats, stop and restart say so). "clipper-hub" = the
+# compose folder on the Docker host that deploy/hub/deploy.sh uses (relative to the ssh user's
+# home), reached over ssh like the recorder ([record] ssh_host).
+hub = ""
+
+[warroom]
+# The dashboard at http://127.0.0.1:8765/ with which shows are live, each stream's pipeline,
+# the review queue (approve / changes / reject / hold / pin / edit), the schedule and
+# retakes. `clipper serve` runs it with the jobs; `clipper warroom` runs the page alone.
+# To open it to other machines: host = "0.0.0.0" plus a token.
+host = "127.0.0.1"
+port = 8765
+token = ""
+# On a phone (narrow screen) videos play from a low-res copy (lowres/ beside each preview),
+# made on first play, or ahead of time for items waiting for review when lowres_prewarm is on
+# (one ffmpeg at a time, low priority).
+lowres_height = 360
+lowres_prewarm = true
+# Shows left off the live strip and the show filter, e.g. ones not clipped for now
+# ([shows.<key>] keys; their streams and items still show).
+hide_shows = []
+# The phone, away from home: `clipper warroom --tailnet on` serves it at
+# https://<this machine>.<tailnet>.ts.net/ through Tailscale (tailnet devices only). Set true
+# afterwards so `clipper doctor` checks it. See the wiki, Phone-access.
+tailnet = false
+
+[retake]
+# A "retake" note in Kitsu or Discord -> clipper re-cuts / re-thumbnails the item and sends
+# it back for review (clipper retake; the bot runs it on its own).
+auto = true
+model = "claude-sonnet-5-5"
+effort = "medium"
+prompt_version = "v2"          # prompts/retake_<v>.md
+context_s = 90                 # transcript this far around the cut points
+max_per_run = 10               # retakes handled per run
+
+[pick]
+# `clipper pick <stream> --from 4:05:00 --to 4:25:00 --about "..."`: Shorts from a stretch you
+# name, appended to the stream's picks (ids h01...) and sent to review like scored ones.
+model = "claude-sonnet-5-5"
+max_clips = 3
+effort = "high"
+prompt_version = "v1"          # prompts/pick_<v>.md, pick_locate_<v>.md
+span_s = 600                   # --at: this long a stretch, centred on the time
+max_span_s = 2700              # longest stretch read in one call
+max_overlap = 0.5              # skip a moment whose Short overlaps an existing pick this much
+# --about without a time: a cheap model finds the stretch in the stream's summary timeline.
+locate_model = "claude-haiku-5-5"
+locate_effort = "medium"
+max_stretches = 2              # 15-minute summary blocks read after locating
+locate_pad_s = 120             # around each located block
+
+[schedule]
+# Release planning for `clipper schedule` -> schedule.json (the upload step reads it).
+# In Kitsu: "Hold" skips an item, "Publish at" pins it ("2026-10-20 15:00", or a date for
+# that day's first slot), "Scheduled" shows the slot clipper assigned.
+timezone = "America/Los_Angeles"
+start = ""                     # earliest date to fill (YYYY-MM-DD); empty = tomorrow
+horizon_days = 21
+clip_days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+clip_times = ["12:00", "18:00"]
+segment_days = ["mon", "tue", "wed", "thu", "fri"]
+segment_times = ["16:00"]
+compilation_days = ["sat"]
+compilation_times = ["14:00"]
+short_days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+short_times = ["10:00"]          # Shorts count toward max_per_day and min_gap_minutes too
+max_per_day = 6                # YouTube upload quota guard, all kinds together
+min_gap_minutes = 90
+kick_first_hours = 24          # nothing goes out until this long after the stream ended
+# Most releases per stream by kind; the best go (Shorts by score, segments and compilations
+# by chat heat), the rest stay approved but unscheduled. {} = everything approved goes;
+# a kind at 0 goes only when pinned (compilation = 0: a big-story stream turns it back on,
+# docs/big-story.toml).
+stream_budget = {}             # e.g. { segment = 10, short = 8, compilation = 1 }
+budget_hours = 8.0             # a stream this long gets the whole budget; others scale with length
+stale_days = 0                 # an item not out this many days after its first allowed slot never goes; 0 = off
+clip_order = "score"           # score (best first) or stream (oldest stream first)
+mix_shows = true              # shows take turns for slots of each kind; false = one queue, oldest stream first
+# priority = true: set only in a stream's own streams/<id>/config.toml; its items go ahead of
+# every other stream's, freeing their automatic slots that are not uploaded yet.
+priority = false
+
+[youtube]
+# `clipper upload`: one-time `clipper upload --sign-in`, then uploads due schedule.json
+# entries as private with publishAt. Client secret/token paths are in [paths].
+auto_upload_minutes = 0        # the Discord bot runs `clipper upload` this often (e.g. 60); 0 = by hand
+upload_ahead_hours = 48        # upload entries whose slot is within this window
+min_lead_minutes = 30          # publishAt must still be this far in the future
+manual_publish = false         # true: every upload stays private (no publishAt, pre-shows too);
+                               # you make it public in YouTube Studio at its slot
+max_per_run = 6                # quota guard per run
+max_per_24h = 6                # uploads in any 24 h, all runs together (YouTube's daily upload cap;
+                               # see the wiki, YouTube-channel)
+category_id = "24"             # Entertainment
+language = "en"
+cookies_from_browser = ""      # yt-dlp's signed-in retries (youtube_cookies' uses) read this browser
+                               # profile's cookies live instead, so they can't go stale: "firefox:clipper"
+                               # (BROWSER[:PROFILE], yt-dlp's --cookies-from-browser). Put it in
+                               # clipper.local.toml; wiki: Archives#age-restricted-videos-and-youtube-cookies
+made_for_kids = false
+notify_subscribers = true
+captions = true                # upload the .srt beside each video
+thumbnails = true              # set the .jpg beside each video (custom thumbnails need a
+                               # phone-verified channel; then `clipper upload --thumbnails`)
+short_thumbnails = false       # Shorts' 9:16 covers too; off until the API is verified on a Short
+add_to_playlist = true         # the metadata draft's playlist, created on first use
+show_playlist = "{show}"       # ...and every upload in its show's playlist ("My Show"); "" = off
+                               # backfill videos already up: clipper upload --playlists [--max N]
+playlist_privacy = "public"
+source_links = true            # clip -> its segment (?t=), segment -> its compilation, once public;
+                               # each upload run fixes videos already up (or: clipper upload --links)
+clip_source = "Full segment: {url}"
+segment_source = "The whole story in one video: {url}"
+part_links = false             # segments also link the stream's previous / next segment
+previous_part = "Previous part: {url}"  # part_links lines; {url}, {title}: the other segment's
+next_part = "Next part: {url}"
+link_updates_per_run = 20      # description updates per run, ~51 quota units each
+daily_quota = 10000            # the Cloud project's Data API units a day (uploads have their own bucket)
+upload_units = 600             # kept back per upload still allowed today; link and caption retries get the rest
+
+[analytics]
+# `clipper analytics`: YouTube stats of uploads -> analytics.json -> a hint in scoring's Pass B.
+auto_hours = 24                # `clipper serve` refreshes it this often (once there are uploads); 0 = off
+min_videos = 5                 # a show needs this many uploads with 7-day numbers first
+examples = 4                   # this many best and worst shown to Pass B
+
+[rumble]
+# `clipper rumble <stream>`: Rumble has no upload API and its terms forbid automating the
+# site, so this writes one folder per scheduled item under [paths] rumble: the video (hard
+# link), thumbnail.jpg (from `clipper thumbs`) and upload.txt with every form field.
+# --open opens the folder and the upload page; then `clipper rumble --done s02 --url ...`
+# (or the Kitsu "Rumble URL" column) records it in schedule.json.
+upload_url = "https://rumble.com/upload.php"
+kinds = ["segment", "compilation", "clip"]  # schedule.json kinds to prepare
+# Licensing on the form. "Rumble Only" is non-exclusive and removable, so the YouTube copy
+# stays yours. "Video Management" is exclusive for 50 years and Content-ID-claims the
+# YouTube copy; "Video Management Excluding YouTube" bars monetizing it anywhere else.
+license = "Rumble Only"
+category = "Entertainment"
+visibility = "public"          # public | unlisted
+schedule = "youtube"           # youtube: same slot as YouTube (+ offset_minutes) | now
+offset_minutes = 0
+footer = ""                    # appended to descriptions; {youtube_url} once it's on YouTube
+max_tags = 0                   # 0 = every tag in the metadata draft
+max_title_chars = 100
+max_description_chars = 5000
+link = "hardlink"              # hardlink (no extra disk; copies across drives) | copy
+kitsu = true                   # Kitsu "Rumble" (ready/uploaded) and "Rumble URL" columns
+
+[tiktok]
+# `clipper tiktok --items s02,t20`: Shorts go to the TikTok app's drafts (Content Posting API,
+# Upload route); you open the notification on the phone, paste the caption and post. The API
+# takes no caption for drafts, so it is posted to Discord and kept in schedule.json.
+# One-time: clipper tiktok --sign-in (developer app at developers.tiktok.com, Login Kit desktop
+# redirect URI http://localhost:<redirect_port>/callback/, scopes user.info.basic + video.upload).
+kinds = ["short"]
+max_per_24h = 3                # TikTok allows at most 5 pending drafts in 24 h; new accounts get throttled
+auto_send_minutes = 0          # the bot runs `clipper tiktok --auto` this often (next Shorts in
+                               # YouTube-schedule order, up to max_per_24h); 0 = only by hand
+hashtags = []                  # added to every caption, e.g. ["mychannel"]
+max_caption_chars = 2200
+redirect_port = 3455
+caption_channel_id = ""        # Discord channel for captions; empty = [record] alert channel/webhook
+
+[x]
+# `clipper x --items s02,t20`: Shorts posted to X as native video (API v2, pay-per-use credits).
+# The text is the title plus hashtags, never a link (X bills a post with a URL at $0.20, $0.015
+# without). One-time: clipper x --sign-in (app at console.x.com, callback URL
+# http://127.0.0.1:<redirect_port>/callback, scopes tweet.read tweet.write users.read media.write
+# offline.access). See the wiki, X-posts.
+kinds = ["short"]
+max_per_24h = 6
+auto_post_minutes = 0          # the bot runs `clipper x --auto` this often; 0 = only by hand
+after_youtube = false          # true: --auto waits until a Short is public on YouTube
+max_age_hours = 72             # --auto skips Shorts from streams older than this (--items still posts them)
+hashtags = []                  # added after the Short's own, e.g. ["mychannel"]
+max_hashtags = 3               # the Short's subject tags, then the show's
+show_hashtag = true            # end the hashtags with the show's name (#MyShow), kept when others are cut
+hook_first = true              # drop the "MY SHOW | " prefix: the feed shows the first words
+mentions = []                  # @handles of whose footage it is, per show in [shows.<key>.x]
+                               # (e.g. ["janedoe", "acme"]); each gets notified
+credit = "From {show}: {mentions}"   # the post's last line, when the show has mentions
+max_chars = 280
+max_height = 1280              # taller Shorts are re-encoded to 720x1280 first; 0 = send as is
+post_usd = 0.015               # logged to paths.costs per post (`clipper costs`)
+redirect_port = 3456
+
+[archive]
+# `clipper archive`: other channels' back catalogs, transcribed on Modal, never uploaded.
+gpu = "L4"                     # Modal GPU for bulk runs
+parallel = 8                   # items at once (the Modal app allows 10 containers)
+min_duration_s = 60            # skip shorter items (Shorts)
+youtube_format = "bestaudio[abr<=96]/bestaudio"
+stop_after_failures = 20       # in a row (YouTube's bot check); 0 = never stop
+diarize = false                # speaker turns per item too (#52; --diarize): ~+80% GPU time
+link_parallel = 4              # `clipper archive check`: are source links up? (oEmbed / Odysee resolve)
+link_recheck_days = 7          # links checked more recently are skipped; --all rechecks them
+index_window_s = 30            # `clipper archive index`: seconds of transcript per searchable window
+# `clipper archive ask`: a cheap model writes the searches, then picks the windows that fit.
+ask_model = "claude-haiku-5-5"
+ask_effort = "low"
+ask_prompt_version = "v1"      # prompts/archive_expand_<v>.md, archive_judge_<v>.md
+ask_max_queries = 8            # searches the model may write per question
+ask_per_query = 25             # best-ranked windows kept per search
+ask_candidates = 80            # pooled windows the model reads (~25k tokens)
+kick_format = "worst"          # a Kick VOD (`clipper story`): its HLS variants carry video too, so the smallest
+
+[receipts]
+# `clipper receipts <stream>`: old clips of the archive subject for the night's stories (#48),
+# one video with source and date on screen, uploaded private for the user to send on.
+subject = ""                   # the archive subject (paths.archive/<subject>); "" = not set up, and `clipper receipts` says so
+topics = []                    # segments with one of these topics, e.g. ["Jane Doe"]...
+figures = []                   # ...or one of these figures, e.g. ["Jane Doe", "Jane"]: the subject's names as the show says them
+title = ""                     # the video title's start; "" = "<subject> receipts"
+tags = ["receipts"]            # YouTube tags; the show's name is added
+per_story = 3
+model = "claude-sonnet-5-5"    # reads the segments, writes the stories and questions
+effort = "medium"
+prompt_version = "v2"          # prompts/receipts_stories_<v>.md
+max_stories = 6
+maybe = false                  # also use "maybe" fits (they need a look in context)
+lead_s = 6                     # a clip starts this much before the quote (at a sentence start)...
+tail_s = 5                     # ...and ends this much after it
+max_clip_s = 60                # longer clips give up lead-in first
+card_s = 3.5                   # story card before each story's receipts
+# `clipper receipts script`: the voice-over (open, a line per story card, a lead-in per
+# clip, close), voiced at `receipts cut` with [narrate] voice_id and tts_settings.
+script_model = "claude-opus-5-5"
+script_effort = "medium"
+script_prompt_version = "v2"   # prompts/receipts_script_<v>.md (v2: no "host")
+vo_pad_s = 0.6                 # card time after a read ends
+lufs = -16                     # every card and clip normalized to this
+# yt-dlp format per clip: HLS first, where a section is a few segments (a DASH section
+# had ffmpeg read from YouTube for 10+ minutes for a 20 s clip).
+format = "bv*[height<=1080][protocol^=m3u8]+ba[protocol^=m3u8]/b[height<=1080][protocol^=m3u8]/bv*[height<=1080]+ba/b"
+codec = "libx264"              # every part is re-encoded to one format
+crf = 20
+bug = ""                       # corner text on every clip; "" = [scoring] channel_name
+# Card and caption fonts, first that exists: big text (Impact), small text (Arial Bold).
+fonts = ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
+         "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf"]
+text_fonts = ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+              "/Library/Fonts/Arial Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"]
+
+[investigate]
+# `clipper investigate <subject>` (#108): an archive subject's own videos -> checkable facts
+# (quotes verified against the words) -> threads found in code -> leads -> "is anyone else on
+# this?". Research files in paths.archive/<subject>/investigate/; nothing is uploaded or posted.
+facts_model = "claude-haiku-5-5"   # reads every chunk of every item: the bulk of the cost
+facts_effort = "low"
+leads_model = "claude-sonnet-5-5"  # reads one candidate thread at a time
+leads_effort = "medium"
+check_model = "claude-haiku-5-5"   # coverage labels, --confirm verdicts
+check_effort = "low"
+prompt_version = "v1"          # prompts/investigate_{facts,leads,check,confirm}_<v>.md
+parallel = 8                   # model calls at once
+chunk_s = 1200                 # transcript seconds per facts call
+since_days = 0                 # facts: last N days when --since isn't given; 0 = the whole catalog
+max_leads = 10
+max_candidates = 30            # candidate threads the leads model reads, one call each
+min_facts_per_thread = 3       # facts from different videos a thread needs
+trend_weeks = 4                # trend: these recent weeks against the 26 before them
+dropped_weeks = 8              # dropped thread: silent this long after being talked about
+window_days = 60               # convergence: personal facts from several videos this close together
+check_results = 10             # check: his own video titles that match, at most
+check_findings = 40            # check: the swarm's findings the check model reads, best first
+# check: [swarm] settings for one lead's search (#109), small since a lead is one question:
+# ~$0.01-0.03 a lead in Haiku calls. Its seeds are the lead's search words on YouTube, Reddit,
+# the web and our streams; the planner adds searches and the workers follow up.
+swarm = { first_tasks = 8, max_tasks = 20, max_rounds = 2, budget_usd = 0.1, max_wall_s = 300 }
+budget_usd = 10.0              # a run stops before it would spend more
+discord = false                # true: leads, check and confirm post to discord_channel when done
+discord_channel = "investigations"   # by name, made if missing (or a forum by that name): a thread per leads run
+
+[swarm]
+# The search swarm (#109) `story` (#84) and `investigate` (#108) use: a planner writes the first
+# searches (YouTube, Kick, Odysee, Reddit, the web, our archives and streams), workers run them in
+# parallel, read the results and follow up on what they find. Finds and ranks; downloads nothing.
+# The trail is the caller's swarm.json; a rerun resumes it. Cost ~$0.10-0.30 for a full run.
+planner_model = "claude-sonnet-5-5"   # one call: the first tasks
+planner_effort = "low"
+worker_model = "claude-haiku-5-5"     # one call per task (~$0.001): findings and follow-ups
+worker_effort = "low"
+prompt_version = "v1"          # prompts/swarm_{plan,worker}_<v>.md
+workers = 8                    # tasks at once (each source's rate bounds it too)
+first_tasks = 16               # the planner's tasks, at most
+max_rounds = 3                 # follow-up rounds per run
+max_tasks = 60                 # tasks per run
+followups_per_task = 3
+results_per_task = 20          # search results / channel videos one worker reads
+channel_depth = 200            # a channel task lists this many videos, keeps the run's dates and
+                               # gives the worker the results_per_task whose titles fit the goal best
+                               # (a channel posting 30 a day reaches back about a week: its
+                               # archive subject, if any, is the way into older videos)
+budget_usd = 1.0               # per run: it stops before a call would go over
+max_wall_s = 600               # per run: no new task starts after this
+rates = { youtube = 0.5, kick = 2.0, odysee = 2.0, reddit = 0.5, web = 1.0 }   # requests a second per source
+
+[story]
+# `clipper story` (#84), phase 1: a news brief -> the swarm -> triage (the videos worth
+# transcribing) -> Modal transcripts -> the moments that tell it (quotes checked against the
+# words) -> a dossier citing every moment and source. Files in paths.archive/story-<slug>/;
+# nothing is uploaded. Cost: models ~$0.20-0.60 a story, Modal L4 ~$0.03-0.07 an audio hour.
+people = {}                    # people beside [paths] streamers: { "Name" = { youtube = "@x", kick = "y" } }
+days = 7                       # the window when --since isn't given
+max_videos = 12                # triage: videos to transcribe, at most (our own streams are linked, free)
+max_hours = 6.0                # ...and hours of audio; a video of unknown length counts as an hour
+min_duration_s = 30            # shorter videos are skipped
+gpu = "L4"                     # Modal GPU for the transcripts
+parallel = 2                   # containers at once: each start costs ~10 min of GPU (~$0.13 on L4), and a story has few items
+youtube_bot_retry = true       # YouTube's bot check is retried signed in (youtube_cookies), as pre-shows do; false = never
+triage_model = "claude-haiku-5-5"
+triage_effort = "low"
+find_model = "claude-haiku-5-5"    # writes the searches, then picks the moments
+find_effort = "low"
+max_queries = 10
+per_query = 20                 # best-ranked windows kept per search and subject
+candidates = 120               # pooled windows the find model reads
+dossier_model = "claude-sonnet-5-5"
+dossier_effort = "medium"
+dossier_sources = 80           # swarm findings the dossier may cite, best first
+prompt_version = "v1"          # prompts/story_{triage,expand,moments,dossier}_<v>.md
+budget_usd = 2.0               # triage, find and dossier together (the swarm has its own budget_usd)
+swarm = {}                     # [swarm] settings for a story's searches, e.g. { max_tasks = 40 }
+# Phase 2: `story plan` writes the edit (paths.streams/story-<slug>/story.json) from the
+# moments; `story cut` renders it, then meta, thumbs and the Kitsu card. Rendering uses
+# [receipts] fonts, bug, codec, crf, lufs and format. Cost: ~$0.03 plan + the usual meta.
+show = ""                      # the show a story goes out under; "" = `clipper --show <key>`, or the only show
+edit_model = "claude-sonnet-5-5"   # orders the moments into the edit, writes the title
+edit_effort = "medium"
+max_minutes = 12.0             # the edit stops here; later parts stay in story.json with use = false
+lead_s = 6                     # a part starts this much before its quote (at a sentence start)
+tail_s = 20                    # and ends this much after it: the rest of the thought
+max_clip_s = 90
+kick_format = "best[height<=1080]/best"     # a Kick VOD's section (yt-dlp)
+odysee_format = "best[height<=1080]/best"
+publish = "asap"               # asap: out as soon as approved and uploaded | slots: schedule's slots
+playlist = ""                  # one YouTube playlist for every story ({show}); "" = the model's pick
+credit = "Sources, in the order they appear:"   # the description's last block; a line per part follows
+# Narration: the short version first, a line of context before each part, where it stands at
+# the end, each a card read by the narrator (ElevenLabs, [narrate]'s key and tts_model; a few
+# cents of credits a story). Without a voice_id the cards are silent, timed for reading.
+edit_prompt_version = "v2"     # prompts/story_edit_<v>.md; v1 = clips only, no narration
+narrate = true                 # false = the clips alone
+voice_id = ""                  # the narrator's voice (clipper narrate voices), not the [narrate] character's
+tts_settings = {}              # the narrator's voice_settings, e.g. { stability = 0.5, speed = 1.0 }
+read_wpm = 160                 # a silent card's reading pace
+
+[signals]
+chat_lag_s = 6             # shift chat earlier: stream delay + typing time
+baseline_s = 300           # rolling median baseline
+smooth_s = 10
+z_cap = 8.0                # clip each signal so one can't dominate
+w_chat = 1.0               # unique chatters per second
+w_react = 0.8              # messages matching react_regex (emote names included)
+w_clip = 1.0               # messages matching clip_regex
+w_loud = 0.4               # audio RMS
+react_regex = '(?i)lol|lmao|lmfao|kek|lul|haha|rofl|laugh|dead|omg|wtf|💀|😂|🤣'
+clip_regex = '(?i)\bclip'
+min_heat = 1.0
+min_gap_s = 45             # minimum spacing between peaks
+window_pre_s = 120         # setup before the peak
+window_post_s = 30
+max_window_s = 240         # overlapping windows merge up to this length
+top_n = 30
+
+
+[weekly]
+# `clipper weekly`: the week's streams (Sun-Sat) -> a ten-page tabloid issue under
+# paths.weekly/<saturday>/. Pages are 1080x1440 (a TikTok carousel, or two YouTube Posts).
+first_issue = 1
+words = ["grift", "coffee", "cameo", "sub", "clip", "lawsuit", "divorce"]  # counted on the numbers page
+model = "claude-opus-5-5"      # drafts issue.json from prompts/weekly_<v>.md; edit it, then
+                               # `clipper weekly --render`
+effort = "high"
+prompt_version = "v3"          # v3: people only talked about from the cast library, photo by label (#41); v2: quotes credited
+write_articles = true          # after a draft, write the three articles again, one call each...
+article_prompt_version = "v2"  # ...with prompts/weekly_article_<v>.md...
+article_example = "weekly_article_example.md"  # ...and this piece (in prompts/) as the voice to match
+quote_match = 0.75             # a hook this close to word for word in the Short is credited to its speaker
+face_frames = 3                # each person named in a stream's faces.json: their best faces for the pages; 0 = off
+formats = ["tiktok", "youtube"]  # tiktok: 1080x1440 pages | youtube: the same pages 1080x1080 in youtube/
+masthead = []                  # the cover's two words, red then chrome ("WEEKLY" follows), e.g. ["DAILY", "PLANET"]; `clipper weekly` needs them
+byline = ""                    # under each article's deck, e.g. "BY THE NEWS DESK"; "" = none
+price = "$1.39 US"             # on the cover's barcode block
+# Colours, the cover's geometry and the fixed copy: <paths.weekly>/style.toml (wiki, Weekly-issue).
+# Fonts, first that exists: the cover headline (Impact), a condensed family with named
+# styles (Bahnschrift), a serif italic and bold italic (Georgia), a black and a bold sans
+# for the masthead and barcode.
+headline_fonts = ["C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/msttcorefonts/Impact.ttf",
+                  "/Library/Fonts/Impact.ttf", "/System/Library/Fonts/Supplemental/Impact.ttf"]
+condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf", "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+                   "/usr/share/fonts/truetype/roboto/hinted/RobotoCondensed-Bold.ttf", "/Library/Fonts/RobotoCondensed-Bold.ttf"]
+serif_italic_fonts = ["C:/Windows/Fonts/georgiai.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Italic.ttf",
+                      "/Library/Fonts/Georgia Italic.ttf", "/System/Library/Fonts/Supplemental/Georgia Italic.ttf"]
+serif_bold_italic_fonts = ["C:/Windows/Fonts/georgiaz.ttf", "/usr/share/fonts/truetype/msttcorefonts/Georgia_Bold_Italic.ttf",
+                           "/Library/Fonts/Georgia Bold Italic.ttf", "/System/Library/Fonts/Supplemental/Georgia Bold Italic.ttf"]
+black_fonts = ["C:/Windows/Fonts/ariblk.ttf", "/usr/share/fonts/truetype/msttcorefonts/Arial_Black.ttf",
+               "/Library/Fonts/Arial Black.ttf", "/System/Library/Fonts/Supplemental/Arial Black.ttf"]
+bold_fonts = ["C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+              "/Library/Fonts/Arial Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"]
+
+# ---------- shows ----------
+# One table per show. A stream belongs to the show whose `channels` include the Kick
+# channel in its meta.json (recordings and `clipper fetch` both write it), and that
+# show's sub-tables override the sections above for it: [shows.<key>.<section>] takes any
+# key of [<section>]. Each show gets its own Kitsu production (named after meta.show_name
+# unless review.project is set) and its own Discord threads; all shows share the YouTube
+# channel and release schedule above. `clipper shows` lists them; `--show <key>` forces
+# one. `clipper worker` skips recordings of channels no show claims.
+
+# A show is a table of its own in clipper.toml, e.g. [shows.myshow] (clipper.example.toml shows one).
+# [shows.<key>.thumbnail], [shows.<key>.discord] etc. work the same way, e.g. a
+# different masthead or review channel for one show.
+
+[narrate]
+# `clipper narrate` (ElevenLabs): the character voice for re-voiced takes and script reads.
+# Key in $ELEVENLABS_API_KEY or secrets/elevenlabs_api_key.txt. Find ids: clipper narrate voices
+voice_id = ""
+key_env = "ELEVENLABS_API_KEY"  # env var with the API key; else [paths] elevenlabs_key
+model_id = "eleven_multilingual_sts_v2"  # voice changer (`clipper narrate voice`)
+tts_model = "eleven_v3"        # script reads (`clipper narrate speak`); takes [sighs]-style tags
+tts_max_chars = 3000           # longest script per read; split longer ones at scene breaks
+tts_settings = {}              # voice_settings for reads, e.g. { stability = 0.5, style = 0, speed = 1.05 };
+                               # {} = the voice's own; eleven_v3 stability is 0, 0.5 or 1
+output_format = "pcm_48000"    # lossless 48 kHz, saved as .wav (Creator plan and up; plans without it
+                               # fall back to mp3_44100_128); mp3_44100_192 is the best MP3; pcm_44100 needs Pro
+remove_background_noise = true  # voice changer: phone takes in a room
+max_s = 300                    # longest take per call; split longer ones at pauses
+
+[perform]
+# lip-sync pass for `clipper perform lipsync`: latentsync (Modal) | sync (sync.so key in secrets/)
+# `clipper perform`: a take cut into pieces for the character model, each ending in a pause
+# of the read.
+max_piece_s = 15               # WAN 3 Prime takes at most 15 s of reference video
+min_piece_s = 3
+tail_s = 1.5                   # keep this much of the take after the read ends (the final hold)
+silence_db = -35               # pause detection in the read: below this level...
+silence_min_s = 0.25           # ...for at least this long
+fps = 30
+crf = 21                       # pieces stay under the 30 MB single upload
+lipsync_engine = "latentsync"  # latentsync (Modal, no account) | sync (sync.so, needs a key)
+latentsync_app = "clipper-lipsync"  # Modal app (`clipper perform lipsync --deploy`)
+latentsync_steps = 20          # 20-50: higher is better and slower
+latentsync_guidance = 1.5      # 1.0-3.0: higher syncs harder, may jitter
+sync_model = "lipsync-2"       # sync.so: lipsync-2 | lipsync-2-pro
+sync_key_env = "SYNC_API_KEY"  # env var with the sync.so key; else [paths] sync_key

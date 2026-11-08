@@ -16,7 +16,7 @@ hand with `clipper shorts <stream> --items <vNN> --layout <name>`, the Kitsu Lay
 Add the slug to `[record] channels` to record it live. `clipper shows` lists every show and
 its streams; the show's Kitsu production is created on its first publish.
 
-Three `[shows.<key>.scoring]` settings decide what a Short may be (see clipper.example.toml):
+Three `[shows.<key>.scoring]` settings decide what a Short may be (see `[scoring]` in clipper/defaults.toml):
 `third_party_audio` (`reject`, or `allow_reactions` for reaction clips the show's own
 commentary carries, with at most `max_source_audio_s` of the source), `audience_knowledge`
 (`strangers`, or `fans` who know `known_figures` and their running drama) and, from prompt

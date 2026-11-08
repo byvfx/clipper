@@ -32,7 +32,7 @@ things on Discord's side, once:
    review publish` (the worker's last stage) while `[discord] enabled` is true; `clipper review
    notify <stream>` posts a stream's cards by hand, and `clipper alert test` DMs you a test.
 
-Settings worth knowing, all under `[discord]` and `[notify]` in `clipper.example.toml`:
+Settings worth knowing, all under `[discord]` and `[notify]` in `clipper/defaults.toml`:
 `max_upload_mb` (10 on a plain server, 50 or 100 with boosts) decides how previews are shrunk
 to fit; `thread_name` names the threads; `replan` reruns the schedule after each decision;
 `refresh_minutes` keeps the cards in step with decisions made in Kitsu or the war room.

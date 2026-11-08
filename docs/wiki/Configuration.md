@@ -12,8 +12,9 @@ priority = true` so its items go out ahead of the backlog. Unknown keys there ar
 [`docs/big-story.toml`](https://github.com/byvfx/clipper/blob/main/docs/big-story.toml) is the ready-made one to copy: more picks and Shorts, priority, and the
 night's compilation. A `[schedule] stream_budget` kind at 0 goes only when pinned, so
 `compilation = 0` there keeps compilations for big-story nights.
-`clipper.example.toml` documents every key; `clipper.toml` holds only what differs (`clipper
-setup` starts a new one that way). `clipper.toml` itself is gitignored because it holds your
+`clipper/defaults.toml` documents every key with its default; `clipper.toml` holds only what
+differs (`clipper setup` starts a new one that way, and `clipper.example.toml` is a starter to
+copy). `clipper.toml` itself is gitignored because it holds your
 Discord ids and Kitsu address.
 
 `clipper config get meta.model` prints a setting's value and every layer that sets it

@@ -8,7 +8,7 @@ clipper/              the package, one module per stage, cli.py wires them
 prompts/              versioned prompt files; the version in use is set in clipper.toml
 deploy/               bootstrap (new machine); compose stacks for the NAS hub (serve, bot, worker), the recorder, Kitsu and Claude; Windows task scripts for a GPU worker
 streams/<id>/         one folder per stream: source, transcript, cuts, metadata, review state
-clipper.example.toml  every setting, documented (a test checks it against config.py)
+clipper/defaults.toml every setting with its default, documented; config.py loads it (clipper.example.toml is a starter clipper.toml)
 tests/                offline tests (pytest); CI runs them and ruff on every push
 docs/wiki/            these pages; pushed to the wiki on every push to main
 HANDOFF.md            current state between work sessions (short); docs/log/ has the dated diary
@@ -47,8 +47,9 @@ Each step is checked by a test where it can be, so a missing one fails `pytest`,
 
 1. The parser and `cmd_<name>` in `clipper/cli.py`, in its group's `add_<group>`, and the name in
    `COMMAND_GROUPS` (test).
-2. Its settings in `config.DEFAULTS`, a comment on each, and the same keys in
-   `clipper.example.toml` (test). Nothing machine- or show-specific in a default.
+2. Its settings in `clipper/defaults.toml`, a comment on each (that file is the documentation;
+   `config.DEFAULTS` is it loaded; a None default is a commented line there plus
+   `config.NONE_DEFAULTS`). Nothing machine- or show-specific in a default (test).
 3. A pipeline stage is also a row in `clipper/stages.py` (test).
 4. A `clipper doctor` check when it needs a key, a service or a file, with the fix in the message.
 5. A wiki page or section, in the sidebar (test), and `wiki.page(...)` links in its messages (test).

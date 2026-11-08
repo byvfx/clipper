@@ -25,7 +25,8 @@ the same PR as the change.
   (a default for a missing or broken file: services and the page only),
   `write` (tmp + replace), `update`/`merge` (under a lock). A test fails on a raw
   `json.loads(path.read_text())`.
-- Config: defaults in `clipper/config.py` < `clipper.toml` < `clipper.local.toml` (this machine's
+- Config: defaults in `clipper/defaults.toml` (commented; `config.py` loads it as `DEFAULTS`, the
+  None defaults listed in `config.NONE_DEFAULTS`) < `clipper.toml` < `clipper.local.toml` (this machine's
   own values, written by `clipper setup`) < `CLIPPER_<SECTION>_<KEY>` env; the last two also win
   over show and stream overrides.
   `config.for_stream(cfg, sdir)` resolves the show from the stream's `meta.json` channel,
@@ -49,9 +50,10 @@ the same PR as the change.
 
 ## Rules
 
-- No machine-specific values in `config.py` defaults: no IPs, hostnames, user ids, local
-  paths. They go in `clipper.toml` (gitignored) or env vars, with a placeholder in
-  `clipper.example.toml`. `clipper doctor` should fail with a fix when a required one is unset.
+- No machine-specific values in `clipper/defaults.toml`: no IPs, hostnames, user ids, local
+  paths, nothing of this install's (a test checks for its names). They go in `clipper.toml`
+  (gitignored) or env vars, with a placeholder in `clipper.example.toml` (the starter).
+  `clipper doctor` should fail with a fix when a required one is unset.
 - Secrets are env vars (`ANTHROPIC_API_KEY`, `KITSU_TOKEN`, `DISCORD_BOT_TOKEN`,
   `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`, `ELEVENLABS_API_KEY`, `BRAVE_API_KEY` for cast image
   search, and `OPENAI_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY` if a stage uses those providers) or files
