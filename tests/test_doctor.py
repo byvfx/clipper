@@ -81,7 +81,9 @@ def test_doctor_prices_the_defaults_like_the_client(defaults):
 
 def test_an_unset_masthead_is_a_warning(defaults):
     """The default [weekly] masthead is empty: doctor warns, and stops once two words are set."""
-    rows = doctor.collect(doctor.check_fonts, defaults)
-    assert any(s == "WARN" and "[weekly] masthead" in what for s, _, what, _ in rows)
+    for words in ([], ["", ""], ["   ", "PLANET"]):
+        defaults["weekly"]["masthead"] = words
+        rows = doctor.collect(doctor.check_fonts, defaults)
+        assert any(s == "WARN" and "[weekly] masthead" in what for s, _, what, _ in rows), words
     defaults["weekly"]["masthead"] = ["DAILY", "PLANET"]
     assert not any("masthead" in what for _, _, what, _ in doctor.collect(doctor.check_fonts, defaults))

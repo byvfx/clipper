@@ -235,7 +235,13 @@ def test_no_masthead_no_draft(cfg, monkeypatch):
     monkeypatch.setattr(gather, "gather", lambda cfg, start, end, here: (
         {"label": "w"}, {"shows": 0, "preshows": 0, "hours": 0.0, "chat_messages": 0}))
     monkeypatch.setattr(draft, "draft", lambda *a, **k: pytest.fail("drafted without a masthead"))
-    for words in ([], ["DAILY"]):
+    for words in ([], ["DAILY"], ["", ""], ["   ", "PLANET"]):
         cfg["weekly"]["masthead"] = words
         with pytest.raises(ClipperError, match="masthead is not set.*two words"):
             weekly.run(cfg)
+
+
+def test_masthead_is_two_stripped_words_or_nothing():
+    assert style.masthead({"masthead": [" DAILY ", "PLANET"]}) == ("DAILY", "PLANET")
+    for bad in ([], ["DAILY"], ["", ""], ["   ", "PLANET"], ["A", "B", "C"], [1, "B"]):
+        assert style.masthead({"masthead": bad}) is None, bad

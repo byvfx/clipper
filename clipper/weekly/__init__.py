@@ -112,7 +112,7 @@ def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool
               f"{stats['chat_messages']:,} chat messages")
     if gather_only:
         return here
-    if len(cfg["weekly"]["masthead"]) != 2:
+    if style.masthead(cfg["weekly"]) is None:
         raise ClipperError('[weekly] masthead is not set: the cover needs two words, red then chrome '
                            '("WEEKLY" follows), e.g. ["DAILY", "PLANET"]; ' + wiki.page("Weekly-issue"))
     ij = here / "issue.json"
