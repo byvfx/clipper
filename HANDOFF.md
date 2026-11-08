@@ -384,7 +384,7 @@ metadata checkpoints honoured), per-stream costs on Costs, `clipper status` (fil
 <discord id>`, compose the one way to run serve and the bot (the Windows serve/bot task scripts removed,
 `deploy/worker` stays), product pages without this install's names; #182 `clipper/defaults.toml` as the one
 source of defaults (config.py 1,330 → 446 lines), `clipper.example.toml` a 58-line starter. Copilot had 1/2/5/4
-comments on #178-#181, all taken. The last plan item followed the same day: the prompts moved into the package
+comments on #178-#181, all taken. The last plan item followed the same day (PR #184): the prompts moved into the package
 (`clipper/prompts/`, found with `importlib.resources`; `[paths] prompts` is now an optional folder of your own).
 The hub was deployed with all of it on 2026-11-08 13:14, right after chudlogic's stream ended (serve, bot and
 worker on the new image, heartbeats fresh, the image loads the 626 defaults). Found while waiting for that
