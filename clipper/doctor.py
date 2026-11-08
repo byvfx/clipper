@@ -363,8 +363,10 @@ def llm_providers(cfg: dict) -> dict[str, list[str]]:
     return out
 
 
-def check_llm_keys(cfg: dict) -> None:
+def check_llm_keys(cfg: dict, need=None) -> None:
     from . import llm
+
+    need = need or fail
 
     for prov, uses in llm_providers(cfg).items():
         env = llm.PROVIDERS[prov][1]
@@ -373,14 +375,14 @@ def check_llm_keys(cfg: dict) -> None:
             if cfg["llm"]["local_base_url"]:
                 ok("keys", f"{what}: [llm] local_base_url = {cfg['llm']['local_base_url']}")
             else:
-                fail("keys", f"{what}: [llm] local_base_url not set",
+                need("keys", f"{what}: [llm] local_base_url not set",
                      "set it in clipper.toml to the server's OpenAI-compatible /v1 URL")
         elif os.environ.get(env):
             ok("keys", f"{what}: {env} set")
         elif llm.provider_key(prov, cfg["paths"]):
             ok("keys", f"{what}: key in {cfg['paths'][f'{prov}_key']}")
         else:
-            fail("keys", f"{what}: {env} not set",
+            need("keys", f"{what}: {env} not set",
                  f"set it as a user environment variable, or put the key in {cfg['paths'].get(f'{prov}_key')}")
 
 
@@ -439,6 +441,8 @@ def check_llm_online(cfg: dict) -> None:
 
 
 def check_keys(cfg: dict, role: str) -> None:
+    # a control station runs no stage and uses Kitsu in the browser: missing keys only warn there
+    need = warn if role == "control" else fail
     if role != "nas":
         from .llm import claude_model, provider_key
 
@@ -449,15 +453,15 @@ def check_keys(cfg: dict, role: str) -> None:
         elif not claude_model(cfg):
             ok("keys", "ANTHROPIC_API_KEY not set; no stage uses Claude")
         else:
-            fail("keys", "ANTHROPIC_API_KEY not set", "clipper setup --step keys (or set it as a user env var)")
-        check_llm_keys(cfg)
+            need("keys", "ANTHROPIC_API_KEY not set", "clipper setup --step keys (or set it as a user env var)")
+        check_llm_keys(cfg, need)
         check_llm_prices(cfg)
         rc = cfg["review"]
         if rc["host"] and "<" not in rc["host"]:
             ok("keys", f"[review] host = {rc['host']}")
         else:
-            fail("keys", "[review] host not set", "clipper setup --step keys, or set it to your Kitsu URL + /api in clipper.toml")
-        (ok if os.environ.get(rc["token_env"]) else fail)(
+            need("keys", "[review] host not set", "clipper setup --step keys, or set it to your Kitsu URL + /api in clipper.toml")
+        (ok if os.environ.get(rc["token_env"]) else need)(
             "keys", f"${rc['token_env']} (Kitsu bot token) " + ("set" if os.environ.get(rc["token_env"]) else "not set"),
             "" if os.environ.get(rc["token_env"]) else "Kitsu > Bots > new token; clipper setup --step keys")
     if (cfg["discord"]["enabled"] and role != "control") or role == "bot":

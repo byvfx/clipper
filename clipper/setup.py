@@ -633,6 +633,9 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
     from .doctor import llm_providers
     from .llm import PROVIDERS, claude_model, provider_key
 
+    if control_only(roles):
+        say("A control station runs no stages and uses Kitsu in the browser, so these are optional:")
+        say("Enter skips each. Add them later (`clipper setup --step keys`) to run a stage here.")
     if claude_model(cfg):
         ensure_env_key(cfg, ask, "ANTHROPIC_API_KEY", "the model calls (score, segments, titles, covers)",
                        "console.anthropic.com -> API keys")
