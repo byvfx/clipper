@@ -18,7 +18,7 @@ from ..config import for_stream
 from ..errors import ClipperError
 from ..states import RELEASE_KIND
 from .data import all_rows, row_json
-from .state import HOOKS, LOCK, SYNC, WHO
+from .state import HOOKS, LOCK, SYNC, SYNC_LOCK, WHO
 
 
 def start_retake(cfg: dict) -> bool:
@@ -322,9 +322,10 @@ def do_replace(cfg: dict, body: dict) -> dict:
     return {"dry_run": False, "done": len(done), "failed": failed, "rows": out_rows, "undo": uid}
 
 def sync_all(cfg: dict, stream: str | None = None) -> None:
-    if SYNC["running"]:
-        return
-    SYNC.update(running=True, error="")
+    with SYNC_LOCK:   # two requests in the same instant start one sync, not two
+        if SYNC["running"]:
+            return
+        SYNC.update(running=True, error="")
 
     def run():
         try:

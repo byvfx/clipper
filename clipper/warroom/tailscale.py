@@ -24,6 +24,16 @@ def _ts(*args: str, timeout: int = 20) -> subprocess.CompletedProcess:
     return subprocess.run([tailscale_exe() or "tailscale", *args], capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=timeout, check=False)
 
+def _json(proc) -> dict:
+    """A tailscale --json answer as a dict; anything else (an older CLI, a login prompt, an
+    error) counts as an empty one, so the status reads "not up" instead of crashing."""
+    try:
+        out = json.loads(proc.stdout or "{}")
+    except ValueError:
+        return {}
+    return out if isinstance(out, dict) else {}
+
+
 def tailnet_status(cfg: dict) -> dict:
     """Is Tailscale installed and up here, this machine's tailnet name, and the https URL
     `tailscale serve` proxies to the war room (if it does). userspace: tailscaled has no tun
@@ -31,12 +41,12 @@ def tailnet_status(cfg: dict) -> dict:
     addresses, its own name included."""
     if not tailscale_exe():
         return {"installed": False, "state": "", "name": "", "served": "", "userspace": False}
-    st = json.loads(_ts("status", "--json").stdout or "{}")
+    st = _json(_ts("status", "--json"))
     out = {"installed": True, "state": st.get("BackendState", ""),
            "name": ((st.get("Self") or {}).get("DNSName") or "").rstrip("."), "served": "",
            "userspace": st.get("TUN") is False}
     port = _root(cfg)["warroom"]["port"]
-    sv = json.loads(_ts("serve", "status", "--json").stdout or "{}")
+    sv = _json(_ts("serve", "status", "--json"))
     for hostport, web in (sv.get("Web") or {}).items():  # {"name:443": {"Handlers": {"/": {"Proxy": ...}}}}
         for path, h in (web.get("Handlers") or {}).items():
             if (h.get("Proxy") or "").rstrip("/") in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):

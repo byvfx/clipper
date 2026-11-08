@@ -79,7 +79,10 @@ def watch_page(qs: dict) -> bytes:
     if not src.startswith("/media/"):
         raise ClipperError("no such video")
     title = html.escape((qs.get("title") or ["clipper"])[0])
-    t = float((qs.get("t") or ["0"])[0] or 0)
+    try:
+        t = float((qs.get("t") or ["0"])[0] or 0)
+    except ValueError:   # ?t=abc: from the start
+        t = 0.0
     return (f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title>
 <style>html,body{{margin:0;height:100%;background:#000}}video{{display:block;width:100%;height:100%;object-fit:contain}}</style>
@@ -252,7 +255,10 @@ class Handler(BaseHTTPRequestHandler):
         # Read the body before any refusal: closing with it unread resets the connection
         # (Windows), and the client sees an abort instead of the answer. The page's own
         # posts are a few KB; a bigger body is read in chunks and thrown away.
-        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return self.send_json({"error": "bad Content-Length"}, 400)
         if n > MAX_POST:
             while n > 0 and (chunk := self.rfile.read(min(n, 1 << 16))):
                 n -= len(chunk)
@@ -304,12 +310,23 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"error": "not found"}, 404)
         size = path.stat().st_size
         ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        start, end = 0, size - 1
+        start, end, partial = 0, size - 1, False
         rng = self.headers.get("Range")
         if rng and rng.startswith("bytes="):
             a, _, b = rng[6:].partition("-")
-            start = int(a) if a else max(0, size - int(b))
-            end = min(int(b), size - 1) if a and b else end
+            try:
+                start = int(a) if a else max(0, size - int(b))
+                end = min(int(b), size - 1) if a and b else size - 1
+                partial = True
+            except ValueError:   # bytes=abc-def: as if there were no Range header
+                start, end = 0, size - 1
+            if partial and (start > end or start >= size):   # past the end: 416, nothing sent
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+        if partial:
             self.send_response(HTTPStatus.PARTIAL_CONTENT)
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         else:

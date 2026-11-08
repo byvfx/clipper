@@ -269,7 +269,7 @@ def last_upload_run(cfg: dict) -> dict:
         out["running_since"] = cur["at"]
     return out
 
-def views_by_video(cfg: dict) -> dict[str, int]:
+def views_by_video(cfg: dict) -> dict[str, int | None]:
     a = jsonstate.read_or(cfg["paths"]["schedule"].with_name("analytics.json"), {}) or {}
     return {vid: v.get("views") for vid, v in a.items() if isinstance(v, dict)}
 
