@@ -21,7 +21,7 @@ import numpy as np
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .llm import Claude, preflight
+from .llm import Claude, estimate_lines, preflight, tokens
 from .prompts import Prompts
 from .states import carry_numbers, number_history, numbered_picks
 from .transcript import load_words, snap, transcript_lines
@@ -367,6 +367,34 @@ def run_pass_b(kept: list[dict], summary: list[dict], words: list[dict], cfg: di
     return {**result, "status": "ok", **out, "picks": picks}
 
 
+def estimate(stream_dir: Path, cfg: dict, prompts: Prompts, windows: list[dict], words: list[dict],
+             sig: dict, n: int) -> list[str]:
+    """`--dry-run`: what a run would send, priced with [llm] prices, nothing called. The summary
+    and the scan are left out when cached; Pass B is an upper bound (every window kept), and
+    the scan's new windows would add to Pass A."""
+    sc = cfg["scoring"]
+    blocks = ["\n".join(transcript_lines(words, a, a + SUMMARY_BLOCK_S)) for a in range(0, n, SUMMARY_BLOCK_S)]
+    blocks = [b for b in blocks if b]
+    block_in = sum(tokens(b) for b in blocks)
+    rows = []
+    if not (stream_dir / f"summary_{prompts.version}.json").exists():
+        rows.append(("summary", sc["model_a"], len(blocks),
+                     len(blocks) * tokens(prompts.get("summary")) + block_in, 150 * len(blocks)))
+    scan_system = prompts.get("scan") if sc["transcript_scan"] else ""
+    if scan_system and cached_scan(stream_dir / f"scan_{prompts.version}.json", prompt_sha(scan_system)) is None:
+        rows.append(("scan", sc["model_a"], len(blocks), len(blocks) * tokens(scan_system) + block_in,
+                     300 * len(blocks)))
+    system = prompts.get("score_a")
+    rows.append(("Pass A", sc["model_a"], len(windows),
+                 sum(tokens(system + pass_a_user(w, words, sig, sc["lead_in_s"])) for w in windows),
+                 300 * len(windows)))
+    b_in = tokens(prompts.get("score_b")) + 60 * len(blocks) + sum(
+        tokens(" ".join(transcript_lines(words, w["start_s"], w["end_s"]))) + 120 for w in windows)
+    rows.append(("Pass B", sc["model_b"], 1, b_in, 2500))
+    return estimate_lines(cfg, rows) + [
+        "  Pass B as if every window were kept (fewer are); the scan's new windows would add to Pass A"]
+
+
 def run(stream_dir: Path, cfg: dict, dry_run: bool = False, force: bool = False) -> dict:
     cfg = for_stream(cfg, stream_dir)
     sc = cfg["scoring"]
@@ -388,6 +416,8 @@ def run(stream_dir: Path, cfg: dict, dry_run: bool = False, force: bool = False)
             (d / f"pass_a_w{w['rank']:02d}.md").write_text(
                 f"# system\n\n{system}\n\n# user\n\n{user}\n", encoding="utf-8")
         print(f"wrote {len(windows)} Pass A requests to {d}")
+        print("\n".join(["estimate:"] + estimate(stream_dir, cfg, prompts, windows, words, sig,
+                                                 int(np.ceil(meta["duration_s"])))))
         return {}
 
     claude = Claude(cfg)

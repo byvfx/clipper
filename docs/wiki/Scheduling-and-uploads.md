@@ -14,6 +14,10 @@ only by hand, and `clipper doctor` says so on a serve machine), at most `[youtub
 channel's daily upload limit. Pre-shows and stories set to "asap" go out on the next run,
 outside the release slots.
 
+`clipper status` is the one screen for all of this: the services' heartbeats and the recorder,
+the worker's streams, review counts, the next releases and the month's spend (`--days N` looks
+further ahead; `--sync` reads Kitsu first).
+
 ## Staying current
 
 To stay current rather than build a backlog, `[schedule] stream_budget` caps each stream's

@@ -22,7 +22,7 @@ from pathlib import Path
 from . import jsonstate
 from .config import for_stream
 from .errors import ClipperError
-from .llm import Claude, preflight
+from .llm import Claude, estimate_lines, preflight, tokens
 from .prompts import Prompts
 from .timefmt import clock, hms
 from .transcript import load_words, snap, transcript_lines
@@ -154,13 +154,18 @@ def make_srt(words: list[dict], parts: list[tuple], mc: dict, mask=lambda s: s) 
 
 # ---------- chapters ----------
 
+def chapter_user(asset: dict, words: list[dict]) -> str:
+    """The chapters call's input: the segment's title, description and transcript."""
+    a, b, _ = asset["parts"][0]
+    return (f"Title: {asset['title']}\nDescription: {asset['body']}\n\n<transcript>\n"
+            + "\n".join(transcript_lines(words, a, b)) + "\n</transcript>")
+
+
 def segment_chapters(asset: dict, words: list[dict], mc: dict, claude: Claude,
                      prompts: Prompts) -> list[dict]:
     a, b, _ = asset["parts"][0]
-    user = (f"Title: {asset['title']}\nDescription: {asset['body']}\n\n<transcript>\n"
-            + "\n".join(transcript_lines(words, a, b)) + "\n</transcript>")
-    out, _ = claude.json_call(mc["model"], prompts.get("chapters"), user, CHAPTER_SCHEMA,
-                              mc["effort"])
+    out, _ = claude.json_call(mc["model"], prompts.get("chapters"), chapter_user(asset, words),
+                              CHAPTER_SCHEMA, mc["effort"])
     if not out:
         return []
     span = [w for w in words if a <= w["start"] < b]
@@ -325,9 +330,22 @@ def draft(x: dict, g: dict, ch: list[dict], credit: str, playlist: str, mc: dict
     return out
 
 
-def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
+def estimate(cfg: dict, mc: dict, prompts: Prompts, lines: list[str], long_segs: list[dict],
+             words: list[dict], n_assets: int) -> list[str]:
+    """`--dry-run`: the metadata call and a chapters call per long segment, priced with [llm]
+    prices, nothing called."""
+    rows = [("metadata", mc["model"], 1, tokens(prompts.get("meta") + "\n\n".join(lines)), 250 * n_assets)]
+    if long_segs:
+        rows.append(("chapters", mc["model"], len(long_segs),
+                     sum(tokens(prompts.get("chapters") + chapter_user(x, words)) for x in long_segs),
+                     300 * len(long_segs)))
+    return estimate_lines(cfg, rows)
+
+
+def run(stream_dir: Path, cfg: dict, missing: bool = False, dry_run: bool = False) -> list[dict]:
     """missing: only the videos with no draft yet (the worker's second pass, after the
-    clips went to review); the model is told which playlists the drafted ones use."""
+    clips went to review); the model is told which playlists the drafted ones use.
+    dry_run: print the estimate and write nothing."""
     cfg = for_stream(cfg, stream_dir)
     mc = cfg["meta"]
     prompts = Prompts(cfg)
@@ -351,13 +369,15 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
             return []
         print(f"{len(assets)} videos without a draft ({len(drafted)} kept)")
 
-    claude = Claude(cfg)
-    preflight(claude, mc["model"])
-
     lines = asset_lines(assets, words, drafted)
     # a story's segment has its chapters already (a part each, #84): no transcript call for it
     long_segs = [x for x in assets if x["kind"] == "segment" and duration(x) >= mc["chapters_min_s"]
                  and not x.get("chapters")]
+    if dry_run:
+        print("\n".join(["estimate:"] + estimate(cfg, mc, prompts, lines, long_segs, words, len(assets))))
+        return []
+    claude = Claude(cfg)
+    preflight(claude, mc["model"])
     gen, chapters, ckpt = generate(stream_dir, mc, assets, lines, long_segs, words, claude, prompts)
     chapters.update({x["id"]: x["chapters"] for x in assets if x.get("chapters")})
     by_id = {g["id"]: g for g in gen["assets"]}
