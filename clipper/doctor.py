@@ -165,7 +165,13 @@ def prompt_files(cfg: dict) -> list[str]:
     the version its config key sets, the [scoring] rule files for that version, and the weekly
     article example."""
     sc, v = cfg["scoring"], cfg["scoring"]["prompt_version"]
-    names = [f"{name}_{prompts.version_of(cfg, name)}" for name in prompts.VERSIONS]
+    enquirer = cfg["thumbnail"]["style"] == "enquirer"
+    # Prompts a config may never read: the other thumbnail style's, and the cast and news
+    # labellers' when those features are off (Copilot on #174).
+    unread = {"thumbnail": enquirer, "thumbnail_retry": enquirer,
+              "thumbnail_enquirer": not enquirer, "thumbnail_enquirer_retry": not enquirer,
+              "cast_label": not cfg["cast"]["label_model"], "news_judge": not cfg["news"]["judge_model"]}
+    names = [f"{name}_{prompts.version_of(cfg, name)}" for name in prompts.VERSIONS if not unread.get(name)]
     # The scan and rule files came in v3/v4; before v4 they are read only if present.
     if int(v.lstrip("v") or 0) < 4:
         names.remove(f"scan_{v}")

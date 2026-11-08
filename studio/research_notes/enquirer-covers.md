@@ -68,7 +68,7 @@ betrayed. One word per line of copy gets the yellow highlight. Every story point
   and a yellow arrow, 2-3 red bullet bars, a starburst, and a barcode block (issue date,
   price, barcode, "LOLCOW CINEMA" where A360 MEDIA goes). Bullet and teaser lines can end in
   "Page 3" style refs that match the carousel slide numbers.
-- **Inside pages**: keep the clean editorial mockups (mockups/weekly), borrowing the red
+- **Inside pages**: keep the clean editorial mockups (../mockups/weekly), borrowing the red
   kicker bars, yellow square bullets and the 1970s story index with *page n* refs for the
   contents slide.
 - **Special issues**: gold frame + gold starred kicker (anniversaries, a big week), or a

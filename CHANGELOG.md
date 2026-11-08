@@ -8,6 +8,9 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-08: `studio/` holds the mockups, the research notes and the media-heavy reports; `[paths]
+  streamers` now defaults to `studio/research_notes/streamers.json` (set it if you keep that
+  file elsewhere; it is read with a default when absent).
 - 11-08: hand-over audit (`reports/code-audit-2026-11-08.md`) and its tier 0: the test suite green
   on Windows and run by CI on Linux and Windows; ruff rules widened (import order, bugbear,
   pyupgrade, blind excepts, stale noqa, McCabe over 15); `clipper --version`; stale docs retired;
