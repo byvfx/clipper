@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from clipper import daemon
+from clipper import daemon, jsonstate
 from clipper.errors import ClipperError
 
 
@@ -47,3 +47,40 @@ def test_single_instance_refuses_a_second(tmp_path):
         daemon.single_instance(cfg, "serve")
     first.close()
     daemon.single_instance(cfg, "serve").close()  # free again once the holder is gone
+
+
+def test_a_heartbeat_missed_for_one_read_is_read_again(tmp_path, monkeypatch):
+    """The writer replaces the file every few seconds; a read over the share can land in the gap
+    (2026-11-08: `clipper record status` said "no heartbeat" mid-show once)."""
+    (tmp_path / ".serve").mkdir()
+    path = tmp_path / ".serve" / "status.json"
+    jsonstate.write(path, {"at": "x"})
+    real, misses = jsonstate.read, [None]            # the first read finds no file
+    monkeypatch.setattr(daemon.jsonstate, "read", lambda p, d=None: misses.pop() if misses else real(p, d))
+    slept = []
+    monkeypatch.setattr(daemon.time, "sleep", slept.append)
+    assert daemon.read_heartbeat(path) == {"at": "x"} and slept == [0.3]
+
+
+def test_no_heartbeat_is_read_again_only_where_the_service_has_run(tmp_path, monkeypatch):
+    slept = []
+    monkeypatch.setattr(daemon.time, "sleep", slept.append)
+    assert daemon.read_heartbeat(tmp_path / ".bot" / "status.json") == {} and slept == []   # never ran: no folder
+    (tmp_path / ".serve").mkdir()
+    assert daemon.read_heartbeat(tmp_path / ".serve" / "status.json") == {} and slept == [0.3, 0.3]
+    (tmp_path / ".serve" / "status.json").write_text("not json", encoding="utf-8")
+    with pytest.raises(ValueError):                  # there but unreadable after the retries: unknown, not empty
+        daemon.read_heartbeat(tmp_path / ".serve" / "status.json")
+    assert slept == [0.3] * 4
+
+
+def test_an_unreadable_heartbeat_is_unknown_not_absent(tmp_path, monkeypatch):
+    """Health and the status lines say so instead of "not running" (Copilot on #183)."""
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    (tmp_path / ".serve").mkdir()
+    (tmp_path / ".serve" / "status.json").write_text("{", encoding="utf-8")
+    hb = daemon.heartbeat(cfg_at(tmp_path), "serve")
+    assert not hb["up"] and hb["age_s"] is None and hb["error"].startswith("JSONDecodeError")
+    assert daemon.state(hb)[0] == "bad" and "unreadable" in daemon.state(hb)[1]
+    assert "unreadable" in daemon.heartbeat_lines("serve", hb)[0]
+    assert daemon.heartbeat(cfg_at(tmp_path), "bot")["error"] == ""      # no file: absent, not an error

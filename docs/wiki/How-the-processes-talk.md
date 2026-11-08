@@ -60,9 +60,15 @@ also carries the war room address (`warroom`, `tailnet`) and each background job
 exit code, last line and next due time. The recorder writes `streams/.record/status.json` on
 every pass (a few seconds) with each channel's state and who is live.
 
-Readers: `clipper services status`, the [war room](War-room)'s Health panel and
-`clipper doctor`, from any machine that sees the share. "Down" therefore means one of two
-things: the process died, or it can't reach the share any more.
+Readers: `clipper status`, `clipper services status`, `clipper record status`, the
+[war room](War-room)'s Health panel and `clipper doctor`, from any machine that sees the share.
+"Down" therefore means one of two things: the process died, or it can't reach the share any more.
+A read can land while the writer is replacing the file and find none, so a reader tries a
+missing or unreadable heartbeat again (three reads, 0.3 s apart) before calling it absent; only a
+service that never ran here, with no folder for its file, is answered at once. A file that is
+there but still can't be read is reported as unreadable, not as absent: Health shows it bad with
+the reason, `clipper record status` exits 1, and the recorder's stop, restart and deploy refuse
+without `--force`, since nothing says whether a show is live.
 
 ## 4. The DM outbox (`clipper/alerts.py`)
 

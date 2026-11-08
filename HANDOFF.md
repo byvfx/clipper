@@ -189,9 +189,6 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
-- **Deploy the hub:** the NAS containers (serve, bot, worker) still run the code from before tier 1 (the 11-07
-  deploy). `bash deploy/hub/deploy.sh` from a main checkout once #182 is in, not during a show and not while an
-  upload runs (`clipper services status serve` lists its jobs).
 - Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/` until
   then). The stale worktrees (`C:\clipper-wt`, `C:\clipper-jevlab`, `.claude/worktrees/*`) can go: delete the
   folders, then `git worktree prune`. PR #169 (the user's own) is still open and mergeable.
@@ -388,7 +385,13 @@ metadata checkpoints honoured), per-stream costs on Costs, `clipper status` (fil
 `deploy/worker` stays), product pages without this install's names; #182 `clipper/defaults.toml` as the one
 source of defaults (config.py 1,330 → 446 lines), `clipper.example.toml` a 58-line starter. Copilot had 1/2/5/4
 comments on #178-#181, all taken. Not done from the plan: prompts into the package (`importlib.resources`).
-The NAS containers run the pre-tier-1 code until `bash deploy/hub/deploy.sh`.
+The hub was deployed with all of it on 2026-11-08 13:14, right after chudlogic's stream ended (serve, bot and
+worker on the new image, heartbeats fresh, the image loads the 626 defaults). Found while waiting for that
+stream: one read of the recorder's heartbeat landed mid-replace and `clipper record status` said "no heartbeat"
+(exit 0), which `deploy/record/deploy.sh` would have taken as "not live"; `daemon.read_heartbeat` now reads a
+missing or unreadable heartbeat again (three reads, 0.3 s apart) when its folder exists, and a file still
+unreadable after that is unknown, not absent (`record status` exits 1; stop, restart and deploy refuse without
+`--force`).
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,

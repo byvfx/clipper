@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from clipper import services
+from clipper import daemon, jsonstate, services
 from clipper.errors import ClipperError
 
 NOW = datetime(2026, 10, 30, 20, 0, tzinfo=UTC)
@@ -96,3 +96,31 @@ def test_serve_and_bot_have_no_task_without_a_hub(defaults, capsys):
     assert services.run_task("serve", "restart", cfg) == 1
     assert "deploy/hub" in capsys.readouterr().out
     assert services.run_task("bot", "status", cfg) == 0
+
+
+def test_record_status_stays_live_across_a_read_mid_replace(tmp_path, monkeypatch):
+    """One missed read made it say "no heartbeat" (exit 0) mid-show on 2026-11-08, which would have
+    let deploy/record/deploy.sh restart the recorder: the heartbeat is read again."""
+    cfg = cfg_with(tmp_path, beat(1, kino="kick-1 recording"))
+    real, misses = jsonstate.read, [None]
+    monkeypatch.setattr(daemon.jsonstate, "read", lambda p, d=None: misses.pop() if misses else real(p, d))
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    with pytest.raises(ClipperError) as e:
+        services.record_status(cfg, NOW)
+    assert e.value.status == 3
+
+
+def test_record_status_refuses_when_the_heartbeat_cannot_be_read(tmp_path, monkeypatch):
+    """Unknown isn't quiet: exit 1, which deploy/record/deploy.sh refuses on too, and the stop/restart
+    guard holds (Copilot on #183)."""
+    monkeypatch.setattr(daemon.time, "sleep", lambda s: None)
+    cfg = cfg_with(tmp_path, {})
+    (tmp_path / ".record" / "status.json").write_text("{", encoding="utf-8")
+    rec = services.recorder(cfg, NOW)
+    assert rec["error"] and rec["live"] == [] and "unreadable" in services.recorder_lines(rec)[0]
+    with pytest.raises(ClipperError, match="can't tell") as e:
+        services.record_status(cfg, NOW)
+    assert e.value.status == 1
+    monkeypatch.setattr(services, "recorder_compose", lambda cfg, action: pytest.fail("recorder touched"))
+    with pytest.raises(ClipperError, match="can't tell"):
+        services.run(cfg, "restart", "recorder")

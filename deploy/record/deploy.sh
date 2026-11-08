@@ -2,8 +2,9 @@
 # Deploy or update the live recorder (`clipper record watch`) on the NAS.
 #
 # Run from the repo root:  bash deploy/record/deploy.sh [--force]
-#   Refused while a show is being recorded (`clipper record status`): the restart starts a
-#   new recording part. --force deploys anyway.
+#   Refused while a show is being recorded (`clipper record status` exits 3) and when the
+#   recorder's state can't be read (exit 1): the restart starts a new recording part. --force
+#   deploys anyway.
 #   RECORD_SSH_HOST  ssh host alias (default: nas)
 #   RECORD_DIR       compose dir on the NAS, relative to the ssh user's home (default: clipper-record)
 #   CLIPPER_TOML     a config to install as $CLIPPER_DATA/clipper.toml. Unset: the one there is

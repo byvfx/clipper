@@ -10,8 +10,9 @@ live, with chat, into the streams share, and the worker takes each recording fro
 `[record]` and `[kick]` from the `clipper.toml` in the NAS folder, the one copy since
 2026-11-05 ([NAS hub](NAS-hub)): the script copies `./clipper.toml` there only if there is none
 (or `CLIPPER_TOML=<file>` to replace it). Re-run it after changing `[record] channels`. It refuses while a show is being recorded (the restart would start a
-new recording part): `clipper record status` shows what the recorder is doing, from the
-heartbeat it writes to the share, and `deploy.sh --force` deploys anyway.
+new recording part) and when the recorder's state can't be read: `clipper record status` shows
+what the recorder is doing, from the heartbeat it writes to the share (exit 3 while live, 1 when
+the heartbeat is unreadable), and `deploy.sh --force` deploys anyway.
 `clipper services stop|restart recorder` stops or restarts it over ssh without a new build,
 with the same check.
 

@@ -29,7 +29,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import daemon, jsonstate
+from . import daemon
 from .errors import ClipperError
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -41,10 +41,15 @@ HEARTBEAT_S = 60   # the recorder writes every 2 s; a minute without one means i
 
 
 def recorder(cfg: dict, now: datetime | None = None) -> dict:
-    """The recorder's heartbeat: {up, age_s, at, channels: {slug: state}, live: [slug ...]}.
-    A channel's state is "<stream id> recording|paused|finalizing" or "offline"."""
+    """The recorder's heartbeat: {up, age_s, at, channels: {slug: state}, live: [slug ...], path,
+    error}. A channel's state is "<stream id> recording|paused|finalizing" or "offline". `error` is
+    why the file couldn't be read ("" when it could): nothing is known then, `live` included, so
+    record_status and the stop/restart guard refuse instead of calling it quiet."""
     path = cfg["paths"]["streams"] / ".record" / "status.json"
-    hb = jsonstate.read(path, {})
+    try:
+        hb, error = daemon.read_heartbeat(path), ""
+    except (OSError, ValueError) as e:
+        hb, error = {}, f"{type(e).__name__}: {e}"
     at = hb.get("at") or ""
     try:
         age = ((now or datetime.now(UTC)) - datetime.fromisoformat(at)).total_seconds()
@@ -53,10 +58,13 @@ def recorder(cfg: dict, now: datetime | None = None) -> dict:
     up = age is not None and age < HEARTBEAT_S
     channels = hb.get("channels") or {}
     live = [slug for slug, state in channels.items() if up and state != "offline"]
-    return {"up": up, "age_s": age, "at": at, "channels": channels, "live": live, "path": str(path)}
+    return {"up": up, "age_s": age, "at": at, "channels": channels, "live": live, "path": str(path),
+            "error": error}
 
 
 def recorder_lines(rec: dict) -> list[str]:
+    if rec.get("error"):
+        return [f"recorder: heartbeat unreadable at {rec['path']} ({rec['error']}): can't tell what is live"]
     if rec["age_s"] is None:
         return [f"recorder: no heartbeat at {rec['path']} (not deployed, or the share isn't reachable)"]
     if not rec["up"]:
@@ -68,9 +76,12 @@ def recorder_lines(rec: dict) -> list[str]:
 
 
 def record_status(cfg: dict, now: datetime | None = None) -> None:
-    """`clipper record status`: exit 3 while a show is being recorded (deploy.sh checks it)."""
+    """`clipper record status`: exit 3 while a show is being recorded, exit 1 when the heartbeat
+    can't be read (deploy/record/deploy.sh refuses on either, unless --force)."""
     rec = recorder(cfg, now)
     print("\n".join(recorder_lines(rec)))
+    if rec.get("error"):
+        raise ClipperError(f"can't tell whether a show is live: {rec['error']}")
     if rec["live"]:
         raise ClipperError("", status=3)
 
@@ -161,10 +172,13 @@ def run(cfg: dict, action: str = "status", which: str = "all", force: bool = Fal
             print("NAS cuts: " + ("none running" if not cuts else "\n  " + "\n  ".join(cuts)))
         return 0
     if which == "recorder":
-        live = recorder(cfg)["live"]
-        if live and not force:
-            raise ClipperError(f"recording {', '.join(live)} now: a {action} would start a new recording part. "
-                               "Wait until the show ends, or pass --force")
+        rec = recorder(cfg)
+        if rec.get("error") and not force:
+            raise ClipperError(f"can't tell whether a show is live ({rec['error']}): a {action} might start a "
+                               "new recording part. Fix the read, or pass --force")
+        if rec["live"] and not force:
+            raise ClipperError(f"recording {', '.join(rec['live'])} now: a {action} would start a new recording "
+                               "part. Wait until the show ends, or pass --force")
         return recorder_compose(cfg, action)
     worst = 0
     for name in (["worker", "serve", "bot"] if which == "all" else [which]):

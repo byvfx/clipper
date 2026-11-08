@@ -15,6 +15,7 @@ import logging.handlers
 import os
 import socket
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -80,24 +81,52 @@ def beat(cfg: dict, name: str, started_at: str, **extra) -> None:
         log.warning(f"heartbeat not written ({e})")
 
 
+def read_heartbeat(path: Path, tries: int = 3, wait_s: float = 0.3) -> dict:
+    """The heartbeat file's JSON; {} when there is no file. The writer replaces the file every few
+    seconds (a temp file, then a rename), and a read over the share can land in that gap and find
+    no file, or half of one. So a missing or unreadable heartbeat whose folder exists is read
+    again, up to `tries` times `wait_s` apart, before the answer stands; a service that never ran
+    here has no folder and is answered at once. A file that is there but still can't be read or
+    parsed on the last try raises that OSError or ValueError: the state is unknown then, not
+    empty, and the recorder's deploy guard must not take it for "nothing live". (2026-11-08: one
+    read mid-replace made `clipper record status` say "no heartbeat", exit 0, mid-show, which
+    would have let deploy/record/deploy.sh restart the recorder.)"""
+    for attempt in range(tries):
+        try:
+            data, error = jsonstate.read(path, None), None
+        except (OSError, ValueError) as e:
+            data, error = None, e
+        if isinstance(data, dict):
+            return data
+        if attempt + 1 == tries or not path.parent.is_dir():
+            break
+        time.sleep(wait_s)
+    if error is not None:
+        raise error
+    return {}
+
+
 def heartbeat(cfg: dict, name: str, now: datetime | None = None) -> dict:
-    """{up, age_s (None = no heartbeat), at, host, data: the whole file, path}."""
+    """{up, age_s (None = no heartbeat), at, host, data: the whole file, path, error: why the file
+    couldn't be read, "" when it could (then nothing is known, `up` included)}."""
     path = heartbeat_path(cfg, name)
     try:
-        data = jsonstate.read(path, {})
-    except (OSError, ValueError):
-        data = {}
+        data, error = read_heartbeat(path), ""
+    except (OSError, ValueError) as e:
+        data, error = {}, f"{type(e).__name__}: {e}"
     at = data.get("at") or ""
     try:
         age = ((now or datetime.now(UTC)) - datetime.fromisoformat(at)).total_seconds()
     except ValueError:
         age = None
     return {"up": age is not None and age < HEARTBEAT_S, "age_s": age, "at": at,
-            "host": data.get("host", ""), "data": data, "path": str(path)}
+            "host": data.get("host", ""), "data": data, "path": str(path), "error": error}
 
 
 def state(hb: dict) -> tuple[str, str]:
     """(ok|mid|bad, short text) for a Health line."""
+    if hb.get("error"):
+        return "bad", f"heartbeat unreadable ({hb['error']})"
     if hb["age_s"] is None:
         return "bad", "not running (no heartbeat)"
     if not hb["up"]:
@@ -115,6 +144,8 @@ def local(iso: str, fmt: str = "%m-%d %H:%M") -> str:
 
 def heartbeat_lines(name: str, hb: dict) -> list[str]:
     """`clipper services status` lines for a service's heartbeat."""
+    if hb.get("error"):
+        return [f"{name}: heartbeat unreadable at {hb['path']} ({hb['error']}): can't tell whether it runs"]
     if hb["age_s"] is None:
         return [f"{name}: no heartbeat at {hb['path']} (not running, or the share isn't reachable)"]
     if not hb["up"]:
