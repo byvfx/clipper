@@ -565,19 +565,10 @@ def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
         text = (sys.stdin.read() if args.file == "-"
                 else Path(args.file).read_text(encoding="utf-8-sig"))
     who = "clipper CLI"
-    r = {"approve": lambda: actions.approve(cfg, item, text, who),
-         "reject": lambda: actions.reject(cfg, item, text, who),
-         "changes": lambda: actions.changes(cfg, item, text, who),
-         "reopen": lambda: actions.reopen(cfg, item, who),
-         "hold": lambda: actions.hold(cfg, item, not args.off, who),
-         "pin": lambda: actions.pin(cfg, item, "" if args.clear else text, who),
-         "retitle": lambda: actions.retitle(cfg, item, text, who),
-         "thumbtext": lambda: actions.thumbtext(cfg, item, text, who),
-         "description": lambda: actions.description(cfg, item, text, who),
-         "hashtags": lambda: actions.hashtags(cfg, item, text, who),
-         "tags": lambda: actions.tags(cfg, item, text, who),
-         "playlist": lambda: actions.playlist(cfg, item, text, who)}[args.action]()
-    actions.print_rows([r])
+    on = (not args.off) if args.action == "hold" else None
+    if args.action == "pin" and args.clear:
+        text = ""
+    actions.print_rows([actions.decide(cfg, item, args.action, who, text=text, on=on)])
 
 
 def cmd_schedule(cfg: dict, args: argparse.Namespace) -> None:

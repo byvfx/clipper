@@ -1,7 +1,7 @@
 import pytest
 
 from clipper.errors import ClipperError
-from clipper.timefmt import clock, hms, length, parse_time
+from clipper.timefmt import age_s, clock, hms, length, now_iso, parse_time
 
 
 def test_hms_cuts_to_the_second():
@@ -36,3 +36,11 @@ def test_parse_time_refuses(text):
 def test_a_bad_time_is_a_clipper_error():
     with pytest.raises(ClipperError, match="not a time"):
         parse_time("abc")
+
+
+def test_now_iso_and_age_s_agree():
+    stamp = now_iso()
+    assert stamp.endswith("+00:00") and len(stamp) == 25
+    assert 0 <= age_s(stamp) < 5
+    assert age_s(None) == age_s("") == age_s("not a time") == float("inf")
+    assert age_s("2026-01-01T00:00:00+00:00") > 24 * 3600

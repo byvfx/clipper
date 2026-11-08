@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from clipper import stages, worker
+from clipper import jsonstate, stages, worker
 
 SLOW = ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts", "review"]
 
@@ -110,7 +110,7 @@ def test_release_after_a_takeover_leaves_the_new_holder_alone(tmp_path):
     assert old.save() is False  # a stage finishing after the takeover writes nothing either
     old.release()
     assert (tmp_path / ".run.lock").read_text(encoding="utf-8") == "other:1"
-    assert worker.read_json(tmp_path / "run.json")["worker"] == "other:1"
+    assert jsonstate.read_or(tmp_path / "run.json", {})["worker"] == "other:1"
 
 
 def test_a_takeover_is_serialized(tmp_path, monkeypatch):
@@ -119,9 +119,9 @@ def test_a_takeover_is_serialized(tmp_path, monkeypatch):
     (tmp_path / ".run.lock").write_text("gone:1", encoding="utf-8")
     worker.write_json(tmp_path / "run.json", {"worker": "gone:1", "heartbeat": "2026-01-01T00:00:00+00:00"})
     seen = []
-    real_read = worker.read_json
-    monkeypatch.setattr(worker, "read_json",
-                        lambda p: seen.append((tmp_path / ".run.lock.lock").exists()) or real_read(p))
+    real_read = jsonstate.read_or
+    monkeypatch.setattr(jsonstate, "read_or",
+                        lambda p, d: seen.append((tmp_path / ".run.lock.lock").exists()) or real_read(p, d))
     first = worker.Run(tmp_path, wcfg())
     seen.clear()
     first.acquire()
@@ -210,7 +210,6 @@ def test_a_forced_run_passes_force_to_the_stages_that_refuse_reruns(defaults):
 
 def test_a_pre_show_is_known_by_its_meta_kind(tmp_path):
     """states.is_preshow: the worker and segments ask it, preshow.py no longer owns it."""
-    from clipper import jsonstate
     from clipper.states import PRESHOW_PREFIX, is_preshow
 
     d = tmp_path / f"{PRESHOW_PREFIX}abc123"

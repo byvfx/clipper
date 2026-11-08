@@ -21,7 +21,8 @@ the same PR as the change.
   `clipper/stages.py`, which the worker and `clipper run` read.
 - A stream is `streams/<id>/`; stages read and write files there and are idempotent, so
   `clipper run` can skip what is done. Review state is `review.json`, retakes `retakes.json`.
-  JSON files go through `clipper/jsonstate.py`: `load`/`read` (retry a file mid-replace),
+  JSON files go through `clipper/jsonstate.py`: `load`/`read` (retry a file mid-replace), `read_or`
+  (a default for a missing or broken file: services and the page only),
   `write` (tmp + replace), `update`/`merge` (under a lock). A test fails on a raw
   `json.loads(path.read_text())`.
 - Config: defaults in `clipper/config.py` < `clipper.toml` < `clipper.local.toml` (this machine's

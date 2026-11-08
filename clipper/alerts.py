@@ -146,9 +146,8 @@ def save_state(cfg: dict, st: dict) -> None:
     keep = timedelta(days=7)  # cooldowns are hours; don't let the file grow forever
     st["sent"] = {k: v for k, v in st["sent"].items() if now - datetime.fromisoformat(v) < keep}
     p = _state_path(cfg)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(st, indent=1), encoding="utf-8")
-    tmp.replace(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    jsonstate.write(p, st, indent=1)
 
 
 def checks(cfg: dict, st: dict, now: datetime, digest=None) -> None:

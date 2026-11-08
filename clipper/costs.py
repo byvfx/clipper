@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import jsonstate
+from .timefmt import now_iso
 
 log = logging.getLogger(__name__)
 
@@ -31,10 +32,6 @@ CONTEXT = {"stage": "", "stream": ""}
 
 def set_context(stage: str, stream: str = "") -> None:
     CONTEXT.update(stage=stage, stream=stream)
-
-
-def now_iso() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def record(path: Path | None, rec: dict) -> None:

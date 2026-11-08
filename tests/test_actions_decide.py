@@ -26,8 +26,12 @@ def test_decide_dispatch(calls):
     actions.decide({}, ITEM, "edit", "me", values={"Tags": "a"})
     actions.decide({}, ITEM, "hold", "me")               # flips: it was held
     actions.decide({}, ITEM, "hold", "me", on=True)
+    actions.decide({}, ITEM, "retitle", "me", text="New title")   # the CLI's column verbs
+    actions.decide({}, ITEM, "playlist", "me", text="Kino Casino")
     assert calls == [("approve", ("nice", "me")), ("reopen", ("me",)),
-                     ("edit", ({"Tags": "a"}, "me")), ("hold", (False, "me")), ("hold", (True, "me"))]
+                     ("edit", ({"Tags": "a"}, "me")), ("hold", (False, "me")), ("hold", (True, "me")),
+                     ("edit", ({"YouTube title": "New title"}, "me")),
+                     ("edit", ({"Playlist": "Kino Casino"}, "me"))]
     with pytest.raises(ClipperError, match="unknown action"):
         actions.decide({}, ITEM, "publish", "me")
 

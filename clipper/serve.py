@@ -41,6 +41,7 @@ import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import NamedTuple
 
 import requests
 
@@ -62,11 +63,18 @@ def has_opencv() -> bool:
     return importlib.util.find_spec("cv2") is not None
 
 
-def due(jobs: list, last: dict[str, float], now: float) -> list[str]:
+class Job(NamedTuple):
+    """A background job: started when its interval has passed and ready() says so."""
+    name: str
+    every_s: float                 # 0 or less: never on its own (POST /api/retake still may)
+    ready: Callable[[], bool]
+    start: Callable[[], object]
+
+
+def due(jobs: list[Job], last: dict[str, float], now: float) -> list[str]:
     """Names of the jobs whose interval has passed since they last started (an interval of
     0 or less: never)."""
-    return [name for name, every, *_ in jobs
-            if every > 0 and now - last.get(name, float("-inf")) >= every]
+    return [j.name for j in jobs if j.every_s > 0 and now - last.get(j.name, float("-inf")) >= j.every_s]
 
 
 class Serve:
@@ -87,37 +95,37 @@ class Serve:
         """Seconds since the job last started (infinite if never)."""
         return time.monotonic() - self.last.get(name, float("-inf"))
 
-    def jobs(self) -> list[tuple[str, float, Callable[[], bool], Callable[[], object]]]:
-        """(name, every s, ready() -> bool, start()) for the background jobs."""
+    def jobs(self) -> list[Job]:
+        """The background jobs, each with its interval, its ready() check and its start()."""
         cfg, paths = self.cfg, self.cfg["paths"]
         has_upload = lambda: paths["schedule"].exists() \
             and '"uploaded"' in paths["schedule"].read_text(encoding="utf-8")
         task = lambda coro: self.loop.create_task(coro)
         return [
-            ("upload", cfg["youtube"]["auto_upload_minutes"] * 60,
+            Job("upload", cfg["youtube"]["auto_upload_minutes"] * 60,
              lambda: not self.running("upload"), lambda: task(self.auto_upload())),
-            ("preshow", cfg["preshow"]["poll_minutes"] * 60,
+            Job("preshow", cfg["preshow"]["poll_minutes"] * 60,
              lambda: not self.running("preshow") and bool(preshow.watched(cfg)),
              lambda: task(self.run_clipper("preshow", ["preshow", "check", "--run"]))),
             # retake notes made in Kitsu: as review.json has them (the bot's card refresh and the
             # replan sync it), and every RETAKE_SYNC_S the command's own sync, with or without a bot
-            ("retake", RETAKE_EVERY_S if cfg["retake"]["auto"] else 0,
+            Job("retake", RETAKE_EVERY_S if cfg["retake"]["auto"] else 0,
              lambda: bool(retake.pending(cfg)) or (self.since("retake") >= RETAKE_SYNC_S
                                                    and bool(actions.review_dirs(cfg))),
              self.start_retake),
-            ("tiktok", cfg["tiktok"]["auto_send_minutes"] * 60,
+            Job("tiktok", cfg["tiktok"]["auto_send_minutes"] * 60,
              lambda: paths["tiktok_token"].exists() and not self.running("tiktok"),
              lambda: task(self.run_clipper("tiktok", ["tiktok", "--auto"]))),
-            ("x", cfg["x"]["auto_post_minutes"] * 60,
+            Job("x", cfg["x"]["auto_post_minutes"] * 60,
              lambda: paths["x_token"].exists() and not self.running("x"),
              lambda: task(self.run_clipper("x", ["x", "--auto"]))),
-            ("analytics", cfg["analytics"]["auto_hours"] * 3600,
+            Job("analytics", cfg["analytics"]["auto_hours"] * 3600,
              lambda: paths["youtube_token"].exists() and has_upload() and not self.running("analytics"),
              lambda: task(self.run_clipper("analytics", ["analytics"]))),
-            ("cast", cfg["cast"]["auto_hours"] * 3600,  # #41: photos for anyone short of them
+            Job("cast", cfg["cast"]["auto_hours"] * 3600,  # #41: photos for anyone short of them
              lambda: bool(cfg["thumbnail"]["photos"]) and has_opencv() and not self.running("cast"),
              lambda: task(self.run_clipper("cast", ["cast", "auto"]))),
-            ("news", cfg["news"]["check_minutes"] * 60,  # #110: headlines about the watched terms
+            Job("news", cfg["news"]["check_minutes"] * 60,  # #110: headlines about the watched terms
              lambda: not self.running("news") and bool(news.watchlist(cfg)),  # no terms: nothing to do
              lambda: task(self.run_clipper("news", ["news", "check"]))),
         ]
@@ -183,22 +191,23 @@ class Serve:
         await asyncio.sleep(FIRST_PASS_S)
         while True:
             jobs = self.jobs()
-            for name, _every, ready, start in jobs:
-                if name not in due(jobs, self.last, time.monotonic()):
+            for job in jobs:
+                if job.name not in due(jobs, self.last, time.monotonic()):
                     continue
                 try:
-                    if not await asyncio.to_thread(ready):
+                    if not await asyncio.to_thread(job.ready):
                         continue
-                    self.last[name] = time.monotonic()
-                    start()
+                    self.last[job.name] = time.monotonic()
+                    job.start()
                 except (Exception, SystemExit):  # SystemExit would stop the event loop
-                    log.exception(f"{name} check failed")
+                    log.exception(f"{job.name} check failed")
             await asyncio.sleep(60)
 
     def status(self) -> dict:
         """Each job's state for the heartbeat: running, last run, next due."""
         now, out = time.monotonic(), {}
-        for name, every, *_ in self.jobs():
+        for job in self.jobs():
+            name, every = job.name, job.every_s
             st = dict(self.state.get(name, {}))
             st["every_s"] = every
             if every <= 0:

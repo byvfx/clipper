@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 
 from .errors import ClipperError
 
@@ -39,3 +40,19 @@ def parse_time(s: str) -> float:
         raise ClipperError(f"not a time: {s!r} (use seconds, H:MM or H:MM:SS)")
     h, mi, sec = (float(x) if x else 0.0 for x in m.groups())
     return h * 3600 + mi * 60 + sec
+
+
+def now_iso() -> str:
+    """Now in UTC as an ISO-8601 string to the second: the timestamp the state files use."""
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def age_s(iso: str | None) -> float:
+    """Seconds since an ISO-8601 timestamp (a heartbeat, run.json's last beat); inf when there
+    is none or it doesn't parse, so "older than N" holds for a missing one."""
+    if not iso:
+        return float("inf")
+    try:
+        return (datetime.now(UTC) - datetime.fromisoformat(iso)).total_seconds()
+    except (TypeError, ValueError):
+        return float("inf")

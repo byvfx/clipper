@@ -41,10 +41,6 @@ def review_dirs(cfg: dict) -> list[Path]:
     return sorted(p.parent for p in cfg["paths"]["streams"].glob("*/review_state.json"))
 
 
-def load(path: Path, default):
-    return jsonstate.read(path, default)
-
-
 def note_id(r: dict) -> str:
     """The Kitsu comment id; reviews synced before ids were kept use a hash of the text."""
     text = r.get("comment", "")
@@ -57,8 +53,8 @@ def pending(cfg: dict, stream: str | None = None) -> list[tuple[Path, str, dict]
     dirs = [stream_dir(cfg, stream)] if stream else review_dirs(cfg)
     out = []
     for d in dirs:
-        done = {h["comment_id"] for hs in load(d / "retakes.json", {}).values() for h in hs}
-        for key, r in load(d / "review.json", {}).items():
+        done = {h["comment_id"] for hs in jsonstate.read(d / "retakes.json", {}).values() for h in hs}
+        for key, r in jsonstate.read(d / "review.json", {}).items():
             if r.get("decision") == "changes_requested" and r.get("comment") \
                     and note_id(r) not in done:
                 out.append((d, key, r))
@@ -92,7 +88,7 @@ SCHEMA_BASE = {
 
 def comp_segments(sdir: Path, st: dict) -> list[dict]:
     """A compilation's segments (segments.json rows), in order."""
-    data = load(sdir / "segments.json", {})
+    data = jsonstate.read(sdir / "segments.json", {})
     name = Path(st["file"].replace("\\", "/")).name
     comp = next(c for c in data.get("compilations", []) if c["file"] == name)
     by_id = {s["id"]: s for s in data["segments"]}
@@ -104,13 +100,13 @@ def window(sdir: Path, st: dict) -> tuple[float, float] | None:
     segment's start and its last segment's end."""
     kind = st["kind"]
     if kind == "pick":
-        c = next(r for r in load(sdir / "candidates.json", {})["pass_a"] if r["id"] == st["id"])
+        c = next(r for r in jsonstate.read(sdir / "candidates.json", {})["pass_a"] if r["id"] == st["id"])
         return c["in_s"], c["out_s"]
     if kind == "short":
-        s = load(sdir / "shorts.json", {})[short_key(st)]
+        s = jsonstate.read(sdir / "shorts.json", {})[short_key(st)]
         return s["in_s"], s["out_s"]
     if kind == "segment":
-        s = next(x for x in load(sdir / "segments.json", {})["segments"] if x["id"] == st["id"])
+        s = next(x for x in jsonstate.read(sdir / "segments.json", {})["segments"] if x["id"] == st["id"])
         return s["start_s"], s["end_s"]
     if kind == "compilation":
         segs = comp_segments(sdir, st)
@@ -136,7 +132,7 @@ def context(cfg: dict, sdir: Path, key: str, st: dict, row: dict) -> str:
         lines.append(f"Description: {row['description'][:600]}")
     if row.get("hashtags"):
         lines.append(f"Hashtags: {row['hashtags']}")
-    thumbs = load(sdir / "thumbnails.json", {})
+    thumbs = jsonstate.read(sdir / "thumbnails.json", {})
     th = thumbs.get(f"{Path(st['file'].replace(chr(92), '/')).parent.name}/"
                     f"{Path(st['file'].replace(chr(92), '/')).stem}")
     if th:
@@ -146,7 +142,7 @@ def context(cfg: dict, sdir: Path, key: str, st: dict, row: dict) -> str:
         lines.append("Thumbnail: none yet")
     if st["kind"] == "short":
         lays = layouts_of(cfg["shorts"])
-        cur = load(sdir / "shorts.json", {}).get(short_key(st), {}).get("layout", "")
+        cur = jsonstate.read(sdir / "shorts.json", {}).get(short_key(st), {}).get("layout", "")
         lines.append(f"Layout: {cur}. Layouts: " + "; ".join(
             f"{n} = {v.get('description', '')}" for n, v in lays.items()))
     win = window(sdir, st)
@@ -205,7 +201,7 @@ def snap_trim(cfg: dict, sdir: Path, st: dict, trim: dict) -> tuple[float, float
     from .shorts import grow_window, snap_window
     from .transcript import load_words
 
-    meta = load(sdir / "meta.json", {})
+    meta = jsonstate.read(sdir / "meta.json", {})
     end = float(meta.get("duration_s") or trim["end_s"])
     a = max(0.0, float(trim["start_s"]))
     b = min(float(trim["end_s"]), end)
@@ -268,7 +264,7 @@ def rewrite_draft(cfg: dict, path: Path, chapters: list[dict]) -> None:
 
     if not path.exists():
         return
-    d = load(path, {})
+    d = jsonstate.read(path, {})
     bc = cfg["bleep"]
     mask = Bleeper({**bc, "patterns": bc["patterns"] if bc["mode"] != "off" else []}).mask
     d["chapters"] = chapters
@@ -287,7 +283,7 @@ def trim_segments(cfg: dict, sdir: Path, wins: dict[str, tuple[float, float]]) -
     """trim_segment for several segments at once: each compilation is re-cut only once."""
     from .cut import cut_compilations, cut_segments
 
-    if (load(sdir / "meta.json", {}) or {}).get("kind") == "story":
+    if (jsonstate.read(sdir / "meta.json", {}) or {}).get("kind") == "story":
         story = sdir.name.removeprefix("story-")
         raise ClipperError(f"a story's video is an edit of other videos: trim its parts in {sdir.name}/story.json, "
                            f"then clipper story cut {story}")
@@ -304,19 +300,19 @@ def trim_segments(cfg: dict, sdir: Path, wins: dict[str, tuple[float, float]]) -
     for seg in data["segments"]:
         draft = sdir / "metadata" / "segments" / f"{Path(seg['file']).stem}.json"
         if seg["id"] in wins and draft.exists():
-            rewrite_draft(cfg, draft, shift_chapters(load(draft, {}).get("chapters", []),
+            rewrite_draft(cfg, draft, shift_chapters(jsonstate.read(draft, {}).get("chapters", []),
                                                      deltas[seg["id"]], seg["duration_s"]))
     comps = [c for c in data.get("compilations", []) if set(wins) & set(c["segments"])]
     if not comps:
         return []
     cut_compilations(sdir, cfg, topics=[c["topic"] for c in comps])
     for c in comps:  # its chapters: each segment's title at its offset, then its chapters
-        side = load(sdir / "compilations" / c["file"].replace(".mp4", ".json"), {})
+        side = jsonstate.read(sdir / "compilations" / c["file"].replace(".mp4", ".json"), {})
         ch = []
         for part in side.get("chapters", []):
             ch.append({"t": part["start_s"], "title": part["title"]})
             sd = next((s for s in data["segments"] if s["id"] == part["id"]), None)
-            sdraft = load(sdir / "metadata" / "segments" / f"{Path(sd['file']).stem}.json", {}) if sd else {}
+            sdraft = jsonstate.read(sdir / "metadata" / "segments" / f"{Path(sd['file']).stem}.json", {}) if sd else {}
             ch += [{"t": round(part["start_s"] + x["t"], 1), "title": x["title"]}
                    for x in sdraft.get("chapters", [])[1:]]
         rewrite_draft(cfg, sdir / "metadata" / "compilations" / c["file"].replace(".mp4", ".json"), ch)
@@ -382,7 +378,7 @@ def apply(cfg: dict, sdir: Path, key: str, st: dict, p: dict, who: str) -> tuple
             done.append(f"cut {old[0]:.1f}-{old[1]:.1f} s -> {a:.1f}-{b:.1f} s "
                         f"({b - a:.0f} s)")
     if p.get("layout") and st["kind"] == "short":
-        cur = load(sdir / "shorts.json", {}).get(short_key(st), {}).get("layout")
+        cur = jsonstate.read(sdir / "shorts.json", {}).get(short_key(st), {}).get("layout")
         if p["layout"] != cur:
             shorts.run(sdir, cfg, ids=[short_key(st).split("_")[0]], layout=p["layout"])
             videos.append(key)
@@ -424,7 +420,7 @@ def discord_message(cfg: dict, sdir: Path, text: str) -> None:
         return
     api = notify.Rest(cfg)
     dpath = sdir / "discord.json"
-    dstate = load(dpath, {})
+    dstate = jsonstate.read(dpath, {})
     thread = notify.ensure_thread(api, cfg, sdir, dstate, list(actions.describe(cfg, sdir).values()))
     notify.save_state(dpath, dstate)
     api("POST", f"/channels/{thread}/messages", {"content": text[:1900]})
@@ -435,7 +431,7 @@ def process(cfg: dict, sdir: Path, key: str, note: str, comment_id: str,
     from . import actions, review
 
     cfg = for_stream(cfg, sdir)
-    state = load(sdir / "review_state.json", {})
+    state = jsonstate.read(sdir / "review_state.json", {})
     st = state[key]
     row = actions.describe(cfg, sdir)[key]
     short = row["short"]
@@ -484,14 +480,14 @@ def publish_retake(cfg: dict, sdir: Path, key: str, entry: dict) -> None:
     from . import actions, notify, review
 
     cfg = for_stream(cfg, sdir)
-    st = load(sdir / "review_state.json", {})[key]
+    st = jsonstate.read(sdir / "review_state.json", {})[key]
     short = f"{sdir.name}/{key.split('_')[0]}"
     done, note, unsupported = entry["applied"], entry["comment"], entry.get("unsupported", "")
     summary = entry.get("summary") or "; ".join(done)
     gazu = review.connect(cfg["review"])
     before = st.get("revision")
     review.publish(sdir, cfg)
-    st = load(sdir / "review_state.json", {})[key]
+    st = jsonstate.read(sdir / "review_state.json", {})[key]
     text = (f"{review.NOTE_PREFIX} Retake applied: {summary}\n"
             + "\n".join(f"- {d}" for d in done)
             + (f"\nNot done: {unsupported}" if unsupported else "") + f"\nNote: {note}")
@@ -499,8 +495,8 @@ def publish_retake(cfg: dict, sdir: Path, key: str, entry: dict) -> None:
     actions._comment(gazu, actions.Item(sdir, key, st),
                      None if st.get("revision") != before else "wfa", text)
     for k in entry.get("videos", []):
-        if k != key and k in load(sdir / "review_state.json", {}):
-            actions._comment(gazu, actions.Item(sdir, k, load(sdir / "review_state.json", {})[k]),
+        if k != key and k in jsonstate.read(sdir / "review_state.json", {}):
+            actions._comment(gazu, actions.Item(sdir, k, jsonstate.read(sdir / "review_state.json", {})[k]),
                              None, f"{review.NOTE_PREFIX} Re-cut because {short} was trimmed "
                                    f"(retake: {note[:200]})")
     review.sync(sdir, cfg, keys=[key], quiet=True)
@@ -518,7 +514,7 @@ def publish_retake(cfg: dict, sdir: Path, key: str, entry: dict) -> None:
 def unpublished(cfg: dict) -> list[tuple[Path, str, dict]]:
     """Retakes applied while Kitsu or Discord was down, not yet published."""
     return [(d, key, h) for d in review_dirs(cfg)
-            for key, hs in load(d / "retakes.json", {}).items()
+            for key, hs in jsonstate.read(d / "retakes.json", {}).items()
             for h in hs if h.get("publish") == "pending"]
 
 
@@ -575,7 +571,7 @@ def run(cfg: dict, stream: str | None = None, item: str | None = None,
         if comment is None:
             if sync:
                 review.sync(it.stream_dir, root, keys=[it.key], quiet=True)
-            r = load(it.stream_dir / "review.json", {}).get(it.key, {})
+            r = jsonstate.read(it.stream_dir / "review.json", {}).get(it.key, {})
             if not r.get("comment"):
                 raise ClipperError(f"{it.ref} has no retake note; pass --comment to try one")
             comment, cid = r["comment"], note_id(r)
