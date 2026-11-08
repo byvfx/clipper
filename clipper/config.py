@@ -65,7 +65,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "weekly": "weekly",       # `clipper weekly` issues: <saturday>/01_cover.jpg ... issue.json
         "voices": "voices",       # enrolled voices per show: <show>.json (`clipper speakers --enroll`)
         "faces": "faces",         # known faces, every show: known.json (`clipper faces --enroll`) + models/
-        "streamers": "research_notes/streamers.json",  # people and their channels (`clipper story`)
+        "streamers": "studio/research_notes/streamers.json",  # people and their channels (`clipper story`)
         "people": "people.json",  # one record per person (`clipper people`); folds in streamers.json and the cast library
     },
     "modal": {

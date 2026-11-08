@@ -76,7 +76,7 @@ Story dossiers need the swarm's keys plus Modal (as for `clipper
 archive`): the videos it picks are transcribed there, on `[story] gpu` (L4). Kick VODs are
 downloaded here at their smallest variant (`[archive] kick_format`) for their audio; YouTube audio
 uses the archive's cookies retry. People and their channels come from [`clipper people`](People) (`people.json`, with
-`research_notes/streamers.json`, `[story] people` and the cast library folded in). `story cut` renders
+`studio/research_notes/streamers.json`, `[story] people` and the cast library folded in). `story cut` renders
 with `[receipts]`'s fonts (Impact and Arial Bold, as receipts need) and reads our own streams'
 source videos from `paths.streams`, so it runs on a machine that sees the share; with several
 shows, set `[story] show` or pass `clipper --show <key>` to `story plan`.

@@ -14,7 +14,7 @@ Everything in channels is confirmed: typed by hand or from a hand-kept list, nev
 model (a channel the swarm finds waits for approval, #138 part 3).
 
 [paths] people (people.json) is the record. load() also folds in what the older lists know, so
-nothing has to move at once: research_notes/streamers.json ([paths] streamers: streamers and
+nothing has to move at once: studio/research_notes/streamers.json ([paths] streamers: streamers and
 uploads_only), [story] people and the cast library's folders ([thumbnail] photos: aliases,
 channels, the folder as `cast`). Entries are one person when any of their names match (names():
 the name, the words in its brackets, the slug and the aliases, compared by investigate's

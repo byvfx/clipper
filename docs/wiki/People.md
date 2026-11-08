@@ -10,7 +10,7 @@ the fly, who said what, the Obsidian vault).
 `people.json` (`[paths] people`, gitignored) is the record. Until everyone is in it, `clipper
 people` also folds in the older lists, so nothing has to move at once:
 
-- `research_notes/streamers.json` (`[paths] streamers`): its `streamers` and `uploads_only`
+- `studio/research_notes/streamers.json` (`[paths] streamers`): its `streamers` and `uploads_only`
 - `[story] people` in clipper.toml
 - the cast library's folders (`[thumbnail] photos`): their aliases and channels, and the folder
   itself as the person's `cast`

@@ -15,7 +15,7 @@ item, index.sqlite, as `clipper archive` keeps them) plus its own files: brief.j
 swarm.json (the trail), triage.json, moments.json, dossier.json and dossier.md.
 
 The steps, each skipped when done (--from reruns one and everything after it):
-1. Brief (code, no model): the people named in it, from research_notes/streamers.json
+1. Brief (code, no model): the people named in it, from studio/research_notes/streamers.json
    ([paths] streamers) and [story] people, matched by name, nickname or slug; their channels
    seed the swarm (YouTube, Kick, Odysee; Rumble and Twitch are context only). --person adds
    one the brief doesn't name. The window is --since/--before, else the last [story] days.

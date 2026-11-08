@@ -96,7 +96,7 @@ What makes narration over stream footage sound pasted on, and what to do instead
 Prototype: render the same cut twice, **flat** (hard cuts, voice on top, stream muted under it)
 vs **natural** (1-5), and compare.
 
-## Prototype, 2026-11-04 (reports/8bitguy-explainer/)
+## Prototype, 2026-11-04 (8bitguy-explainer/, beside this file)
 
 `8bitguy_flat.mp4` and `8bitguy_natural.mp4`: the same 58.8 s vertical edit (13 shots, chud `watch`
 layout; Murray's two shots use his player full height because Chud's cam is off then), two mixes.
@@ -121,7 +121,7 @@ eleven_v4. Built by `build_prototype.py` (scratch, not a clipper stage yet).
   transcript time lands 13.7 minutes off, so `clipper run` must not cut this stream until fetch
   is fixed. Also: Kick's open GOPs drop frames after an input seek, so cut with an output-side seek.
 
-## In DaVinci Resolve, 2026-11-04 (reports/8bitguy-explainer/resolve/)
+## In DaVinci Resolve, 2026-11-04 (8bitguy-explainer/resolve/)
 
 Resolve Studio 21.1.1 on the laptop, driven by samuelgursky/davinci-resolve-mcp (registered for this
 project) or straight through Resolve's Python API. The project **"8-Bit Guy explainer"** holds timeline
