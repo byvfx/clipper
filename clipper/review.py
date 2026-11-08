@@ -662,10 +662,12 @@ def make_playlists(gazu, stream_dir: Path, proj: dict, ep: dict, state: dict) ->
             print(f"playlist Compilation: {comp['topic']} ({len(entries)} segments)")
 
 
-def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = True,
-            only: list[str] | None = None) -> None:
+def publish(stream_dir: Path, cfg: dict, force: bool = False,
+            only: list[str] | None = None) -> list[str]:
     """only: publish just these kinds of [review] include (e.g. re-cut Shorts without
-    sending re-cut segments back for review too)."""
+    sending re-cut segments back for review too). Returns the keys that got a new revision
+    in Kitsu; their Discord cards are the caller's business (notify.publish_and_post), so
+    this module never imports Discord."""
     cfg = for_stream(cfg, stream_dir)
     rc = cfg["review"]
     todo = items(stream_dir, [k for k in rc["include"] if not only or k in only], cfg)
@@ -684,9 +686,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
           f"({project_name(cfg)} / {ep_name})")
     if cfg["thumbnail"]["kitsu"]:
         attach_thumbnails(stream_dir, cfg, gazu, keys=[it["key"] for it in todo] if only else None)
-    if notify and published and cfg["discord"]["enabled"]:
-        from . import notify as discord_notify
-        discord_notify.post(stream_dir, cfg, keys=published)
+    return list(published)
 
 
 def attach_thumbnails(stream_dir: Path, cfg: dict, gazu=None, keys: list[str] | None = None) -> int:

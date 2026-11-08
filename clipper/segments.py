@@ -21,6 +21,7 @@ from .config import for_stream
 from .errors import ClipperError
 from .llm import Claude, preflight
 from .prompts import Prompts
+from .states import is_preshow
 from .timefmt import hms
 from .transcript import load_words, snap, transcript_lines
 
@@ -135,7 +136,7 @@ def compilations(data: dict, cfg: dict, claude: Claude, prompts: Prompts) -> lis
 def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     from . import preshow
 
-    if preshow.is_preshow(stream_dir):  # one whole-video segment, no split
+    if is_preshow(stream_dir):  # one whole-video segment, no split
         return preshow.write_segments(stream_dir, cfg, force=force)
     cfg = for_stream(cfg, stream_dir)
     seg_cfg = cfg["segments"]

@@ -541,16 +541,15 @@ def cmd_retake(cfg: dict, args: argparse.Namespace) -> None:
 
 
 def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
-    from . import actions, review
+    from . import actions, notify, review
 
     if args.action in ("publish", "sync", "notify"):
         d = stream_dir(cfg, args.stream)
         if args.action == "publish":
-            review.publish(d, cfg, force=args.force, notify=not args.no_notify, only=args.only)
+            notify.publish_and_post(d, cfg, force=args.force, only=args.only, post_cards=not args.no_notify)
         elif args.action == "sync":
             review.sync(d, cfg)
         else:
-            from . import notify
             notify.post(d, cfg, keys=args.items, force=args.force)
         return
     if args.action == "status":
@@ -835,14 +834,14 @@ def cmd_warroom(cfg: dict, args: argparse.Namespace) -> None:
 
 
 def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
-    from . import alerts
+    from . import alerts, digest
 
     if args.what == "test":
         alerts.send(cfg, "test", "Test from `clipper alert test`: clipper's DMs reach you.")
         print(f"queued in {alerts.outbox(cfg)}; the bot DMs it within a minute "
               f"(not during quiet hours {cfg['notify']['quiet_hours'] or 'none'})")
     else:
-        text = alerts.digest(cfg)
+        text = digest.text(cfg)
         print(text)
         if args.send:
             alerts.send(cfg, "digest", text, key=f"digest-now:{time.time():.0f}")

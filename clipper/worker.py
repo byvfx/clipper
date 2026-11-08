@@ -36,9 +36,10 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import jsonstate, preshow, stages
+from . import jsonstate, stages
 from .config import for_stream, show_args, show_of_channel
 from .errors import ClipperError
+from .states import PRESHOW_PREFIX, is_preshow
 
 log = logging.getLogger("clipper.worker")
 
@@ -223,7 +224,7 @@ class Run:
 def default_stages(cfg: dict, stream_dir: Path) -> list[str]:
     """A pre-show (one whole video, no chat) skips signals, scoring and Shorts. With the
     fast lane, a scored stream also gets the clips twins of cut, meta, thumbs, review."""
-    if preshow.is_preshow(stream_dir):
+    if is_preshow(stream_dir):
         return for_stream(cfg, stream_dir)["preshow"]["stages"]
     wanted = list(cfg["worker"]["stages"])
     if cfg["worker"]["fast_lane"] and "score" in wanted:
@@ -375,7 +376,7 @@ def pending(cfg: dict) -> list[Path]:
             continue  # recorded only: add a [shows.<key>] profile for the channel to clip it
         ready.append(d)
     # Grabbed pre-shows: meta.json is written once the download is complete.
-    ready += [m.parent for m in sorted(root.glob(f"{preshow.PREFIX}*/meta.json"))]
+    ready += [m.parent for m in sorted(root.glob(f"{PRESHOW_PREFIX}*/meta.json"))]
     out = []
     for d in ready:
         run = read_json(d / "run.json")

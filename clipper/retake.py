@@ -490,7 +490,7 @@ def publish_retake(cfg: dict, sdir: Path, key: str, entry: dict) -> None:
     summary = entry.get("summary") or "; ".join(done)
     gazu = review.connect(cfg["review"])
     before = st.get("revision")
-    review.publish(sdir, cfg, notify=False)
+    review.publish(sdir, cfg)
     st = load(sdir / "review_state.json", {})[key]
     text = (f"{review.NOTE_PREFIX} Retake applied: {summary}\n"
             + "\n".join(f"- {d}" for d in done)

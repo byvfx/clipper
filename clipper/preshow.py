@@ -38,13 +38,13 @@ from zoneinfo import ZoneInfo
 
 from . import alerts, jsonstate, media, ytdl
 from .config import for_show, for_stream
+from .states import PRESHOW_PREFIX as PREFIX
 
 log = logging.getLogger("clipper.preshow")
 
 FEED = "https://www.youtube.com/feeds/videos.xml?channel_id={}"
 NS = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015",
       "media": "http://search.yahoo.com/mrss/"}
-PREFIX = "yt-"
 
 SCHEMA = {
     "type": "object",
@@ -67,14 +67,6 @@ SCHEMA_WINDOW = {
     "required": SCHEMA["required"] + ["start_s", "end_s"],
 }
 WINDOW_PAD_S = 1.0   # keep this much room around the model's bounds
-
-
-def is_preshow(stream_dir: Path) -> bool:
-    try:
-        meta = jsonstate.load(stream_dir / "meta.json")
-    except (OSError, ValueError):
-        return False
-    return meta.get("kind") == "preshow"
 
 
 def watched(cfg: dict) -> list[tuple[str, dict]]:

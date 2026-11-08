@@ -380,10 +380,11 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
 
 def make_picks(stream_dir: Path, cfg: dict, ids: list[str], notify: bool = True) -> None:
     """Cut, draft, cover and render the new picks, then publish them for review."""
-    from . import cut, meta, review, shorts, thumbs
+    from . import cut, meta, shorts, thumbs
+    from . import notify as discord_notify
 
     cut.cut_picks(stream_dir, cfg, ids=ids)
     meta.run(stream_dir, cfg, missing=True)
     thumbs.run(stream_dir, cfg, ids=ids, missing=True)
     shorts.run(stream_dir, cfg, ids=ids)
-    review.publish(stream_dir, cfg, notify=notify, only=["picks", "shorts"])
+    discord_notify.publish_and_post(stream_dir, cfg, only=["picks", "shorts"], post_cards=notify)
