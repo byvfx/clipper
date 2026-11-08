@@ -48,7 +48,9 @@ EXIT_SYNC = 3                     # packages missing: the bootstrap script syncs
 ROLES = {"worker": "worker: transcribe, score, cut, Shorts, covers (`clipper worker`)",
          "serve": "serve: the war room, hourly uploads, pre-shows, retakes, daily jobs (`clipper serve`, one machine only)",
          "bot": "bot: Discord review cards, buttons and DMs (`clipper bot`, one machine only)",
-         "recorder": "recorder: records the Kick shows live (Docker on the NAS)"}
+         "recorder": "recorder: records the Kick shows live (Docker on the NAS)",
+         "control": "control: a dev/control station; runs nothing unattended (`clipper services`, deploys, "
+                    "review, one-off commands)"}
 BACKENDS = {"whisperx": "WhisperX on this machine's NVIDIA GPU",
             "mlx": "mlx-whisper on this Mac's Apple GPU",
             "modal": "WhisperX on a Modal cloud GPU (any machine; ~$0.34 per 8 h stream)"}
@@ -185,7 +187,8 @@ def say(text: str = "") -> None:
 # ---------- state ----------
 
 def state_path(cfg: dict) -> Path:
-    return _root(cfg)["_path"].parent / STATE
+    """Beside this machine's clipper.local.toml: never on the share a joined config lives on."""
+    return config.local_path(_root(cfg)["_path"]).parent / STATE
 
 
 def load_state(cfg: dict) -> dict:
@@ -203,9 +206,16 @@ def save_state(cfg: dict, st: dict) -> None:
 
 def doctor_role(roles: list[str]) -> str:
     """`clipper doctor --role` for these setup roles."""
-    mapped = {"worker": "gpu", "serve": "serve", "bot": "bot", "recorder": "nas"}
+    mapped = {"worker": "gpu", "serve": "serve", "bot": "bot", "recorder": "nas", "control": "control"}
     picked = {mapped[r] for r in roles if r != "recorder"}  # the recorder isn't installed here
+    if len(picked) > 1:
+        picked.discard("control")  # the service roles check more than control does
     return picked.pop() if len(picked) == 1 else "all" if picked else "nas"
+
+
+def control_only(roles: list[str]) -> bool:
+    """Nothing runs here unattended: control, with the recorder (on the NAS) at most."""
+    return "control" in roles and set(roles) <= {"control", "recorder"}
 
 
 # ---------- TOML, edited in place (comments kept) ----------
@@ -422,9 +432,21 @@ def step_mode(cfg: dict, st: dict, ask: Ask) -> None:
         say(f"Wrote a starter {target.name} (only what differs from the defaults; clipper.example.toml "
             "lists every setting). The next steps fill in this machine's part.")
     else:
-        say("Copy the main machine's clipper.toml here (it is gitignored, so it isn't in the code).")
+        say("The main machine's clipper.toml: on the share it's used where it is, a copy elsewhere is copied "
+            "here (it's gitignored, so it isn't in the code).")
         src = config_file(ask.text("from", "Path to the main machine's clipper.toml (a share or a copy; "
-                                   "you can drag the file in)", check=config_file_ok))
+                                   "you can drag the file in)", check=config_file_ok)).resolve()
+        on_share = not src.is_relative_to(Path.home().resolve())  # /Volumes/..., \\nas\..., a mapped drive
+        if ask.yes("in_place", "Use it where it is, so this machine shares that one config? (No copies it "
+                   "here; a copy doesn't see later changes, and its relative paths point into this folder)",
+                   on_share):
+            local = target.parent / config.LOCAL_CONFIG
+            say(f"CLIPPER_CONFIG = {src}: saved in {set_user_env('CLIPPER_CONFIG', str(src))}")
+            say(f"CLIPPER_LOCAL_CONFIG = {local}: saved in {set_user_env('CLIPPER_LOCAL_CONFIG', str(local))}")
+            say("This machine's own settings stay in that local file, not on the share.")
+            if target.exists():
+                say(f"{target} is no longer read; delete it when you like.")
+            return
         shutil.copyfile(src, target)
         say(f"Copied {src} -> {target}")
         secrets = src.parent / "secrets"
@@ -480,6 +502,8 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
     roles = st.get("roles") or ["worker"]
 
     def streams_ok(v: str) -> str | None:
+        if v == "-" and control_only(roles):
+            return None
         p = user_path(v)
         if str(p).startswith("~"):
             return f"can't find the home folder in {p} (a path from your home folder starts with ~/)"
@@ -495,15 +519,23 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
             return f"can't write to {p}: {e}"
         return None
 
-    if st.get("mode") == "join":
+    if control_only(roles):
+        say("A control station only needs the streams folder (the NAS share) for commands on a "
+            "stream; - skips it for now.")
+    elif st.get("mode") == "join":
         say("Every machine must see the same streams folder (the NAS share, or a mapped drive).")
     else:
         say("Where recordings and everything made from them go (~20-30 GB per stream).")
     current = str(cfg["paths"]["streams"])
+    if control_only(roles) and not user_path(current).exists():
+        current = "-"
     streams = ask.text("streams", "Streams folder", current, check=streams_ok)
-    p = user_path(streams)
-    p = p if p.is_absolute() else _root(cfg)["_dir"] / p
-    set_local(cfg, "paths", "streams", str(p), str(shared["paths"]["streams"]))
+    if streams == "-" and control_only(roles):
+        say("No streams folder here; `clipper setup --step machine` adds one later.")
+    else:
+        p = user_path(streams)
+        p = p if p.is_absolute() else _root(cfg)["_dir"] / p
+        set_local(cfg, "paths", "streams", str(p), str(shared["paths"]["streams"]))
 
     if st.get("mode") == "new":
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -522,8 +554,16 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
     if not shutil.which("ffmpeg"):
         raise ClipperError("ffmpeg isn't on PATH: run deploy/bootstrap (or winget install Gyan.FFmpeg / "
                          "brew install ffmpeg), open a new terminal, then clipper setup --step machine")
-    if roles == ["recorder"]:
-        return
+    if control_only(roles) and cfg["serve"]["hub"] and not (cfg["serve"]["url"] or "").strip():
+        say("serve runs on the hub, so the war room is at its tailnet address (" + wiki.page("Phone-access") + ").")
+
+        def serve_ok(v: str) -> str | None:
+            return None if not v or re.match(r"https?://", v) else "a URL, e.g. https://clipper.<tailnet>.ts.net/"
+        u = ask.text("serve_url", "War room address (Enter skips)", "", serve_ok).strip()
+        if u:
+            set_local(cfg, "serve", "url", u.rstrip("/") + "/", shared["serve"]["url"])
+    if roles == ["recorder"] or control_only(roles):
+        return  # nothing encodes here
     hw = hardware()
     codec = cfg["cut"]["clip_codec"]
     if doctor.encoder_works(codec)[0]:
@@ -614,6 +654,9 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
     from .doctor import llm_providers
     from .llm import PROVIDERS, claude_model, provider_key
 
+    if control_only(roles):
+        say("A control station runs no stages and uses Kitsu in the browser, so these are optional:")
+        say("Enter skips each. Add them later (`clipper setup --step keys`) to run a stage here.")
     if claude_model(cfg):
         ensure_env_key(cfg, ask, "ANTHROPIC_API_KEY", "the model calls (score, segments, titles, covers)",
                        "console.anthropic.com -> API keys")
@@ -641,7 +684,7 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
     have_host = cfg["review"]["host"] and "<" not in cfg["review"]["host"]
     ensure_env_key(cfg, ask, cfg["review"]["token_env"], "a Kitsu bot token",
                    "Kitsu -> Bots -> New bot (Supervisor) -> copy its token", check=bool(have_host))
-    if cfg["transcribe"]["backend"] == "modal":
+    if cfg["transcribe"]["backend"] == "modal" and not control_only(roles):
         if (Path.home() / ".modal.toml").exists() and not user_env("MODAL_TOKEN_ID"):
             say("Modal: token in ~/.modal.toml")
         else:
@@ -649,7 +692,7 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
                 ensure_env_key(cfg, ask, name, "transcription on Modal",
                                "modal.com -> Settings -> API Tokens -> New token", check=False)
             say("The Modal app is deployed with `clipper transcribe --deploy` (several minutes, once).")
-    if "bot" in roles or cfg["discord"]["enabled"]:  # enabled: the worker posts review cards too
+    if "bot" in roles or (cfg["discord"]["enabled"] and not control_only(roles)):  # the worker posts cards too
         path: Path = cfg["paths"]["discord_token"]
         good, msg = check_key("discord", cfg) if (user_env(cfg["discord"]["token_env"]) or path.exists()) \
             else (False, "")
@@ -686,6 +729,9 @@ def step_check(cfg: dict, st: dict, ask: Ask, offline: bool = False) -> int:
         if "bot" in roles:
             say("  bot, unattended:    " + (r"deploy\discord\bot-task.ps1 -Install" if win
                                             else "clipper bot (in a terminal or launchd for now)"))
+        if control_only(roles):
+            say("  control: clipper services status (the hub's containers over ssh), "
+                "bash deploy/hub/deploy.sh to ship main, the war room in a browser")
         say("  What setup doesn't do yet (Discord ids, YouTube sign-in, adding a show): " + wiki.page("Install"))
     return code
 
@@ -708,7 +754,7 @@ def checks_for(cfg: dict, st: dict, step: str) -> list:
                  + (" installed" if installed(e) else " not installed"),
                  "" if installed(e) else f"uv sync {sync_args(st)}") for e in st.get("extras", [])]
     if step == "machine":
-        return doctor.collect(doctor.check_config, cfg) + doctor.collect(doctor.check_ffmpeg, cfg, role)
+        return doctor.collect(doctor.check_config, cfg, role) + doctor.collect(doctor.check_ffmpeg, cfg, role)
     if step == "keys":  # check_gpu: CUDA, or the Modal token
         return (doctor.collect(doctor.check_gpu, cfg) if "worker" in roles else []) \
             + doctor.collect(doctor.check_keys, cfg, role)

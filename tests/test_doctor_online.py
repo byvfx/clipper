@@ -33,3 +33,17 @@ def test_userspace_tailnet_is_checked_at_the_proxy_target(defaults, monkeypatch)
     (status, area, what, _), = doctor.collect(doctor.check_tailnet, cfg, False)
     assert (status, area) == ("OK", "warroom") and "userspace" not in what and "proxies to" in what
     assert status == "OK" and asked == [f"http://127.0.0.1:{cfg['warroom']['port']}/manifest.webmanifest"]
+
+
+def test_control_checks_the_hub_and_war_room_not_discord_or_modal(defaults, monkeypatch):
+    called = []
+    for name in dir(doctor):
+        if name.startswith("online_") or name == "check_llm_online":
+            monkeypatch.setattr(doctor, name, lambda *a, _n=name, **k: called.append(_n))
+    cfg = {**defaults, "discord": {**defaults["discord"], "enabled": True}}
+    doctor.check_online(cfg, "control")
+    assert {"online_hub", "online_serve", "online_kitsu", "online_anthropic"} <= set(called)
+    assert not {"online_discord", "online_modal", "online_nas_cut", "online_youtube"} & set(called)
+    called.clear()
+    doctor.check_online(cfg, "all")
+    assert "online_discord" in called and "online_modal" in called and "online_hub" not in called

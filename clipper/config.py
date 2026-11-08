@@ -1059,9 +1059,10 @@ LOCAL_CONFIG = "clipper.local.toml"
 
 
 def local_path(cfg_path: str | Path | None = None) -> Path:
-    """This machine's clipper.local.toml: $CLIPPER_LOCAL_CONFIG, else beside the config file."""
-    if os.environ.get("CLIPPER_LOCAL_CONFIG"):
-        return Path(os.environ["CLIPPER_LOCAL_CONFIG"])
+    """This machine's clipper.local.toml: $CLIPPER_LOCAL_CONFIG (or the user's saved one, as for
+    CLIPPER_CONFIG), else beside the config file."""
+    if os.environ.get("CLIPPER_LOCAL_CONFIG") or user_env("CLIPPER_LOCAL_CONFIG"):
+        return Path(os.environ.get("CLIPPER_LOCAL_CONFIG") or user_env("CLIPPER_LOCAL_CONFIG"))
     return find(cfg_path).resolve().parent / LOCAL_CONFIG
 
 

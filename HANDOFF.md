@@ -119,6 +119,13 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   `schedule.json` (files stored relative to streams/), secrets/, logs/, faces/, voices/, news/, weekly/,
   archive/, layouts/, rumble/, people.json, fonts/ (Impact etc. for the containers). The laptop's old
   copies are in C:\clipper\backups\laptop-state-2026-11-05\.
+- **Mac `lofn`** (Apple Silicon, joined 2026-11-07 as setup's new `control` role, PR #166): a dev/control
+  station that runs nothing unattended. Clone `~/clipper`; `CLIPPER_CONFIG=/Volumes/docker/clipper/clipper.toml`
+  and `CLIPPER_LOCAL_CONFIG=~/clipper/clipper.local.toml` in `~/.zshrc` (the share must be mounted in
+  Finder); local file sets `[paths] streams` (the share) and `[serve] url` = the tailnet war room. ssh
+  alias `nas` in `~/.ssh/config`: user **`Brandon`** (capital B; lowercase is refused), key
+  `~/.ssh/id_ed25519`. `clipper doctor --role control` clean (no Anthropic key or Kitsu token by
+  choice); `clipper services status` reaches the hub. Homebrew ffmpeg there has no libass.
 - **NAS** (192.168.0.155): recorder container (`deploy/record`, redeployed 2026-10-30 15:09 at 1e4f724,
   watching kinocasinogaming + donflurgundy + chudlogic since 2026-11-04 09:55), Kitsu :8090, the streams share, photos share, cut container.
 - **Shows:** kino and c404 live through review → schedule; `chud` (ChudLogic, Kick `chudlogic`; user
@@ -172,6 +179,10 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
+- Bootstrap fixes from setting up the Mac, both open 11-07: PR #165 (setup path prompts take `~/`,
+  quotes, a dragged-in file; Copilot's 3 comments handled) and PR #166 stacked on it (`control` role;
+  join uses a config on the share in place via CLIPPER_CONFIG / CLIPPER_LOCAL_CONFIG; keys optional
+  for control; doctor `online_hub`). Merge #165 first; #166 waits for Copilot's review.
 - The DSP story video is in Kitsu for review (Kino Casino / "2026-11-04 story-dsp-credit-score-590",
   Discord card posted, user's go 11-04): "DSP Says the 590 Credit Score Letter Is Fake", 3:14.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
@@ -247,13 +258,14 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The user signed in again 11-02 16:57 (In production), so the token shouldn't lapse.
 
 ## Open work
-**Chud's face cut off in Shorts (user 11-07, PR #164 `shorts-face-focus`):** his cam is 1.49:1, the
-slot keeps 62% of it (38% in `cam`) and he sits at the right (face centre 0.62-0.69 of the box), so the
-middle crop clipped him. A panel's `focus = "face"` now centres the crop on the faces.json face in its
-box per scene. After the merge and hub deploy: put `focus = "face"` on both Chud cam panels in
-clipper.toml (backup first; the containers' old code can't parse the string before the deploy), then
-`clipper shorts kick-136479997` re-renders v01_t07 (scheduled, not uploaded), v02, v03. The four from
-kick-136292920 are uploaded private for 11-08 and keep the bad crop unless deleted and re-uploaded.
+**Bootstrap follow-up (11-07):** `deploy/bootstrap.sh` installs Homebrew `ffmpeg`, which has no
+`subtitles` (libass) filter, so a Mac worker fails Short captions; `ffmpeg-full` has it but is
+keg-only (not on PATH). Pick one: install `ffmpeg-full` and point clipper at it, or document it.
+`deploy/hub/deploy.sh` from `lofn` needs `deploy/hub/env.local` (it overwrites the NAS `.env`); the
+11-07 deploy copied the code and rebuilt by hand, keeping the NAS `.env`.
+**Chud's old-crop Shorts (11-07):** `focus = "face"` is live on both Chud cam panels (PR #164, see the
+log); kick-136479997's v01_t07, v02, v03 were re-rendered on the hub. The four from kick-136292920 are
+uploaded private for 11-08 with the old crop: they stay that way unless deleted and re-uploaded.
 **Story (#84) + swarm (#109), user 11-03: three PRs.** 1) `clipper/swarm.py` (library: planner →
 Haiku workers in rounds → merged findings, trail `swarm.json`; tools YouTube search/channel, Kick,
 Odysee, Reddit, web, archive, our streams; `kick.list_videos`; `llm.Budget` now shared with

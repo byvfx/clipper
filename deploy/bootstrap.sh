@@ -59,7 +59,18 @@ case ":$LOGIN_PATH:" in
 esac
 
 export CLIPPER_BOOTSTRAP=1
+# A joined config used in place: setup saves CLIPPER_CONFIG / CLIPPER_LOCAL_CONFIG in the shell
+# profile, which this shell predates; pick them up before each (re)start of setup.
+saved_env() {
+  local f
+  for f in "$HOME/.zshrc" "$HOME/.bashrc"; do
+    if [ -f "$f" ]; then
+      eval "$(grep -E '^export CLIPPER_(LOCAL_)?CONFIG=' "$f" || true)"
+    fi
+  done
+}
 for _ in 1 2 3; do
+  saved_env
   code=0
   .venv/bin/clipper setup "$@" || code=$?
   [ "$code" -eq 3 ] || exit "$code"
