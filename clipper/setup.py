@@ -57,6 +57,49 @@ EXTRA_MODULE = {"gpu": "whisperx", "mac": "mlx_whisper", "modal": "modal", "disc
 
 # ---------- questions ----------
 
+def _expand(v: str) -> Path:
+    try:
+        return Path(v).expanduser()
+    except RuntimeError:          # ~name for a user that doesn't exist: left as typed
+        return Path(v)
+
+
+def user_path(raw: str) -> Path:
+    """A path as people type or paste it: `~` expanded, and the shell quoting that dragging a
+    file into the terminal (macOS/Linux) or the quotes that "Copy as path" (Windows) adds.
+    Of the readings that differ, the first that exists wins, so a literal apostrophe works too."""
+    v = raw.strip()
+    readings = []
+    if os.name != "nt" and any(c in v for c in "'\"\\"):
+        try:
+            words = shlex.split(v)
+        except ValueError:        # an unclosed quote: a literal apostrophe, most likely
+            words = []
+        if len(words) == 1:
+            readings.append(words[0])
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        readings.append(v[1:-1])
+    readings.append(v)
+    paths = [_expand(r) for r in readings]
+    return next((p for p in paths if p.exists()), paths[0])
+
+
+def config_file(raw: str) -> Path:
+    """The main machine's clipper.toml, given as the file or the folder holding it."""
+    p = user_path(raw)
+    return p / "clipper.toml" if p.is_dir() else p
+
+
+def config_file_ok(raw: str) -> str | None:
+    p = config_file(raw)
+    if p.is_file():
+        return None
+    if str(p).startswith("~"):
+        return f"can't find the home folder in {p} (a path from your home folder starts with ~/)"
+    if not p.is_absolute():
+        return f"no file at {p.resolve()} (a path from your home folder starts with ~/)"
+    return f"no file at {p}"
+
 class Ask:
     """Questions on the terminal, or answered from an answers file (no prompts) instead."""
 
@@ -380,8 +423,8 @@ def step_mode(cfg: dict, st: dict, ask: Ask) -> None:
             "lists every setting). The next steps fill in this machine's part.")
     else:
         say("Copy the main machine's clipper.toml here (it is gitignored, so it isn't in the code).")
-        src = Path(ask.text("from", "Path to the main machine's clipper.toml (a share or a copy)",
-                            check=lambda v: None if Path(v).is_file() else "no such file"))
+        src = config_file(ask.text("from", "Path to the main machine's clipper.toml (a share or a copy; "
+                                   "you can drag the file in)", check=config_file_ok))
         shutil.copyfile(src, target)
         say(f"Copied {src} -> {target}")
         secrets = src.parent / "secrets"
@@ -437,7 +480,9 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
     roles = st.get("roles") or ["worker"]
 
     def streams_ok(v: str) -> str | None:
-        p = Path(v).expanduser()
+        p = user_path(v)
+        if str(p).startswith("~"):
+            return f"can't find the home folder in {p} (a path from your home folder starts with ~/)"
         p = p if p.is_absolute() else _root(cfg)["_dir"] / p
         if not p.exists():
             if not p.parent.exists():
@@ -456,7 +501,7 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
         say("Where recordings and everything made from them go (~20-30 GB per stream).")
     current = str(cfg["paths"]["streams"])
     streams = ask.text("streams", "Streams folder", current, check=streams_ok)
-    p = Path(streams).expanduser()
+    p = user_path(streams)
     p = p if p.is_absolute() else _root(cfg)["_dir"] / p
     set_local(cfg, "paths", "streams", str(p), str(shared["paths"]["streams"]))
 
