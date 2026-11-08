@@ -70,3 +70,10 @@ def test_code_links_resolve():
             elif section and section not in _anchors(pages[name]):
                 bad.append(f"{path.name}: no heading #{section} in {name}")
     assert seen and not bad, "\n".join(bad)
+
+
+def test_page_addresses_name_the_wiki():
+    from clipper import wiki
+
+    assert wiki.page("Speakers") == "https://github.com/byvfx/clipper/wiki/Speakers"
+    assert wiki.page("War-room", "faces") == "https://github.com/byvfx/clipper/wiki/War-room#faces"

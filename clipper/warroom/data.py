@@ -12,7 +12,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from .. import actions, daemon, jsonstate, review, schedule, worker
-from ..config import _root, for_stream
+from ..config import base, for_stream
 from ..timefmt import age_s
 from .state import SYNC, TAILNET
 
@@ -103,7 +103,7 @@ def stream_info(cfg: dict, sdir: Path) -> dict:
 
 def shown_shows(cfg: dict) -> dict:
     """The [shows.<key>] tables the page lists: all but [warroom] hide_shows."""
-    root = _root(cfg)
+    root = base(cfg)
     hide = set(root["warroom"]["hide_shows"])
     return {k: s for k, s in root["shows"].items() if k not in hide}
 

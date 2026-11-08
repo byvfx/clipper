@@ -46,7 +46,7 @@ from typing import NamedTuple
 import requests
 
 from . import actions, alerts, daemon, news, preshow, retake, warroom
-from .config import _root
+from .config import base
 from .errors import ClipperError
 
 log = logging.getLogger("clipper.serve")
@@ -248,7 +248,7 @@ def run(cfg: dict, port: int | None = None) -> None:
     try:
         srv = warroom.server(cfg, port)
     except OSError as e:
-        raise ClipperError(f"war room: port {port or _root(cfg)['warroom']['port']} is busy ({e}); is "
+        raise ClipperError(f"war room: port {port or base(cfg)['warroom']['port']} is busy ({e}); is "
                            "`clipper warroom`, or a `clipper bot` from before the split, still serving it?") from None
     threading.Thread(target=srv.serve_forever, daemon=True, name="warroom").start()
     log.info(f"war room on {warroom.url(cfg, port, with_key=False)}")  # no token in the log
@@ -269,7 +269,7 @@ def run(cfg: dict, port: int | None = None) -> None:
 
 def url(cfg: dict) -> str:
     """[serve] url, else the war room on this machine. Always ends in /."""
-    root = _root(cfg)
+    root = base(cfg)
     u = (root["serve"]["url"] or "").strip() or f"http://127.0.0.1:{root['warroom']['port']}/"
     return u.rstrip("/") + "/"
 

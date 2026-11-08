@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 from .. import wiki
-from ..config import _root
+from ..config import base
 from ..errors import ClipperError
 from .state import token
 
@@ -35,7 +35,7 @@ def tailnet_status(cfg: dict) -> dict:
     out = {"installed": True, "state": st.get("BackendState", ""),
            "name": ((st.get("Self") or {}).get("DNSName") or "").rstrip("."), "served": "",
            "userspace": st.get("TUN") is False}
-    port = _root(cfg)["warroom"]["port"]
+    port = base(cfg)["warroom"]["port"]
     sv = json.loads(_ts("serve", "status", "--json").stdout or "{}")
     for hostport, web in (sv.get("Web") or {}).items():  # {"name:443": {"Handlers": {"/": {"Proxy": ...}}}}
         for path, h in (web.get("Handlers") or {}).items():
@@ -46,7 +46,7 @@ def tailnet_status(cfg: dict) -> dict:
 def tailnet(cfg: dict, action: str) -> None:
     """`clipper warroom --tailnet on|off|status`: put the war room on this machine's tailnet
     name over HTTPS (tailnet devices only; nothing on the LAN or the internet)."""
-    cfg = _root(cfg)
+    cfg = base(cfg)
     wc, tok_file = cfg["warroom"], Path(cfg["paths"]["warroom_token"])
     st = tailnet_status(cfg)
     if not st["installed"]:

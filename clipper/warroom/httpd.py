@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import ClassVar
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ..config import _root
+from ..config import base
 from ..errors import ClipperError
 from .cast import cast_get, cast_label, cast_mark, cast_run, cast_set
 from .covers import cover_get, cover_post
@@ -334,7 +334,7 @@ def make_handler(cfg: dict) -> type[Handler]:
                                         "streams_root": cfg["paths"]["streams"].resolve()})
 
 def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
-    cfg = _root(cfg)
+    cfg = base(cfg)
     cfg = {**cfg, "warroom": {**cfg["warroom"], "token": token(cfg)}}
     wc = cfg["warroom"]
     if wc["host"] not in ("127.0.0.1", "localhost", "::1") and not wc["token"]:
@@ -358,7 +358,7 @@ def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
     return ThreadingHTTPServer((wc["host"], port or wc["port"]), make_handler(cfg))
 
 def url(cfg: dict, port: int | None = None, with_key: bool = True) -> str:
-    wc, key = _root(cfg)["warroom"], token(cfg)
+    wc, key = base(cfg)["warroom"], token(cfg)
     host = "127.0.0.1" if wc["host"] in ("0.0.0.0", "::") else wc["host"]
     return f"http://{host}:{port or wc['port']}/" + (f"?key={key}" if key and with_key else "")
 
@@ -366,7 +366,7 @@ def run(cfg: dict, port: int | None = None, open_browser: bool = False) -> None:
     try:
         srv = server(cfg, port)
     except OSError as e:
-        raise ClipperError(f"war room: port {port or _root(cfg)['warroom']['port']} is busy ({e}); "
+        raise ClipperError(f"war room: port {port or base(cfg)['warroom']['port']} is busy ({e}); "
                          "clipper serve may already be serving it") from None
     url_ = url(cfg, port)
     print(f"war room on {url_}  (Ctrl+C to stop)", flush=True)

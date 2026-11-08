@@ -1202,8 +1202,13 @@ def stream_channel(sdir: Path) -> str:
     return channel
 
 
-def _root(cfg: dict) -> dict:
+def base(cfg: dict) -> dict:
+    """The config as loaded, before any show or stream override (for_show and for_stream keep
+    it under "_root"): for settings that are about the whole install, [shows] included."""
     return cfg.get("_root") or cfg
+
+
+_root = base   # the old name; drop it after a release
 
 
 def for_show(cfg: dict, key: str, channel: str = "") -> dict:

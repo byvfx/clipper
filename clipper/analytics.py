@@ -26,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import jsonstate
-from .config import _root, for_stream
+from .config import base, for_stream
 from .states import split_key
 
 ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
@@ -73,7 +73,7 @@ def entry_details(cfg: dict, e: dict) -> dict:
 def run(cfg: dict, sign_in: bool = False) -> dict:
     from googleapiclient.discovery import build
 
-    cfg = _root(cfg)
+    cfg = base(cfg)
     if sign_in:
         credentials(cfg, sign_in=True)
         print("signed in with YouTube Analytics access")
@@ -135,7 +135,7 @@ def run(cfg: dict, sign_in: bool = False) -> dict:
 
 
 def show(cfg: dict) -> None:
-    data = load(_root(cfg))
+    data = load(base(cfg))
     rows = sorted(data.values(), key=lambda r: -((r.get("d7") or {}).get("views") or r.get("views", 0)))
     for r in rows:
         d7 = r.get("d7") or {}
@@ -150,7 +150,7 @@ def feedback_block(cfg: dict, show_key: str) -> str:
     """For Pass B: best and worst of this show's uploads by 7-day views, or "" when there
     are fewer than [analytics] min_videos with 7-day numbers."""
     ac = cfg["analytics"]
-    rows = [r for r in load(_root(cfg)).values()
+    rows = [r for r in load(base(cfg)).values()
             if r.get("d7") and not r.get("missing") and r.get("show") == show_key
             and r["kind"] in ("clip", "short")]
     if len(rows) < ac["min_videos"]:
@@ -237,7 +237,7 @@ def report(cfg: dict, month: str = "") -> dict:
     traffic sources and the daily numbers."""
     from zoneinfo import ZoneInfo
 
-    cfg = _root(cfg)
+    cfg = base(cfg)
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     month = month or datetime.now(tz).strftime("%Y-%m")
     prev = (datetime.strptime(month + "-01", "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m")
@@ -342,7 +342,7 @@ def write_report(cfg: dict, rep: dict) -> Path:
     """reports/analytics/<month>.md and .csv (every upload of the month, one row each)."""
     import csv
 
-    out = Path(_root(cfg)["_dir"]) / "reports" / "analytics"
+    out = Path(base(cfg)["_dir"]) / "reports" / "analytics"
     out.mkdir(parents=True, exist_ok=True)
     md = out / f"{rep['month']}.md"
     jsonstate.write_text(md, report_markdown(rep))

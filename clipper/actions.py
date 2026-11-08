@@ -35,7 +35,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import jsonstate, review
-from .config import _root, for_stream, stream_dir
+from .config import base, for_stream, stream_dir
 from .errors import ClipperError
 from .timefmt import length
 
@@ -370,8 +370,8 @@ def replan(cfg: dict, item: Item, action: str, row: dict, via=None) -> tuple[dic
 def clipper_cmd(cfg: dict) -> list[str]:
     """The command line for a background `clipper` run with this config."""
     cmd = [sys.executable, "-m", "clipper.cli"]
-    if _root(cfg).get("_file"):
-        cmd += ["--config", str(_root(cfg)["_file"])]
+    if base(cfg).get("_file"):
+        cmd += ["--config", str(base(cfg)["_file"])]
     return cmd
 
 

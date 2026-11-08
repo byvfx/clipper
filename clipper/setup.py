@@ -36,7 +36,7 @@ import tomllib
 from pathlib import Path
 
 from . import config, doctor, jsonstate, wiki
-from .config import _root
+from .config import base
 from .errors import ClipperError
 
 STEPS = ("mode", "roles", "machine", "keys", "check")
@@ -195,7 +195,7 @@ def say(text: str = "") -> None:
 
 def state_path(cfg: dict) -> Path:
     """Beside this machine's clipper.local.toml: never on the share a joined config lives on."""
-    return config.local_path(_root(cfg)["_path"]).parent / STATE
+    return config.local_path(base(cfg)["_path"]).parent / STATE
 
 
 def load_state(cfg: dict) -> dict:
@@ -282,7 +282,7 @@ def toml_set(path: Path, section: str, key: str, value) -> None:
 
 def set_local(cfg: dict, section: str, key: str, value, shared) -> None:
     """This machine's value in clipper.local.toml, only where it differs from clipper.toml's."""
-    path = config.local_path(_root(cfg)["_file"])
+    path = config.local_path(base(cfg)["_file"])
     if value == shared:
         if path.exists() and key in tomllib.loads(path.read_text(encoding="utf-8")).get(section, {}):
             toml_set(path, section, key, value)  # keep the file honest if it already had one
@@ -297,7 +297,7 @@ def set_local(cfg: dict, section: str, key: str, value, shared) -> None:
 
 def shared_cfg(cfg: dict) -> dict:
     """The config as clipper.toml and the defaults give it, without this machine's file."""
-    return config.load(_root(cfg)["_file"], use_local=False)
+    return config.load(base(cfg)["_file"], use_local=False)
 
 
 # ---------- keys in the user's environment ----------
@@ -424,7 +424,7 @@ title_format = "{SHOW} | {title}"   # titles start with the show's name
 """
 
 def step_mode(cfg: dict, st: dict, ask: Ask) -> None:
-    root = _root(cfg)
+    root = base(cfg)
     have = root["_file"] is not None
     say("join: add this machine to an install that already runs (same NAS, Kitsu, Discord, YouTube).")
     say("new:  start a new install of your own (its own config, services and channel).")
@@ -514,7 +514,7 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:  # noqa: C901
         p = user_path(v)
         if str(p).startswith("~"):
             return f"can't find the home folder in {p} (a path from your home folder starts with ~/)"
-        p = p if p.is_absolute() else _root(cfg)["_dir"] / p
+        p = p if p.is_absolute() else base(cfg)["_dir"] / p
         if not p.exists():
             if not p.parent.exists():
                 return f"{p} doesn't exist (mount the share first?)"
@@ -541,7 +541,7 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:  # noqa: C901
         say("No streams folder here; `clipper setup --step machine` adds one later.")
     else:
         p = user_path(streams)
-        p = p if p.is_absolute() else _root(cfg)["_dir"] / p
+        p = p if p.is_absolute() else base(cfg)["_dir"] / p
         set_local(cfg, "paths", "streams", str(p), str(shared["paths"]["streams"]))
 
     if st.get("mode") == "new":
@@ -555,7 +555,7 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:  # noqa: C901
                 return 'an IANA time zone, e.g. "America/Los_Angeles"'
         tz = ask.text("timezone", "Time zone uploads are scheduled in", cfg["schedule"]["timezone"], tz_ok)
         if tz != cfg["schedule"]["timezone"]:
-            toml_set(_root(cfg)["_file"], "schedule", "timezone", tz)
+            toml_set(base(cfg)["_file"], "schedule", "timezone", tz)
             say(f"-> clipper.toml: [schedule] timezone = {toml_value(tz)}")
 
     if not shutil.which("ffmpeg"):
@@ -685,9 +685,9 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:  # noqa: C901
         host = ask.text("kitsu", "Kitsu address (review happens there)", "", url_ok).rstrip("/")
         if host:
             host = host if host.endswith("/api") else host + "/api"
-            toml_set(_root(cfg)["_file"], "review", "host", host)
+            toml_set(base(cfg)["_file"], "review", "host", host)
             say(f"-> clipper.toml: [review] host = {toml_value(host)}")
-            cfg = config.load(_root(cfg)["_file"])
+            cfg = config.load(base(cfg)["_file"])
     have_host = cfg["review"]["host"] and "<" not in cfg["review"]["host"]
     ensure_env_key(cfg, ask, cfg["review"]["token_env"], "a Kitsu bot token",
                    "Kitsu -> Bots -> New bot (Supervisor) -> copy its token", check=bool(have_host))
@@ -752,7 +752,7 @@ def sync_args(st: dict) -> str:
 def checks_for(cfg: dict, st: dict, step: str) -> list:
     roles = st.get("roles") or ["worker"]
     role = doctor_role(roles)
-    root = _root(cfg)
+    root = base(cfg)
     if step == "mode":
         return [("OK", "config", str(root["_file"]), "") if root["_file"] else
                 ("FAIL", "config", f"no {root['_path'].name}", "clipper setup --step mode")]

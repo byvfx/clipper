@@ -6,7 +6,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from ..config import _root
+from ..config import base
 
 LOCK = threading.Lock()  # one Kitsu write / replan at a time
 
@@ -20,5 +20,5 @@ WHO = "war room"
 
 def token(cfg: dict) -> str:
     """[warroom] token, else the one `clipper warroom --tailnet on` keeps in [paths] warroom_token."""
-    wc, f = _root(cfg)["warroom"], Path(cfg["paths"]["warroom_token"])
+    wc, f = base(cfg)["warroom"], Path(cfg["paths"]["warroom_token"])
     return wc["token"] or (f.read_text(encoding="utf-8").strip() if f.is_file() else "")

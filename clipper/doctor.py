@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 
 from . import jsonstate, prompts, wiki
-from .config import _root, for_show
+from .config import base, for_show
 from .errors import ClipperError
 
 RESULTS: list[tuple[str, str, str, str]] = []  # (status, area, what, hint)
@@ -111,7 +111,7 @@ def check_command() -> None:
 
 
 def check_config(cfg: dict, role: str = "all") -> None:
-    root = _root(cfg)
+    root = base(cfg)
     if root.get("_file"):
         ok("config", f"{root['_file']}")
     else:
@@ -179,7 +179,7 @@ def prompt_files(cfg: dict) -> list[str]:
 def check_prompts(cfg: dict) -> None:
     """Each show can set its own prompt versions, so every show's files are checked."""
     d: Path = cfg["paths"]["prompts"]
-    shows = list(_root(cfg)["shows"])
+    shows = list(base(cfg)["shows"])
     users: dict[Path, list[str]] = {}  # file -> the configs that read it
     for key in ["", *shows]:
         c = for_show(cfg, key)
@@ -285,7 +285,7 @@ def check_fonts(cfg: dict) -> None:
 
 def diarizing(cfg: dict) -> list[str]:
     """Shows (or "base") with [transcribe] diarize on."""
-    return [k or "base" for k in ["", *_root(cfg)["shows"]] if for_show(cfg, k)["transcribe"]["diarize"]]
+    return [k or "base" for k in ["", *base(cfg)["shows"]] if for_show(cfg, k)["transcribe"]["diarize"]]
 
 
 def check_gpu(cfg: dict) -> None:
@@ -581,7 +581,7 @@ def check_narrate(cfg: dict) -> None:
     where = f"${nc['key_env']} or {nc['key_file']}"
     # a show can set its own narrator (and key), so each show's story settings are checked
     unread = []   # each with where its own key would be
-    for key in ["", *_root(cfg)["shows"]]:
+    for key in ["", *base(cfg)["shows"]]:
         c = for_show(cfg, key)
         sn = settings(c)
         if c["story"]["narrate"] and c["story"]["voice_id"] and not find_key(sn):
@@ -689,7 +689,7 @@ def online_kitsu(cfg: dict) -> None:
         from . import review
         gazu = review.connect(rc)
         ok("online", f"Kitsu answers at {rc['host']}")
-        for key in _root(cfg)["shows"] or [""]:
+        for key in base(cfg)["shows"] or [""]:
             name = review.project_name(for_show(cfg, key))
             if gazu.project.get_project_by_name(name):
                 ok("online", f"Kitsu production {name!r}")
@@ -804,7 +804,7 @@ def online_nas_cut(cfg: dict) -> None:
 
 def online_preshow_feeds(cfg: dict) -> None:
     from . import preshow
-    for key, sc in preshow.watched(_root(cfg)):
+    for key, sc in preshow.watched(base(cfg)):
         ch = sc["preshow"]["youtube_channel"]
         try:
             hits = [e for e in preshow.feed(ch, sc["kick"]["user_agent"])
@@ -818,7 +818,7 @@ def online_preshow_feeds(cfg: dict) -> None:
 def online_kick(cfg: dict) -> None:
     import requests
 
-    chans = [c for s in _root(cfg)["shows"].values() for c in s["channels"]] or [cfg["kick"]["channel"]]
+    chans = [c for s in base(cfg)["shows"].values() for c in s["channels"]] or [cfg["kick"]["channel"]]
     chans = [c for c in chans if c]
     if not chans:
         return
