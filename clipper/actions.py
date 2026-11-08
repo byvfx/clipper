@@ -288,14 +288,6 @@ def edit_meta(cfg: dict, item: Item, values: dict[str, str], who: str = "") -> d
     return refresh(cfg, item)
 
 
-def description(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"YouTube description": text}, who)
-
-
-def playlist(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"Playlist": text}, who)
-
-
 def thumbtext(cfg: dict, item: Item, text: str, who: str = "") -> dict:
     """The refresh's sync sees the new column value and re-renders the thumbnail."""
     cfg = for_stream(cfg, item.stream_dir)
