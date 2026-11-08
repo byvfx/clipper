@@ -45,3 +45,4 @@
 
 **💻 Working on clipper**
 - [Developing](Developing)
+- [How the processes talk](How-the-processes-talk)
