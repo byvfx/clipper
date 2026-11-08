@@ -681,7 +681,7 @@ def step_keys(cfg: dict, st: dict, ask: Ask) -> None:  # noqa: C901
     rc = cfg["review"]
     if not rc["host"] or "<" in rc["host"]:
         def url_ok(v: str) -> str | None:
-            return None if not v or re.match(r"https?://", v) else "a URL, e.g. http://192.168.0.155:8090"
+            return None if not v or re.match(r"https?://", v) else "a URL, e.g. http://nas.local:8090"
         host = ask.text("kitsu", "Kitsu address (review happens there)", "", url_ok).rstrip("/")
         if host:
             host = host if host.endswith("/api") else host + "/api"

@@ -144,6 +144,7 @@ class Renderer:
         self.W = self.H if square else self.S.canvas.width
         self.CW = self.W - 2 * self.MX
         self.F = Fonts(self.wc)
+        self.m1, self.m2 = weekly_style.masthead(self.wc) or ("", "")   # run() refused before this if unset
         self.faces = Faces(cfg, week, issue.get("faces"), here, palette=self.P, labels=issue.get("photo_labels"))
         self.faces.fonts = self.F
         self.ISSUE = f"ISSUE {int(issue.get('issue') or 1):02d}"
@@ -162,7 +163,7 @@ class Renderer:
         d = ImageDraw.Draw(p)
         fg, sub = (P.white, P.grey) if dark else (P.ink, P.muted)
         f = F.bahn(36)
-        m1, m2 = self.wc["masthead"]
+        m1, m2 = self.m1, self.m2
         d.text((MX, 38), m1, font=f, fill=P.red)
         d.text((MX + d.textlength(m1 + " ", font=f), 38), f"{m2} {self.T.weekly}", font=f, fill=fg)
         d.text((W - MX, 48), f"{section}  ·  {self.ISSUE}", font=F.bahn(22, "SemiBold"), fill=sub, anchor="ra")
@@ -317,7 +318,7 @@ class Renderer:
         """The red word sheared over the panel, the chrome word below it."""
         W, P, F, L = self.W, self.P, self.F, self.S.cover
         M, MAIN_TOP = L.margin, L.main_top
-        m1, m2 = self.wc["masthead"]
+        m1, m2 = self.m1, self.m2
         lol = Image.new("RGBA", (420, 70), (0, 0, 0, 0))
         ImageDraw.Draw(lol).text((4, 0), m1, font=F.black(56), fill=P.red, stroke_width=2, stroke_fill=P.white)
         page.alpha_composite(sheared(lol), (50, MAIN_TOP + 6))
@@ -498,7 +499,7 @@ class Renderer:
             x += w + random.choice([1, 2, 2, 3])
         d.text((bx + 10, by + 168), f"{T.barcode}{n:02d}  1", font=F.bold(15), fill=P.ink)
         d.text((bx + BW - 12, by + 52), f"{n:02d}>", font=F.bold(14), fill=P.ink, anchor="ra")
-        m1, m2 = self.wc["masthead"]
+        m1, m2 = self.m1, self.m2
         d.rectangle([bx, by + BH - 26, bx + BW, by + BH], fill=P.ink)
         d.text((bx + BW // 2, by + BH - 23), f"{m1} {m2}", font=F.bahn(19), fill=P.white, anchor="ma")
 
@@ -566,8 +567,9 @@ class Renderer:
         self.highlight_text(d, (MX - 2, y), [(t, h) for t, h in parts if t], hf)
         y += int(hf.size * 1.14)
         y = para(d, (MX, y), a["deck"], F.serif(27 if feature else 32), CW, P.ink, 34 if feature else 40) + 8
-        d.text((MX, y), self.wc["byline"], font=F.bahn(20, "SemiBold"), fill=P.red)
-        y += 40
+        if self.wc["byline"]:
+            d.text((MX, y), self.wc["byline"], font=F.bahn(20, "SemiBold"), fill=P.red)
+            y += 40
         colw = (CW - 40) // 2
         bf, lh = (F.bahn(22, "Regular"), 28) if feature else (F.bahn(25, "Regular"), 34)
         end1 = para(d, (MX, y), a["col1"], bf, colw, P.ink, lh)

@@ -1,4 +1,5 @@
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -310,3 +311,20 @@ def test_a_loose_key_in_the_toml_is_a_warning_not_a_crash(tmp_path):
     path.write_text("[shows]\nfoo = 1\n", encoding="utf-8")
     with pytest.raises(ClipperError, match=r"\[shows\] holds"):
         config.load(path, use_local=False)
+
+
+# This install's own names (its shows, people, channels and addresses), which the product's
+# defaults, example and setup must not carry: a new install's come from its own clipper.toml.
+# Audit of 2026-11-08, item 13; extend the pattern when a new one slips in.
+INSTALL = re.compile(r"(?<![a-z])(kino|lolcow|andy|ppp|jer|jeremy|hambly|quartering|dspgaming|donflurgundy"
+                     r"|byvfx|UCt26)|192\.168\.", re.I)
+
+
+def test_defaults_example_and_setup_name_no_install():
+    hits = []
+    for f in ("clipper/config.py", "clipper.example.toml", "clipper/setup.py"):
+        for i, line in enumerate((ROOT / f).read_text(encoding="utf-8").splitlines(), 1):
+            m = INSTALL.search(line)
+            if m:
+                hits.append(f"{f}:{i} {m.group(0)!r}")
+    assert not hits, "this install's names in the product's files (they belong in clipper.toml): " + ", ".join(hits)
