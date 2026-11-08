@@ -82,7 +82,7 @@ class Recording:
         log.info("%s: resolving playback", self.st.stream_id)
         return pick_variant(master, url, self.st.max_height)
 
-    def _video(self) -> None:
+    def _video(self) -> None:  # noqa: C901
         media, fails, alerted, saved = None, 0, False, time.monotonic()
         began = _now()  # #77 M10: a stream that never sends a segment still counts as stalled
         resolved = time.monotonic()

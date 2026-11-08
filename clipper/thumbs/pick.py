@@ -256,7 +256,7 @@ def pick(x: dict, fr: list[dict], info: dict, tc: dict, claude: Claude, system: 
     clean, again, fallback, finish = STYLES["enquirer" if style == "enquirer" else "classic"]
     content, schema = request(x, fr, info, tc, style, feedback_text(retry, note))
     out, meta = None, {}
-    for attempt in range(2):
+    for _attempt in range(2):
         out, meta = claude.json_call(tc["model"], system, content, schema, tc["effort"],
                                      fallback=True)
         if out is None:

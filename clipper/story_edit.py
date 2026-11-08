@@ -472,7 +472,7 @@ def retire(sdir: Path, keep: str) -> None:
                 f.unlink()
 
 
-def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
+def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:  # noqa: C901
     from . import meta as meta_stage
     from . import review as review_stage
     from . import thumbs

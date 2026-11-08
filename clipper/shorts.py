@@ -682,7 +682,7 @@ def save_short(stream_dir: Path, state_path: Path, dst: Path, side: dict, clip_v
 
 # ---------- stage ----------
 
-def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str | None = None,
+def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str | None = None,  # noqa: C901
         force: bool = False, rescene: bool = False, check: bool = False) -> list[dict]:
     """rescene: label the scenes again for Shorts whose layout the model chose (re-renders
     the ones that come out different). check: print each Short's scenes, render nothing."""

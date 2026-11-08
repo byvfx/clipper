@@ -156,7 +156,7 @@ def _acquire_file(lock_path: Path, wait_s: float) -> tuple[str, float]:
                 # no lock, yet creating one is refused: maybe it just went, maybe the folder
                 # isn't writable. Back off, and past the deadline say which.
                 if time.monotonic() > deadline:
-                    raise denied
+                    raise denied from None
             except PermissionError:
                 pass
             if time.monotonic() > deadline:

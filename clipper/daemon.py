@@ -47,7 +47,7 @@ def single_instance(cfg: dict, name: str):
     (two bots would race to answer every button, two serves would upload twice)."""
     path = cfg["paths"]["streams"] / f".{name}.lock"
     path.parent.mkdir(parents=True, exist_ok=True)
-    f = open(path, "a+")  # noqa: SIM115 (held for the process's life)
+    f = open(path, "a+")  # held open for the process's life: it is the single-instance lock
     try:
         if os.name == "nt":
             import msvcrt

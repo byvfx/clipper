@@ -415,7 +415,7 @@ class LLM:
                                "and nothing else:\n" + json.dumps(schema))
         return {"type": "json_object"}
 
-    def _compat(self, model: str, messages: list[dict], effort: str, max_tokens: int,
+    def _compat(self, model: str, messages: list[dict], effort: str, max_tokens: int,  # noqa: C901
                 response_format: dict | None = None, length_ok: bool = False) -> tuple[dict, dict]:
         """One chat/completions request with retries. Returns (response JSON, meta); meta has
         "refusal" when the model refused. length_ok: running out of max_tokens isn't an error

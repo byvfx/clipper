@@ -351,7 +351,7 @@ def thumb_asset_id(st: dict) -> str:
     return st["id"]  # thumbs asset ids: s02, t20, comp-<topic>
 
 
-def apply(cfg: dict, sdir: Path, key: str, st: dict, p: dict, who: str) -> tuple[list[str], list[str]]:
+def apply(cfg: dict, sdir: Path, key: str, st: dict, p: dict, who: str) -> tuple[list[str], list[str]]:  # noqa: C901
     """Make the plan's edits. Returns (what changed, item keys whose video changed)."""
     from . import actions, shorts, thumbs
     from .meta import captions_only

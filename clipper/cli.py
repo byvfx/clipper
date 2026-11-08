@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import config, jsonstate
+from . import __version__, config, jsonstate
 from .config import stream_dir
 from .errors import ClipperError
 
@@ -778,7 +778,7 @@ def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
         ok = worker.run_stream(cfg, stream_dir(cfg, args.stream), config_path(args), stages,
                                force=args.force or bool(args.from_))
     except worker.Busy as e:
-        raise ClipperError(str(e))
+        raise ClipperError(str(e)) from e
     if not ok:
         raise SystemExit(1)
 
@@ -1639,6 +1639,7 @@ def add_setup(sub) -> None:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="clipper", epilog=command_list(),
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--version", action="version", version=f"clipper {__version__}")
     ap.add_argument("--config", help="path to clipper.toml (default: $CLIPPER_CONFIG or ./clipper.toml)")
     ap.add_argument("--show", help="use this [shows.<key>] profile (default: the stream's, by Kick channel)")
     sub = ap.add_subparsers(dest="cmd", required=True)

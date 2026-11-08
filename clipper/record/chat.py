@@ -25,14 +25,14 @@ log = logging.getLogger("clipper.record")
 DEFAULT_CHAT_WS = "wss://realtime.us-east-1.platform.kick.com/connection/websocket"
 
 
-def listen(rec: Recording) -> None:
+def listen(rec: Recording) -> None:  # noqa: C901
     """Until rec.stop_evt: connect, subscribe, append rows; reconnect with backoff."""
     from websockets.exceptions import WebSocketException
     from websockets.sync.client import connect
 
     st, http = rec.st, rec.chat_http
     backoff = 1
-    rows = open(rec.d / LIVE_CHAT, "a", encoding="utf-8")  # noqa: SIM115 (closed in finally)
+    rows = open(rec.d / LIVE_CHAT, "a", encoding="utf-8")  # closed in finally
     try:
         while not rec.stop_evt.is_set():
             span = None

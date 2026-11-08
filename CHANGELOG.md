@@ -1,0 +1,41 @@
+# Changelog
+
+Notable changes, newest first. The dated diary is `docs/log/<YYYY-MM>.md`; `HANDOFF.md` is the
+current state; the version is `clipper --version` (set in `clipper/__init__.py` and
+`pyproject.toml`, which a test keeps equal). Nothing has been released yet.
+
+## Unreleased (0.1.0)
+
+### 2026-11
+
+- 11-08: hand-over audit (`reports/code-audit-2026-11-08.md`) and its tier 0: the test suite green
+  on Windows and run by CI on Linux and Windows; ruff rules widened (import order, bugbear,
+  pyupgrade, blind excepts, stale noqa, McCabe over 15); `clipper --version`; stale docs retired;
+  tests filed by subject; this file.
+- 11-07: a Mac as a `control` role (`clipper setup`); Linux bootstrap installs the fonts; Shorts
+  panels can focus on a face.
+- 11-05: serve, the bot and the worker as containers on the NAS (`deploy/hub`), with the config
+  and all state on the NAS share; Claude Code in a container on the NAS; scoring prompt v7 with
+  `[scoring] gambling`; narrated story videos.
+- 11-04: `clipper story` plan and cut; `clipper people`; `clipper compare` and OpenRouter models;
+  ChudLogic as a show; YouTube cookies from a browser profile; the wiki as the docs.
+- 11-03: `clipper serve` split out of the bot; `clipper investigate` (#108) and the search swarm
+  (#109); the 11-03 audit's fixes (quiet failures, cost guards, scheduler consistency).
+- 11-02: cast library (`clipper cast`) and the `cast` worker stage; news watcher; weekly pages
+  in Discord.
+- 11-01: first X post (`clipper x`) and auto-posting; TikTok parked; faces on screen
+  (`clipper faces`).
+
+### 2026-10
+
+- 10-31: `clipper x` (X API).
+- 10-28 to 10-30: the maintainability audit: tests and CI, `ClipperError`, `jsonstate`
+  everywhere, the stages table, `clipper services`, the record and thumbs packages;
+  `clipper setup` phase 1; analytics; the cover editor.
+- 10-25 to 10-27: `clipper receipts`; speaker labels; cut on the NAS; the cost ledger
+  (`clipper costs`); the LLM layer.
+- 10-23 to 10-24: war room on the phone (Tailscale); Discord DMs; source links in descriptions;
+  `clipper weekly`; Modal monitoring.
+- 10-20 to 10-22: automatic uploads; Shorts with scene-cut layouts; the worker's fast lane;
+  TikTok drafts; hand picks (`clipper pick`).
+- 10-18 to 10-19: multi-show; pre-shows; Channel 404 News; the backlog push.

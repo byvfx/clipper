@@ -264,7 +264,7 @@ def waiting(cfg: dict, stream_dir: Path, lane: str | None = None) -> bool:
     return any(not run.done(s) for s in plan(cfg, stream_dir, lane=lane))
 
 
-def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
+def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,  # noqa: C901
                stages: list[str] | None = None, force: bool = False, lane: str | None = None,
                step_aside=None) -> bool:
     """Run the stages that aren't done yet. False when a stage failed (run.json has why).
@@ -422,7 +422,7 @@ def ready_text(cfg: dict, d: Path, what: str) -> str:
     return f"{show}{when}: {what}" + (f" ({n} items in Kitsu)" if n else "") + f", {d.name}"
 
 
-def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None:
+def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None:  # noqa: C901
     from . import alerts
 
     wc = cfg["worker"]
