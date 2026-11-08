@@ -237,3 +237,13 @@ def test_the_anthropic_key_from_a_file_when_the_env_has_none(tmp_path, monkeypat
     assert llm.LLM(defaults).client.api_key == "sk-ant-file"
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-env")
     assert llm.provider_key("anthropic", defaults["paths"]) == "sk-ant-env"
+
+
+def test_prices_match_the_longest_listed_prefix():
+    prices = {"claude-sonnet-5-5": [2.0, 10.0], "claude-sonnet-5-5-fast": [4.0, 20.0], "gpt-5": [1.0, 2.0]}
+    assert llm.price_of(prices, "claude-sonnet-5-5") == (2.0, 10.0)
+    assert llm.price_of(prices, "claude-sonnet-5-5-20260601") == (2.0, 10.0)
+    assert llm.price_of(prices, "claude-sonnet-5-5-fast-1") == (4.0, 20.0)
+    assert llm.price_of(prices, "openai:gpt-5-mini") == (1.0, 2.0)
+    assert llm.price_of(prices, "claude-opus-5-5") is None
+    assert llm.price_of({"openai:gpt-5-mini": [3.0, 4.0]}, "openai:gpt-5-mini-20260601") == (3.0, 4.0)

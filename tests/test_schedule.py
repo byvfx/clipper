@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -264,3 +264,32 @@ def test_release_window(defaults, tmp_path):
     assert schedule.release_window(defaults, tmp_path, {**meta, "kind": "preshow"}) == (started, None)
     defaults["schedule"]["stale_days"] = 2
     assert schedule.release_window(defaults, tmp_path, meta)[1] == earliest + timedelta(days=2)
+
+
+def test_a_pinned_item_is_never_stale():
+    """An explicit Publish at is a decision; once passed it takes the next slot, it isn't dropped."""
+    gone = datetime(2026, 11, 1, tzinfo=UTC)
+    it = {"expires": gone, "override_text": ""}
+    assert not schedule.current(it, gone + timedelta(days=1))
+    assert schedule.current({**it, "override_text": "2026-11-01 20:00"}, gone + timedelta(days=1))
+
+
+def test_fill_leaves_slots_inside_the_upload_lead_time():
+    """Upload calls a slot within min_lead_minutes missed; the scheduler mustn't hand one out."""
+    now = datetime(2026, 11, 3, 11, 50, tzinfo=UTC)
+    sc = {"max_per_day": 10, "min_gap_minutes": 0}
+    slots = [(now + timedelta(minutes=10), "short"), (now + timedelta(hours=2), "short")]
+    placed = []
+
+    class P:
+        def __init__(self):
+            self.taken = []
+
+        def __contains__(self, key):
+            return False
+
+        def place(self, it, when, how):
+            placed.append(when)
+    item = {"earliest": now - timedelta(days=1), "key": "k"}
+    schedule.fill(P(), {"short": [item]}, slots, ("short",), sc, now + timedelta(minutes=20))
+    assert placed == [now + timedelta(hours=2)]

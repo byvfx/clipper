@@ -379,3 +379,13 @@ def test_only_the_whole_stream_grab_marks_the_stage_done(cfg, tmp_path):
     sdir.mkdir()
     cast.grab(cfg, sdir, "Jer", 4, needed=True, say=lambda *a: None)
     assert not (sdir / "cast_grab.json").exists()
+
+
+def test_an_enrolled_face_that_fits_someone_else_better_is_refused():
+    jer, don = np.array([1.0, 0.0]), np.array([0.0, 1.0])
+    face = ({"px": 100, "box": [0, 0, 1, 1]}, np.array([0.6, 0.8]))  # 0.6 like Jer, 0.8 like Don
+    known = {"Jer": [jer.tolist()], "Don": [don.tolist()]}
+    f, score, why = cast.choose_face([face], "Jer", known, match=0.5, other=0.65)
+    assert f is None and "looks like don" in why
+    f, score, why = cast.choose_face([face], "Don", known, match=0.5, other=0.65)
+    assert f is not None and score == 0.8
