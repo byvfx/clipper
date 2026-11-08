@@ -506,15 +506,16 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
             return f"can't write to {p}: {e}"
         return None
 
-    if st.get("mode") == "join":
+    if control_only(roles):
+        say("A control station only needs the streams folder (the NAS share) for commands on a "
+            "stream; - skips it for now.")
+    elif st.get("mode") == "join":
         say("Every machine must see the same streams folder (the NAS share, or a mapped drive).")
     else:
         say("Where recordings and everything made from them go (~20-30 GB per stream).")
     current = str(cfg["paths"]["streams"])
-    if control_only(roles):
-        say("A control station only needs it for commands on a stream (- skips it for now).")
-        if not user_path(current).exists():
-            current = "-"
+    if control_only(roles) and not user_path(current).exists():
+        current = "-"
     streams = ask.text("streams", "Streams folder", current, check=streams_ok)
     if streams == "-":
         say("No streams folder here; `clipper setup --step machine` adds one later.")
