@@ -230,7 +230,8 @@ def check_ffmpeg(cfg: dict, role: str) -> None:
         else:
             (warn if role == "control" else fail)(
                 "ffmpeg", f"no {f} filter: {why} won't work",
-                "install a full ffmpeg build (Windows: gyan.dev 'full'; macOS: brew install ffmpeg-full)")
+                "install a full ffmpeg build (Windows: gyan.dev 'full'; macOS: brew install ffmpeg-full, "
+                "then put \"$(brew --prefix ffmpeg-full)/bin\" first on PATH: it's keg-only)")
     if role in ("nas", "control"):
         return  # nothing encodes there
     codecs = {cfg["cut"]["clip_codec"], cfg["shorts"]["codec"] or cfg["cut"]["clip_codec"],

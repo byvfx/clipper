@@ -530,7 +530,7 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
     if control_only(roles) and not user_path(current).exists():
         current = "-"
     streams = ask.text("streams", "Streams folder", current, check=streams_ok)
-    if streams == "-":
+    if streams == "-" and control_only(roles):
         say("No streams folder here; `clipper setup --step machine` adds one later.")
     else:
         p = user_path(streams)

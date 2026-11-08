@@ -85,3 +85,19 @@ def test_join_copies_a_downloaded_config(tmp_path, monkeypatch):
     cfg = config.load(home / "clipper" / "clipper.toml", use_local=False)
     setup.step_mode(cfg, {"done": {}}, setup.Ask({"mode": "join", "from": "~/Downloads/clipper.toml"}))
     assert (home / "clipper" / "clipper.toml").read_text(encoding="utf-8") == "# shared\n"
+
+
+def test_a_dash_skips_the_streams_folder_only_on_a_control_station(tmp_path, monkeypatch):
+    """Copilot on #166: `-` is "skip" for control alone; elsewhere it's a folder name
+    like any other, saved like any other."""
+    from clipper import config
+
+    monkeypatch.setattr(setup.shutil, "which", lambda name: "/usr/bin/" + name)
+    saved = []
+    monkeypatch.setattr(setup, "set_local", lambda cfg, sec, key, v, shared: saved.append((sec, key, v)))
+    (tmp_path / "clipper.toml").write_text("", encoding="utf-8")  # paths resolve beside it
+    cfg = config.load(tmp_path / "clipper.toml", use_local=False)
+    setup.step_machine(cfg, {"roles": ["control"]}, setup.Ask({"streams": "-"}))
+    assert not [s for s in saved if s[:2] == ("paths", "streams")]
+    setup.step_machine(cfg, {"roles": ["recorder"]}, setup.Ask({"streams": "-"}))
+    assert ("paths", "streams", str(tmp_path / "-")) in saved
