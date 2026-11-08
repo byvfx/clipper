@@ -8,6 +8,11 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-08: the prompt files ship inside the package: `prompts/` moved to `clipper/prompts/`, beside the
+  loader (`clipper/prompts/__init__.py`, which finds them with `importlib.resources`), so a wheel and
+  the hub image carry them without a copy step. `[paths] prompts` is optional now (`""`, the default,
+  means none): a folder of your own, read before the packaged files; doctor warns when it names a
+  folder that isn't there. The Dockerfiles and `deploy/hub/deploy.sh` no longer copy `prompts/`.
 - 11-08: a heartbeat read that lands while its writer replaces the file no longer counts as "no
   heartbeat": `daemon.read_heartbeat` reads a missing or unreadable heartbeat again (three reads,
   0.3 s apart) when its folder exists. `clipper record status` (exit 3 while a show is recorded,

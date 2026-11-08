@@ -81,12 +81,12 @@ testpaths = ["tests"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# A source distribution carries the code, prompts and docs, not the studio's working files.
+# A source distribution carries the code (prompts included) and docs, not the studio's working files.
 [tool.hatch.build.targets.sdist]
 exclude = ["studio/"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["clipper"]   # defaults.toml ships with the code
+packages = ["clipper"]   # defaults.toml and clipper/prompts/*.md ship with the code
 
 # PyPI's Windows torch wheels are CPU-only; pull the CUDA 12.8 builds instead.
 [tool.uv.sources]

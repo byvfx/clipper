@@ -226,12 +226,15 @@ def test_find_falls_back_to_the_user_config(tmp_path, monkeypatch):
     assert config.find() == Path("env.toml")
 
 
-def test_prompts_fall_back_to_the_checkout(tmp_path):
+def test_the_prompts_path_is_optional(tmp_path):
+    """The empty default is None (the files ship with the code); a folder resolves beside the config."""
     path = tmp_path / "clipper.toml"
     path.write_text("")
-    assert config.load(path, use_local=False)["paths"]["prompts"] == config.CHECKOUT_PROMPTS
-    (tmp_path / "prompts").mkdir()
-    assert config.load(path, use_local=False)["paths"]["prompts"] == tmp_path / "prompts"
+    assert config.load(path, use_local=False)["paths"]["prompts"] is None
+    path.write_text('''[paths]
+prompts = "mine"
+''', encoding="utf-8")
+    assert config.load(path, use_local=False)["paths"]["prompts"] == tmp_path / "mine"
 
 
 def test_photos_is_beside_the_config_not_the_cwd(tmp_path, monkeypatch):

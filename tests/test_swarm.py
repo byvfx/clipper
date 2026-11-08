@@ -2,7 +2,6 @@ import re
 import time
 
 import pytest
-from conftest import ROOT
 
 from clipper import jsonstate, swarm
 from clipper.errors import ClipperError
@@ -11,7 +10,6 @@ from clipper.kick import RateLimiter
 
 @pytest.fixture
 def cfg(defaults):
-    defaults["paths"]["prompts"] = ROOT / "prompts"
     defaults["swarm"].update(workers=1, rates=dict.fromkeys(defaults["swarm"]["rates"], 0))  # no waits
     return defaults
 

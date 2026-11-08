@@ -27,7 +27,7 @@
    or with an env var `CLIPPER_<SECTION>_<KEY>`, e.g. `CLIPPER_CUT_CLIP_CODEC=libx264`, so one
    shared clipper.toml can stay identical.
 
-4. **Prompts and secrets**: copy `prompts/` (it comes with the repo) and `secrets/`
+4. **Secrets**: copy `secrets/`
    (`discord_token.txt`, `youtube_client_secret.json`, `youtube_token.json`; only the
    machine that uploads needs the YouTube files).
 

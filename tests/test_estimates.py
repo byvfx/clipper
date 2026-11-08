@@ -1,6 +1,5 @@
 """`--dry-run` on score, segments, meta and thumbs: what a run would send, priced, nothing called."""
 import pytest
-from conftest import ROOT
 
 from clipper import cli, jsonstate, llm, meta, segments
 from clipper.prompts import Prompts
@@ -16,7 +15,6 @@ def test_estimate_lines_price_by_the_table_and_say_when_a_model_is_not_in_it(def
 
 
 def test_thumbs_estimate_counts_frames_per_kind(defaults):
-    defaults["paths"]["prompts"] = ROOT / "prompts"
     tc = {**defaults["thumbnail"]}
     todo = [{"kind": "clip"}, {"kind": "segment"}]
     lines = stage.estimate(defaults, tc, todo, "classic")
@@ -26,7 +24,6 @@ def test_thumbs_estimate_counts_frames_per_kind(defaults):
 
 
 def test_meta_estimate_is_one_call_plus_chapters_minus_the_checkpoint(defaults, tmp_path):
-    defaults["paths"]["prompts"] = ROOT / "prompts"
     mc = defaults["meta"]
     prompts = Prompts(defaults)
     prompts.vars.update(show_name="The Show", min_chapters=mc["min_chapters"], max_chapters=mc["max_chapters"])

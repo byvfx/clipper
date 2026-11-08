@@ -35,10 +35,9 @@ cast = ["Don"]
 
 @pytest.fixture
 def cfg(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)  # paths resolve beside the config; prompts come from the repo
+    monkeypatch.chdir(tmp_path)  # paths resolve beside the config
     (tmp_path / "clipper.toml").write_text(TOML, encoding="utf-8")
     c = config.load(tmp_path / "clipper.toml", use_local=False)
-    c["paths"]["prompts"] = config.Path(__file__).resolve().parent.parent / "prompts"
     (tmp_path / "streams").mkdir()
     return c
 

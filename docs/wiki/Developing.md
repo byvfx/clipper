@@ -5,7 +5,7 @@ this page is the short version.
 
 ```
 clipper/              the package, one module per stage, cli.py wires them
-prompts/              versioned prompt files; the version in use is set in clipper.toml
+clipper/prompts/      the prompt files, versioned, shipped inside the package; the version in use is set in clipper.toml
 deploy/               bootstrap (new machine); compose stacks for the NAS hub (serve, bot, worker), the recorder, Kitsu and Claude; Windows task scripts for a GPU worker
 streams/<id>/         one folder per stream: source, transcript, cuts, metadata, review state
 clipper/defaults.toml every setting with its default, documented; config.py loads it (clipper.example.toml is a starter clipper.toml)
@@ -30,9 +30,10 @@ reports/              the audits and the monthly analytics reports
 - Model calls go through `clipper/llm.py`; the provider is the model string's prefix
   ([Model providers](Model-providers)).
 - Library code raises `ClipperError` (`clipper/errors.py`); only `cli.main` exits.
-- Prompts are `prompts/<name>_<version>.md`; `prompts.VERSIONS` names the config key that holds each
-  one's version (doctor and a test read it). Add a new version rather than editing one that
-  produced reviewed output.
+- Prompts are `clipper/prompts/<name>_<version>.md`, inside the package (`[paths] prompts` adds a
+  folder of your own, read first); `prompts.VERSIONS` names the config key that holds each one's
+  version (doctor and a test read it). Add a new version rather than editing one that produced
+  reviewed output.
 - Kitsu is the record for review decisions; the bot and the war room act through
   `clipper/actions.py`.
 - Stages print, services log. A `clipper <stage>` prints its progress (the worker and serve copy

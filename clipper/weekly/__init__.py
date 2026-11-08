@@ -20,8 +20,8 @@ Three idempotent steps in one folder:
 - draft: [weekly] model writes issue.json from week.json and prompts/weekly_<v>.md: every
   page's copy, who is pictured where (people the renderer can find a face for), the poll.
   Then the writer pass (write_articles): one call per article page (03 cover story, 04 and
-  05 features) with prompts/weekly_article_<v>.md and the owner's own piece as the example
-  (prompts/weekly_article_example.md) writes the deck, both columns and the pull quote to
+  05 features) with weekly_article_<v>.md and the owner's own piece as the example
+  (clipper/prompts/weekly_article_example.md) writes the deck, both columns and the pull quote to
   the word budget the page holds; a draft that would overflow is sent back once to be cut.
   Edit issue.json by hand and --render; a draft never overwrites an edited file unless
   --draft is given, and --write redoes only the articles named.

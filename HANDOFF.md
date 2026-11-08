@@ -10,7 +10,7 @@ Stream clipper for Kino Casino (Kick channel `kinocasinogaming`) and Channel 404
 channel **Lolcow Cinema**. Repo `C:\clipper`, remote https://github.com/byvfx/clipper (private).
 Python package `clipper/` (its `defaults.toml` is every setting, documented), config `clipper.toml` (gitignored;
 `clipper.example.toml` is a tracked starter),
-prompts `prompts/`. The user docs are the GitHub wiki, built from `docs/wiki/` (`.github/workflows/wiki.yml`
+prompts `clipper/prompts/`. The user docs are the GitHub wiki, built from `docs/wiki/` (`.github/workflows/wiki.yml`
 pushes it on every push to main; 2026-11-04); README.md and SETUP.md are short pointers; CLAUDE.md the conventions.
 Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds durable preferences.
 - Plan doc: https://claude.ai/code/artifact/a9bb9e38-ced0-4455-8d8e-18a78122f45f
@@ -384,7 +384,8 @@ metadata checkpoints honoured), per-stream costs on Costs, `clipper status` (fil
 <discord id>`, compose the one way to run serve and the bot (the Windows serve/bot task scripts removed,
 `deploy/worker` stays), product pages without this install's names; #182 `clipper/defaults.toml` as the one
 source of defaults (config.py 1,330 → 446 lines), `clipper.example.toml` a 58-line starter. Copilot had 1/2/5/4
-comments on #178-#181, all taken. Not done from the plan: prompts into the package (`importlib.resources`).
+comments on #178-#181, all taken. The last plan item followed the same day: the prompts moved into the package
+(`clipper/prompts/`, found with `importlib.resources`; `[paths] prompts` is now an optional folder of your own).
 The hub was deployed with all of it on 2026-11-08 13:14, right after chudlogic's stream ended (serve, bot and
 worker on the new image, heartbeats fresh, the image loads the 626 defaults). Found while waiting for that
 stream: one read of the recorder's heartbeat landed mid-replace and `clipper record status` said "no heartbeat"
@@ -438,12 +439,12 @@ list|grab|find|add|keep|drop|label|set` and the war room's **Cast** button (bot 
 Photos in `[thumbnail] photos/<Person>/` + cast.json (NAS photos share); sources: a stream's named faces,
 Wikimedia Commons, the person's YouTube/Kick channels, Brave image search (`$BRAVE_API_KEY`, not set yet;
 agencies blocked), a file or URL. Face-checked against known.json, duplicates skipped, 4:5, Haiku labels
-(prompts/cast_label_v1.md, ~$0.0002 a photo). `thumbs.photos()` takes a person's best kept photo (neutral
+(clipper/prompts/cast_label_v1.md, ~$0.0002 a photo). `thumbs.photos()` takes a person's best kept photo (neutral
 first), so covers and the weekly use them already. Tried into a scratch folder only: the real folder still
 has just Hasan Piker.jpg and luther morgan.jpg; Jer's YouTube thumbnails are designed graphics (flagged),
 streams are the better source for him, Andy/PPP need a non-costume stream. Commons spells "Candace Owens":
 add it as her alias. **Part two (merged 2026-11-02, PR #122 as 1b69a90, live):** covers pick a cast photo
-by label (prompts/thumbnail_enquirer_v6.md, `photo_label`/`teaser_photo_label` in thumbnails.json; the war
+by label (clipper/prompts/thumbnail_enquirer_v6.md, `photo_label`/`teaser_photo_label` in thumbnails.json; the war
 room's cover editor offers "Jer · angry"); the weekly v3 pictures people only talked about from a photo
 and picks the label (issue.json `photo_labels`); `{known_figures}` adds everyone with a kept photo plus
 aliases (`[cast] known_figures`). clipper.toml now `enquirer_prompt_version = "v6"` (backup
@@ -495,7 +496,7 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 ## Back up the taste layer (user, 2026-10-24)
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
 like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built).
-- **In git (push it):** `prompts/` (every version, never edit one that produced reviewed output),
+- **In git (push it):** `clipper/prompts/` (every version, never edit one that produced reviewed output),
   `clipper.example.toml`, `studio/` (mockups, research notes with `streamers.json`, the media reports), `reports/`, this file.
 - **Not in git, copy by hand or script** (all in the NAS folder since 2026-11-05): `clipper.toml` and the `backups/` folder (`clipper.before_*`,
   `schedule.before_*`; hand-edit backups go there now, not the repo root)

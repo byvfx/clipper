@@ -4,7 +4,7 @@
 # is never restarted by this.
 #
 # Run from the repo root:  bash deploy/hub/deploy.sh [service ...]
-#   No services = all of them. The image is rebuilt from this checkout (code + prompts).
+#   No services = all of them. The image is rebuilt from this checkout (the code, prompts included).
 #   HUB_SSH_HOST  ssh host alias (default: $RECORD_SSH_HOST, else nas)
 #   HUB_DIR       compose dir on the NAS, relative to the ssh user's home (default: clipper-hub)
 #   HUB_SUDO      prefix for docker commands if the ssh user needs it (e.g. "sudo")
@@ -36,7 +36,6 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/src"
 cp "$ROOT/pyproject.toml" "$ROOT/uv.lock" "$HERE/Dockerfile" "$TMP/src/"
 cp -r "$ROOT/clipper" "$TMP/src/clipper"
-cp -r "$ROOT/prompts" "$TMP/src/prompts"
 find "$TMP/src" -name __pycache__ -prune -exec rm -rf {} +
 cp "$HERE/compose.yaml" "$HERE/tailscale-serve.json" "$TMP/"
 cp "$ENV_LOCAL" "$TMP/.env"

@@ -1615,7 +1615,7 @@ def add_extras(sub) -> None:
     q.add_argument("--effort", default="", help="the candidate's effort instead of [scoring] effort_a/_b; "
                                                 "none = reasoning off (other providers)")
     q.add_argument("--prompt-version", default="",
-                   help="try another prompt version (prompts/score_a_<v>.md ...) on the stream's own windows")
+                   help="try another prompt version (clipper/prompts/score_a_<v>.md ...) on the stream's own windows")
     q.add_argument("--repeat", action="store_true",
                    help="allow the stream's own model and prompt: what a rerun alone changes")
     q.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
