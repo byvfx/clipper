@@ -187,7 +187,8 @@ def say(text: str = "") -> None:
 # ---------- state ----------
 
 def state_path(cfg: dict) -> Path:
-    return _root(cfg)["_path"].parent / STATE
+    """Beside this machine's clipper.local.toml: never on the share a joined config lives on."""
+    return config.local_path(_root(cfg)["_path"]).parent / STATE
 
 
 def load_state(cfg: dict) -> dict:
@@ -433,7 +434,18 @@ def step_mode(cfg: dict, st: dict, ask: Ask) -> None:
     else:
         say("Copy the main machine's clipper.toml here (it is gitignored, so it isn't in the code).")
         src = config_file(ask.text("from", "Path to the main machine's clipper.toml (a share or a copy; "
-                                   "you can drag the file in)", check=config_file_ok))
+                                   "you can drag the file in)", check=config_file_ok)).resolve()
+        on_share = not src.is_relative_to(Path.home().resolve())  # /Volumes/..., \\nas\..., a mapped drive
+        if ask.yes("in_place", "Use it where it is, so this machine shares that one config? (No copies it "
+                   "here; a copy doesn't see later changes, and its relative paths point into this folder)",
+                   on_share):
+            local = target.parent / config.LOCAL_CONFIG
+            say(f"CLIPPER_CONFIG = {src}: saved in {set_user_env('CLIPPER_CONFIG', str(src))}")
+            say(f"CLIPPER_LOCAL_CONFIG = {local}: saved in {set_user_env('CLIPPER_LOCAL_CONFIG', str(local))}")
+            say("This machine's own settings stay in that local file, not on the share.")
+            if target.exists():
+                say(f"{target} is no longer read; delete it when you like.")
+            return
         shutil.copyfile(src, target)
         say(f"Copied {src} -> {target}")
         secrets = src.parent / "secrets"
@@ -541,6 +553,14 @@ def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
     if not shutil.which("ffmpeg"):
         raise ClipperError("ffmpeg isn't on PATH: run deploy/bootstrap (or winget install Gyan.FFmpeg / "
                          "brew install ffmpeg), open a new terminal, then clipper setup --step machine")
+    if control_only(roles) and cfg["serve"]["hub"] and not (cfg["serve"]["url"] or "").strip():
+        say("serve runs on the hub, so the war room is at its tailnet address (" + wiki.page("Phone-access") + ").")
+
+        def serve_ok(v: str) -> str | None:
+            return None if not v or re.match(r"https?://", v) else "a URL, e.g. https://clipper.<tailnet>.ts.net/"
+        u = ask.text("serve_url", "War room address (Enter skips)", "", serve_ok).strip()
+        if u:
+            set_local(cfg, "serve", "url", u.rstrip("/") + "/", shared["serve"]["url"])
     if roles == ["recorder"] or control_only(roles):
         return  # nothing encodes here
     hw = hardware()

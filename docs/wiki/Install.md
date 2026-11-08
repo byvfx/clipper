@@ -25,9 +25,12 @@ else uv's installer and BtbN's ffmpeg build; Homebrew or apt on macOS/Linux), sy
 packages, adds a `clipper` command to `~/.local/bin` (on PATH; it runs this folder's
 `.venv`, so `clipper` works in any folder and new terminal), then runs `clipper setup`:
 
-1. **Join or start fresh.** Join copies the main machine's `clipper.toml` (and, if you like, the
-   `secrets/` beside it) from a path or the share (`~/Downloads/clipper.toml`, the folder that holds it, or
-   the file dragged into the terminal); new writes a short starter (only what differs from the defaults; clipper.example.toml lists every setting).
+1. **Join or start fresh.** Join takes the main machine's `clipper.toml` from the share or a path
+   (`~/Downloads/clipper.toml`, the folder that holds it, or the file dragged into the terminal).
+   On the share (the [hub](NAS-hub) setup) it is used in place: setup saves `CLIPPER_CONFIG`
+   pointing at it and `CLIPPER_LOCAL_CONFIG` pointing at this checkout's `clipper.local.toml`, so
+   every machine reads one config and this machine's own values stay off the share. A copy (and,
+   if you like, the `secrets/` beside it) is the other answer; new writes a short starter (only what differs from the defaults; clipper.example.toml lists every setting).
 2. **Roles.** Worker, serve, bot, recorder (the recorder is the NAS's Docker container; setup only
    points at `deploy/record/deploy.sh`), control (a dev/control station that runs nothing
    unattended: no extra packages, no encoder, no Modal or Discord token; the streams folder, the

@@ -728,10 +728,12 @@ def online_serve(cfg: dict, role: str) -> None:
         serve.health(cfg)
         ok("online", f"clipper serve answers at {serve.url(cfg)}")
     except Exception as e:  # noqa: BLE001
-        (fail if role == "bot" else warn)(
-            "online", f"clipper serve isn't answering at {serve.url(cfg)} ({e})",
-            r"start it: clipper serve, or deploy\serve\serve-task.ps1 -Install (set [serve] url when it "
-            "runs on another machine)")
+        hint = (r"start it: clipper serve, or deploy\serve\serve-task.ps1 -Install (set [serve] url when it "
+                "runs on another machine)")
+        if role == "control":
+            hint = ("set [serve] url to the hub's tailnet address: clipper setup --step machine ("
+                    + wiki.page("Phone-access") + ")")
+        (fail if role == "bot" else warn)("online", f"{e}", hint)
 
 
 def online_hub(cfg: dict) -> None:
