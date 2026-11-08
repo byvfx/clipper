@@ -42,7 +42,7 @@ flowchart TB
 [Roles and services](Roles-and-services)<br>
 [Configuration](Configuration)<br>
 [Pipeline](Pipeline)<br>
-[Review](Review) · [War room](War-room)<br>
+[Review](Review) · [Reviewing](Reviewing) · [War room](War-room)<br>
 [Scheduling and uploads](Scheduling-and-uploads)<br>
 [Costs](Costs)
 
@@ -51,6 +51,7 @@ flowchart TB
 
 ### 🛠️ Install
 [Install](Install) (`clipper setup`)<br>
+[Kitsu](Kitsu) · [Discord app](Discord-app) · [YouTube sign-in](YouTube-sign-in)<br>
 [Windows](Install-Windows) · [macOS](Install-macOS)<br>
 [Transcribe on Modal](Transcribe-on-Modal)<br>
 [NAS recorder](NAS-recorder)<br>

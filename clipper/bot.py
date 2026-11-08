@@ -19,8 +19,7 @@ and edits cards whose status, hold, pin, title or schedule changed outside Disco
 (clipper/alerts.py), and every few minutes it posts the stories `clipper news check`
 found. It logs to paths.bot_log as well as the console, only one bot runs per streams
 folder (a lock file), and it writes a heartbeat (clipper/daemon.py) that the war room's
-Health panel and `clipper services status` read. deploy/discord/bot-task.ps1 runs it at
-logon.
+Health panel and `clipper services status` read. deploy/hub runs it as a container.
 
 Everything that isn't Discord is `clipper serve` (clipper/serve.py): the war room, the
 hourly replan and upload, pre-show grabs, retakes and the daily jobs. The bot asks it over

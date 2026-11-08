@@ -1,7 +1,7 @@
-What we learned bringing up Lolcow Cinema (October 2026). A new channel is held back in
+What we learned bringing up a new channel (October 2026): it is held back in
 ways the API reports badly, so do these before the first big upload run.
 
-1. **Sign in**: `clipper upload --sign-in` once, on the machine that uploads. The token
+1. **Sign in** ([YouTube sign-in](YouTube-sign-in)): `clipper upload --sign-in` once, on the machine that uploads. The token
    lands in `secrets/youtube_token.json`. First set the Google Cloud project's OAuth app to
    **In production** (Google Auth Platform > Audience > Publish app; no verification
    needed, you click past the "unverified app" warning): while it is in **Testing**, Google
@@ -10,7 +10,7 @@ ways the API reports badly, so do these before the first big upload run.
 2. **Verify the channel** at https://www.youtube.com/verify (phone). Without it custom
    thumbnails are refused (403); videos still go up, and `clipper upload --thumbnails` sets
    the covers afterwards. Verification can take more than one round: if Studio later
-   refuses an upload, it may offer another verification link. Follow it. On Lolcow Cinema
+   refuses an upload, it may offer another verification link. Follow it. On our channel
    that second verification lifted the cap for Studio *and* the API: uploads went through
    again right away.
 3. **Expect a small daily upload cap.** `uploadLimitExceeded` ("The user has exceeded the

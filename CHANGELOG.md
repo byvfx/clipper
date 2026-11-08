@@ -8,6 +8,13 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-08: pages for what `clipper setup` can't do: Kitsu (with `deploy/kitsu/local.sh` for one
+  machine without ssh, and the bot and reviewer accounts), the Discord app and its ids, YouTube
+  sign-in, and Reviewing for the second person; `clipper review invite <discord user id>` puts a
+  reviewer on the bot's allowlist. One way to run each role unattended: compose (`deploy/hub`,
+  any Docker host) for serve, the bot and the worker, the Windows task for a GPU worker only; the
+  serve and bot task scripts are gone. The product pages no longer name this install's test
+  stream, NAS address or channel.
 - 11-08: `clipper status`: one screen with the services' and the recorder's heartbeats, the
   worker's streams, review counts, the next releases and the month's spend. `score`, `segments`,
   `meta` and `thumbs` print an estimate with `--dry-run` (the prompts they would send, four

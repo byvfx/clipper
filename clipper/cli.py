@@ -571,6 +571,11 @@ def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
     if args.action == "status":
         print("\n".join(actions.status_lines(actions.status(cfg, sync=args.sync))))
         return
+    if args.action == "invite":
+        ids, added = notify.invite(cfg, args.user_id)
+        print(f"{args.user_id} {'added' if added else 'was already there'}: [discord] allowed_user_ids = {ids}"
+              + ("; restart the bot (clipper services restart bot) for it to count" if added else ""))
+        return
     if args.action == "list":
         actions.print_rows(actions.list_items(cfg, args.stream, everything=args.all,
                                               sync=not args.no_sync))
@@ -1104,6 +1109,9 @@ def add_review(sub) -> None:
     r = rsub.add_parser("status", help="decision counts per stream, and what's scheduled")
     # Reads review.json unless asked: a sync writes it and can post to Kitsu, not for a status.
     r.add_argument("--sync", action="store_true", help="read Kitsu first")
+    r = rsub.add_parser("invite", help="let a Discord user review: their id goes on [discord] allowed_user_ids "
+                                       "in clipper.toml (then restart the bot)")
+    r.add_argument("user_id", help="their Discord user id (Developer Mode on, right-click the person, Copy User ID)")
     r = rsub.add_parser("list", help="items waiting for a decision, with Kitsu links and previews")
     r.add_argument("stream", nargs="?", help="only this stream")
     r.add_argument("--all", action="store_true", help="every item, decided or not")

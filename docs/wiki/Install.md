@@ -74,8 +74,11 @@ kitsu = "http://<nas>:8090"
 > deep inside `.venv`, and past 260 in total Python can't import them. The bootstrap refuses a
 > longer folder and doctor warns.
 
-Not in the walkthrough yet (the pages above, and #78 phases 2-4): creating the Discord app and its
-ids, YouTube sign-in, the first show, the Modal deploy, the unattended tasks.
+Not in the walkthrough (each has its page): [Kitsu](Kitsu) and its accounts, the
+[Discord app](Discord-app) and its ids, [YouTube sign-in](YouTube-sign-in), the first show
+([Adding a show](Adding-a-show)), the Modal deploy ([Transcribe on Modal](Transcribe-on-Modal)),
+the unattended services ([Roles and services](Roles-and-services#services)), and the second
+person's view ([Reviewing](Reviewing)).
 
 ## Requirements
 

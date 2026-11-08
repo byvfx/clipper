@@ -64,7 +64,7 @@ uvx ruff@0.17.3 check clipper tests
 
 Tests are offline and take about 25 s; new pure logic gets a test. CI runs both on every
 push, on Linux and Windows (`.github/workflows/check.yml`). The ruff rules are the defaults plus
-the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on the test stream `kick-131151926`
+the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on a short test stream
 first. Before merging a PR, wait for Copilot's automatic review and handle each comment.
 
 ## Editing these docs

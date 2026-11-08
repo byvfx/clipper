@@ -1,5 +1,5 @@
 > [!TIP]
-> Try anything risky on the test stream `kick-131151926` before a real one.
+> Try anything risky on a short test stream first: fetch any short VOD and run it end to end.
 
 ## Install a machine
 
