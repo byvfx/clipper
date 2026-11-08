@@ -55,8 +55,11 @@ The bot DMs you (`[notify]`, see [Review](Review)); logs are in `logs/` (`serve.
 
 ## Commands and flags
 
-`clipper -h` lists the commands by group; `clipper <command> -h` gives each one's flags. The
-same flag means the same thing everywhere: `--items s02,c03` picks items (the old `--ids`,
-`--keys`, `--item` and `--segments` still work), times are `H:MM:SS`, `H:MM` or seconds,
-`--limit N` caps a run, `--dry-run` changes nothing, and `--no-sync` skips the Kitsu read.
+`clipper -h` lists the commands by group; `clipper <command> -h` gives each one's flags, every
+one explained. A flag means the same thing wherever it appears: `--items s02,c03` picks items
+(the old `--ids`, `--keys`, `--item` and `--segments` still work), times are `H:MM:SS`, `H:MM`
+or seconds, `--dry-run` changes nothing and says what would happen, `--force` redoes what is
+already done, and `--no-sync` skips the Kitsu read. Two are command-specific: `--from` is a
+stage on `run` and `story run` but a time on `pick` and `preshow fetch`, and `--limit N` caps
+only `upload` and the `archive` and `investigate` commands.
 Flags for different jobs on one command (`upload --links` and `--next`, say) are refused together.

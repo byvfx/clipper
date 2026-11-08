@@ -8,6 +8,10 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-08: every flag and positional has help (`clipper <command> -h`; a test keeps it so), `run -h`
+  explains the fast lane's twin stages, the wiki stops calling `--limit` and `--from` universal,
+  and `clipper doctor` warns on `[youtube] auto_upload_minutes = 0` (serve) and on a bot machine
+  with `[discord] enabled = false`.
 - 11-08: the defaults and `clipper.example.toml` describe the product, not this install:
   `[receipts]` and `[weekly] masthead`/`byline` are empty until set (`clipper receipts` and
   `clipper weekly` refuse with the fix; `clipper doctor` warns), the example's show is

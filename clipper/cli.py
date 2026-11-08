@@ -29,6 +29,16 @@ def add_stream(p, optional: bool = False, help: str = STREAM_HELP) -> None:
     p.add_argument("stream", nargs="?" if optional else None, help=help)
 
 
+def add_subject(p, optional: bool = False) -> None:
+    p.add_argument("subject", nargs="?" if optional else None,
+                   help="the archive subject: the short name given to `clipper archive add`")
+
+
+def add_slug(p, optional: bool = False) -> None:
+    p.add_argument("slug", nargs="?" if optional else None,
+                   help="the story's slug, as `clipper story status` lists them")
+
+
 def add_items(p, help: str, old: tuple[str, ...] = (), many: bool = False) -> None:
     """The one flag that picks items. Spellings it replaced (--ids, --keys, ...) still work,
     unlisted: scripts, notes and an older NAS image may still pass them."""
@@ -905,9 +915,9 @@ def command_list() -> str:
 def add_pipeline(sub) -> None:
     """Pipeline: a stream from recording to review, in run order."""
     p = sub.add_parser("fetch", help="resolve a Kick VOD url, pull chat and video")
-    p.add_argument("url")
-    p.add_argument("--no-video", action="store_true")
-    p.add_argument("--no-chat", action="store_true")
+    p.add_argument("url", help="the Kick VOD url (kick.com/<channel>/videos/<id>)")
+    p.add_argument("--no-video", action="store_true", help="chat and meta only; no video download")
+    p.add_argument("--no-chat", action="store_true", help="video and meta only; no chat replay")
     p.set_defaults(fn=cmd_fetch)
 
     p = sub.add_parser("preshow", help="grab a show's pre-show from its YouTube channel, as one whole video")
@@ -918,7 +928,7 @@ def add_pipeline(sub) -> None:
     rsub.add_parser("list", help="recent pre-shows in the feeds, and which are grabbed")
     r = rsub.add_parser("fetch", help="grab one video by url, any age; --from/--to/--about: a one-off, "
                                       "one long segment out of that stretch")
-    r.add_argument("url")
+    r.add_argument("url", help="the YouTube video url, any age")
     r.add_argument("--from", dest="start", metavar="TIME", help="one-off: the stretch starts about here (1:30:00)")
     r.add_argument("--to", dest="end", metavar="TIME", help="one-off: ...and ends about here (default: the end)")
     r.add_argument("--about", default="", help="one-off: what the stretch is (the model finds the exact bounds)")
@@ -986,7 +996,7 @@ def add_pipeline(sub) -> None:
 
     p = sub.add_parser("thumbs", help="thumbnails: pick a frame, write the text -> <video>.jpg")
     add_stream(p)
-    add_items(p, "only these videos, e.g. t20,s02,comp-the-quartering", old=("--ids",))
+    add_items(p, "only these videos, e.g. t20,s02,comp-<topic>", old=("--ids",))
     p.add_argument("--force", action="store_true", help="pick again even if the video is unchanged")
     p.add_argument("--compose-only", action="store_true",
                    help="re-render from thumbnails.json (brand or hand edits), no model calls")
@@ -1034,12 +1044,24 @@ def add_pipeline(sub) -> None:
                    help="keep moments that overlap an existing pick")
     p.set_defaults(fn=cmd_pick)
 
-    p = sub.add_parser("run", help="run every pipeline stage not done yet: transcribe ... review publish")
-    p.add_argument("stream")
     from .stages import NAMES as STAGE_NAMES
-    p.add_argument("--only", help="just these stages, comma-separated: " + ", ".join(STAGE_NAMES))
+    p = sub.add_parser("run", help="run every pipeline stage not done yet: transcribe ... review publish",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="stages, in run order: " + ", ".join(STAGE_NAMES[:8]) + ",\n"
+                              + ", ".join(STAGE_NAMES[8:]) + ".\n"
+                              "clips, clips_meta, clips_thumbs and clips_review are the fast lane's early cut,\n"
+                              "metadata, covers and review publish of the picks, what the Shorts need first;\n"
+                              "cut, meta, thumbs and review are the same stages for the segments and\n"
+                              "compilations ([worker] fast_lane). --only and --from choose stages, not what\n"
+                              "they redo: a stage keeps the paid work it finds (drafts, covers, unchanged\n"
+                              "cuts). To redo covers or drafts run the stage itself:\n"
+                              "clipper thumbs STREAM --items IDS --force, clipper meta STREAM.")
+    add_stream(p)
+    p.add_argument("--only", metavar="STAGES", help="just these stages, comma-separated (the list below); "
+                                                    "done ones need --force")
     p.add_argument("--from", dest="from_", choices=STAGE_NAMES, metavar="STAGE",
-                   help="rerun from this stage on: " + ", ".join(STAGE_NAMES))
+                   help="run this stage and every one after it again, done or not "
+                        "(score, cut and clips get --force)")
     p.add_argument("--force", action="store_true", help="rerun stages even if done")
     p.set_defaults(fn=cmd_run)
 
@@ -1080,7 +1102,7 @@ def add_review(sub) -> None:
             ("thumbtext", "change the words on the YouTube thumbnail", "2-4 words"),
             ("description", "change the YouTube description (without its hashtag line)",
              "the new description (or --file)"),
-            ("hashtags", "change the hashtags closing the description", "#Kino #Casino (# optional)"),
+            ("hashtags", "change the hashtags closing the description", "#MyShow #Drama (# optional)"),
             ("tags", "change the YouTube tags", "comma-separated tags (about 500 chars in all)"),
             ("playlist", "change the YouTube playlist", "playlist name")]:
         r = rsub.add_parser(name, help=help_)
@@ -1209,7 +1231,8 @@ def add_services(sub) -> None:
     add_stream(r)
 
     p = sub.add_parser("services", help="status, stop or restart serve, the bot, the worker and the NAS recorder")
-    p.add_argument("action", nargs="?", choices=["status", "stop", "restart"], default="status")
+    p.add_argument("action", nargs="?", choices=["status", "stop", "restart"], default="status",
+                   help="status (default), stop or restart")
     p.add_argument("which", nargs="?", choices=["serve", "bot", "worker", "recorder", "all"],
                    help="default for status: everything; stop/restart need one (all = worker, serve "
                         "and bot; the recorder is only ever named)")
@@ -1237,7 +1260,7 @@ def add_services(sub) -> None:
     p.set_defaults(fn=cmd_warroom)
 
     p = sub.add_parser("alert", help="notifications (Discord DMs from the bot): test one, see the digest")
-    p.add_argument("what", choices=("test", "digest"))
+    p.add_argument("what", choices=("test", "digest"), help="test: DM yourself a test alert; digest: print today's")
     p.add_argument("--send", action="store_true", help="digest: DM it now too")
     p.set_defaults(fn=cmd_alert)
 
@@ -1262,7 +1285,9 @@ def add_extras(sub) -> None:
 
     p = sub.add_parser("receipts", help="old clips of the archive subject for a stream's stories, "
                                         "one video uploaded private (#48)")
-    p.add_argument("action", choices=["find", "list", "script", "cut", "upload"])
+    p.add_argument("action", choices=["find", "list", "script", "cut", "upload"],
+                   help="find: the stories and their receipts (a model call); list: what find found; "
+                        "script: the voice-over (a model call); cut: the video; upload: to YouTube, private")
     add_stream(p)
     add_items(p, "find: only these segments, e.g. s02,s05 (default: by topic/figure)", old=("--segments",))
     p.add_argument("--again", action="store_true", help="upload: a second copy even if one is up")
@@ -1272,10 +1297,10 @@ def add_extras(sub) -> None:
     rsub = p.add_subparsers(dest="action", required=True)
     p.set_defaults(fn=cmd_archive)
     r = rsub.add_parser("add", help="list a channel's long-form videos into a subject's catalog")
-    r.add_argument("subject", help="short name, e.g. jer")
+    r.add_argument("subject", help="a short name for the person, e.g. jane: their folder is paths.archive/<subject>")
     r.add_argument("url", nargs="+", help="YouTube channel/tab or Odysee channel url")
     r = rsub.add_parser("transcribe", help="transcribe catalog items not done yet, on Modal")
-    r.add_argument("subject")
+    add_subject(r)
     r.add_argument("--limit", type=int, help="at most this many items")
     r.add_argument("--oldest", action="store_true", help="oldest first (default newest first)")
     r.add_argument("--gpu", help="Modal GPU (default [archive] gpu)")
@@ -1283,31 +1308,32 @@ def add_extras(sub) -> None:
     r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
     r.add_argument("--diarize", action="store_true", help="speaker turns too (default [archive] diarize)")
     r = rsub.add_parser("status", help="items, hours transcribed, errors, cost, link checks")
-    r.add_argument("subject", nargs="?")
+    add_subject(r, optional=True)
     r = rsub.add_parser("check", help="are the source links still up? (no downloads, no cost)")
-    r.add_argument("subject")
+    add_subject(r)
     add_items(r, "just these items (default: not checked in [archive] link_recheck_days)",
               old=("--ids",), many=True)
     r.add_argument("--all", action="store_true", help="every item, however recently checked")
     r.add_argument("--limit", type=int, help="at most this many items")
     r = rsub.add_parser("links", help="items by link status (default: every link not alive)")
-    r.add_argument("subject")
-    r.add_argument("--status", choices=["dead", "restricted", "alive", "all"])
+    add_subject(r)
+    r.add_argument("--status", choices=["dead", "restricted", "alive", "all"],
+                   help="only links in this state (default: every one not alive)")
     r = rsub.add_parser("index", help="build the subject's keyword index (index.sqlite; no cost)")
-    r.add_argument("subject")
+    add_subject(r)
     r.add_argument("--rebuild", action="store_true", help="start the index over")
     r = rsub.add_parser("search", help="search the transcripts: hits with date, link at the moment")
-    r.add_argument("subject")
+    add_subject(r)
     r.add_argument("query", help='FTS5: costco dog | "costco dog" | costco OR walmart | coff*')
-    r.add_argument("--limit", type=int, default=20)
+    r.add_argument("--limit", type=int, default=20, help="hits shown (default 20)")
     r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
     r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
     r.add_argument("--by", choices=["rank", "date", "oldest"], default="rank",
                    help="best match (default), newest first, or oldest first")
     r.add_argument("--years", action="store_true", help="matching windows per year, not hits")
     r = rsub.add_parser("ask", help="plain question: a cheap model searches the index, picks the fits")
-    r.add_argument("subject")
-    r.add_argument("question", help="e.g. 'Jer saying he would never sell out to a sponsor'")
+    add_subject(r)
+    r.add_argument("question", help="e.g. 'the subject saying they would never take a sponsor'")
     r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
     r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
     r.add_argument("--limit", type=int, default=15, help="options shown")
@@ -1322,35 +1348,35 @@ def add_extras(sub) -> None:
         r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
 
     r = rsub.add_parser("facts", help="read items for checkable facts, quotes verified (cached per item)")
-    r.add_argument("subject")
+    add_subject(r)
     span(r)
     r.add_argument("--limit", type=int, help="at most this many items, newest first")
     r.add_argument("--new", action="store_true", help="only items newer than the newest one read")
     r.add_argument("--dry-run", action="store_true", help="say how many items and hours and the estimated cost")
     r = rsub.add_parser("leads", help="candidate threads in code, then the leads model writes them up")
-    r.add_argument("subject")
+    add_subject(r)
     r.add_argument("--about", help='narrow to a focus, e.g. "lawsuit" or a name')
     span(r)
     r.add_argument("--max", type=int, help="leads kept (default [investigate] max_leads)")
     r.add_argument("--confirm", action="store_true", help="then test each lead against more of the archive")
     r = rsub.add_parser("confirm", help="test the leads against more of the archive (archive ask)")
-    r.add_argument("subject")
+    add_subject(r)
     r.add_argument("--lead", help="just this lead, e.g. L03")
     r = rsub.add_parser("check", help="is anyone else on it? YouTube, web, Reddit, our streams, his own titles")
-    r.add_argument("subject")
+    add_subject(r)
     r.add_argument("--lead", help="just this lead, e.g. L03")
     r.add_argument("--trail", action="store_true", help="print the last check's searches and results")
     r = rsub.add_parser("list", help="the leads: kind, confidence, coverage, receipts")
-    r.add_argument("subject")
+    add_subject(r)
     r = rsub.add_parser("show", help="one lead's story and timeline with quotes and links")
-    r.add_argument("subject")
+    add_subject(r)
     r.add_argument("lead", help="e.g. L03")
     r = rsub.add_parser("post", help="post the kept leads to [investigate] discord_channel: a thread per "
                                      "leads run, edited in place after check or confirm")
-    r.add_argument("subject")
+    add_subject(r)
     r.add_argument("--new-thread", action="store_true", help="a fresh thread even if this run has one")
     r = rsub.add_parser("run", help="facts (--new unless --since) -> leads -> check; prints the total cost")
-    r.add_argument("subject")
+    add_subject(r)
     span(r)
     r.add_argument("--about", help="narrow the leads to a focus")
     r.add_argument("--max", type=int, help="leads kept")
@@ -1366,7 +1392,7 @@ def add_extras(sub) -> None:
         r.add_argument("--dry-run", action="store_true", help="stop after triage: the list and the Modal estimate")
 
     r = rsub.add_parser("new", help="start a story from a brief and run every step")
-    r.add_argument("brief", help='e.g. "Jer banned from Kick after the FDA call"')
+    r.add_argument("brief", help='e.g. "the streamer banned from Kick after the call"')
     r.add_argument("--slug", help="the story's name (default: from the brief's words)")
     r.add_argument("--days", type=int, help="the window: the last N days (default [story] days)")
     r.add_argument("--since", help="the window starts YYYY-MM-DD")
@@ -1377,26 +1403,26 @@ def add_extras(sub) -> None:
                    "(YouTube, Kick VOD, Odysee; repeatable)")
     limits(r)
     r = rsub.add_parser("run", help="the steps not done yet (swarm, triage, ingest, find, dossier)")
-    r.add_argument("slug")
+    add_slug(r)
     r.add_argument("--from", dest="start", choices=["swarm", "triage", "ingest", "find", "dossier"],
                    help="rerun this step and every one after it")
     limits(r)
     r = rsub.add_parser("add", help="videos to transcribe whatever triage says; then run --from triage")
-    r.add_argument("slug")
-    r.add_argument("urls", nargs="+")
+    add_slug(r)
+    r.add_argument("urls", nargs="+", help="video urls to transcribe")
     r = rsub.add_parser("status", help="each story's steps, transcripts, moments and model cost")
-    r.add_argument("slug", nargs="?")
+    add_slug(r, optional=True)
     r = rsub.add_parser("trail", help="the swarm's task tree: who found what, from which search")
-    r.add_argument("slug")
+    add_slug(r)
     r = rsub.add_parser("show", help="the dossier, re-rendered from dossier.json (keeps hand edits; no model call)")
-    r.add_argument("slug")
+    add_slug(r)
     r = rsub.add_parser("plan", help="the edit from the moments -> streams/story-<slug>/story.json (~$0.03; "
                                      "clipper --show <key> story plan ... picks the show)")
-    r.add_argument("slug")
+    add_slug(r)
     r.add_argument("--force", action="store_true", help="plan again (the old edit is kept as story.<time>.json)")
     r = rsub.add_parser("cut", help="render story.json, then meta, thumbs and the Kitsu card; "
                                     "approved, it goes out asap")
-    r.add_argument("slug")
+    add_slug(r)
     r.add_argument("--force", action="store_true", help="re-render every part and redo meta and thumbs")
     r.add_argument("--no-review", action="store_true", help="only the video: no meta, thumbs or Kitsu")
 
@@ -1411,11 +1437,11 @@ def add_extras(sub) -> None:
     r.add_argument("--style", type=float, help="0-1 style exaggeration")
     r.add_argument("--speed", type=float, help="0.7-1.2")
     r = rsub.add_parser("voice", help="take (video or audio) -> <take>.voiced.mp4/.mp3 in [narrate] voice_id")
-    r.add_argument("take")
+    r.add_argument("take", help="the take: a video or audio file")
     r.add_argument("--voice-id", help="override [narrate] voice_id")
     r.add_argument("-o", "--out", help="output path")
     r = rsub.add_parser("voices", help="list your voices and the shared library; --add one")
-    r.add_argument("--search")
+    r.add_argument("--search", help="only voices whose name or description has this")
     r.add_argument("--accent", help="e.g. british")
     r.add_argument("--gender", help="male | female | neutral")
     r.add_argument("--age", help="young | middle_aged | old")
@@ -1431,9 +1457,9 @@ def add_extras(sub) -> None:
     r.add_argument("--take", type=int, default=1, help="which take (default 1)")
     r.add_argument("--out", help="output folder (default <recording>.perform)")
     r = rsub.add_parser("status", help="which pieces are rendered")
-    r.add_argument("dir")
+    r.add_argument("dir", help="the prepare folder (<recording>.perform)")
     r = rsub.add_parser("stitch", help="renderN.mp4 at their read times + the read -> final.mp4")
-    r.add_argument("dir")
+    r.add_argument("dir", help="the prepare folder (<recording>.perform)")
     r = rsub.add_parser("lipsync", help="redraw the mouth to match the read (LatentSync on Modal, or Sync)")
     r.add_argument("target", nargs="?", help="a perform dir (uses final.mp4 + its read) or a video")
     r.add_argument("--engine", choices=["latentsync", "sync", "both"],
@@ -1460,27 +1486,27 @@ def add_extras(sub) -> None:
     r.add_argument("--no-label", action="store_true", help="skip the label call")
     r = csub.add_parser("find", help="new photos from the web: Wikimedia Commons, the person's channels, "
                                      "image search ($BRAVE_API_KEY or [paths] brave_key)")
-    r.add_argument("person")
+    r.add_argument("person", help="the person, by name (`clipper cast list`)")
     r.add_argument("--source", action="append", choices=["commons", "channels", "search"],
                    help="only these (repeatable; default all)")
     r.add_argument("--no-label", action="store_true", help="skip the label call")
     r = csub.add_parser("add", help="one photo from a file or a web address")
-    r.add_argument("person")
-    r.add_argument("src", metavar="FILE|URL")
+    r.add_argument("person", help="the person, by name (`clipper cast list`)")
+    r.add_argument("src", metavar="FILE|URL", help="a photo file, or its web address")
     r.add_argument("--no-label", action="store_true", help="skip the label call")
     r = csub.add_parser("auto", help="a find from every source for everyone with fewer than [cast] target "
                                      "photos (serve runs it every [cast] auto_hours)")
     r.add_argument("--no-label", action="store_true", help="skip the label call")
     for act, what in (("keep", "keep these new photos"), ("drop", "delete these photos; their sources aren't fetched again")):
         r = csub.add_parser(act, help=what)
-        r.add_argument("person")
-        r.add_argument("ids", nargs="+", metavar="ID")
+        r.add_argument("person", help="the person, by name (`clipper cast list`)")
+        r.add_argument("ids", nargs="+", metavar="ID", help="the photos' ids")
     r = csub.add_parser("label", help="set a photo's label (see [cast] labels)")
-    r.add_argument("person")
-    r.add_argument("id")
-    r.add_argument("label")
+    r.add_argument("person", help="the person, by name (`clipper cast list`)")
+    r.add_argument("id", help="the photo's id")
+    r.add_argument("label", help="one of [cast] labels")
     r = csub.add_parser("set", help="a person's other names and channels (YouTube, Kick) for find")
-    r.add_argument("person")
+    r.add_argument("person", help="the person, by name (`clipper cast list`)")
     r.add_argument("--alias", action="append", help="another name (repeatable; replaces the list)")
     r.add_argument("--channel", action="append", metavar="URL", help="https://www.youtube.com/@name or "
                                                                      "https://kick.com/name (repeatable; replaces the list)")
@@ -1491,7 +1517,7 @@ def add_extras(sub) -> None:
     p.set_defaults(fn=cmd_people)
     psub.add_parser("list", help="everyone, and which lists each record comes from")
     r = psub.add_parser("show", help="one person's record")
-    r.add_argument("name")
+    r.add_argument("name", help="the person, by any of their names")
     r = psub.add_parser("set", help="change a person in people.json, or add one (channels: confirmed ones only)")
     r.add_argument("name", help="a name, alias or id")
     r.add_argument("--name", dest="new_name", help="rename (the old name stays an alias)")
@@ -1519,18 +1545,18 @@ def add_extras(sub) -> None:
                                       "(the bot runs it every [news] check_minutes)")
     r.add_argument("--no-judge", action="store_true", help="fetch and match only, no model call")
     r = nsub.add_parser("list", help="recent stories, newest first")
-    r.add_argument("--days", type=float, default=3)
+    r.add_argument("--days", type=float, default=3, help="how many days back (default 3)")
     r.add_argument("--person", help="only stories about this person")
     r.add_argument("--all", action="store_true", help="dismissed ones too")
     r = nsub.add_parser("search", help="Google News now for a query, and the stored headlines")
     r.add_argument("query", help='e.g. "Ethan Klein"')
-    r.add_argument("--days", type=int, default=7)
+    r.add_argument("--days", type=int, default=7, help="how many days back (default 7)")
     nsub.add_parser("feeds", help="each source: last fetch, items, error")
     nsub.add_parser("watch", help="who is watched, under which names, for which shows")
     r = nsub.add_parser("dismiss", help="never post these stories")
-    r.add_argument("ids", nargs="+", type=int, metavar="STORY")
+    r.add_argument("ids", nargs="+", type=int, metavar="STORY", help="story numbers, as `clipper news list` shows them")
     r = nsub.add_parser("context", help="these stories as the show's next stream_context")
-    r.add_argument("ids", nargs="+", type=int, metavar="STORY")
+    r.add_argument("ids", nargs="+", type=int, metavar="STORY", help="story numbers, as `clipper news list` shows them")
     r.add_argument("--show", dest="context_show", help="the show (default: the story's)")
 
     p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
@@ -1586,10 +1612,10 @@ def add_extras(sub) -> None:
     g.add_argument("--streams", type=int, default=12, help="the newest this many reviewed streams (12)")
     g.set_defaults(fn=cmd_models)
     g = gsub.add_parser("confirm", help='set labels from a JSON file: {"<stream>_<id>": {"label": "keep"}}')
-    g.add_argument("file")
+    g.add_argument("file", help="the labels JSON file")
     g.set_defaults(fn=cmd_models)
     g = gsub.add_parser("run", help="score the confirmed windows with a model; recall and precision per label")
-    g.add_argument("model")
+    g.add_argument("model", help="model string: bare = Claude, or openai:..., gemini:..., local:...")
     g.add_argument("--effort", default="", help="instead of [scoring] effort_a; none = reasoning off")
     g.add_argument("--prompt-version", default="", help="instead of [scoring] prompt_version")
     g.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")

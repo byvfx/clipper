@@ -83,3 +83,17 @@ def test_version_is_one_number(capsys):
     assert capsys.readouterr().out.strip() == f"clipper {__version__}"
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     assert project["version"] == __version__
+
+
+def test_every_argument_and_command_has_help():
+    """`clipper <command> -h` explains every flag and positional (audit item 17); --version's
+    help is argparse's own."""
+    import ast
+
+    tree = ast.parse((ROOT / "clipper" / "cli.py").read_text(encoding="utf-8"))
+    bare = [f"cli.py:{n.lineno}" for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr in ("add_argument", "add_parser")
+            and not any(k.arg == "help" for k in n.keywords)
+            and not any(k.arg == "action" and getattr(k.value, "value", None) == "version" for k in n.keywords)]
+    assert not bare, "add help= to " + ", ".join(bare)
