@@ -432,6 +432,11 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
   read-only plus an answers file and a writable out folder, and a LogonCommand script that copies the code
   to `C:\clipper`, runs `deploy\bootstrap.ps1 --answers ... --offline`, then doctor and `setup --check`
   into the out folder. No keys go in. Launch the `.wsb`, wait for a DONE file (~1 min), close the Sandbox.
+- **Clean-Linux test of bootstrap.sh:** Docker Desktop on the laptop (start it; restart it if the engine
+  returns 500s), `ubuntu:24.04` with the archive, answers and out folder mounted; as root install sudo +
+  curl, `rm -rf /var/lib/apt/lists/*`, add a sudo user, then `su - user -c` a script that runs
+  `bash deploy/bootstrap.sh --answers ... --offline` and `bash -ic 'clipper doctor ...'` (a new terminal).
+  ~5 min (ffmpeg from apt). The font EULA goes unanswered there. Then the by-hand wiki Install-checklist.
 
 ## Back up the taste layer (user, 2026-10-24)
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them

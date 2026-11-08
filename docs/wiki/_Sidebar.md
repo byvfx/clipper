@@ -12,6 +12,7 @@
 
 **🛠️ Install**
 - [Install](Install)
+- [Install checklist](Install-checklist)
 - [Windows](Install-Windows)
 - [macOS](Install-macOS)
 - [Transcribe on Modal](Transcribe-on-Modal)
