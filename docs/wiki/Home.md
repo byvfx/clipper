@@ -85,7 +85,8 @@ flowchart TB
 <td valign="top">
 
 ### 💻 Working on clipper
-[Developing](Developing): layout, code shape, checks, and how these pages are built
+[Developing](Developing): layout, code shape, checks, and how these pages are built<br>
+[How the processes talk](How-the-processes-talk): locks, heartbeats, the outbox, serve's API, which log to read
 
 </td>
 <td valign="top">

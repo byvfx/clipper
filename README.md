@@ -38,3 +38,4 @@ clipper run <stream id>
 - `clipper.example.toml`: every setting, documented
 - `HANDOFF.md`: current state between work sessions; `docs/log/` has the dated diary
 - `CLAUDE.md`: rules for code sessions
+- `LICENSE`: MIT

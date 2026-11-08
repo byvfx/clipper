@@ -39,6 +39,9 @@ the same PR as the change.
   like any exception. A test fails on a new `raise SystemExit` outside cli.py.
 - Prompts are `prompts/<name>_<version>.md` (loaded by `clipper/prompts.py`); the version in use is a config key. Add a new
   version rather than editing one that produced reviewed output.
+- Stages print, services (serve, bot, worker, recorder) log through `logging`. How the processes share
+  state (locks, heartbeats, the DM outbox, serve's API) is the wiki page How-the-processes-talk; the
+  six-step checklist for a new command is in Developing.
 
 ## Rules
 

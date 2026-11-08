@@ -30,6 +30,24 @@ HANDOFF.md            current state between work sessions (short); docs/log/ has
   produced reviewed output.
 - Kitsu is the record for review decisions; the bot and the war room act through
   `clipper/actions.py`.
+- Stages print, services log. A `clipper <stage>` prints its progress (the worker and serve copy
+  a child's output into `run_<stage>.log` and `serve.log`); serve, the bot, the worker and the
+  recorder log through `logging`, never `print`. The processes share state through the streams
+  folder: [How the processes talk](How-the-processes-talk) lists the locks, heartbeats, the DM
+  outbox and serve's API, and which log answers which question.
+
+## Adding a command or a stage
+
+Each step is checked by a test where it can be, so a missing one fails `pytest`, not a user:
+
+1. The parser and `cmd_<name>` in `clipper/cli.py`, in its group's `add_<group>`, and the name in
+   `COMMAND_GROUPS` (test).
+2. Its settings in `config.DEFAULTS`, a comment on each, and the same keys in
+   `clipper.example.toml` (test). Nothing machine- or show-specific in a default.
+3. A pipeline stage is also a row in `clipper/stages.py` (test).
+4. A `clipper doctor` check when it needs a key, a service or a file, with the fix in the message.
+5. A wiki page or section, in the sidebar (test), and `wiki.page(...)` links in its messages (test).
+6. Tests for its pure logic in `tests/`, and the cost printed before any model call it makes.
 
 ## Checks
 

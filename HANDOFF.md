@@ -434,7 +434,7 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
   A serve restart or deploy kills a running upload: `clipper services status serve` lists its jobs; wait
   until none is running.
 - **Upload one item now:** approve in Kitsu, `clipper schedule` (back up schedule.json first), then
-  `clipper upload --max 1`; asap items go public at once. Logs in `logs/upload_*.log`.
+  `clipper upload --max 1`; asap items go public at once (serve's hourly runs log to `logs/serve.log`).
 - **One-off from a YouTube video:** `clipper --show <key> preshow fetch <url> --from H:MM:SS --about "..."`
   (add a `[shows.<key>]` table with a placeholder channel if the show isn't on Kick), then
   `clipper run yt-<id>`. YouTube bot checks: a fresh cookie export into secrets/youtube_cookies.txt.
