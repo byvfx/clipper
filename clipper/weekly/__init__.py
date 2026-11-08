@@ -1,4 +1,4 @@
-"""Lolcow Cinema Weekly: the week's streams -> a ten-page tabloid issue (issue #35).
+"""The weekly issue: the week's streams -> a ten-page tabloid issue (issue #35).
 
   clipper weekly                          this week (Sun-Sat, [schedule] timezone): gather,
                                           draft, render -> <paths.weekly>/<saturday>/
@@ -53,6 +53,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from .. import wiki
 from ..errors import ClipperError
 from . import draft, gather, render, style
 
@@ -111,6 +112,9 @@ def run(cfg: dict, day: str | None = None, headline: str = "", gather_only: bool
               f"{stats['chat_messages']:,} chat messages")
     if gather_only:
         return here
+    if len(cfg["weekly"]["masthead"]) != 2:
+        raise ClipperError('[weekly] masthead is not set: the cover needs two words, red then chrome '
+                           '("WEEKLY" follows), e.g. ["DAILY", "PLANET"]; ' + wiki.page("Weekly-issue"))
     ij = here / "issue.json"
     if render_only and not ij.exists():
         raise ClipperError(f"--render: no issue.json in {here} to render; a draft costs model calls, "

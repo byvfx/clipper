@@ -1,5 +1,6 @@
-`clipper receipts` turns a stream's stories about the archive subject (`[receipts] subject`,
-`jer`) into one video of his own old clips, to send to the show:
+`clipper receipts` turns a stream's stories about the archive subject (`[receipts] subject`, with
+`topics` and `figures` naming them the way the show does; unset until you fill them in, and
+`clipper receipts find` says so) into one video of their own old clips, to send to the show:
 
 ```bash
 clipper receipts find kick-<id>     # Sonnet names the stories + a search each; `archive ask` finds the clips (~$0.20)

@@ -261,6 +261,9 @@ def check_fonts(cfg: dict) -> None:
                                "" if cond else font_hint("install Bahnschrift / Roboto Condensed or set "
                                                          "[thumbnail] condensed_fonts"))
     wc = cfg["weekly"]
+    if len(wc["masthead"]) != 2:
+        warn("config", "[weekly] masthead is not set: `clipper weekly` refuses until it has the cover's two words",
+             'masthead = ["DAILY", "PLANET"] (red word, chrome word; "WEEKLY" follows)')
     missing = [k for k in ("headline", "condensed", "serif_italic", "serif_bold_italic", "black", "bold")
                if not first_font(wc[f"{k}_fonts"])]
     if missing:

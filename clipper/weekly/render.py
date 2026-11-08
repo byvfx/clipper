@@ -566,8 +566,9 @@ class Renderer:
         self.highlight_text(d, (MX - 2, y), [(t, h) for t, h in parts if t], hf)
         y += int(hf.size * 1.14)
         y = para(d, (MX, y), a["deck"], F.serif(27 if feature else 32), CW, P.ink, 34 if feature else 40) + 8
-        d.text((MX, y), self.wc["byline"], font=F.bahn(20, "SemiBold"), fill=P.red)
-        y += 40
+        if self.wc["byline"]:
+            d.text((MX, y), self.wc["byline"], font=F.bahn(20, "SemiBold"), fill=P.red)
+            y += 40
         colw = (CW - 40) // 2
         bf, lh = (F.bahn(22, "Regular"), 28) if feature else (F.bahn(25, "Regular"), 34)
         end1 = para(d, (MX, y), a["col1"], bf, colw, P.ink, lh)

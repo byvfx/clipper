@@ -1,5 +1,4 @@
-`clipper weekly` turns the week's streams (Sun-Sat) into *Lolcow Cinema
-Weekly*, a ten-page tabloid for a TikTok carousel or two YouTube Posts: a cover, contents,
+`clipper weekly` turns the week's streams (Sun-Sat) into a weekly, a ten-page tabloid for a TikTok carousel or two YouTube Posts: a cover, contents,
 the cover story and two features, news in brief, the quote of the week, the week in numbers,
 a marketplace of parody ads, and next week's schedule with a readers' poll. It gathers the
 week (segments, chat, transcripts, faces named by `clipper faces` and the thumbnail stage's) into `weekly/<saturday>/week.json`,
@@ -15,7 +14,10 @@ geometry and the fixed copy can be changed in `weekly/style.toml` (Style, below)
 `clipper weekly` builds the week's ten-page tabloid issue into `weekly/<saturday>/` (the
 folder is `[paths] weekly`). It needs Impact, Bahnschrift, Georgia (italic and bold italic)
 and Arial (bold and black), all standard on Windows; `clipper doctor` warns when any is
-missing, and `[weekly] *_fonts` take other paths. The cover subject is cut out with
+missing, and `[weekly] *_fonts` take other paths. The paper's name is `[weekly] masthead`, two
+words (the red one, then the chrome one; "WEEKLY" follows), and `byline` goes under each
+article's deck; the weekly refuses to draft until the masthead is set, and `clipper doctor`
+warns. The cover subject is cut out with
 torchvision DeepLabV3 (the worker's torch install; the weights download once), otherwise the
 cover shows a photo panel instead.
 

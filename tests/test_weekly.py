@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from clipper import jsonstate
+from clipper import jsonstate, weekly
 from clipper.errors import ClipperError
 from clipper.weekly import draft, gather, style
 from clipper.weekly.render import Fonts, Renderer
@@ -19,6 +19,7 @@ PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 def cfg(defaults, tmp_path):
     cfg = copy.deepcopy(defaults)
     cfg["paths"]["weekly"] = tmp_path
+    cfg["weekly"]["masthead"], cfg["weekly"]["byline"] = ["DAILY", "PLANET"], "BY THE DESK"
     cfg["scoring"]["house_style"] = ["Never say the word on the banned list.", "No emoji."]
     return cfg
 
@@ -226,3 +227,15 @@ def test_check_issue_wants_a_one_or_two_line_headline():
     issue["articles"] = [{**art, "headline": ["A", "B"]}, {**art, "headline": ["A", "B", "C"]}]
     missing = draft.check_issue(issue)
     assert missing == ["feature.headline (one or two lines)", "articles[1].headline (one or two lines)"]
+
+
+def test_no_masthead_no_draft(cfg, monkeypatch):
+    """The default [weekly] masthead is empty: the weekly stops before the draft (the model call)
+    and says what to set, for no words and for one."""
+    monkeypatch.setattr(gather, "gather", lambda cfg, start, end, here: (
+        {"label": "w"}, {"shows": 0, "preshows": 0, "hours": 0.0, "chat_messages": 0}))
+    monkeypatch.setattr(draft, "draft", lambda *a, **k: pytest.fail("drafted without a masthead"))
+    for words in ([], ["DAILY"]):
+        cfg["weekly"]["masthead"] = words
+        with pytest.raises(ClipperError, match="masthead is not set.*two words"):
+            weekly.run(cfg)

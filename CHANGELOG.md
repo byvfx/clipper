@@ -8,6 +8,11 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-08: the defaults and `clipper.example.toml` describe the product, not this install:
+  `[receipts]` and `[weekly] masthead`/`byline` are empty until set (`clipper receipts` and
+  `clipper weekly` refuse with the fix; `clipper doctor` warns), the example's show is
+  `[shows.myshow]`, and a test keeps this install's names out of `config.py`, the example and
+  `clipper setup`.
 - 11-08: `studio/` holds the mockups, the research notes and the media-heavy reports; `[paths]
   streamers` now defaults to `studio/research_notes/streamers.json` (set it if you keep that
   file elsewhere; it is read with a default when absent).
