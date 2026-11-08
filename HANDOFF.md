@@ -261,6 +261,11 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 **Bootstrap follow-up (11-07):** `deploy/bootstrap.sh` installs Homebrew `ffmpeg`, which has no
 `subtitles` (libass) filter, so a Mac worker fails Short captions; `ffmpeg-full` has it but is
 keg-only (not on PATH). Pick one: install `ffmpeg-full` and point clipper at it, or document it.
+`deploy/hub/deploy.sh` from `lofn` needs `deploy/hub/env.local` (it overwrites the NAS `.env`); the
+11-07 deploy copied the code and rebuilt by hand, keeping the NAS `.env`.
+**Chud's old-crop Shorts (11-07):** `focus = "face"` is live on both Chud cam panels (PR #164, see the
+log); kick-136479997's v01_t07, v02, v03 were re-rendered on the hub. The four from kick-136292920 are
+uploaded private for 11-08 with the old crop: they stay that way unless deleted and re-uploaded.
 **Story (#84) + swarm (#109), user 11-03: three PRs.** 1) `clipper/swarm.py` (library: planner →
 Haiku workers in rounds → merged findings, trail `swarm.json`; tools YouTube search/channel, Kick,
 Odysee, Reddit, web, archive, our streams; `kick.list_videos`; `llm.Budget` now shared with
