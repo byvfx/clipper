@@ -20,7 +20,7 @@ def test_a_prompts_folder_of_your_own_is_checked(tmp_path):
 prompts = "mine"
 '''
     (status, _, what, fix), = prompts_check(tmp_path, mine)
-    assert status == "WARN" and "not a folder" in what and "drop the key" in fix
+    assert status == "WARN" and "isn't there" in what and "(base)" in what and "drop the key" in fix
     (tmp_path / "mine").mkdir()
     (status, _, what, _), = prompts_check(tmp_path, mine)
     assert status == "OK" and "read first" in what
