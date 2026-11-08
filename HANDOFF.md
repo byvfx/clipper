@@ -19,13 +19,13 @@ Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds 
   `export KITSU_TOKEN="$(powershell.exe -NoProfile -Command "[Environment]::GetEnvironmentVariable('KITSU_TOKEN','User')" | tr -d '\r')"`
 
 ## Pipeline (one stream = `streams/<id>/`, test stream `kick-131151926`)
-`clipper fetch <kick url>` → `transcribe` (WhisperX, GPU) → `signals` (chat/loudness heat) →
+`clipper fetch <kick url>` → `signals` (chat/loudness heat) → `transcribe` (WhisperX on the GPU, or Modal) →
 `score` (Haiku Pass A + transcript scan, Sonnet Pass B) → `segments` (Opus topic split + compilations) →
 `cut` (segments lossless w/ keyframe starts, compilations joined, picks re-encoded; slurs+"fuck" bleeped) →
 `meta` (SEO title/description/chapters/tags + .srt) → `thumbs` (Enquirer tabloid covers) →
 `review publish` (Kitsu on NAS 192.168.0.155:8090 + Discord cards) → `review sync` / Discord bot →
-`schedule` → `upload` (YouTube). Always on: `clipper serve` (task `clipper-serve`: the war room, hourly
-replan + upload, pre-show grabs, retakes, daily jobs) and the Discord bot (`clipper bot`, task `clipper-bot`).
+`schedule` → `upload` (YouTube). Always on, as NAS containers since 11-05: `clipper serve` (the war room, hourly
+replan + upload, pre-show grabs, retakes, daily jobs) and the Discord bot (`clipper bot`).
 
 Around it (each a subcommand; details in the wiki pages and the log): `record` (NAS Docker recorder),
 `worker` (GPU machine: fast lane clips/Shorts first, then segments), `shorts` (vertical, scene-aware
@@ -104,6 +104,12 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   and DMs (warnings only), so warnings arrive twice: kept on purpose (user, 2026-10-28).
 - Model calls are logged to `logs/costs.jsonl` (`clipper costs`); say what a rerun costs before doing it.
 - The taste layer is the asset (prompts, clipper.toml show tables, house_style, Kitsu): see "Back up".
+- Hand-over audit answers (user, 2026-11-08; `reports/code-audit-2026-11-08.md` §7): build as a public package
+  but this deployment first; the audit's tiers 0 and 1 (a hygiene day, a structure week) before any new
+  feature; `mockups/`, `reports/` media and `research_notes/` move under `studio/`, out of the package, no
+  history rewrite; Kitsu stays the record, with a one-machine Kitsu (page + local compose) to document, and
+  Kitsu-optional is not a goal. Claude's pick, not objected to: the Windows task scripts stay for a GPU worker
+  only; serve and the bot are compose-only in the docs.
 
 ## State now (2026-10-30)
 - **Running on the NAS** since 2026-11-05 (#9/#12, PR #152; wiki NAS-hub): containers `serve` (war room on
@@ -336,6 +342,18 @@ never goes stale; a passed slot never goes public at once from a long run; an X 
 "unknown" for a hand check, never retried; a cast grab is refused when another enrolled person fits
 better. Left for later: #15 (example toml commented), #24/#25 (lock edges), #29-#35, #37, #41, #46-#50
 (lows), #42's lock part.
+**Code audit 2026-11-08** (`reports/code-audit-2026-11-08.md`): architecture, maintainability and ease of
+use for hand-over; read-only, nothing changed or run against a service. Verdict: the core and the conventions
+are sound and the 10-28/11-03 fixes held; the risks are growth outrunning tests and docs (626 config keys,
+21 modules no test names, 17 functions over McCabe 15, this file at 539 lines), the product still shaped like
+this deployment (the author's shows in DEFAULTS and the example, Kitsu a hard requirement of `clipper run`, no
+Discord/OAuth/Kitsu setup pages, two deploy paths both documented), knowledge in seven places with drift, and
+four shapes to split (warroom.py, the config dict's bookkeeping keys, the five inter-process mechanisms only
+docstrings describe, prompt versions set by mutating `Prompts`). The report ends in a 20-item plan in three
+tiers (a day / a week / before anyone else installs it) and five questions for the user (release audience,
+a consolidation window, studio files in the repo, the Windows task scripts, Kitsu optional). Also: the suite
+is still red on Windows (`tests/test_setup_paths.py:47`, known since 11-07) and CI is Linux-only; all 77
+`# noqa` comments are unused. Nothing acted on yet; the user's answers decide the order.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
