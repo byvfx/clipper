@@ -11,6 +11,7 @@ from ..config import base
 LOCK = threading.Lock()  # one Kitsu write / replan at a time
 
 SYNC = {"running": False, "last": None, "error": ""}
+SYNC_LOCK = threading.Lock()   # the check-and-set in sync_all: one sync thread at a time
 
 TAILNET: dict = {"served": ""}   # the https URL tailscale serve gives the war room, found at start
 

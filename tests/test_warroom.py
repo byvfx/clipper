@@ -71,7 +71,8 @@ def test_saved_layouts(tmp_path):
     assert warroom.save_layout(cfg, {"name": "Mine", "layout": lay})["layouts"]["Mine"] == lay
     assert warroom.layouts(cfg)["layouts"]["Mine"] == lay
     for bad in ({"zones": {"sideways": []}}, {"zones": {"top": "schedule"}}, {"zones": {"top": ['"]']}},
-                {"zones": {"top": []}, "widths": {"left": 5000}}):
+                {"zones": {"top": []}, "widths": {"left": 5000}}, {"zones": {"top": []}, "widths": [300]},
+                ["top"]):   # widths and the layout itself must be dicts (Copilot on #176)
         with pytest.raises(ClipperError, match="not a layout"):
             warroom.save_layout(cfg, {"name": "Bad", "layout": bad})
     with pytest.raises(ClipperError, match="name"):
@@ -221,3 +222,58 @@ def test_hidden_shows_leave_the_page(tmp_path):
     path.write_text('[warroom]\nhide_shows = ["trish"]\n[shows.kino]\nchannels = ["k"]\n'
                     '[shows.trish]\nchannels = ["t"]\n', encoding="utf-8")
     assert list(warroom.shown_shows(config.load(path))) == ["kino"]
+
+
+def test_bad_headers_and_queries_are_bad_requests_not_crashes(serve, defaults, tmp_path):
+    """A malformed Content-Length, Range or ?t= answers with a status, never a 500 (Copilot on #176)."""
+    defaults["paths"]["streams"] = tmp_path / "streams"   # before serve(): the handler reads it then
+    port = serve("")
+    root = defaults["paths"]["streams"]
+    (root / "kick-1").mkdir(parents=True)
+    (root / "kick-1" / "c.mp4").write_bytes(b"0123456789")
+
+    def get(path: str, **headers) -> tuple[int, bytes, dict]:
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        c.request("GET", path, headers={"Host": "localhost", **headers})
+        r = c.getresponse()
+        return r.status, r.read(), dict(r.getheaders())
+
+    assert get("/media/kick-1/c.mp4", Range="bytes=2-4")[:2] == (206, b"234")
+    assert get("/media/kick-1/c.mp4", Range="bytes=2-4")[2]["Content-Range"] == "bytes 2-4/10"
+    assert get("/media/kick-1/c.mp4", Range="bytes=abc-def")[:2] == (200, b"0123456789")   # ignored
+    code, body, hdrs = get("/media/kick-1/c.mp4", Range="bytes=100-")
+    assert (code, body, hdrs["Content-Range"]) == (416, b"", "bytes */10")
+    assert get("/watch?src=/media/kick-1/c.mp4&t=abc")[0] == 200   # from the start
+
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    c.putrequest("POST", "/api/nope")
+    c.putheader("Host", "localhost")
+    c.putheader("Content-Length", "abc")
+    c.endheaders()
+    assert c.getresponse().status == 400
+
+
+def test_tailscale_json_that_isnt_is_an_empty_status():
+    from types import SimpleNamespace
+
+    j = warroom.tailscale._json
+    assert j(SimpleNamespace(stdout='{"BackendState": "Running"}')) == {"BackendState": "Running"}
+    assert j(SimpleNamespace(stdout="Log in at https://login.tailscale.com/...")) == {}
+    assert j(SimpleNamespace(stdout="")) == {} and j(SimpleNamespace(stdout="[1, 2]")) == {}
+
+
+def test_sync_all_starts_one_sync_for_two_requests(defaults, monkeypatch):
+    import time
+
+    calls = []
+
+    def slow_sync(d, cfg, quiet=False):
+        calls.append(d)
+        time.sleep(0.3)
+    monkeypatch.setattr(warroom.review.review, "sync", slow_sync)
+    monkeypatch.setattr(warroom.review.actions, "review_dirs", lambda cfg: [defaults["paths"]["streams"] / "kick-1"])
+    warroom.SYNC.update(running=False, error="")
+    warroom.sync_all(defaults)
+    warroom.sync_all(defaults)   # the same instant: still one thread
+    time.sleep(0.6)
+    assert len(calls) == 1 and warroom.SYNC["running"] is False and warroom.SYNC["last"]
