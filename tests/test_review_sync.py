@@ -93,8 +93,8 @@ def test_sync_reads_kitsu_into_review_json_and_keeps_a_newer_local_decision(defa
                 "fields": {"YouTube title": "Old"}},
         "s02": {"kind": "segment", "id": "s02", "file": "segments/s02.mp4", "task_id": "T2", "entity_id": "E2",
                 "fields": {}}})
-    jsonstate.write(sdir / "review.json", {"s02": {"kind": "segment", "decision": "approved", "status": "approved",
-                                                   "updated_at": "2026-11-08T12:00:00", "fields": {}}})
+    local = {"s02": {"kind": "segment", "decision": "approved", "status": "approved",
+                     "updated_at": "2026-11-08T12:00:00", "fields": {}}}
 
     class Gazu:
         class task:
@@ -104,6 +104,8 @@ def test_sync_reads_kitsu_into_review_json_and_keeps_a_newer_local_decision(defa
 
             @staticmethod
             def get_task(tid):
+                if tid == "T1":   # a button decides s02 while this sync is still reading Kitsu
+                    jsonstate.write(sdir / "review.json", local)
                 return {"T1": {"task_status_id": "S1", "updated_at": "2026-11-08T10:00:00"},
                         "T2": {"task_status_id": "S2", "updated_at": "2026-11-08T09:00:00"}}[tid]
 
