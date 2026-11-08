@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import time
+import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -411,8 +412,10 @@ def post_issue(cfg: dict, day: str | None = None) -> int:
 
 def invite(cfg: dict, user_id: str) -> tuple[list[str], bool]:
     """`clipper review invite <discord user id>`: a reviewer onto [discord] allowed_user_ids in
-    clipper.toml (the bot reads it at start, so restart it). (the ids after, whether it was new)."""
-    from .config import base
+    clipper.toml (the bot reads it at start, so restart it). The file's own list is extended, not
+    the resolved one; when clipper.local.toml, a show or an env var sets the list too, that layer
+    would win and the invite is refused with where to add the id. (the ids after, whether new)."""
+    from .config import base, explain
     from .setup import toml_set
 
     uid = str(user_id).strip()
@@ -422,9 +425,15 @@ def invite(cfg: dict, user_id: str) -> tuple[list[str], bool]:
     path = base(cfg).get("_file")
     if not path:
         raise ClipperError("no clipper.toml to write to: run clipper setup first")
-    ids = [str(x) for x in cfg["discord"]["allowed_user_ids"]]
+    path = Path(path)
+    above = [name for name, _ in explain(cfg, "discord.allowed_user_ids")["layers"]
+             if name not in ("default", path.name)]
+    if above:
+        raise ClipperError(f"[discord] allowed_user_ids is also set in {', '.join(above)}, which wins over "
+                           f"{path.name}: add {uid} there")
+    ids = [str(x) for x in tomllib.loads(path.read_text(encoding="utf-8")).get("discord", {}).get("allowed_user_ids", [])]
     if uid in ids:
         return ids, False
     ids.append(uid)
-    toml_set(Path(path), "discord", "allowed_user_ids", ids)
+    toml_set(path, "discord", "allowed_user_ids", ids)
     return ids, True

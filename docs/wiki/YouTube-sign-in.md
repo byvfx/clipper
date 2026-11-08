@@ -11,14 +11,18 @@ daily quota ([YouTube channel](YouTube-channel), point 8).
    app" warning once; no verification is needed to upload to your own channel.
 4. **The client.** Credentials → Create credentials → OAuth client ID → **Desktop app**.
    Download the JSON and save it as `secrets/youtube_client_secret.json` (`[paths]
-   youtube_client_secret`) on the machine that uploads (serve's).
-5. **Sign in.** `clipper upload --sign-in` opens a browser: pick the Google account and, when it
-   asks, **the channel**. A Brand Account channel shows as its own choice; picking the personal
-   identity leaves clipper with no channel to upload to. It asks for the upload and
-   `youtube.force-ssl` scopes (captions, playlists). The token lands in
-   `secrets/youtube_token.json` and refreshes itself; `clipper doctor --role serve` (online)
-   checks it, and `clipper upload --sign-in` again redoes it.
+   youtube_client_secret`) on the machine you will sign in from (step 5).
+5. **Sign in on a machine with a browser** (your laptop): `clipper upload --sign-in` opens one.
+   Pick the Google account and, when it asks, **the channel**: a Brand Account channel shows as
+   its own choice, and the personal identity has no channel to upload to. It asks for the
+   upload and `youtube.force-ssl` scopes (captions, playlists), and the token lands in
+   `secrets/youtube_token.json`. The sign-in needs the browser on the same machine (Google calls
+   back to localhost), so a headless serve, the containers here, never signs in itself: copy
+   both files into the `secrets/` folder serve reads (on the NAS share here), as private as the
+   Discord token. The token refreshes itself wherever it is used; `clipper doctor --role serve`
+   (online) checks it, and when it stops working, sign in again the same way and copy the token
+   over.
 
-Only serve uploads, so only that machine signs in: `clipper doctor --role serve` warns when the
-two files are missing, and other roles don't need them. What a new channel does to the first
-uploads (verification, the daily cap, Studio as the fallback) is [YouTube channel](YouTube-channel).
+Only serve uploads: `clipper doctor --role serve` warns when the two files are missing, and other
+roles don't need them. What a new channel does to the first uploads (verification, the daily
+cap, Studio as the fallback) is [YouTube channel](YouTube-channel).

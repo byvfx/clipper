@@ -255,6 +255,14 @@ def _comment(line: str) -> str:
     return ""
 
 
+def _parses(text: str) -> bool:
+    try:
+        tomllib.loads(text)
+        return True
+    except tomllib.TOMLDecodeError:
+        return False
+
+
 def toml_set(path: Path, section: str, key: str, value) -> None:
     """Set [section] key = value in a TOML file, keeping its comments and layout."""
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
@@ -274,7 +282,12 @@ def toml_set(path: Path, section: str, key: str, value) -> None:
                 at -= 1
             lines.insert(at, new)
         else:
-            lines[hit] = re.match(r"\s*", lines[hit]).group() + new + _comment(lines[hit])
+            stop = hit + 1   # a value over several lines (an array, a multi-line string) goes whole
+            while stop <= end and not _parses("\n".join(lines[hit:stop])):
+                stop += 1
+            if stop > end:   # never parsed: the file is broken; replace the one line as before
+                stop = hit + 1
+            lines[hit:stop] = [re.match(r"\s*", lines[hit]).group() + new + _comment(lines[hit])]
     text = "\n".join(lines) + "\n"
     tomllib.loads(text)  # never leave a file clipper can't read
     path.write_text(text, encoding="utf-8")
