@@ -5,7 +5,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from clipper import warroom
+from clipper import actions, warroom
 from clipper.errors import ClipperError
 
 
@@ -60,7 +60,7 @@ def test_a_refused_post_still_gets_its_answer(serve, monkeypatch):
     port = serve("")
     for _ in range(20):
         assert status(port, "/api/nope", "evil.example", method="POST") == 403
-    monkeypatch.setattr(warroom, "MAX_POST", 1)
+    monkeypatch.setattr(warroom.httpd, "MAX_POST", 1)
     assert status(port, "/api/nope", "localhost", method="POST") == 413
 
 
@@ -107,7 +107,7 @@ def test_faces_window(tmp_path, defaults, monkeypatch):
     from clipper import faces, jsonstate
 
     cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path, "faces": str(tmp_path / "known")}}
-    monkeypatch.setattr(warroom, "for_stream", lambda c, sdir: cfg)
+    monkeypatch.setattr(warroom.faces, "for_stream", lambda c, sdir: cfg)
     sdir = tmp_path / "kick-1"
     (sdir / "faces").mkdir(parents=True)
     jsonstate.write(sdir / "meta.json", {"channel": "x"})
@@ -139,7 +139,7 @@ def test_faces_window(tmp_path, defaults, monkeypatch):
 
 
 def test_face_pick_grabs_the_cut_or_a_compilations_preview(tmp_path, defaults, monkeypatch):
-    from clipper import actions, faces
+    from clipper import faces
 
     cfg = {**defaults, "paths": {**defaults["paths"], "streams": tmp_path}}
     sdir = tmp_path / "kick-1"
@@ -148,11 +148,11 @@ def test_face_pick_grabs_the_cut_or_a_compilations_preview(tmp_path, defaults, m
     (sdir / "review" / "c01_t20.mp4").write_bytes(b"")
     states = {"c01_t20": {"kind": "pick", "file": r"clips\01_t20.mp4"},
               "comp-x": {"kind": "compilation", "file": r"compilations\x.mp4"}}
-    monkeypatch.setattr(warroom.actions, "resolve", lambda c, ref: actions.Item(sdir, ref.split("/")[1], states[ref.split("/")[1]]))
+    monkeypatch.setattr(actions, "resolve", lambda c, ref: actions.Item(sdir, ref.split("/")[1], states[ref.split("/")[1]]))
     grabbed = []
     monkeypatch.setattr(faces, "grab", lambda video, t, dst: grabbed.append(video) or dst)
     monkeypatch.setattr(faces, "pick", lambda img, box, c: {"box": box, "px": 90, "embedding": [], "closest": "", "match": 0.0, "tile": b"jpg"})
-    monkeypatch.setattr(warroom, "for_stream", lambda c, d: cfg)
+    monkeypatch.setattr(warroom.faces, "for_stream", lambda c, d: cfg)
     box = {"x": 0.1, "y": 0.1, "width": 0.2, "height": 0.2}
     got = warroom.faces_pick(cfg, {"ref": "kick-1/c01_t20", "t": 3.0, "box": box})
     assert got["tile"].startswith("data:image/jpeg;base64,") and got["stream"] == "kick-1"
@@ -188,7 +188,7 @@ def test_next_slot_for_every_segment_leaves_out_a_full_budget(tmp_path, defaults
     jsonstate.write(cfg["paths"]["schedule"], {"entries": []})
     row = lambda ref, **kw: {"ref": ref, "stream": ref.split("/")[0], "kind": "segment", "title": ref,
                              "decision": "approved", "hold": False, "scheduled": "", "uploaded": False, **kw}
-    monkeypatch.setattr(warroom, "all_rows", lambda c: [row("a/x"), row("b/y"), row("b/held", hold=True),
+    monkeypatch.setattr(warroom.review, "all_rows", lambda c: [row("a/x"), row("b/y"), row("b/held", hold=True),
                                                         row("b/no", decision="pending")])
     monkeypatch.setattr(schedule, "release_window", lambda c, sdir, meta: (datetime.now(UTC) - timedelta(days=1), None))
     auto = {"key": "a/auto", "title": "a/auto", "publish_at": "2026-11-09T16:00:00-08:00"}
