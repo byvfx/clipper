@@ -3,7 +3,7 @@
 The file is found via --config, then $CLIPPER_CONFIG, then ./clipper.toml, then (Windows)
 the user-scope CLIPPER_CONFIG a shell may not have inherited: the laptop's points at the one
 on the NAS share since 2026-11-05. Relative paths in [paths] resolve against the config
-file's directory; prompts falls back to the checkout's own prompts/ when that has none.
+file's directory; [paths] prompts is optional, a folder of your own read before the package's.
 
 clipper.local.toml (beside clipper.toml, or $CLIPPER_LOCAL_CONFIG) holds this machine's own
 values (streams path, codec, transcribe backend; `clipper setup` writes it), so clipper.toml
@@ -168,8 +168,14 @@ def _apply_env(cfg: dict, only: set[str] | None = None, local: dict | None = Non
                 values[key] = _coerce(env, value, name)
 
 
+OPTIONAL_PATHS = {"prompts"}    # "" (unset) resolves to None, never to a folder
+
+
 def _resolve_paths(paths: dict, base: Path, keys=None) -> None:
     for key in keys if keys is not None else list(paths):
+        if key in OPTIONAL_PATHS and not paths[key]:
+            paths[key] = None
+            continue
         p = Path(paths[key]).expanduser()
         paths[key] = p if p.is_absolute() else base / p
 
@@ -207,9 +213,6 @@ def _load_local(path: Path, cfg: dict, base: Path) -> dict:
     if "paths" in local:
         _resolve_paths(local["paths"], base)
     return local
-
-
-CHECKOUT_PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 
 
 def user_env(name: str) -> str:
@@ -264,8 +267,6 @@ def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, di
     _apply_env(cfg, local=local)
     _resolve_paths(cfg["paths"], base)
     _resolve_photos(cfg, base)
-    if not cfg["paths"]["prompts"].exists() and CHECKOUT_PROMPTS.exists():
-        cfg["paths"]["prompts"] = CHECKOUT_PROMPTS
 
     cfg["shows"] = {}
     for key, show in shows.items():

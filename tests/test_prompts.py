@@ -7,7 +7,7 @@ from conftest import ROOT
 from clipper import prompts
 from clipper.errors import ClipperError
 
-PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
+PROMPTS = prompts.PACKAGED      # clipper/prompts/, inside the package
 
 
 def test_cast_names():
@@ -79,7 +79,7 @@ def test_a_scan_made_with_other_settings_is_scanned_again(defaults, tmp_path):
 
 
 def test_every_prompt_is_registered_and_its_default_version_is_on_file(defaults):
-    """prompts.VERSIONS is the one list: every prompt family in prompts/ (the rule files aside)
+    """prompts.VERSIONS is the one list: every prompt family in clipper/prompts/ (the rule files aside)
     is in it, every name the code asks for is in it, and each one's default version exists."""
     families = {f for f in latest() if not f.startswith(prompts.RULE_FILES)}
     assert families == set(prompts.VERSIONS), families ^ set(prompts.VERSIONS)
@@ -98,3 +98,17 @@ def test_get_reads_each_stages_own_version(defaults):
         prompts.Prompts(cfg).get("meta")        # the [meta] key decides the file, not [scoring]'s
     with pytest.raises(ClipperError, match="VERSIONS"):
         p.get("nope")
+
+
+def test_a_folder_of_your_own_is_read_first(defaults, tmp_path):
+    """[paths] prompts: a file there wins; everything else, and everything when it is unset, comes
+    from the package. The empty default loads as None."""
+    name = f"meta_{prompts.version_of(defaults, 'meta')}.md"
+    assert defaults["paths"]["prompts"] is None and prompts.find(defaults, name) == prompts.PACKAGED / name
+    cfg = {**defaults, "paths": {**defaults["paths"], "prompts": tmp_path}}
+    assert prompts.find(cfg, name) == prompts.PACKAGED / name           # not in the folder: the package's
+    (tmp_path / name).write_text("mine, {cast}", encoding="utf-8")
+    assert prompts.find(cfg, name) == tmp_path / name and prompts.Prompts(cfg).get("meta").startswith("mine")
+    assert "show_name" in (prompts.PACKAGED / name).read_text(encoding="utf-8")   # the stage fills that one
+    with pytest.raises(ClipperError, match=tmp_path.name):              # the error names both places
+        prompts.Prompts({**cfg, "meta": {**cfg["meta"], "prompt_version": "v999"}}).get("meta")

@@ -161,7 +161,7 @@ def check_config(cfg: dict, role: str = "all") -> None:
 
 
 def prompt_files(cfg: dict) -> list[str]:
-    """Every file in prompts/ this (show's) config reads: each prompt in prompts.VERSIONS at
+    """Every prompt file this (show's) config reads: each prompt in prompts.VERSIONS at
     the version its config key sets, the [scoring] rule files for that version, and the weekly
     article example."""
     sc, v = cfg["scoring"], cfg["scoring"]["prompt_version"]
@@ -183,23 +183,33 @@ def prompt_files(cfg: dict) -> list[str]:
 
 
 def check_prompts(cfg: dict) -> None:
-    """Each show can set its own prompt versions, so every show's files are checked."""
-    d: Path = cfg["paths"]["prompts"]
+    """Each show can set its own prompt versions, so every show's files are checked. The files
+    ship in the package (clipper/prompts/); [paths] prompts, when set, is read first."""
     shows = list(base(cfg)["shows"])
-    users: dict[Path, list[str]] = {}  # file -> the configs that read it
+    users: dict[Path, list[str]] = {}   # file -> the configs that read it
+    extras: dict[Path, list[str]] = {}  # [paths] prompts folder -> the configs that name it (a show has its own)
     for key in ["", *shows]:
         c = for_show(cfg, key)
+        if (d := prompts.extra_dir(c)) is not None:
+            extras.setdefault(d, []).append(key or "base")
         for name in prompt_files(c):
-            users.setdefault(Path(c["paths"]["prompts"]) / name, []).append(key or "base")
+            users.setdefault(prompts.find(c, name), []).append(key or "base")
     missing = [(p, who) for p, who in users.items() if not p.exists()]
+    absent = [(d, who) for d, who in extras.items() if not d.is_dir()]
     if missing:
-        fail("prompts", f"missing in {d}: " + ", ".join(
+        fail("prompts", f"missing in {prompts.PACKAGED}" + "".join(f" and {d}" for d in extras) + ": " + ", ".join(
             p.name if len(who) == len(shows) + 1 else f"{p.name} ({', '.join(who)})"
             for p, who in missing),
-             "copy the prompts/ folder from the main machine, or fix the prompt version keys")
+             "fix the prompt version keys, or put the file in the folder [paths] prompts names")
+    elif absent:
+        warn("prompts", "[paths] prompts names a folder that isn't there: "
+             + ", ".join(f"{d} ({', '.join(who)})" for d, who in absent)
+             + "; the prompts that ship with the code are read instead",
+             "drop the key, or create the folder for prompt files of your own")
     else:
         ok("prompts", f"{len(users)} prompt files for the configured versions"
-           + (f" (base and {len(shows)} shows)" if shows else ""))
+           + (f" (base and {len(shows)} shows)" if shows else "")
+           + (f", {', '.join(str(d) for d in extras)} read first" if extras else ""))
 
 
 def check_ffmpeg(cfg: dict, role: str) -> None:

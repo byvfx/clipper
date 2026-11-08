@@ -5,7 +5,7 @@ from clipper import config, doctor
 
 def prompts_check(tmp_path, toml: str) -> list[tuple[str, str, str, str]]:
     path = tmp_path / "clipper.toml"
-    path.write_text(f'[paths]\nprompts = "{(ROOT / "prompts").as_posix()}"\n' + toml, encoding="utf-8")
+    path.write_text(toml, encoding="utf-8")
     return doctor.collect(doctor.check_prompts, config.load(path, use_local=False))
 
 
@@ -14,9 +14,30 @@ def test_every_default_prompt_is_in_the_repo(tmp_path):
     assert status == "OK", what
 
 
+def test_a_prompts_folder_of_your_own_is_checked(tmp_path):
+    """[paths] prompts naming a folder that isn't there is a warning: the packaged files are read."""
+    mine = '''[paths]
+prompts = "mine"
+'''
+    (status, _, what, fix), = prompts_check(tmp_path, mine)
+    assert status == "WARN" and "isn't there" in what and "(base)" in what and "drop the key" in fix
+    (tmp_path / "mine").mkdir()
+    (status, _, what, _), = prompts_check(tmp_path, mine)
+    assert status == "OK" and "read first" in what
+
+
+def test_a_shows_own_prompts_folder_is_checked_too(tmp_path):
+    """Each show resolves its own [paths] prompts, so a typo there is named with the show (Copilot on #184)."""
+    (status, _, what, _), = prompts_check(tmp_path, '''[shows.kino]
+channels = ["kinocasinogaming"]
+[shows.kino.paths]
+prompts = "missing"
+''')
+    assert status == "WARN" and "missing (kino)" in what and "base" not in what
+
+
 def test_the_example_shows_find_their_prompts():
     cfg = config.load(ROOT / "clipper.example.toml", use_local=False)
-    cfg["paths"]["prompts"] = ROOT / "prompts"
     (status, _, what, _), = doctor.collect(doctor.check_prompts, cfg)
     assert status == "OK", what
     assert f"{len(cfg['shows'])} shows" in what

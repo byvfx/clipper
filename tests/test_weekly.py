@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from clipper import jsonstate, weekly
+from clipper import jsonstate, prompts, weekly
 from clipper.errors import ClipperError
 from clipper.weekly import draft, gather, style
 from clipper.weekly.render import Fonts, Renderer
 
-PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
+PROMPTS = prompts.PACKAGED
 
 
 @pytest.fixture

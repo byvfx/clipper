@@ -1,16 +1,18 @@
-"""Prompt files: prompts/<name>_<version>.md, filled from [scoring], with the swappable
-rule files and [scoring] house_style for viewer-facing prompts.
+"""Prompt files: <name>_<version>.md, shipped in this package (clipper/prompts/) and filled
+from [scoring], with the swappable rule files and [scoring] house_style for viewer-facing
+prompts. `[paths] prompts` names a folder of your own, read before the packaged files.
 
 VERSIONS is the one list of prompts: which [section] key holds each one's version.
 `Prompts(cfg).get(name)` reads that key, so a stage never assigns a version by hand; doctor
 checks every file the table names at the configured versions, and tests/test_prompts.py
-checks the table against prompts/ and against every `prompts.get("...")` in the code. A new
-prompt is a file, a config key with its version, and a row here."""
+checks the table against this folder and against every `prompts.get("...")` in the code. A
+new prompt is a file here, a config key with its version, and a row in VERSIONS."""
 from __future__ import annotations
 
+from importlib import resources
 from pathlib import Path
 
-from .errors import ClipperError
+from ..errors import ClipperError
 
 VERSIONS: dict[str, tuple[str, str]] = {
     # scoring (the rule files below follow the same version)
@@ -46,6 +48,26 @@ VERSIONS: dict[str, tuple[str, str]] = {
 }
 # <kind>_<mode>_<version>.md: rule files spliced into the scoring prompts, at [scoring] prompt_version.
 RULE_FILES = ("third_party", "audience", "gambling")
+
+# The files ship with the code: hatchling packs every file under clipper/, so a wheel and the
+# hub image carry them. A plain folder here, never a zip.
+PACKAGED: Path = Path(str(resources.files(__package__)))
+
+
+def extra_dir(cfg: dict) -> Path | None:
+    """[paths] prompts: a folder of your own prompt files, read before the packaged ones; None
+    when unset ("")."""
+    d = (cfg.get("paths") or {}).get("prompts")
+    return Path(d) if d else None
+
+
+def find(cfg: dict, filename: str) -> Path:
+    """Where `filename` is read from: [paths] prompts when the file is there, else the package's
+    copy (which may not exist: the caller says so)."""
+    extra = extra_dir(cfg)
+    if extra is not None and (extra / filename).exists():
+        return extra / filename
+    return PACKAGED / filename
 
 
 def version_of(cfg: dict, name: str) -> str:
@@ -86,8 +108,8 @@ def figures(cfg: dict) -> str:
     sc = cfg["scoring"]
     if not ((cfg.get("cast") or {}).get("known_figures") and (cfg.get("thumbnail") or {}).get("photos")):
         return sc["known_figures"]
-    from .cast import figures as cast_figures
-    from .cast import known_figures
+    from ..cast import figures as cast_figures
+    from ..cast import known_figures
 
     return known_figures(sc["known_figures"], cast_figures(cfg))
 
@@ -111,7 +133,7 @@ class Prompts:
         sc = cfg["scoring"]
         self.cfg = cfg
         self.version = sc["prompt_version"]
-        self.dir: Path = cfg["paths"]["prompts"]
+        self.extra = extra_dir(cfg)
         self.house_style: list[str] = list(sc.get("house_style") or [])
         self.vars = {"channel_name": sc["channel_name"], "audience": sc["audience"],
                      "tone": sc["tone"], "max_picks": sc["max_picks"],
@@ -127,7 +149,7 @@ class Prompts:
                                  ("gambling", "gambling", ("reject", "commentary"))):
             if sc[key] not in modes:
                 raise ClipperError(f"scoring.{key} must be one of {modes}, not {sc[key]!r}")
-            rule = self.dir / f"{kind}_{sc[key]}_{self.version}.md"
+            rule = find(cfg, f"{kind}_{sc[key]}_{self.version}.md")
             if rule.exists():
                 self.vars.update(read_sections(rule, kind, self.vars))
         # v3 prompts name the third-party sections {third_party_rule} / {third_party_rule_b}.
@@ -141,11 +163,12 @@ class Prompts:
     def get(self, name: str, **fill) -> str:
         """The prompt at the version its config key sets (VERSIONS). fill: per-call
         placeholders on top of vars (e.g. a reviewer's note)."""
-        path = self.dir / f"{name}_{self.version_of(name)}.md"
+        path = find(self.cfg, f"{name}_{self.version_of(name)}.md")
         try:
             text = path.read_text(encoding="utf-8")
         except FileNotFoundError:
-            raise ClipperError(f"no prompt {path.name} in {self.dir} (clipper doctor lists the missing ones)") from None
+            where = f"{PACKAGED}" + (f" or {self.extra}" if self.extra else "")
+            raise ClipperError(f"no prompt {path.name} in {where} (clipper doctor lists the missing ones)") from None
         try:
             text = text.format(**{**self.vars, **fill})
         except (KeyError, IndexError, ValueError) as e:

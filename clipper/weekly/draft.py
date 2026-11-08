@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..errors import ClipperError
 from ..prompts import Prompts
+from ..prompts import find as find_prompt
 from .faces import usable
 from .gather import hm, next_issue_number
 from .render import Renderer
@@ -175,11 +176,11 @@ def article_user(week: dict, a: dict, page: int, budget: tuple, note: str = "") 
 
 
 def article_system(cfg: dict, budget: tuple) -> str:
-    """prompts/weekly_article_<v>.md for this word budget, with the owner's own piece as the
-    example and the house style."""
+    """weekly_article_<v>.md for this word budget, with the owner's own piece as the example
+    and the house style."""
     wc = cfg["weekly"]
     prompts = Prompts(cfg)
-    example = (Path(cfg["paths"]["prompts"]) / wc["article_example"]).read_text(encoding="utf-8")
+    example = find_prompt(cfg, wc["article_example"]).read_text(encoding="utf-8")
     prompts.vars.update(example=example, col1_words=budget[0], col2_words=budget[1], deck_chars=budget[2])
     return prompts.get("weekly_article")
 

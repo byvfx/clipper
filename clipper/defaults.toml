@@ -9,7 +9,7 @@
 # Relative paths resolve against the folder of the clipper.toml in use (the working directory
 # when there is none), never against this file's.
 streams = "streams"
-prompts = "prompts"
+prompts = ""                # a folder of your own prompt files, read before the ones that ship with the code (clipper/prompts/); "" = none
 schedule = "schedule.json"
 youtube_client_secret = "secrets/youtube_client_secret.json"
 youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sign-in
@@ -123,9 +123,9 @@ format = "bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b"  # yt
 stages = ["transcribe", "segments", "cut", "meta", "thumbs", "review"]
 model = "claude-sonnet-5-5"  # writes the segment's title/description (~$0.03 each)
 effort = "medium"
-prompt_version = "v1"      # prompts/preshow_<v>.md
+prompt_version = "v1"      # clipper/prompts/preshow_<v>.md
 trim_end_s = 3.0           # seconds dropped off the end of each pre-show; 0 = the whole video
-oneoff_prompt_version = "v1"   # prompts/oneoff_<v>.md: `preshow fetch --from/--to/--about`, one stretch of any video
+oneoff_prompt_version = "v1"   # clipper/prompts/oneoff_<v>.md: `preshow fetch --from/--to/--about`, one stretch of any video
 publish = "asap"           # asap: approved -> next `clipper upload` publishes it at once | slots
 band = "Pre-show {date}!"  # the cover's green band, {date} = M/D; "" = the model's own line
 # teasers = false          # pre-show covers: one story, no side boxes (unset = as [thumbnail] teasers)
@@ -192,7 +192,7 @@ auto_hours = 24            # serve's `cast auto` this often; 0 = off
 retry_days = 7             # someone a find added nothing for is tried again after this
 label_model = "claude-haiku-5-5"  # labels each new photo ("" = no labels)
 label_effort = "low"
-prompt_version = "v1"      # prompts/cast_label_<v>.md
+prompt_version = "v1"      # clipper/prompts/cast_label_<v>.md
 labels = ["neutral", "smiling", "laughing", "angry", "shocked", "smug", "sad", "serious"]
 # Never taken from image search: photo agencies, whose photographers file copyright claims.
 blocked_domains = ["gettyimages.com", "gettyimages.co.uk", "istockphoto.com", "apimages.com",
@@ -224,7 +224,7 @@ max_age_hours = 48         # older items are skipped
 keep_days = 30             # items and stories are forgotten after this
 judge_model = "claude-haiku-5-5"  # rates each matched headline ("" = no judging)
 judge_effort = "low"
-prompt_version = "v1"      # prompts/news_judge_<v>.md
+prompt_version = "v1"      # clipper/prompts/news_judge_<v>.md
 max_judge = 60             # most headlines judged per check (newest first)
 post_maybe = true          # post "maybe" stories too, marked as such
 max_posts = 5              # most stories posted per check (strong ones first)
@@ -262,7 +262,7 @@ model_a = "claude-haiku-5-5"    # Pass A, one call per window + the stream summa
 model_b = "claude-sonnet-5-5"   # Pass B, one call per stream
 effort_a = "medium"
 effort_b = "high"
-prompt_version = "v5"           # prompts/<name>_<version>.md (v5: reads speaker tags, #52)
+prompt_version = "v5"           # clipper/prompts/<name>_<version>.md (v5: reads speaker tags, #52)
 concurrency = 4
 lead_in_s = 120                 # transcript before each window, for context
 max_picks = 10
@@ -310,7 +310,7 @@ scan_max_overlap = 0.5     # skip scanned moments a chat window already covers t
 # whole transcript (~100k tokens for an 8 h stream).
 model = "claude-opus-5-5"
 effort = "medium"
-prompt_version = "v3"          # prompts/segments_<version>.md and compilation_<version>.md (v3: speaker tags)
+prompt_version = "v3"          # clipper/prompts/segments_<version>.md and compilation_<version>.md (v3: speaker tags)
 min_aside_s = 180              # fold shorter asides into the surrounding segment
 min_s = 180                    # only cut segments between min_s and max_s seconds
 max_s = 3600
@@ -351,7 +351,7 @@ profanity_patterns = [
 # Upload metadata drafts (`clipper meta`): SEO titles, descriptions, chapters, tags, SRT.
 model = "claude-opus-5-5"
 effort = "medium"
-prompt_version = "v3"          # prompts/meta_<v>.md and chapters_<v>.md (v2: better hashtag picks, v3: speaker tags)
+prompt_version = "v3"          # clipper/prompts/meta_<v>.md and chapters_<v>.md (v2: better hashtag picks, v3: speaker tags)
 concurrency = 4                # model calls at once (the metadata draft and chapters)
 show_name = ""
 cast = []                      # per show: the show's own people by name, e.g. ["Alex", "Sam"]; the
@@ -372,7 +372,7 @@ srt_max_s = 6
 # a "text" / "highlight" / "position" there, then `clipper thumbs <id> --compose-only`.
 model = "claude-opus-5-5"
 effort = "medium"
-prompt_version = "v2"          # prompts/thumbnail_<version>.md (v2: names [meta] cast, not "the hosts")
+prompt_version = "v2"          # clipper/prompts/thumbnail_<version>.md (v2: names [meta] cast, not "the hosts")
 concurrency = 4
 clip_frames = 8                # candidates per clip, around its hook and payoff
 even_frames = 5                # segments/compilations: evenly spaced candidates...
@@ -382,7 +382,7 @@ min_brightness = 28            # skip darker frames (mean luma 0-255)
 min_sharpness = 150.0          # skip blurrier frames (variance of the Laplacian)
 min_crop = 0.4                 # most zoom allowed: a 16:9 box this share of the frame wide
 max_words = 4
-retry_prompt_version = "v1"    # prompts/thumbnail_retry_<v>.md, thumbnail_enquirer_retry_<v>.md and
+retry_prompt_version = "v1"    # clipper/prompts/thumbnail_retry_<v>.md, thumbnail_enquirer_retry_<v>.md and
                                # thumbnail_feedback_<v>.md: asking again for unusable text, a retake's note
 # Brand look. font: a bold TTF/OTF; empty = the first of `fonts` that exists
 # (Impact on Windows/macOS, DejaVu Sans Bold on Linux).
@@ -412,7 +412,7 @@ kitsu = true                   # attach to each item's Kitsu revision and set it
 # Thumbnail look: "classic" (frame + big text) or "enquirer" (1990s tabloid cover:
 # masthead, teaser band and boxes plugging the episode's other videos, big face, inset).
 style = "classic"
-enquirer_prompt_version = "v6"   # prompts/thumbnail_enquirer_<v>.md (v6: picks a cast photo by label, #41; v5: frames say whose face `clipper faces` found)
+enquirer_prompt_version = "v6"   # clipper/prompts/thumbnail_enquirer_<v>.md (v6: picks a cast photo by label, #41; v5: frames say whose face `clipper faces` found)
 face_frames = 2                # with faces.json: each named person's best frames offered for the cover...
 face_people = 4                # ...for this many people, the ones seen most in the video
 masthead = ""                  # empty = meta.show_name
@@ -475,7 +475,7 @@ fade_out_s = 0.25              # at most a quarter of the Short
 default_layout = "center"
 layout_model = "claude-haiku-5-5"
 layout_effort = "low"
-layout_prompt_version = "v1"  # prompts/shorts_layout_<v>.md
+layout_prompt_version = "v1"  # clipper/prompts/shorts_layout_<v>.md
 scene_step_s = 4               # one frame labelled this often (~$0.002 a Short)
 scene_batch = 8                # frames per call; more per call drifted
 min_scene_s = 6                # shorter runs join a neighbour (one odd frame can't flip it)
@@ -589,7 +589,7 @@ tailnet = false
 auto = true
 model = "claude-sonnet-5-5"
 effort = "medium"
-prompt_version = "v2"          # prompts/retake_<v>.md
+prompt_version = "v2"          # clipper/prompts/retake_<v>.md
 context_s = 90                 # transcript this far around the cut points
 max_per_run = 10               # retakes handled per run
 
@@ -599,7 +599,7 @@ max_per_run = 10               # retakes handled per run
 model = "claude-sonnet-5-5"
 max_clips = 3
 effort = "high"
-prompt_version = "v1"          # prompts/pick_<v>.md, pick_locate_<v>.md
+prompt_version = "v1"          # clipper/prompts/pick_<v>.md, pick_locate_<v>.md
 span_s = 600                   # --at: this long a stretch, centred on the time
 max_span_s = 2700              # longest stretch read in one call
 max_overlap = 0.5              # skip a moment whose Short overlaps an existing pick this much
@@ -759,7 +759,7 @@ index_window_s = 30            # `clipper archive index`: seconds of transcript 
 # `clipper archive ask`: a cheap model writes the searches, then picks the windows that fit.
 ask_model = "claude-haiku-5-5"
 ask_effort = "low"
-ask_prompt_version = "v1"      # prompts/archive_expand_<v>.md, archive_judge_<v>.md
+ask_prompt_version = "v1"      # clipper/prompts/archive_expand_<v>.md, archive_judge_<v>.md
 ask_max_queries = 8            # searches the model may write per question
 ask_per_query = 25             # best-ranked windows kept per search
 ask_candidates = 80            # pooled windows the model reads (~25k tokens)
@@ -776,7 +776,7 @@ tags = ["receipts"]            # YouTube tags; the show's name is added
 per_story = 3
 model = "claude-sonnet-5-5"    # reads the segments, writes the stories and questions
 effort = "medium"
-prompt_version = "v2"          # prompts/receipts_stories_<v>.md
+prompt_version = "v2"          # clipper/prompts/receipts_stories_<v>.md
 max_stories = 6
 maybe = false                  # also use "maybe" fits (they need a look in context)
 lead_s = 6                     # a clip starts this much before the quote (at a sentence start)...
@@ -787,7 +787,7 @@ card_s = 3.5                   # story card before each story's receipts
 # clip, close), voiced at `receipts cut` with [narrate] voice_id and tts_settings.
 script_model = "claude-opus-5-5"
 script_effort = "medium"
-script_prompt_version = "v2"   # prompts/receipts_script_<v>.md (v2: no "host")
+script_prompt_version = "v2"   # clipper/prompts/receipts_script_<v>.md (v2: no "host")
 vo_pad_s = 0.6                 # card time after a read ends
 lufs = -16                     # every card and clip normalized to this
 # yt-dlp format per clip: HLS first, where a section is a few segments (a DASH section
@@ -812,7 +812,7 @@ leads_model = "claude-sonnet-5-5"  # reads one candidate thread at a time
 leads_effort = "medium"
 check_model = "claude-haiku-5-5"   # coverage labels, --confirm verdicts
 check_effort = "low"
-prompt_version = "v1"          # prompts/investigate_{facts,leads,check,confirm}_<v>.md
+prompt_version = "v1"          # clipper/prompts/investigate_{facts,leads,check,confirm}_<v>.md
 parallel = 8                   # model calls at once
 chunk_s = 1200                 # transcript seconds per facts call
 since_days = 0                 # facts: last N days when --since isn't given; 0 = the whole catalog
@@ -841,7 +841,7 @@ planner_model = "claude-sonnet-5-5"   # one call: the first tasks
 planner_effort = "low"
 worker_model = "claude-haiku-5-5"     # one call per task (~$0.001): findings and follow-ups
 worker_effort = "low"
-prompt_version = "v1"          # prompts/swarm_{plan,worker}_<v>.md
+prompt_version = "v1"          # clipper/prompts/swarm_{plan,worker}_<v>.md
 workers = 8                    # tasks at once (each source's rate bounds it too)
 first_tasks = 16               # the planner's tasks, at most
 max_rounds = 3                 # follow-up rounds per run
@@ -879,7 +879,7 @@ candidates = 120               # pooled windows the find model reads
 dossier_model = "claude-sonnet-5-5"
 dossier_effort = "medium"
 dossier_sources = 80           # swarm findings the dossier may cite, best first
-prompt_version = "v1"          # prompts/story_{triage,expand,moments,dossier}_<v>.md
+prompt_version = "v1"          # clipper/prompts/story_{triage,expand,moments,dossier}_<v>.md
 budget_usd = 2.0               # triage, find and dossier together (the swarm has its own budget_usd)
 swarm = {}                     # [swarm] settings for a story's searches, e.g. { max_tasks = 40 }
 # Phase 2: `story plan` writes the edit (paths.streams/story-<slug>/story.json) from the
@@ -900,7 +900,7 @@ credit = "Sources, in the order they appear:"   # the description's last block; 
 # Narration: the short version first, a line of context before each part, where it stands at
 # the end, each a card read by the narrator (ElevenLabs, [narrate]'s key and tts_model; a few
 # cents of credits a story). Without a voice_id the cards are silent, timed for reading.
-edit_prompt_version = "v2"     # prompts/story_edit_<v>.md; v1 = clips only, no narration
+edit_prompt_version = "v2"     # clipper/prompts/story_edit_<v>.md; v1 = clips only, no narration
 narrate = true                 # false = the clips alone
 voice_id = ""                  # the narrator's voice (clipper narrate voices), not the [narrate] character's
 tts_settings = {}              # the narrator's voice_settings, e.g. { stability = 0.5, speed = 1.0 }
@@ -930,13 +930,13 @@ top_n = 30
 # paths.weekly/<saturday>/. Pages are 1080x1440 (a TikTok carousel, or two YouTube Posts).
 first_issue = 1
 words = ["grift", "coffee", "cameo", "sub", "clip", "lawsuit", "divorce"]  # counted on the numbers page
-model = "claude-opus-5-5"      # drafts issue.json from prompts/weekly_<v>.md; edit it, then
+model = "claude-opus-5-5"      # drafts issue.json from clipper/prompts/weekly_<v>.md; edit it, then
                                # `clipper weekly --render`
 effort = "high"
 prompt_version = "v3"          # v3: people only talked about from the cast library, photo by label (#41); v2: quotes credited
 write_articles = true          # after a draft, write the three articles again, one call each...
-article_prompt_version = "v2"  # ...with prompts/weekly_article_<v>.md...
-article_example = "weekly_article_example.md"  # ...and this piece (in prompts/) as the voice to match
+article_prompt_version = "v2"  # ...with clipper/prompts/weekly_article_<v>.md...
+article_example = "weekly_article_example.md"  # ...and this piece (in clipper/prompts/) as the voice to match
 quote_match = 0.75             # a hook this close to word for word in the Short is credited to its speaker
 face_frames = 3                # each person named in a stream's faces.json: their best faces for the pages; 0 = off
 formats = ["tiktok", "youtube"]  # tiktok: 1080x1440 pages | youtube: the same pages 1080x1080 in youtube/

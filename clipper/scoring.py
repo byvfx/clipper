@@ -5,7 +5,7 @@
            hook, title, score; hard-rejects other creators' video audio and casino play.
   Pass B   one call over every kept candidate: dedupe, spread, rank the final picks.
 
-Prompts live in paths.prompts as <name>_<version>.md with {placeholders} filled from
+Prompts ship in clipper/prompts/ as <name>_<version>.md with {placeholders} filled from
 [scoring]. Every candidate records model and prompt_version so prompt changes can be
 compared. --dry-run writes the Pass A requests to scoring_requests/ without calling the API.
 """

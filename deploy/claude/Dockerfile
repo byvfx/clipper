@@ -34,7 +34,6 @@ RUN chmod 755 /usr/local/bin/clipper-claude
 ENV HOME=/home/claude \
     PATH=/app/.venv/bin:$PATH \
     CLIPPER_CONFIG=/data/clipper.toml \
-    CLIPPER_PATHS_PROMPTS=/app/prompts \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     DISABLE_AUTOUPDATER=1 \

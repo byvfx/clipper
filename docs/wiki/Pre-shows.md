@@ -18,7 +18,7 @@ cookies file, or with a browser profile's cookies when `[youtube] cookies_from_b
 
 The same path takes a **one-off** from any YouTube video: `clipper --show <key> preshow fetch
 <url> --from 1:30:00 [--to 2:10:00] --about "what the stretch is"` grabs it and the segments
-stage asks the model for the exact start and end inside that window (`prompts/oneoff_<v>.md`),
+stage asks the model for the exact start and end inside that window (`clipper/prompts/oneoff_<v>.md`),
 so one long segment comes out, not the whole video. A show that is not on Kick gets a
 placeholder channel in its `[shows.<key>]` table.
 
