@@ -1,4 +1,4 @@
-"""`clipper serve`: the always-on process. It serves the war room (clipper/warroom.py) and
+"""`clipper serve`: the always-on process. It serves the war room (the clipper/warroom package) and
 runs the background jobs that used to ride inside the Discord bot, so the bot is only
 Discord and this can move to the NAS on its own (#12, #64).
 

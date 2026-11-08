@@ -4,7 +4,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from clipper import actions, serve, warroom
+from clipper import actions, schedule, serve, warroom
 from clipper.errors import ClipperError
 
 
@@ -89,7 +89,7 @@ def test_the_client_passes_the_war_rooms_checks(running, monkeypatch):
     h = serve.health(running)
     assert h["services"]["serve"]["level"] == "bad"  # no heartbeat in this tmp folder
     ran = []
-    monkeypatch.setattr(warroom.schedule, "run", lambda cfg, sync_first: ran.append(sync_first))
+    monkeypatch.setattr(schedule, "run", lambda cfg, sync_first: ran.append(sync_first))
     assert serve.replan(running, sync=True) == {"ok": True} and ran == [True]
     with pytest.raises(ClipperError, match="HTTP 401"):
         serve.call({**running, "warroom": {**running["warroom"], "token": "wrong"}}, "/api/health")
