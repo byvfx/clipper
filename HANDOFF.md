@@ -247,6 +247,13 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - YouTube sign-in died 10-29 19:54 (invalid_grant, 7 days after the 10-22 analytics sign-in = OAuth app in Testing); uploads failed hourly until the user signed in again 10-30 (~10:30, all 3 scopes kept). The user published the OAuth app (In production) 10-30 afternoon. The user signed in again 11-02 16:57 (In production), so the token shouldn't lapse.
 
 ## Open work
+**Chud's face cut off in Shorts (user 11-07, PR #164 `shorts-face-focus`):** his cam is 1.49:1, the
+slot keeps 62% of it (38% in `cam`) and he sits at the right (face centre 0.62-0.69 of the box), so the
+middle crop clipped him. A panel's `focus = "face"` now centres the crop on the faces.json face in its
+box per scene. After the merge and hub deploy: put `focus = "face"` on both Chud cam panels in
+clipper.toml (backup first; the containers' old code can't parse the string before the deploy), then
+`clipper shorts kick-136479997` re-renders v01_t07 (scheduled, not uploaded), v02, v03. The four from
+kick-136292920 are uploaded private for 11-08 and keep the bad crop unless deleted and re-uploaded.
 **Story (#84) + swarm (#109), user 11-03: three PRs.** 1) `clipper/swarm.py` (library: planner →
 Haiku workers in rounds → merged findings, trail `swarm.json`; tools YouTube search/channel, Kick,
 Odysee, Reddit, web, archive, our streams; `kick.list_videos`; `llm.Budget` now shared with

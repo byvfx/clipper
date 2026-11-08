@@ -241,6 +241,19 @@ def plan(cfg: dict, stream_dir: Path, names: list[str] | None = None,
     return order
 
 
+def shorts_after_faces(cfg: dict, stream_dir: Path, wanted: list[str], order: list[str]) -> bool:
+    """Render the Shorts again right after `faces` when a layout frames a panel on the face
+    (focus = "face") and the Shorts came first: the fast lane's, or "shorts" before "faces"
+    in this run. Only what the found faces move is re-rendered (the signature)."""
+    if "faces" not in order or "shorts" not in wanted:
+        return False
+    if "shorts" in order and order.index("shorts") > order.index("faces"):
+        return False
+    from .shorts import layouts_of, wants_faces
+
+    return wants_faces(layouts_of(for_stream(cfg, stream_dir)["shorts"]))
+
+
 def cut_before(stage: str, wc: dict) -> tuple[str, tuple[str, ...]] | None:
     return stages.cut_before(stage, wc)
 
@@ -273,10 +286,17 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
                 news.apply_pending(cfg, stream_dir, say=lambda m: log.info("%s: %s", name, m))
         except (ClipperError, OSError, ValueError, KeyError) as e:  # never worth failing a stream over
             log.warning("%s: news context not applied: %s", name, e)
-        for stage in order:
+        again = shorts_after_faces(cfg, stream_dir, wanted, order)
+        if again:
+            order = order[:order.index("faces") + 1] + ["shorts"] + order[order.index("faces") + 1:]
+        ran = set()
+        for i, stage in enumerate(order):
             if run.lost:  # the heartbeat found the lock taken over
                 raise Busy(f"{name}: another worker took the stream over")
-            if not force and run.done(stage):
+            rerun = again and stage == "shorts" and i > order.index("faces")
+            if rerun and ("faces" not in ran or not run.done("shorts")):
+                continue  # the scan didn't run now, or there are no Shorts to frame yet
+            if not force and not rerun and run.done(stage):
                 run.data["stages"].setdefault(stage, {"status": "done", "note": "output found"})
                 continue
             before = cut_before(stage, wc)
@@ -316,6 +336,7 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
             st["status"] = "done"
             log.info("%s: %s done in %ds", name, stage, st["seconds"])
             run.save()
+            ran.add(stage)
         else:
             run.data.pop("paused", None)
         complete = all(run.done(s) for s in STAGES if s in wanted)

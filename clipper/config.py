@@ -689,7 +689,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "lra": 11,
         # Layouts: name -> {description (for the picker), panels, caption_y}. Each panel
         # is src = [x, y, w, h] as fractions of the source frame, cropped to its slot's
-        # aspect around focus = [fx, fy] (default the middle) and scaled to the full width;
+        # aspect around focus = [fx, fy] (default the middle; "face" centres the crop on the
+        # face faces.json found in the box, per scene) and scaled to the full width;
         # h = its height in px (panels without h share the rest). Panels stack top to
         # bottom. caption_y: the captions' centre, as a share of the height. "center" (a
         # 9:16 crop of the middle) is always there.
