@@ -119,7 +119,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   `schedule.json` (files stored relative to streams/), secrets/, logs/, faces/, voices/, news/, weekly/,
   archive/, layouts/, rumble/, people.json, fonts/ (Impact etc. for the containers). The laptop's old
   copies are in C:\clipper\backups\laptop-state-2026-11-05\.
-- **Mac `lofn`** (Apple Silicon, joined 2026-11-07 as setup's new `control` role, PR #166): a dev/control
+- **Mac `lofn`** (Apple Silicon, joined 2026-11-07 as setup's new `control` role, PRs #165/#166 merged 11-07): a dev/control
   station that runs nothing unattended. Clone `~/clipper`; `CLIPPER_CONFIG=/Volumes/docker/clipper/clipper.toml`
   and `CLIPPER_LOCAL_CONFIG=~/clipper/clipper.local.toml` in `~/.zshrc` (the share must be mounted in
   Finder); local file sets `[paths] streams` (the share) and `[serve] url` = the tailnet war room. ssh
@@ -179,10 +179,6 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   Only new compilations get it; the user chose not to re-cut or re-upload the ones already out.
 
 ## Waiting on the user
-- Bootstrap fixes from setting up the Mac, both open 11-07: PR #165 (setup path prompts take `~/`,
-  quotes, a dragged-in file; Copilot's 3 comments handled) and PR #166 stacked on it (`control` role;
-  join uses a config on the share in place via CLIPPER_CONFIG / CLIPPER_LOCAL_CONFIG; keys optional
-  for control; doctor `online_hub`). Merge #165 first; #166 waits for Copilot's review.
 - The DSP story video is in Kitsu for review (Kino Casino / "2026-11-04 story-dsp-credit-score-590",
   Discord card posted, user's go 11-04): "DSP Says the 590 Credit Score Letter Is Fake", 3:14.
 - TikTok drafts to post by hand: last night's four resent 10-27; the 10/25 batch (kick-133940023 v04_t04,
