@@ -370,29 +370,44 @@ def run_pass_b(kept: list[dict], summary: list[dict], words: list[dict], cfg: di
 def estimate(stream_dir: Path, cfg: dict, prompts: Prompts, windows: list[dict], words: list[dict],
              sig: dict, n: int) -> list[str]:
     """`--dry-run`: what a run would send, priced with [llm] prices, nothing called. The summary
-    and the scan are left out when cached; Pass B is an upper bound (every window kept), and
-    the scan's new windows would add to Pass A."""
+    and the scan are left out when cached; after a run that failed past Pass A (a valid
+    checkpoint, #75) only the windows that errored are counted again; Pass B is an upper bound
+    (every window kept), and a fresh run's scan would add windows to Pass A."""
     sc = cfg["scoring"]
     blocks = ["\n".join(transcript_lines(words, a, a + SUMMARY_BLOCK_S)) for a in range(0, n, SUMMARY_BLOCK_S)]
     blocks = [b for b in blocks if b]
     block_in = sum(tokens(b) for b in blocks)
-    rows = []
+    rows, notes = [], []
     if not (stream_dir / f"summary_{prompts.version}.json").exists():
         rows.append(("summary", sc["model_a"], len(blocks),
                      len(blocks) * tokens(prompts.get("summary")) + block_in, 150 * len(blocks)))
     scan_system = prompts.get("scan") if sc["transcript_scan"] else ""
-    if scan_system and cached_scan(stream_dir / f"scan_{prompts.version}.json", prompt_sha(scan_system)) is None:
-        rows.append(("scan", sc["model_a"], len(blocks), len(blocks) * tokens(scan_system) + block_in,
-                     300 * len(blocks)))
+    ckpt_sha = prompt_sha(prompts.get("score_a"), scan_system)
+    saved = jsonstate.read(stream_dir / f"pass_a_{prompts.version}.json")
+    if saved and saved.get("prompt_sha", ckpt_sha) != ckpt_sha:
+        saved = None
+    if saved:
+        by_id = {w.get("id") or f"w{w['rank']:02d}": w for w in windows + saved.get("scan_windows", [])}
+        redo = [by_id[r["id"]] for r in saved["pass_a"] if r["status"] == "error" and r["id"] in by_id]
+        kept = [by_id[r["id"]] for r in saved["pass_a"] if r["status"] == "kept" and r["id"] in by_id]
+        a_windows, b_windows = redo, kept + redo
+        notes.append(f"  Pass A from the saved checkpoint: {len(redo)} errored window(s) asked again, "
+                     f"{len(saved['pass_a']) - len(redo)} kept as they are; no scan")
+    else:
+        if scan_system and cached_scan(stream_dir / f"scan_{prompts.version}.json", prompt_sha(scan_system)) is None:
+            rows.append(("scan", sc["model_a"], len(blocks), len(blocks) * tokens(scan_system) + block_in,
+                         300 * len(blocks)))
+        a_windows = b_windows = windows
+        notes.append("  Pass B as if every window were kept (fewer are); the scan's new windows would add to Pass A")
     system = prompts.get("score_a")
-    rows.append(("Pass A", sc["model_a"], len(windows),
-                 sum(tokens(system + pass_a_user(w, words, sig, sc["lead_in_s"])) for w in windows),
-                 300 * len(windows)))
+    if a_windows:
+        rows.append(("Pass A", sc["model_a"], len(a_windows),
+                     sum(tokens(system + pass_a_user(w, words, sig, sc["lead_in_s"])) for w in a_windows),
+                     300 * len(a_windows)))
     b_in = tokens(prompts.get("score_b")) + 60 * len(blocks) + sum(
-        tokens(" ".join(transcript_lines(words, w["start_s"], w["end_s"]))) + 120 for w in windows)
+        tokens(" ".join(transcript_lines(words, w["start_s"], w["end_s"]))) + 120 for w in b_windows)
     rows.append(("Pass B", sc["model_b"], 1, b_in, 2500))
-    return estimate_lines(cfg, rows) + [
-        "  Pass B as if every window were kept (fewer are); the scan's new windows would add to Pass A"]
+    return estimate_lines(cfg, rows) + notes
 
 
 def run(stream_dir: Path, cfg: dict, dry_run: bool = False, force: bool = False) -> dict:

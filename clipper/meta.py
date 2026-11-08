@@ -262,11 +262,7 @@ def generate(stream_dir: Path, mc: dict, assets: list[dict], lines: list[str],
     (metadata, chapters by segment id, the checkpoint file)."""
     # #75: every call that succeeded is kept here until the drafts are written, so one failed
     # chapters call doesn't throw away the big metadata call (or the other chapters).
-    ckpt = stream_dir / "metadata" / f".checkpoint_{mc['prompt_version']}.json"
-    ids = sorted(x["id"] for x in assets)
-    saved = jsonstate.read(ckpt) or {}
-    if saved.get("ids") != ids:
-        saved = {"ids": ids, "gen": None, "chapters": {}}
+    ckpt, saved = checkpoint(stream_dir, mc, assets)
     errors = []
     with ThreadPoolExecutor(mc["concurrency"]) as pool:
         f_meta = None if saved["gen"] else pool.submit(
@@ -330,16 +326,36 @@ def draft(x: dict, g: dict, ch: list[dict], credit: str, playlist: str, mc: dict
     return out
 
 
-def estimate(cfg: dict, mc: dict, prompts: Prompts, lines: list[str], long_segs: list[dict],
-             words: list[dict], n_assets: int) -> list[str]:
+def checkpoint(stream_dir: Path, mc: dict, assets: list[dict]) -> tuple[Path, dict]:
+    """The metadata checkpoint (#75): the calls an earlier run already paid for, when its asset
+    ids are these; else a fresh one. (its path, {ids, gen, chapters})."""
+    ckpt = stream_dir / "metadata" / f".checkpoint_{mc['prompt_version']}.json"
+    ids = sorted(x["id"] for x in assets)
+    saved = jsonstate.read(ckpt) or {}
+    if saved.get("ids") != ids:
+        saved = {"ids": ids, "gen": None, "chapters": {}}
+    return ckpt, saved
+
+
+def estimate(stream_dir: Path, cfg: dict, mc: dict, prompts: Prompts, assets: list[dict], lines: list[str],
+             long_segs: list[dict], words: list[dict]) -> list[str]:
     """`--dry-run`: the metadata call and a chapters call per long segment, priced with [llm]
-    prices, nothing called."""
-    rows = [("metadata", mc["model"], 1, tokens(prompts.get("meta") + "\n\n".join(lines)), 250 * n_assets)]
-    if long_segs:
-        rows.append(("chapters", mc["model"], len(long_segs),
-                     sum(tokens(prompts.get("chapters") + chapter_user(x, words)) for x in long_segs),
-                     300 * len(long_segs)))
-    return estimate_lines(cfg, rows)
+    prices, nothing called. What the checkpoint of a failed run already holds isn't counted,
+    as `generate` won't ask for it again."""
+    ckpt, saved = checkpoint(stream_dir, mc, assets)
+    rows = []
+    if not saved["gen"]:
+        rows.append(("metadata", mc["model"], 1, tokens(prompts.get("meta") + "\n\n".join(lines)),
+                     250 * len(assets)))
+    todo = [x for x in long_segs if x["id"] not in saved["chapters"]]
+    if todo:
+        rows.append(("chapters", mc["model"], len(todo),
+                     sum(tokens(prompts.get("chapters") + chapter_user(x, words)) for x in todo), 300 * len(todo)))
+    held = (len(long_segs) - len(todo)) + (1 if saved["gen"] else 0)
+    note = [f"  {held} call(s) already in {ckpt.name} from an earlier run: not counted"] if held else []
+    if not rows:
+        return note + ["  nothing to pay: a rerun writes the drafts from the checkpoint"]
+    return estimate_lines(cfg, rows) + note
 
 
 def run(stream_dir: Path, cfg: dict, missing: bool = False, dry_run: bool = False) -> list[dict]:
@@ -374,7 +390,7 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False, dry_run: bool = Fals
     long_segs = [x for x in assets if x["kind"] == "segment" and duration(x) >= mc["chapters_min_s"]
                  and not x.get("chapters")]
     if dry_run:
-        print("\n".join(["estimate:"] + estimate(cfg, mc, prompts, lines, long_segs, words, len(assets))))
+        print("\n".join(["estimate:"] + estimate(stream_dir, cfg, mc, prompts, assets, lines, long_segs, words)))
         return []
     claude = Claude(cfg)
     preflight(claude, mc["model"])

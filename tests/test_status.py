@@ -1,6 +1,8 @@
 """`clipper status`: one screen from the files the services write, nothing called."""
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from clipper import jsonstate, status
 
 
@@ -33,3 +35,20 @@ def test_status_reads_the_files_and_names_what_is_missing(defaults, tmp_path):
 def test_status_with_nothing_at_all(defaults, tmp_path):
     out = status.lines(in_tmp(defaults, tmp_path), days=3)
     assert "  none in progress" in out and "  none scheduled" in out
+
+
+def test_status_counts_reviews_from_files_without_kitsu(defaults, tmp_path, monkeypatch):
+    """An old publish saved no Kitsu links; plain `clipper status` still never asks Kitsu for them."""
+    from clipper import review
+
+    defaults = in_tmp(defaults, tmp_path)
+    sdir = defaults["paths"]["streams"] / "kick-1"
+    (sdir / "clips").mkdir(parents=True)
+    jsonstate.write(sdir / "review_state.json", {"c01_t20": {
+        "kind": "pick", "id": "t20", "file": "clips/01_t20.mp4", "task_id": "T", "entity_id": "E", "fields": {}}})
+    jsonstate.write(sdir / "review.json", {"c01_t20": {"decision": "approved", "status": "approved", "fields": {}}})
+    jsonstate.write(sdir / "meta.json", {"started_at": "2026-11-07T20:00:00-08:00"})
+    jsonstate.write(defaults["paths"]["schedule"], {"entries": []})
+    monkeypatch.setattr(review, "connect", lambda rc: pytest.fail("status reached Kitsu"))
+    out = "\n".join(status.lines(defaults, days=1))
+    assert "kick-1 (2026-11-07): 1 approved" in out and "worker" not in out.split("streams")[0]
