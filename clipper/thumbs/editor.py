@@ -38,7 +38,7 @@ def cover_info(stream_dir: Path, cfg: dict, key: str) -> dict:
             "photos": sorted(tc["_photos"]), "photo_labels": photo_labels(tc), "max_words": tc["max_words"]}
 
 
-def _clean_changes(cfg: dict, e: dict, changes: dict) -> dict:
+def _clean_changes(cfg: dict, e: dict, changes: dict) -> dict:  # noqa: C901
     """The editor's changes, checked: frame numbers in range, face boxes inside the frame,
     photos on file, text without words the channel never prints."""
     from ..bleep import Bleeper

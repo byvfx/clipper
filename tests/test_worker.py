@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from clipper import worker
+from clipper import stages, worker
 
 SLOW = ["signals", "transcribe", "score", "segments", "cut", "meta", "thumbs", "shorts", "review"]
 
@@ -198,3 +198,11 @@ def test_face_framed_shorts_render_again_after_the_face_scan(tmp_path, defaults,
     plain = {**c, "shorts": {**c["shorts"], "layouts": {"cam": {"panels": [{"src": [0, 0, 1, 1]}]}}}}
     assert not worker.shorts_after_faces(plain, tmp_path, worker.default_stages(plain, tmp_path),
                                          worker.plan(plain, tmp_path, lane="slow"))
+
+
+def test_a_forced_run_passes_force_to_the_stages_that_refuse_reruns(defaults):
+    wc = defaults["worker"]
+    assert stages.argv("score", "kick-1", wc) == ["score", "kick-1"]
+    assert stages.argv("score", "kick-1", wc, force=True) == ["score", "kick-1", "--force"]
+    assert "--force" in stages.argv("cut", "kick-1", wc, force=True)
+    assert "--force" not in stages.argv("meta", "kick-1", wc, force=True)

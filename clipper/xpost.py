@@ -141,7 +141,7 @@ def access_token(paths: dict) -> str:
                 new = save_token(token_request(client(paths), grant_type="refresh_token",
                                                refresh_token=tok["refresh_token"]), tok)
             except ClipperError as e:
-                raise ClipperError(f"{e}; run: clipper x --sign-in")
+                raise ClipperError(f"{e}; run: clipper x --sign-in") from e
             tok.clear()
             tok.update(new)
         return tok["access_token"]
@@ -634,7 +634,8 @@ def post_issue(cfg: dict, day: str | None = None, dry_run: bool = False) -> None
             try:
                 pid = call(paths, "POST", "/tweets", json=body)["data"]["id"]
             except (ClipperError, requests.RequestException) as ex:
-                raise ClipperError(f"X post {i + 1} of issue {here.name} failed: {ex}; run it again to carry on")
+                raise ClipperError(f"X post {i + 1} of issue {here.name} failed: {ex}; "
+                                   "run it again to carry on") from ex
             done.append({"id": pid, "url": f"https://x.com/{user}/status/{pid}", "text": text,
                          "posted_at": costs.now_iso()})
             with jsonstate.update(here / "x.json", {}) as rec:

@@ -31,3 +31,8 @@ def test_parse_time(text, s):
 def test_parse_time_refuses(text):
     with pytest.raises(ClipperError):  # the convention: one line for the user, no traceback
         parse_time(text)
+
+
+def test_a_bad_time_is_a_clipper_error():
+    with pytest.raises(ClipperError, match="not a time"):
+        parse_time("abc")

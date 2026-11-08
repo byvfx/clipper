@@ -188,7 +188,7 @@ def set_photos(stream_dir: Path, cfg: dict, ids: list[str], photo: str | None = 
     return sorted(set(changed))
 
 
-def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool = False,
+def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool = False,  # noqa: C901
         compose_only: bool = False, kitsu: bool = True,
         feedback: dict[str, str] | None = None, missing: bool = False) -> list[dict]:
     """feedback: {asset id: what was wrong with its thumbnail}, for a re-pick (retakes).

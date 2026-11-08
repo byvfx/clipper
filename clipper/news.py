@@ -123,7 +123,7 @@ def parse_figures(text: str) -> list[tuple[str, list[str]]]:
     return out
 
 
-def watchlist(cfg: dict) -> dict[str, Watch]:
+def watchlist(cfg: dict) -> dict[str, Watch]:  # noqa: C901
     """{lowercased name: Watch}: the terms in [news] watch and each show's [shows.<key>.news]
     watch, and with [news] auto_watch the shows' people and names and the cast library too."""
     from . import cast

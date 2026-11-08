@@ -41,10 +41,12 @@ recording's stages), `clipper review status` (decisions and what's scheduled), `
 
 ## Stop and restart
 
-`clipper serve`, the bot and the GPU worker are Windows scheduled tasks:
-`clipper services status|stop|restart serve|bot|worker` ([Roles and services](Roles-and-services)).
-The recorder is a container on the NAS: `bash deploy/record/deploy.sh`, only when no show is
-live (a restart starts a new recording part).
+`clipper serve`, the bot and the worker run as containers on the NAS:
+`clipper services status|stop|restart serve|bot|worker` runs `docker compose` there, and code
+changes go out with `bash deploy/hub/deploy.sh` ([Roles and services](Roles-and-services#services),
+[NAS hub](NAS-hub)). On a single Windows machine without Docker they are scheduled tasks instead,
+driven by the same command. The recorder is its own container on the NAS:
+`bash deploy/record/deploy.sh`, only when no show is live (a restart starts a new recording part).
 
 ## When something breaks
 

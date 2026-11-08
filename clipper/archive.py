@@ -369,7 +369,7 @@ def check_odysee(urls: list[str]) -> dict[str, tuple[str, str]]:
     return out
 
 
-def check_links(cfg: dict, subject: str, ids: list[str] | None, everything: bool,
+def check_links(cfg: dict, subject: str, ids: list[str] | None, everything: bool,  # noqa: C901
                 limit: int | None) -> None:
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)

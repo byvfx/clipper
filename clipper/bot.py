@@ -482,7 +482,7 @@ class Bot(discord.Client):
         await interaction.followup.send(f"{verb} `{row['short']}` in Kitsu{note}.", ephemeral=True)
 
 
-def register_commands(bot: Bot) -> None:
+def register_commands(bot: Bot) -> None:  # noqa: C901
     tree, cfg = bot.tree, bot.cfg
 
     async def streams(interaction: discord.Interaction, current: str):

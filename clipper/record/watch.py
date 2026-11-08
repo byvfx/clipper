@@ -125,7 +125,7 @@ class Watcher:
         self.alert(f"{c['slug']} is live: {st.title!r} -> {sid}", logging.INFO)
         return rec
 
-    def tick(self) -> None:
+    def tick(self) -> None:  # noqa: C901
         now = _now()
         for c in self.channels:
             slug = c["slug"]

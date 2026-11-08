@@ -47,9 +47,11 @@
 
 7. **Check**: `clipper doctor --role gpu` (or `--role serve`, `--role bot`).
 
-8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed;
-   the scripts share `deploy\common.ps1`, which lists the user env vars a task copies in,
-   since scheduled tasks don't always see ones set after logon: a new key goes there too):
+8. **Run unattended.** Serve and the bot normally run as containers ([NAS hub](NAS-hub)); on
+   Windows the scheduled tasks are for the GPU worker, or for all three on a single machine
+   without Docker (at logon, restarted if they exit, no admin needed; the scripts share
+   `deploy\common.ps1`, which lists the user env vars a task copies in, since scheduled tasks
+   don't always see ones set after logon: a new key goes there too):
    ```powershell
    deploy\worker\worker-task.ps1 -Install     # GPU worker
    deploy\serve\serve-task.ps1 -Install       # clipper serve (only one machine runs it)
