@@ -6,7 +6,8 @@
 # `clipper config get <section>.<key>` shows a value and which layer set it.
 
 [paths]
-# Relative paths resolve against this file's directory.
+# Relative paths resolve against the folder of the clipper.toml in use (the working directory
+# when there is none), never against this file's.
 streams = "streams"
 prompts = "prompts"
 schedule = "schedule.json"
@@ -429,7 +430,7 @@ condensed_fonts = ["C:/Windows/Fonts/bahnschrift.ttf",
 condensed_variation = "Bold Condensed"
 # Folder of head-and-shoulders photos, "<Person>.jpg", for people talked about but not on
 # screen; enquirer covers may use one for the face or the teaser box. "" = none.
-# photos = "//nas/share/clipper/photos"   (a relative folder is beside this file, like [paths])
+# photos = "//nas/share/clipper/photos"   (a relative folder is beside clipper.toml, like [paths])
 photos = ""
 
 [shorts]
@@ -554,9 +555,11 @@ disk_free_gb = 50            # 0 = no disk check
 # "" = this machine (http://127.0.0.1:<[warroom] port>/). On another machine, e.g.
 # "http://nas:8765/", with the same [warroom] token (or secrets/warroom_token.txt) on both.
 url = ""
-# Where serve, the bot and the worker run, for `clipper services`: "" = this machine's
-# scheduled tasks (deploy/serve, deploy/discord, deploy/worker); "clipper-hub" = containers
-# on the NAS (deploy/hub/deploy.sh), reached over ssh like the recorder ([record] ssh_host).
+# Where serve, the bot and the worker run, for `clipper services`. "" = this machine: only the
+# Windows worker has a scheduled task (deploy/worker); serve and the bot are whatever you
+# started by hand (status shows their heartbeats, stop and restart say so). "clipper-hub" = the
+# compose folder on the Docker host that deploy/hub/deploy.sh uses (relative to the ssh user's
+# home), reached over ssh like the recorder ([record] ssh_host).
 hub = ""
 
 [warroom]
