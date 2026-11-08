@@ -1248,12 +1248,10 @@ def lead_message(x: dict, link: str = "") -> str:
 
 def war_room_link(cfg: dict) -> str:
     """The war room's base URL for links in Discord: its tailnet address, else [serve] url, else ""."""
-    from .serve import tailnet_link
+    from . import daemon
 
-    try:
-        base = tailnet_link(cfg) if cfg["warroom"]["tailnet"] else ""
-    except Exception:  # noqa: BLE001  # serve down: the link is a nicety
-        base = ""
+    hb = daemon.heartbeat(cfg, "serve")  # carries the tailnet URL while serve is up: no HTTP, no serve import
+    base = str(hb["data"].get("tailnet") or "") if hb["up"] and cfg["warroom"]["tailnet"] else ""
     return (base or str(cfg["serve"]["url"] or "")).rstrip("/")
 
 

@@ -356,10 +356,25 @@ def release_issue(dpath: Path) -> None:
         state.pop("claim", None)
 
 
+def publish_and_post(stream_dir: Path, cfg: dict, force: bool = False, only: list[str] | None = None,
+                     post_cards: bool = True) -> list[str]:
+    """`clipper review publish`, then a card for each item it published. The CLI, `pick`
+    and `story cut` go through here so review.py itself never knows about Discord.
+    post_cards=False (`--no-notify`, the worker without [worker] notify) publishes only.
+    Returns the published keys."""
+    from . import review
+
+    cfg = for_stream(cfg, stream_dir)  # the stream's own [discord] enabled, as publish and post see it
+    published = review.publish(stream_dir, cfg, force=force, only=only)
+    if post_cards and published and cfg["discord"]["enabled"]:
+        post(stream_dir, cfg, keys=published)
+    return published
+
+
 def post_issue(cfg: dict, day: str | None = None) -> int:
     """Post a weekly issue's pages to [discord] weekly_channel, to save them on a phone for
     posting by hand. <issue>/discord.json keeps each message, so a rerun posts only what's missing."""
-    from .xpost import issue_folder, issue_pages
+    from .weekly import issue_folder, issue_pages
 
     dc = cfg["discord"]
     here = issue_folder(cfg, day)

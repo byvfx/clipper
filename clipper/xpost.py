@@ -57,6 +57,7 @@ from . import costs, jsonstate, media, oauth, rumble, schedule, wiki
 from .config import for_stream
 from .errors import ClipperError
 from .states import split_key
+from .weekly import issue_folder, issue_pages
 
 AUTH_URL = "https://x.com/i/oauth2/authorize"
 API = "https://api.x.com/2"
@@ -65,7 +66,6 @@ MB = 1024 * 1024
 CHUNK = 4 * MB       # X: keep each appended segment at or below 5 MB (the server takes 8)
 CLAIM_S = 1800       # a run's claim on an entry older than this was left by a run that died
 MAX_TRIES = 3        # --auto tries a failed post again until it has failed this often
-ISSUE_PAGES = 10     # a weekly issue's pages, all posted or none
 
 
 class XError(ClipperError):
@@ -487,22 +487,6 @@ def post(cfg: dict, items: list[str], stream: str | None = None, dry_run: bool =
 
 # ---------- weekly issue ----------
 
-def issue_folder(cfg: dict, day: str | None) -> Path:
-    """weekly/<Saturday>/ of the week holding `day`, or the newest issue drafted."""
-    root = Path(cfg["paths"]["weekly"])
-    if day:
-        d = datetime.strptime(day, "%Y-%m-%d")
-        here = root / (d + timedelta(days=(5 - d.weekday()) % 7)).strftime("%Y-%m-%d")
-    else:
-        drafted = sorted(p.parent for p in root.glob("*/issue.json"))
-        if not drafted:
-            raise ClipperError(f"no weekly issue in {root}; run: clipper weekly")
-        here = drafted[-1]
-    if not (here / "issue.json").exists():
-        raise ClipperError(f"no issue.json in {here}; run: clipper weekly --week {day}")
-    return here
-
-
 def caption_body(text: str) -> str:
     """A post caption without its hashtag lines and a leading "Pages 6-10:"."""
     lines = [s for s in text.splitlines() if not re.fullmatch(r"(\s*#\w+)+\s*", s)]
@@ -537,20 +521,6 @@ def x_len(text: str) -> int:
     (emoji, CJK) 2."""
     light = ((0, 4351), (8192, 8205), (8208, 8223), (8242, 8247))
     return sum(1 if any(a <= ord(c) <= b for a, b in light) else 2 for c in text)
-
-
-def issue_pages(here: Path) -> list[Path]:
-    """Pages 01-10 of an issue, each exactly once: a half-finished render would otherwise go
-    out as a complete thread and the missing page could never follow."""
-    pages = sorted(here.glob("[0-9][0-9]_*.jpg"))
-    nums = [p.name[:2] for p in pages]
-    want = [f"{n:02d}" for n in range(1, ISSUE_PAGES + 1)]
-    if nums != want:
-        missing = sorted(set(want) - set(nums))
-        extra = sorted(n for n in set(nums) if nums.count(n) > 1 or n not in want)
-        raise ClipperError(f"{here} needs pages 01-{ISSUE_PAGES:02d} once each (missing {missing or '-'}, "
-                           f"extra {extra or '-'}); run: clipper weekly --render")
-    return pages
 
 
 def issue_posts_last_24h(cfg: dict, now: datetime | None = None) -> int:

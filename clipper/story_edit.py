@@ -474,7 +474,7 @@ def retire(sdir: Path, keep: str) -> None:
 
 def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:  # noqa: C901
     from . import meta as meta_stage
-    from . import review as review_stage
+    from . import notify as discord_notify
     from . import thumbs
     from .bleep import Bleeper
     from .config import for_show, for_stream
@@ -600,7 +600,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     thumbs.run(sdir, cfg, force=not fresh, missing=fresh)
     done["thumbs"] = video
     jsonstate.write(sdir / "story_state.json", done)
-    review_stage.publish(sdir, cfg, only=["segments"])
+    discord_notify.publish_and_post(sdir, cfg, only=["segments"])
     return final
 
 

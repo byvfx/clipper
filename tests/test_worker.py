@@ -206,3 +206,17 @@ def test_a_forced_run_passes_force_to_the_stages_that_refuse_reruns(defaults):
     assert stages.argv("score", "kick-1", wc, force=True) == ["score", "kick-1", "--force"]
     assert "--force" in stages.argv("cut", "kick-1", wc, force=True)
     assert "--force" not in stages.argv("meta", "kick-1", wc, force=True)
+
+
+def test_a_pre_show_is_known_by_its_meta_kind(tmp_path):
+    """states.is_preshow: the worker and segments ask it, preshow.py no longer owns it."""
+    from clipper import jsonstate
+    from clipper.states import PRESHOW_PREFIX, is_preshow
+
+    d = tmp_path / f"{PRESHOW_PREFIX}abc123"
+    d.mkdir()
+    assert not is_preshow(d)                       # no meta.json yet
+    jsonstate.write(d / "meta.json", {"kind": "preshow", "stream_id": d.name})
+    assert is_preshow(d)
+    jsonstate.write(d / "meta.json", {"stream_id": "kick-1"})
+    assert not is_preshow(d)

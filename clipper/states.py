@@ -1,8 +1,14 @@
 """Names the state files share, in one place: review decisions, the item kinds and what
-each kind is in schedule.json and in Kitsu, and schedule keys ("<stream id>/<item key>")."""
+each kind is in schedule.json and in Kitsu, schedule keys ("<stream id>/<item key>"), and
+which stream folders are pre-shows grabbed from YouTube (yt-<id>)."""
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
+
+from . import jsonstate
+
+PRESHOW_PREFIX = "yt-"   # streams/yt-<video id>: a pre-show or one-off from YouTube (clipper preshow)
 
 
 class Decision(StrEnum):
@@ -55,3 +61,13 @@ def carry_numbers(old: dict, new: list[dict]) -> tuple[list[dict], dict[str, int
             had[p["id"]], nxt = nxt, nxt + 1
         out.append({**p, "n": had[p["id"]]})
     return out, had
+
+
+def is_preshow(stream_dir: Path) -> bool:
+    """A pre-show or one-off: its meta.json says kind "preshow" (one whole-video segment,
+    the [preshow] stages instead of the worker's)."""
+    try:
+        meta = jsonstate.load(stream_dir / "meta.json")
+    except (OSError, ValueError):
+        return False
+    return meta.get("kind") == "preshow"

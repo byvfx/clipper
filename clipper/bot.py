@@ -46,7 +46,7 @@ from zoneinfo import ZoneInfo
 import discord
 from discord import app_commands
 
-from . import actions, alerts, cardsync, daemon, news, notify, schedule, serve
+from . import actions, alerts, cardsync, daemon, digest, news, notify, schedule, serve
 from .errors import ClipperError
 from .timefmt import length
 
@@ -240,7 +240,7 @@ class Bot(discord.Client):
             try:
                 if not link and self.cfg["warroom"]["tailnet"]:
                     link = await asyncio.to_thread(serve.tailnet_link, self.cfg)
-                msgs, files, st = await asyncio.to_thread(alerts.pending, self.cfg, link)
+                msgs, files, st = await asyncio.to_thread(alerts.pending, self.cfg, link, digest.text)
                 if msgs:
                     user = self.get_user(uid) or await self.fetch_user(uid)
                     for m in msgs:
