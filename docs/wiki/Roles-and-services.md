@@ -14,25 +14,28 @@ runs the bot. Here serve, the bot and the worker run as containers on the NAS si
 
 ## Services
 
-On Windows, serve, the bot and the worker run as scheduled tasks (at logon, restarted if they
-exit, no admin needed), installed once per machine ([Install on Windows](Install-Windows), step 8):
+The supported way to run serve, the bot and the worker unattended is Docker compose on the NAS
+([NAS hub](NAS-hub), `deploy/hub`): with `[serve] hub` set, `clipper services
+status|stop|restart serve|bot|worker|all` runs `docker compose` there over ssh, and code changes
+go out with `bash deploy/hub/deploy.sh`. Restart serve after scheduler or war-room changes, the
+bot after Discord changes. `clipper services restart recorder` restarts the recorder over ssh,
+refused while it's recording a show.
+
+On a Windows GPU machine the worker runs as a scheduled task instead (at logon, restarted if it
+exits, no admin needed), installed once ([Install on Windows](Install-Windows), step 8). The
+same scripts exist for serve and the bot, for a single Windows machine without Docker; never
+run them beside the containers (their single-instance locks don't see each other):
 
 ```powershell
 deploy\worker\worker-task.ps1 -Install     # GPU worker
-deploy\serve\serve-task.ps1 -Install       # clipper serve
-deploy\discord\bot-task.ps1 -Install       # Discord bot
+deploy\serve\serve-task.ps1 -Install       # clipper serve (single machine, no Docker)
+deploy\discord\bot-task.ps1 -Install       # Discord bot (single machine, no Docker)
 ```
 
-`-Status`, `-Restart`, `-Stop`, `-Uninstall` work on all three. `clipper services` shows them
-plus the recorder and any cut running on the NAS, with serve's and the bot's heartbeats from the
-share; `clipper services status|stop|restart serve|bot|worker|all` runs the same scripts, which
-also stop the supervisor and stage processes (stopping the task alone doesn't).
-`clipper services restart recorder` restarts the recorder over ssh, refused while it's
-recording a show.
-
-Restart serve after scheduler or war-room changes, the bot after Discord changes. With
-`[serve] hub` set ([NAS hub](NAS-hub)), `clipper services` runs `docker compose` on the NAS over
-ssh instead, and code changes go out with `bash deploy/hub/deploy.sh`.
+`-Status`, `-Restart`, `-Stop`, `-Uninstall` work on all three. Without `[serve] hub`,
+`clipper services` shows the tasks plus the recorder and any cut running on the NAS, with
+serve's and the bot's heartbeats from the share, and `status|stop|restart` runs the same
+scripts, which also stop the supervisor and stage processes (stopping the task alone doesn't).
 
 ## Serve and bot on different machines
 

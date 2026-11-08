@@ -117,9 +117,11 @@ Windows notes above don't apply.
 - `clipper doctor --role gpu --offline` after changing config, ffmpeg, fonts or dependencies.
 - Try risky changes on the test stream `kick-131151926` before a real one.
 - Before committing: `uvx ruff@0.17.3 check clipper tests` and `.venv/Scripts/python.exe -m pytest -q`.
-  The rules are ruff's defaults for the version pinned in pyproject (`required-version`); bump
-  the pin there and in the dev group together. Tests are offline and take under a second; new
-  pure logic gets a test in `tests/`. CI runs both on every push (`.github/workflows/check.yml`).
+  The rules are ruff's defaults plus the few in pyproject's `[tool.ruff.lint]` (import order,
+  bugbear, pyupgrade, blind excepts, stale noqa, McCabe over 15), pinned to the version in
+  `required-version`; bump the pin there and in the dev group together. Tests are offline and
+  take about 25 s; new pure logic gets a test in `tests/`. CI runs both on every push, on Linux
+  and Windows (`.github/workflows/check.yml`).
   Merging a PR: wait for Copilot's automatic review (a few minutes after the PR opens), handle
   each comment and show the user, then merge. Green CI alone isn't enough.
   Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running

@@ -6,7 +6,7 @@ this page is the short version.
 ```
 clipper/              the package, one module per stage, cli.py wires them
 prompts/              versioned prompt files; the version in use is set in clipper.toml
-deploy/               bootstrap (new machine), NAS recorder (Docker), Kitsu (Docker), Windows worker, serve and bot tasks
+deploy/               bootstrap (new machine); compose stacks for the NAS hub (serve, bot, worker), the recorder, Kitsu and Claude; Windows task scripts for a GPU worker
 streams/<id>/         one folder per stream: source, transcript, cuts, metadata, review state
 clipper.example.toml  every setting, documented (a test checks it against config.py)
 tests/                offline tests (pytest); CI runs them and ruff on every push
@@ -38,8 +38,9 @@ uvx ruff@0.17.3 check clipper tests
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-Tests are offline and take under a second; new pure logic gets a test. CI runs both on every
-push (`.github/workflows/check.yml`). Try risky changes on the test stream `kick-131151926`
+Tests are offline and take about 25 s; new pure logic gets a test. CI runs both on every
+push, on Linux and Windows (`.github/workflows/check.yml`). The ruff rules are the defaults plus
+the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on the test stream `kick-131151926`
 first. Before merging a PR, wait for Copilot's automatic review and handle each comment.
 
 ## Editing these docs
