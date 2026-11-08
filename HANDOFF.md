@@ -143,7 +143,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   own task 11-04). An 8-Bit Guy explainer (Mother Moo v4 reads, edited in DaVinci Resolve: project
   "8-Bit Guy explainer" on the laptop, timeline v6, Resolve MCP registered locally) went out on X 11-04
   with burned-in captions (https://x.com/lolcowcinema/status/2118120833046741152); files and recipe in
-  reports/8bitguy-explainer/ and its draft. ElevenLabs reads default to lossless pcm_48000 WAV since
+  studio/reports/8bitguy-explainer/ and its draft. ElevenLabs reads default to lossless pcm_48000 WAV since
   PR #143 (merged 11-04); dsp and blade are config-only tests; `trish` is a
   placeholder show for the 2026-10-27 one-off (public https://youtu.be/Mh6JcTACFlI). trish and blade are
   off the war room (`[warroom] hide_shows`, user 2026-11-05: "i doubt we will ever clip either right now").
@@ -169,7 +169,7 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
   https://x.com/lolcowcinema/status/2116852491925254298. Issue 04 is
   Saturday 2026-11-07 (`clipper weekly --headline "..."`; on a Sunday add `--week <Saturday>`).
 - **The Udder Truth:** storyboard complete, voice and pipeline chosen; next is the newsroom set (Brass Eye
-  refs in mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
+  refs in studio/mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
   (~1,550 credits; 18,457 Runway credits left on 10-24).
 - **Costs:** October ~$200 in model/GPU spend, ~$184 of it the Jer archive; `clipper costs`, war room
   Costs, Modal and API usage panels (`clipper costs --providers`: Claude's and OpenRouter's own count next
@@ -275,7 +275,7 @@ investigate): merged 11-03 (PR #134; X credits PR #133 before it). Live test on 
 tasks, 109 findings (44 strong), $0.025. YouTube flat listings: `ytsearchdate` is gone from yt-dlp;
 search URL + upload-date filter `sp` + `youtubetab:approximate_date` instead (sort-by-date is ignored).
 2) `story` phase 1 (`clipper/story.py`, merged 11-03 as PR #135): brief
-(people from `research_notes/streamers.json` + `[story] people`, their channels seed the swarm) →
+(people from `studio/research_notes/streamers.json` + `[story] people`, their channels seed the swarm) →
 swarm → triage (Haiku, `--max-videos`/`--max-hours`; our own streams linked via the catalog's `dir`,
 not re-transcribed) → ingest (archive's Modal path; new Kick VOD branch: smallest HLS variant →
 flac) → find (Haiku queries + judge over `story-<slug>` and archive subjects the swarm hit; quotes
@@ -458,7 +458,7 @@ start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
 like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built).
 - **In git (push it):** `prompts/` (every version, never edit one that produced reviewed output),
-  `clipper.example.toml`, `mockups/`, `research_notes/` (with `streamers.json`), `reports/`, this file.
+  `clipper.example.toml`, `studio/` (mockups, research notes with `streamers.json`, the media reports), `reports/`, this file.
 - **Not in git, copy by hand or script** (all in the NAS folder since 2026-11-05): `clipper.toml` and the `backups/` folder (`clipper.before_*`,
   `schedule.before_*`; hand-edit backups go there now, not the repo root)
   (show tables, house_style, stream_context, scoring rules), each `streams/<id>/config.toml`

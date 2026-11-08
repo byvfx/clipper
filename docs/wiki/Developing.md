@@ -12,6 +12,8 @@ clipper.example.toml  every setting, documented (a test checks it against config
 tests/                offline tests (pytest); CI runs them and ruff on every push
 docs/wiki/            these pages; pushed to the wiki on every push to main
 HANDOFF.md            current state between work sessions (short); docs/log/ has the dated diary
+studio/               the studio's working files: mockups, research notes, media-heavy reports (not the package)
+reports/              the audits and the monthly analytics reports
 ```
 
 ## Shape

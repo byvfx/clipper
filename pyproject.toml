@@ -81,6 +81,10 @@ testpaths = ["tests"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# A source distribution carries the code, prompts and docs, not the studio's working files.
+[tool.hatch.build.targets.sdist]
+exclude = ["studio/"]
+
 # PyPI's Windows torch wheels are CPU-only; pull the CUDA 12.8 builds instead.
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
