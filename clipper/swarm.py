@@ -92,7 +92,7 @@ def settings(cfg: dict, overrides: dict | None = None) -> dict:
     s = {**cfg["swarm"], **(overrides or {})}
     unknown = sorted(set(s) - set(DEFAULTS["swarm"]))
     if unknown:
-        raise ClipperError(f"unknown swarm setting(s) {', '.join(unknown)} (see [swarm] in clipper.example.toml)")
+        raise ClipperError(f"unknown swarm setting(s) {', '.join(unknown)} (see [swarm] in clipper/defaults.toml)")
     s["rates"] = {**DEFAULTS["swarm"]["rates"], **(cfg["swarm"].get("rates") or {}),
                   **((overrides or {}).get("rates") or {})}
     return s

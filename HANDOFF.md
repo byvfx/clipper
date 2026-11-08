@@ -8,7 +8,8 @@ session: fix what changed here, then add a dated entry at the end of the log.
 
 Stream clipper for Kino Casino (Kick channel `kinocasinogaming`) and Channel 404 News → YouTube
 channel **Lolcow Cinema**. Repo `C:\clipper`, remote https://github.com/byvfx/clipper (private).
-Python package `clipper/`, config `clipper.toml` (gitignored; `clipper.example.toml` is tracked),
+Python package `clipper/` (its `defaults.toml` is every setting, documented), config `clipper.toml` (gitignored;
+`clipper.example.toml` is a tracked starter),
 prompts `prompts/`. The user docs are the GitHub wiki, built from `docs/wiki/` (`.github/workflows/wiki.yml`
 pushes it on every push to main; 2026-11-04); README.md and SETUP.md are short pointers; CLAUDE.md the conventions.
 Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds durable preferences.

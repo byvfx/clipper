@@ -8,6 +8,10 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-08: `clipper/defaults.toml` is the one source of the defaults, every setting with a comment
+  (`config.py` loads it; a None default is a commented line there plus `config.NONE_DEFAULTS`);
+  config.py is 900 lines shorter, and `clipper.example.toml` is a starter clipper.toml with the
+  few values a new install changes and a show table.
 - 11-08: pages for what `clipper setup` can't do: Kitsu (with `deploy/kitsu/local.sh` for one
   machine without ssh, and the bot and reviewer accounts), the Discord app and its ids, YouTube
   sign-in, and Reviewing for the second person; `clipper review invite <discord user id>` puts a

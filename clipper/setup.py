@@ -416,10 +416,10 @@ def encoders_here(hw: dict) -> list[str]:
 # ---------- steps ----------
 
 # A new install's clipper.toml: only what it chooses differently from the built-in defaults.
-# Copying clipper.example.toml instead pinned ~300 defaults (later default changes never
+# Copying the old 1,000-line example instead pinned ~300 defaults (later default changes never
 # reached the install) and brought this install's own show and recorded channel with it.
 NEW_CONFIG = """# clipper.toml: this install's settings. Only what differs from the built-in defaults goes
-# here; clipper.example.toml lists every setting with its default and what it does, and
+# here; clipper/defaults.toml lists every setting with its default and what it does, and
 # `clipper config get <section>.<key>` shows a value and which file set it.
 # `clipper setup` adds what its steps decide.
 
@@ -449,7 +449,7 @@ def step_mode(cfg: dict, st: dict, ask: Ask) -> None:
         say(f"Using {root['_file']}.")
     elif st["mode"] == "new":
         target.write_text(NEW_CONFIG, encoding="utf-8")
-        say(f"Wrote a starter {target.name} (only what differs from the defaults; clipper.example.toml "
+        say(f"Wrote a starter {target.name} (only what differs from the defaults; clipper/defaults.toml "
             "lists every setting). The next steps fill in this machine's part.")
     else:
         say("The main machine's clipper.toml: on the share it's used where it is, a copy elsewhere is copied "

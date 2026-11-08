@@ -35,7 +35,7 @@ packages, adds a `clipper` command to `~/.local/bin` (on PATH; it runs this fold
    On the share (the [hub](NAS-hub) setup) it is used in place: setup saves `CLIPPER_CONFIG`
    pointing at it and `CLIPPER_LOCAL_CONFIG` pointing at this checkout's `clipper.local.toml`, so
    every machine reads one config and this machine's own values stay off the share. A copy (and,
-   if you like, the `secrets/` beside it) is the other answer; new writes a short starter (only what differs from the defaults; clipper.example.toml lists every setting).
+   if you like, the `secrets/` beside it) is the other answer; new writes a short starter (only what differs from the defaults; clipper/defaults.toml lists every setting).
 2. **Roles.** Worker, serve, bot, recorder (the recorder is the NAS's Docker container; setup only
    points at `deploy/record/deploy.sh`), control (a dev/control station that runs nothing
    unattended: no extra packages, no encoder, no Modal or Discord token; the streams folder, the

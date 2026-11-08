@@ -118,7 +118,7 @@ def check_config(cfg: dict, role: str = "all") -> None:
         fail("config", "no clipper.toml found", "clipper setup (or copy clipper.example.toml to clipper.toml)")
     from .config import problems
     for msg in problems(cfg):
-        fail("config", msg, "fix the name (clipper.example.toml lists every setting) or remove it")
+        fail("config", msg, "fix the name (clipper/defaults.toml lists every setting) or remove it")
     if root.get("_local_file"):
         ok("config", f"this machine: {root['_local_file'].name} sets " + ", ".join(
             f"{s}.{k}" for s, v in root["_local"].items() for k in v))
