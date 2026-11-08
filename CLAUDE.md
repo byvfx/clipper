@@ -85,8 +85,10 @@ the same PR as the change.
   `clipper services status|stop|restart serve|bot|worker|all` runs `docker compose` there over
   ssh (`[serve] hub`). Code changes reach them with `bash deploy/hub/deploy.sh` from a checkout
   of main (Git Bash): that replaces restarting serve or the bot, and never touches the recorder.
-  The laptop's scheduled tasks (`deploy/serve`, `deploy/discord`, `deploy/worker`) are disabled;
-  never run them alongside the containers (their single-instance locks don't see each other).
+  The laptop's worker task (`deploy/worker`) is disabled; never run serve, the bot or the worker
+  on the laptop alongside the containers (their single-instance locks don't see each other). The
+  serve and bot task scripts are gone (2026-11-08): compose (`deploy/hub`) is the one way to run
+  them unattended, on any Docker host.
 - The NAS recorder is deployed with `bash deploy/record/deploy.sh`, only when no show is live:
   the restart starts a new recording part. The script refuses while `clipper record status`
   shows a recording (exit 3); `--force` overrides it.

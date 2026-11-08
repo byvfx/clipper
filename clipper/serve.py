@@ -22,7 +22,7 @@ A job that exits non-zero is queued as a DM (clipper/alerts.py; the bot sends it
 Every minute it writes <streams>/.serve/status.json (clipper/daemon.py): what ran last,
 what is running, what is due next. `clipper services status`, the war room's Health panel
 and `clipper doctor` read it from any machine. One serve per streams folder (.serve.lock).
-It logs to [paths] serve_log; deploy/serve/serve-task.ps1 runs it at logon.
+It logs to [paths] serve_log; deploy/hub runs it as a container.
 
 The bot reaches it at [serve] url ("" = http://127.0.0.1:<[warroom] port>/) with the war
 room token (the same [warroom] token or secrets file on both machines when they differ):

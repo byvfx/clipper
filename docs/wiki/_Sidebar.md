@@ -6,12 +6,16 @@
 - [Configuration](Configuration)
 - [Pipeline](Pipeline)
 - [Review](Review)
+- [Reviewing](Reviewing)
 - [War room](War-room)
 - [Scheduling and uploads](Scheduling-and-uploads)
 - [Costs](Costs)
 
 **🛠️ Install**
 - [Install](Install)
+- [Kitsu](Kitsu)
+- [Discord app](Discord-app)
+- [YouTube sign-in](YouTube-sign-in)
 - [Windows](Install-Windows)
 - [macOS](Install-macOS)
 - [Transcribe on Modal](Transcribe-on-Modal)

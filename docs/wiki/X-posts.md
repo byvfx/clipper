@@ -19,7 +19,7 @@ recommended portrait size.
 3. **Sign in** once: `clipper x --sign-in`, with the browser signed in to X as that account.
    The token lands in `secrets/x_token.json`; it lasts 2 h and refreshes itself (scope
    `offline.access`). `clipper doctor` checks the scopes.
-4. **Post**: `clipper x --items kick-131151926/v04_t21 --dry-run` shows the file and text;
+4. **Post**: `clipper x --items <stream>/v04_t21 --dry-run` shows the file and text;
    without `--dry-run` it posts. `clipper x` lists what was posted, with links. A failed post
    is recorded (`clipper x` shows the error) and `--items` tries it again.
 5. **Automatic** (optional): `clipper x --auto` posts approved, scheduled Shorts from streams

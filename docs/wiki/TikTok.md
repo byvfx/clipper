@@ -18,7 +18,7 @@ else the `[record]` alert webhook or channel) and keeps it in schedule.json.
 3. **Sign in** once, as the TikTok account: `clipper tiktok --sign-in`. The token lands in
    `secrets/tiktok_token.json`; it refreshes itself and the sign-in lasts 365 days
    (`clipper doctor` warns two weeks before).
-4. **Send**: `clipper tiktok --items kick-131151926/v01 --dry-run` shows the file and caption;
+4. **Send**: `clipper tiktok --items <stream>/v01 --dry-run` shows the file and caption;
    without `--dry-run` it sends. `clipper tiktok` lists what was sent and marks drafts you
    posted as posted. The draft arrives as a notification in the TikTok app's **Inbox**
    (System notifications), not under Profile > Drafts; it becomes a draft once opened.

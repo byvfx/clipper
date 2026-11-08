@@ -87,3 +87,12 @@ def test_hub_services_go_over_ssh(defaults, monkeypatch):
     assert services.run_task("bot", "restart", cfg) == 0
     host, cmd = sent[0]
     assert host == "nas" and cmd.startswith("cd clipper-hub && ") and "docker compose restart bot" in cmd
+
+
+def test_serve_and_bot_have_no_task_without_a_hub(defaults, capsys):
+    """Without [serve] hub only the worker has a scheduled task: serve and the bot run under
+    compose (deploy/hub) or by hand, and stop/restart say so instead of looking for a script."""
+    cfg = {**defaults, "serve": {**defaults["serve"], "hub": ""}}
+    assert services.run_task("serve", "restart", cfg) == 1
+    assert "deploy/hub" in capsys.readouterr().out
+    assert services.run_task("bot", "status", cfg) == 0

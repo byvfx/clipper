@@ -407,3 +407,24 @@ def post_issue(cfg: dict, day: str | None = None) -> int:
     print(f"discord: issue {here.name}, {posted} of {len(messages)} messages posted"
           f"{'' if posted == len(messages) else ' (the rest were already there)'}")
     return posted
+
+
+def invite(cfg: dict, user_id: str) -> tuple[list[str], bool]:
+    """`clipper review invite <discord user id>`: a reviewer onto [discord] allowed_user_ids in
+    clipper.toml (the bot reads it at start, so restart it). (the ids after, whether it was new)."""
+    from .config import base
+    from .setup import toml_set
+
+    uid = str(user_id).strip()
+    if not uid.isdigit() or not 15 <= len(uid) <= 22:
+        raise ClipperError(f"{user_id!r} isn't a Discord user id (17-20 digits: Settings > Advanced > "
+                           "Developer Mode, then right-click the person > Copy User ID)")
+    path = base(cfg).get("_file")
+    if not path:
+        raise ClipperError("no clipper.toml to write to: run clipper setup first")
+    ids = [str(x) for x in cfg["discord"]["allowed_user_ids"]]
+    if uid in ids:
+        return ids, False
+    ids.append(uid)
+    toml_set(Path(path), "discord", "allowed_user_ids", ids)
+    return ids, True

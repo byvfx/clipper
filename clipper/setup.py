@@ -730,16 +730,16 @@ def step_check(cfg: dict, st: dict, ask: Ask, offline: bool = False) -> int:
         if "worker" in roles:
             say("  worker, unattended: " + (r"deploy\worker\worker-task.ps1 -Install" if win
                                             else "clipper worker (in a terminal or launchd for now)"))
-        if "serve" in roles:
-            say("  serve, unattended:  " + (r"deploy\serve\serve-task.ps1 -Install" if win
-                                            else "clipper serve (in a terminal or launchd for now)"))
-        if "bot" in roles:
-            say("  bot, unattended:    " + (r"deploy\discord\bot-task.ps1 -Install" if win
-                                            else "clipper bot (in a terminal or launchd for now)"))
+        for role in ("serve", "bot"):
+            if role in roles:
+                say(f"  {role}, unattended:{' ' if role == 'serve' else '   '} Docker compose, deploy/hub "
+                    f"(any Docker host; {wiki.page('Roles-and-services', 'services')}); or clipper {role} in a terminal")
         if control_only(roles):
             say("  control: clipper services status (the hub's containers over ssh), "
                 "bash deploy/hub/deploy.sh to ship main, the war room in a browser")
-        say("  What setup doesn't do yet (Discord ids, YouTube sign-in, adding a show): " + wiki.page("Install"))
+        say("  What setup doesn't do: " + ", ".join(f"{what} {wiki.page(page)}" for what, page in (
+            ("Kitsu and its accounts", "Kitsu"), ("the Discord app and ids", "Discord-app"),
+            ("YouTube sign-in", "YouTube-sign-in"), ("adding a show", "Adding-a-show"))))
     return code
 
 

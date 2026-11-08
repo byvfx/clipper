@@ -743,8 +743,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         # retakes, the daily jobs). The bot and `clipper doctor` reach it here.
         "url": "",                # "" = this machine, http://127.0.0.1:<[warroom] port>/; else e.g. "http://nas:8765/" (needs [warroom] token on both)
 
-        # Where serve, the bot and the worker run, for `clipper services`: "" = this machine's
-        # scheduled tasks (deploy/serve, deploy/discord, deploy/worker); else the compose folder
+        # Where serve, the bot and the worker run, for `clipper services`: "" = this machine (the
+        # worker's scheduled task on Windows, deploy/worker; serve and the bot by hand); else the compose folder
         # on the NAS that deploy/hub/deploy.sh uses (relative to the ssh user's home, e.g.
         # "clipper-hub"), reached over ssh like the recorder ([record] ssh_host, sudo).
         "hub": "",

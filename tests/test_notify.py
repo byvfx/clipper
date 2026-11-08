@@ -2,6 +2,8 @@
 joined here and nowhere else, so review.py never imports Discord."""
 from pathlib import Path
 
+import pytest
+
 from clipper import notify, review
 
 
@@ -47,3 +49,21 @@ def test_publish_and_post_reads_the_streams_own_discord_setting(monkeypatch, tmp
     resolved["discord"]["enabled"] = True
     notify.publish_and_post(tmp_path, {"discord": {"enabled": False}})
     assert posted == [["c01"]]                # the stream turned it on
+
+
+def test_invite_adds_a_discord_id_to_the_allowlist_once(tmp_path):
+    """`clipper review invite`: the id lands in clipper.toml's [discord] allowed_user_ids, once; a
+    non-id is refused with the recipe."""
+    from clipper import config
+    from clipper.errors import ClipperError
+
+    path = tmp_path / "clipper.toml"
+    path.write_text('[discord]\nallowed_user_ids = ["111111111111111111"]\n', encoding="utf-8")
+    cfg = config.load(path, use_local=False)
+    ids, added = notify.invite(cfg, "222222222222222222")
+    assert added and ids == ["111111111111111111", "222222222222222222"]
+    assert '"222222222222222222"' in path.read_text(encoding="utf-8")
+    cfg = config.load(path, use_local=False)
+    assert notify.invite(cfg, "222222222222222222") == (ids, False)
+    with pytest.raises(ClipperError, match="user id"):
+        notify.invite(cfg, "bob")
