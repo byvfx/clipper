@@ -16,7 +16,8 @@ def cfg_in(defaults, tmp_path, **sections) -> dict:
 
 
 def test_due_skips_jobs_that_are_off_or_ran_recently():
-    jobs = [("upload", 3600, None, None), ("tiktok", 0, None, None), ("news", 600, None, None)]
+    jobs = [serve.Job("upload", 3600, None, None), serve.Job("tiktok", 0, None, None),
+            serve.Job("news", 600, None, None)]
     assert serve.due(jobs, {}, now=1000.0) == ["upload", "news"]
     assert serve.due(jobs, {"upload": 1000.0, "news": 500.0}, now=4000.0) == ["news"]
     assert serve.due(jobs, {"upload": 1000.0, "news": 3500.0}, now=4000.0) == []

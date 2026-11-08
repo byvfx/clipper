@@ -44,6 +44,7 @@ from . import actions, daemon, jsonstate, review, schedule, wiki, worker
 from .config import _root, for_stream
 from .errors import ClipperError
 from .states import RELEASE_KIND
+from .timefmt import age_s
 
 WEB = Path(__file__).with_name("web")
 PAGE = WEB / "warroom.html"   # markup only: its style is warroom.css, its code web/js/*.js
@@ -68,22 +69,6 @@ def static_file(path: str) -> tuple[Path, str, str] | None:
     if f.suffix in CODE and WEB.resolve() in f.parents and f.is_file():
         return f, CODE[f.suffix], "no-cache"
     return None
-
-
-def load(path: Path, default):
-    try:
-        return jsonstate.read(path, default)
-    except (OSError, ValueError):
-        return default
-
-
-def age_s(iso: str | None) -> float:
-    if not iso:
-        return 1e9
-    try:
-        return (datetime.now(UTC) - datetime.fromisoformat(iso)).total_seconds()
-    except ValueError:
-        return 1e9
 
 
 # ---------- data ----------
@@ -156,8 +141,8 @@ def _mtime(p: Path) -> int:
 
 def stream_info(cfg: dict, sdir: Path) -> dict:
     sc = for_stream(cfg, sdir)
-    meta = load(sdir / "meta.json", {})
-    run = load(sdir / "run.json", {})
+    meta = jsonstate.read_or(sdir / "meta.json", {})
+    run = jsonstate.read_or(sdir / "run.json", {})
     stages = {}
     for st in worker.STAGES:
         info = (run.get("stages") or {}).get(st, {})
@@ -165,7 +150,7 @@ def stream_info(cfg: dict, sdir: Path) -> dict:
         if not status:
             status = "done" if worker.output_found(sdir, st) else ""
         stages[st] = status
-    live = load(sdir / "live" / "state.json", {})
+    live = jsonstate.read_or(sdir / "live" / "state.json", {})
     running = run.get("status") == "running" and age_s(run.get("heartbeat")) < 15 * 60
     return {"id": sdir.name, "show": sc["show"]["key"], "show_name": sc["meta"]["show_name"] or "",
             "channel": meta.get("channel") or live.get("channel", ""),
@@ -264,7 +249,7 @@ def _show_name(cfg: dict, sdir: Path) -> str:
 def retakes(cfg: dict, limit: int = 12) -> list[dict]:
     out = []
     for p in cfg["paths"]["streams"].glob("*/retakes.json"):
-        for key, hs in load(p, {}).items():
+        for key, hs in jsonstate.read_or(p, {}).items():
             for h in hs:
                 out.append({"stream": p.parent.name, "key": key, "comment": h.get("comment", ""),
                             "result": h.get("result", ""), "applied": h.get("applied", []),
@@ -357,7 +342,7 @@ def last_upload_run(cfg: dict) -> dict:
 
 
 def views_by_video(cfg: dict) -> dict[str, int]:
-    a = load(cfg["paths"]["schedule"].with_name("analytics.json"), {}) or {}
+    a = jsonstate.read_or(cfg["paths"]["schedule"].with_name("analytics.json"), {}) or {}
     return {vid: v.get("views") for vid, v in a.items() if isinstance(v, dict)}
 
 
@@ -377,7 +362,7 @@ def overview(cfg: dict) -> dict:
         if d == "approved" and not r["scheduled"] and not r["uploaded"] and not r.get("dropped"):
             counts["approved_unscheduled"] += 1
         counts["held"] += bool(r["hold"])
-    sched = load(cfg["paths"]["schedule"], {}) or {}
+    sched = jsonstate.read_or(cfg["paths"]["schedule"], {}) or {}
     by_ref = {r["ref"]: r for r in rows}
     entries, views = [], views_by_video(cfg)
     for e in sched.get("entries", []):
@@ -683,7 +668,7 @@ def faces_get(cfg: dict, stream: str) -> dict:
     known = faces.load_known(for_stream(cfg, sdir))
     out = {"stream": sdir.name, "known": {n: len(r) for n, r in sorted(known["people"].items())},
            "scanned": False, "groups": [], "more": 0}
-    data = load(sdir / "faces.json", None)
+    data = jsonstate.read_or(sdir / "faces.json", None)
     if not data:
         return out
     try:  # one listing for every sheet's mtime, not a stat each over the share
@@ -933,7 +918,7 @@ def slot_plan(cfg: dict, refs: list[str] | None = None, kind: str = "") -> dict:
     if every:
         refs = [ref for ref, r in rows.items() if RELEASE_KIND[r["kind"]] == kind
                 and r["decision"] == "approved" and not r["scheduled"] and not r["hold"]]
-    entries = (load(cfg["paths"]["schedule"], {}) or {}).get("entries", [])
+    entries = (jsonstate.read_or(cfg["paths"]["schedule"], {}) or {}).get("entries", [])
     mine = set(refs)
     lead = now + timedelta(minutes=cfg["youtube"]["min_lead_minutes"])
     windows: dict[str, tuple] = {}
@@ -957,7 +942,7 @@ def slot_plan(cfg: dict, refs: list[str] | None = None, kind: str = "") -> dict:
             k, stream = RELEASE_KIND[r["kind"]], r["stream"]
             if stream not in windows:
                 sdir = cfg["paths"]["streams"] / stream
-                windows[stream] = schedule.release_window(cfg, sdir, load(sdir / "meta.json", {}))
+                windows[stream] = schedule.release_window(cfg, sdir, jsonstate.read_or(sdir / "meta.json", {}))
             earliest, expires = windows[stream]
             when = schedule.next_free(k, taken, sc, tz, max(lead, earliest))
             why = ("its stream's budget is full: a pin would only bump another" if stream in full
@@ -1113,7 +1098,7 @@ def search_transcripts(cfg: dict, q: str, limit: int = 300) -> dict:
         return {"hits": {}}
     hits = {}
     for sdir in actions.review_dirs(cfg):
-        state = actions.load_json(sdir / "review_state.json", {}) or {}
+        state = jsonstate.read(sdir / "review_state.json", {}) or {}
         for key, st in state.items():
             text = srt_text((sdir / st["file"].replace("\\", "/")).with_suffix(".srt"))
             low = text.lower()

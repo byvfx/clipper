@@ -43,7 +43,7 @@ def stream_dirs(cfg: dict) -> list[Path]:
     for d in actions.review_dirs(cfg):
         if not (d / "discord.json").exists():
             continue
-        started = (actions.load_json(d / "meta.json", {}) or {}).get("started_at", "")
+        started = (jsonstate.read(d / "meta.json", {}) or {}).get("started_at", "")
         if cutoff and started:
             try:
                 when = datetime.fromisoformat(started)
@@ -76,14 +76,14 @@ def refresh_stream(cfg: dict, sdir: Path, api: notify.Rest | None = None,
                    dry_run: bool = False) -> int:
     """Sync one stream from Kitsu and edit its cards that changed; returns edits made."""
     cfg = for_stream(cfg, sdir)
-    dstate = actions.load_json(sdir / "discord.json", {}) or {}
+    dstate = jsonstate.read(sdir / "discord.json", {}) or {}
     thread_id, messages = dstate.get("thread_id"), dstate.get("messages") or {}
     if not thread_id or not messages:
         return 0
     review.sync(sdir, cfg, quiet=True)
     rows = actions.describe(cfg, sdir)
     path = sdir / STATE
-    seen = actions.load_json(path, {}) or {}
+    seen = jsonstate.read(path, {}) or {}
     before = dict(seen)
     edited = 0
     for key, m in messages.items():

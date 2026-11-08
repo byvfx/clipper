@@ -109,16 +109,13 @@ class Clock:
 
 # ---------- helpers ----------
 
-def load(path: Path, default):
-    return jsonstate.read(path, default)
-
 
 def worker_busy(sdir: Path, cfg: dict) -> str:
     """Who holds the stream's run lock, if it is fresh (the worker cutting or publishing it)."""
     lock = sdir / ".run.lock"
     if not lock.exists():
         return ""
-    run = load(sdir / "run.json", {})
+    run = jsonstate.read(sdir / "run.json", {})
     beat = run.get("heartbeat")
     if beat and time.time() - datetime.fromisoformat(beat).timestamp() \
             < cfg["worker"]["stale_minutes"] * 60:
@@ -149,7 +146,7 @@ def next_ids(pass_a: list[dict], n: int) -> list[str]:
 
 def find(sdir: Path, cfg: dict, text: str, clock_use: str = "stream", limit: int = 60) -> None:
     """Transcript lines containing text (case-insensitive), with both clocks."""
-    meta = load(sdir / "meta.json", {})
+    meta = jsonstate.read(sdir / "meta.json", {})
     clock = Clock(meta, clock_use)
     words = load_words(sdir)
     needle = text.lower()
@@ -166,8 +163,8 @@ def locate(sdir: Path, cfg: dict, about: str, claude: Claude, prompts: Prompts,
            clock: Clock) -> list[tuple[float, float]]:
     """Stretches (video clock) whose summary blocks match the request."""
     # this version's summary, else the newest older one (a stream scored before a prompt bump)
-    summary = load(sdir / f"summary_{cfg['scoring']['prompt_version']}.json", None) or next(
-        (load(p, None) for p in sorted(sdir.glob("summary_v*.json"),
+    summary = jsonstate.read(sdir / f"summary_{cfg['scoring']['prompt_version']}.json", None) or next(
+        (jsonstate.read(p, None) for p in sorted(sdir.glob("summary_v*.json"),
                                        key=lambda p: int(p.stem[9:]) if p.stem[9:].isdigit() else 0,
                                        reverse=True)), None)
     if not summary:
@@ -323,7 +320,7 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
         raise ClipperError("no candidates.json: run `clipper score` first")
     if not dry_run and (who := worker_busy(stream_dir, cfg)):
         raise ClipperError(f"{stream_dir.name} is being processed by {who}; try again when it's done")
-    meta = load(stream_dir / "meta.json", {})
+    meta = jsonstate.read(stream_dir / "meta.json", {})
     clock = Clock(meta, clock_use)
     print(f"{stream_dir.name}: {clock.describe()}")
     duration = float(meta.get("duration_s") or 0) or float("inf")
@@ -343,7 +340,7 @@ def run(stream_dir: Path, cfg: dict, about: str = "", start: str | None = None,
             raise ClipperError("nothing in the stream summary matches; try --find with a word "
                              "from it, or give --from/--to")
 
-    cands = load(cands_path, {})
+    cands = jsonstate.read(cands_path, {})
     by_id = {r["id"]: r for r in cands["pass_a"]}
     picks = cands.setdefault("pass_b", {}).setdefault("picks", [])
     picked = [{**by_id[p["id"]], "title": p["title"], "key": f"v{i:02d}_{p['id']}"}
