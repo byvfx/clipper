@@ -43,8 +43,11 @@ fi
 if [ "$(uname)" = Linux ] && have apt-get && ! fc-list 2>/dev/null | grep -qi impact; then
   echo "== Installing fonts (Impact, Georgia, Arial: accept Microsoft's license when it asks)"
   apt_install fontconfig fonts-roboto-unhinted
-  apt_install ttf-mscorefonts-installer ||
-    echo "== No Impact/Georgia/Arial yet: sudo apt-get install ttf-mscorefonts-installer (and accept the license)"
+  # declining the license still exits 0, with the package installed and no fonts
+  apt_install ttf-mscorefonts-installer || true
+  if ! fc-list | grep -qi impact; then
+    echo "== No Impact/Georgia/Arial yet: sudo dpkg-reconfigure ttf-mscorefonts-installer (and accept the license)"
+  fi
 fi
 
 if [ ! -x .venv/bin/clipper ]; then
