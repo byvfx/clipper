@@ -27,10 +27,13 @@ or `jsonstate.read`, which retry a file another process is replacing (Windows an
 refuse the open for a moment); a raw `json.loads(path.read_text())` fails a test.
 
 A change happens under `<file>.lock`, a file created exclusively beside the state file with
-the holder's name inside (host, pid, time, a uuid). A writer waits up to **60 s** for it; a lock
-older than **120 s** is taken for abandoned and removed. Keep the locked part short: no Kitsu or
-YouTube calls inside. The error "`<file>.lock is held by another process for over 60 s (delete it
-if nothing is running)`" means a holder died inside the window; it clears itself after 120 s.
+the holder's name inside (host, pid, time, a uuid). A writer waits up to **60 s** for it. Nothing
+removes a lock on a timer: the next writer that finds one whose modification time is over
+**120 s** old takes it for abandoned, deletes it and goes ahead. Keep the locked part short: no
+Kitsu or YouTube calls inside. The error "`<file>.lock is held by another process for over 60 s
+(delete it if nothing is running)`" means the lock stayed fresh for the whole minute: a slow
+writer still holding it, or one that died less than 120 s before. Read the name inside, and try
+again once the file is over 120 s old; delete it by hand only when nothing is running.
 
 ## 2. One instance of each service
 
@@ -73,19 +76,25 @@ most once per `cooldown_hours`, nothing during `quiet_hours` (held, then sent to
 state file under `.notify/`. The recorder's warnings also go straight to the webhook channel
 (`[record] alert_webhook_env`), which is why they arrive twice, on purpose.
 
-No DM arrived? Files piling up in the outbox mean the bot isn't draining (its heartbeat says
-whether it is up). An empty outbox means the alert was filtered: the kind, the cooldown or the
-quiet hours.
+No DM arrived? Files that stay in the outbox are either held for quiet hours (the bot leaves
+them until the hours end) or waiting on a bot that isn't draining: its heartbeat says whether it
+is up, `bot.log` says why a send failed. An empty outbox means the file was handled: the DM went
+out, or its kind is off or inside its cooldown (the bot deletes those too), or it was never
+queued (the sender logs "notification not queued").
 
 ## 5. HTTP to serve, and one in-process hook
 
-serve owns `schedule.json`: every replan runs inside its process. The bot (and doctor) reach it
-over HTTP at `[serve] url` (empty = `http://127.0.0.1:<[warroom] port>/`) with the war room
-token in an `X-Key` header (`[warroom] token` or `secrets/warroom_token.txt`, the same on both
-machines): `POST /api/replan` after a decision, `POST /api/retake` after "Changes", `GET
-/api/health` for the tailnet link. When serve is down the decision is still in Kitsu and
-`review.json`; the bot says "not replanned" and the next hourly run places the item. A token
-mismatch is an HTTP 403 in `bot.log`.
+`schedule.json` has three writers, kept apart by its jsonstate lock rather than by one owning
+process: serve's hourly `clipper schedule` child, the replan that `POST /api/replan` runs inside
+serve (the bot's and the page's button presses), and a `clipper schedule` run by hand. The bot
+(and doctor) reach serve over HTTP at `[serve] url` (empty = `http://127.0.0.1:<[warroom]
+port>/`) with the war room token in an `X-Key` header (`[warroom] token` or
+`secrets/warroom_token.txt`, the same on both machines): `POST /api/replan` after a decision,
+`POST /api/retake` after "Changes", `GET /api/health` for the tailnet link. When serve is down
+the decision is still in Kitsu and `review.json`; the bot's reply says it wasn't replanned and
+the next hourly run places the item. A wrong or missing token is an HTTP **401** ("add
+?key=..." or "unauthorized"), quoted in that reply; a **403** is the server refusing a non-local
+host without a token, a cross-site request or a non-JSON POST.
 
 Inside serve, the war room page starts a retake through `warroom.HOOKS["retake"]`, a callback
 serve installs, not HTTP. The page run on its own (`clipper warroom`) detaches a `clipper retake`
@@ -111,17 +120,19 @@ process instead and logs it to `logs/retake.log`.
 |---|---|
 | No upload this hour | `clipper services status` (serve's `upload` job: last exit, next due), `logs/serve.log`, `clipper upload --next 5` |
 | A stream is stuck | `streams/<id>/run.json` (`status`, `error`, the stage), `run_<stage>.log`, who holds `.run.lock` |
-| A button press says "not replanned" | serve is down or unreachable: `.serve/status.json`, `[serve] url`, the token (403 in `bot.log`) |
-| No DM | the outbox folder (piling up: bot down; empty: filtered by kind, cooldown or quiet hours), `.bot/status.json` |
+| The bot's reply says it wasn't replanned | serve down or unreachable (`.serve/status.json`, `[serve] url`), or the token: a 401 in the reply means the key differs between the machines |
+| No DM | the outbox: files waiting means quiet hours or a bot that isn't draining (`.bot/status.json`, `bot.log`); empty means sent, filtered by kind or cooldown, or never queued |
 | Health says down | the heartbeat is over 180 s old: the service died, or it lost the share |
-| "held by another process for over 60 s" | a `<file>.lock` left by a killed process; gone by itself after 120 s |
-| The war room page is unstyled after a pull | serve reads `warroom.css` and `js/*.js` from disk: restart serve |
+| "held by another process for over 60 s" | the holder named inside `<file>.lock` is slow, or died in the last two minutes; the next writer reclaims it once it is over 120 s old |
+| The war room page looks wrong after a pull | reload the browser first: the page, `warroom.css` and `js/*.js` are read from disk on every request (no-cache); only when the new page needs API routes the running server lacks, redeploy or restart serve while no upload runs |
 | A cut never finishes on the NAS | `ssh nas docker ps`, then `docker rm -f clipper-cut-<id>` |
 
 ## Print or log?
 
 A **stage** (`clipper <stage>`, `clipper run`) prints its progress to stdout: when the worker or
 serve runs it as a child, that output is what lands in `run_<stage>.log` or `serve.log`. A
-**service** (serve, bot, worker, recorder) logs through `logging` (`daemon.setup_logging`), never
-`print`, so every line carries a time and a level and rotates with the file (`logs/serve.log`,
-`logs/bot.log`, 5 MB x 5). In the containers the same lines are `docker compose logs`.
+**service** (serve, bot, worker, recorder) logs through `logging`, never `print`, so every line
+carries a time and a level. Where the lines go differs: serve and the bot write rotating files
+(`daemon.setup_logging`: `logs/serve.log`, `logs/bot.log`, 5 MB x 5) as well as the console; the
+worker and the recorder log to the console only, which the container keeps (`docker compose
+logs worker`, `... recorder`) and which the Windows task supervisor writes to `logs/worker.log`.
