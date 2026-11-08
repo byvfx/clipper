@@ -248,7 +248,10 @@ def check_ffmpeg(cfg: dict, role: str) -> None:
 
 
 # Linux has none of the fonts Windows and macOS come with; deploy/bootstrap.sh installs these.
-LINUX_FONTS = "sudo apt-get install ttf-mscorefonts-installer fonts-roboto-unhinted"
+# A declined (or unanswered) license leaves the package installed without the fonts, where
+# apt-get install does nothing: dpkg-reconfigure asks again.
+LINUX_FONTS = ("sudo apt-get install ttf-mscorefonts-installer fonts-roboto-unhinted; already installed: "
+               "sudo dpkg-reconfigure ttf-mscorefonts-installer")
 
 
 def font_hint(hint: str) -> str:

@@ -40,13 +40,21 @@ fi
 # Covers, Short captions and the weekly issue use Impact, Georgia, Arial and Roboto Condensed:
 # Windows and macOS have the first three, Linux none. Microsoft's core fonts package asks you
 # to accept its license; without it clipper falls back to other fonts (doctor says which).
-if [ "$(uname)" = Linux ] && have apt-get && ! fc-list 2>/dev/null | grep -qi impact; then
-  echo "== Installing fonts (Impact, Georgia, Arial: accept Microsoft's license when it asks)"
-  apt_install fontconfig fonts-roboto-unhinted
-  # declining the license still exits 0, with the package installed and no fonts
-  apt_install ttf-mscorefonts-installer || true
-  if ! fc-list | grep -qi impact; then
-    echo "== No Impact/Georgia/Arial yet: sudo dpkg-reconfigure ttf-mscorefonts-installer (and accept the license)"
+# Each family is checked on its own; the list goes in a variable, since `fc-list | grep -q`
+# under pipefail can fail with SIGPIPE when grep stops early.
+if [ "$(uname)" = Linux ] && have apt-get; then
+  fonts=$(fc-list 2>/dev/null || true)
+  if ! grep -qi robotocondensed <<<"$fonts"; then
+    echo "== Installing fonts (Roboto Condensed)"
+    apt_install fontconfig fonts-roboto-unhinted
+  fi
+  if ! grep -qi impact <<<"$fonts"; then
+    echo "== Installing fonts (Impact, Georgia, Arial: accept Microsoft's license when it asks)"
+    # declining the license still exits 0, with the package installed and no fonts
+    apt_install fontconfig ttf-mscorefonts-installer || true
+    if ! grep -qi impact <<<"$(fc-list)"; then
+      echo "== No Impact/Georgia/Arial yet: sudo dpkg-reconfigure ttf-mscorefonts-installer (and accept the license)"
+    fi
   fi
 fi
 
