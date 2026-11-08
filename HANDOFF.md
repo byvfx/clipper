@@ -356,7 +356,18 @@ is still red on Windows (`tests/test_setup_paths.py:47`, known since 11-07) and 
 `# noqa` comments are unused. **Tier 0 is PR #170 (11-08):** Windows-green tests and a Linux + Windows CI
 matrix, ruff rules (I, B, UP, BLE, RUF100, C901 at 15; 77 stale noqa gone, the 17 complex functions marked
 `# noqa: C901` to split when touched), the doc drift, tests filed by subject, `clipper --version`, CHANGELOG.md.
-Left from tier 0: deleting the 57 merged remote branches (user's go-ahead) and a LICENSE (user's choice); then tier 1.
+Tier 0 done 11-08 (the 54 merged remote branches deleted, LICENSE MIT). **Tier 1 the same day, seven PRs, each
+merging on green CI + Copilot handled (user's policy):** #171 wiki How-the-processes-talk + print/log rule + checklist
++ LICENSE; #172 the five import cycles (21 -> 7); #173 one JSON reader (`jsonstate.read_or`), `timefmt.now_iso/age_s`,
+serve `Job`, one review-verb table (`actions.EDITS`); #174 prompt registry (`prompts.VERSIONS`, read by `Prompts.get`,
+doctor and a test); #175 `studio/` (mockups, research notes, media reports; `[paths] streamers` default moved;
+the old `mockups/udder_truth/` leftovers stay on the laptop until Fusion is closed, ignored by `/mockups/`);
+#176 the war room as a package (`clipper/warroom/`: data, review, panels, lowres, tailscale, httpd, state);
+#177 tests where the risk is (bot, describe, sync, worker failure, digest, signals, segments, transcribe),
+`tests/test_modules_have_tests.py` (7 modules still untested, list may only shrink), `config.base`, the alias
+rule, CI installs the discord extra. Left for tier 2 (report §6, items 13-19): scrub the deployment from
+DEFAULTS/example, setup phase-2 pages (Discord app, Google OAuth, one-machine Kitsu), a Reviewing page,
+pre-spend estimates and `clipper status`, one deploy path per role, defaults as TOML, prompts in the package.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
