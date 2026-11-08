@@ -353,7 +353,10 @@ docstrings describe, prompt versions set by mutating `Prompts`). The report ends
 tiers (a day / a week / before anyone else installs it) and five questions for the user (release audience,
 a consolidation window, studio files in the repo, the Windows task scripts, Kitsu optional). Also: the suite
 is still red on Windows (`tests/test_setup_paths.py:47`, known since 11-07) and CI is Linux-only; all 77
-`# noqa` comments are unused. Nothing acted on yet; the user's answers decide the order.
+`# noqa` comments are unused. **Tier 0 is PR #170 (11-08):** Windows-green tests and a Linux + Windows CI
+matrix, ruff rules (I, B, UP, BLE, RUF100, C901 at 15; 77 stale noqa gone, the 17 complex functions marked
+`# noqa: C901` to split when touched), the doc drift, tests filed by subject, `clipper --version`, CHANGELOG.md.
+Left from tier 0: deleting the 57 merged remote branches (user's go-ahead) and a LICENSE (user's choice); then tier 1.
 **Maintainability audit 2026-10-28** (`reports/code-audit-2026-10-28.md`): **done**, every item merged
 on GitHub main by 2026-10-30 (PRs #82-#100, #102-#104; 153 offline tests, CI on every push) and
 running here since 14:59 that day. New shapes: `clipper/record/` and `clipper/thumbs/` packages,
