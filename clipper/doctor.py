@@ -26,7 +26,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import jsonstate, wiki
+from . import jsonstate, prompts, wiki
 from .config import _root, for_show
 from .errors import ClipperError
 
@@ -161,37 +161,19 @@ def check_config(cfg: dict, role: str = "all") -> None:
 
 
 def prompt_files(cfg: dict) -> list[str]:
-    """Every file in prompts/ this (show's) config reads, for the versions it sets."""
+    """Every file in prompts/ this (show's) config reads: each prompt in prompts.VERSIONS at
+    the version its config key sets, the [scoring] rule files for that version, and the weekly
+    article example."""
     sc, v = cfg["scoring"], cfg["scoring"]["prompt_version"]
-    names = [f"score_a_{v}", f"score_b_{v}", f"summary_{v}"]
+    names = [f"{name}_{prompts.version_of(cfg, name)}" for name in prompts.VERSIONS]
     # The scan and rule files came in v3/v4; before v4 they are read only if present.
-    if int(v.lstrip("v") or 0) >= 4:
-        names += [f"scan_{v}", f"third_party_{sc['third_party_audio']}_{v}",
-                  f"audience_{sc['audience_knowledge']}_{v}"]
+    if int(v.lstrip("v") or 0) < 4:
+        names.remove(f"scan_{v}")
+    else:
+        names += [f"third_party_{sc['third_party_audio']}_{v}", f"audience_{sc['audience_knowledge']}_{v}"]
     if int(v.lstrip("v") or 0) >= 7:
         names.append(f"gambling_{sc['gambling']}_{v}")
-    seg, mv = cfg["segments"]["prompt_version"], cfg["meta"]["prompt_version"]
-    pc, rc, ac, wc = cfg["preshow"], cfg["receipts"], cfg["archive"], cfg["weekly"]
-    tc = cfg["thumbnail"]
-    names += [f"segments_{seg}", f"compilation_{seg}", f"meta_{mv}", f"chapters_{mv}",
-              f"retake_{cfg['retake']['prompt_version']}",
-              f"pick_{cfg['pick']['prompt_version']}", f"pick_locate_{cfg['pick']['prompt_version']}",
-              f"preshow_{pc['prompt_version']}", f"oneoff_{pc['oneoff_prompt_version']}",
-              f"thumbnail_enquirer_{tc['enquirer_prompt_version']}" if tc["style"] == "enquirer"
-              else f"thumbnail_{tc['prompt_version']}",
-              f"thumbnail_enquirer_retry_{tc['retry_prompt_version']}" if tc["style"] == "enquirer"
-              else f"thumbnail_retry_{tc['retry_prompt_version']}",
-              f"thumbnail_feedback_{tc['retry_prompt_version']}",
-              f"shorts_layout_{cfg['shorts']['layout_prompt_version']}",
-              f"receipts_stories_{rc['prompt_version']}", f"receipts_script_{rc['script_prompt_version']}",
-              f"archive_expand_{ac['ask_prompt_version']}", f"archive_judge_{ac['ask_prompt_version']}",
-              f"weekly_{wc['prompt_version']}", f"weekly_article_{wc['article_prompt_version']}"]
-    iv = cfg["investigate"]["prompt_version"]
-    names += [f"investigate_{step}_{iv}" for step in ("facts", "leads", "check", "confirm")]
-    names += [f"swarm_{step}_{cfg['swarm']['prompt_version']}" for step in ("plan", "worker")]
-    names += [f"story_{step}_{cfg['story']['prompt_version']}" for step in ("triage", "expand", "moments", "dossier")]
-    names.append(f"story_edit_{cfg['story']['edit_prompt_version']}")
-    return [f"{n}.md" for n in names] + [wc["article_example"]]
+    return [f"{n}.md" for n in names] + [cfg["weekly"]["article_example"]]
 
 
 def check_prompts(cfg: dict) -> None:
@@ -872,8 +854,6 @@ def check_cast(cfg: dict) -> None:
     from . import cast
 
     cc = cfg["cast"]
-    if cc["label_model"] and not (Path(cfg["paths"]["prompts"]) / f"cast_label_{cc['prompt_version']}.md").exists():
-        fail("cast", f"prompts/cast_label_{cc['prompt_version']}.md missing", "set [cast] prompt_version to a version on file")
     people = cast.overview(cfg)["people"]
     few = [f"{p['name']} {p['kept']}" for p in people if p["kept"] < cc["min_photos"]]
     if few:
@@ -919,8 +899,6 @@ def check_news(cfg: dict, offline: bool) -> None:
     if not (nc["channel"] or nc["channel_id"] or cfg["discord"]["review_channel_id"]):
         fail("news", "[news] check_minutes is on but there is no channel to post to",
              "set [news] channel (a name the bot makes) or channel_id, or [news] check_minutes = 0")
-    if nc["judge_model"] and not (Path(cfg["paths"]["prompts"]) / f"news_judge_{nc['prompt_version']}.md").exists():
-        fail("news", f"prompts/news_judge_{nc['prompt_version']}.md missing", "set [news] prompt_version to a version on file")
     if offline:
         return
     bad = []

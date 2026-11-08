@@ -331,7 +331,6 @@ def run(stream_dir: Path, cfg: dict, missing: bool = False) -> list[dict]:
     cfg = for_stream(cfg, stream_dir)
     mc = cfg["meta"]
     prompts = Prompts(cfg)
-    prompts.version = mc["prompt_version"]
     prompts.vars.update(show_name=mc["show_name"], min_chapters=mc["min_chapters"],
                         max_chapters=mc["max_chapters"])
     meta = jsonstate.load(stream_dir / "meta.json")

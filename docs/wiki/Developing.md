@@ -26,7 +26,8 @@ HANDOFF.md            current state between work sessions (short); docs/log/ has
 - Model calls go through `clipper/llm.py`; the provider is the model string's prefix
   ([Model providers](Model-providers)).
 - Library code raises `ClipperError` (`clipper/errors.py`); only `cli.main` exits.
-- Prompts are `prompts/<name>_<version>.md`; add a new version rather than editing one that
+- Prompts are `prompts/<name>_<version>.md`; `prompts.VERSIONS` names the config key that holds each
+  one's version (doctor and a test read it). Add a new version rather than editing one that
   produced reviewed output.
 - Kitsu is the record for review decisions; the bot and the war room act through
   `clipper/actions.py`.

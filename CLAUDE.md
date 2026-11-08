@@ -38,8 +38,9 @@ the same PR as the change.
 - Errors: library code raises `ClipperError` (`clipper/errors.py`) with a one-line message, never
   `SystemExit`; only `cli.main` turns it into an exit. The bot, war room and worker catch it
   like any exception. A test fails on a new `raise SystemExit` outside cli.py.
-- Prompts are `prompts/<name>_<version>.md` (loaded by `clipper/prompts.py`); the version in use is a config key. Add a new
-  version rather than editing one that produced reviewed output.
+- Prompts are `prompts/<name>_<version>.md` (loaded by `clipper/prompts.py`); the version in use is a config key, and
+  `prompts.VERSIONS` says which one for each prompt (doctor and a test read it; a stage never assigns a version by
+  hand). Add a new version rather than editing one that produced reviewed output.
 - Stages print, services (serve, bot, worker, recorder) log through `logging`. How the processes share
   state (locks, heartbeats, the DM outbox, serve's API) is the wiki page How-the-processes-talk; the
   six-step checklist for a new command is in Developing.

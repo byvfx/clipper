@@ -723,7 +723,6 @@ def run(cfg: dict, slug: str, start: str | None = None, dry_run: bool = False, c
         quiet_http()
         preflight(claude, sc["triage_model"])
     prompts = Prompts(cfg)
-    prompts.version = sc["prompt_version"]
     # --from: that step and every one after it; otherwise from the first one not done
     first = STEPS.index(start) if start else next((k for k, s in enumerate(STEPS) if not done(d, s)), len(STEPS))
     if first == len(STEPS):

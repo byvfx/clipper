@@ -1,10 +1,60 @@
 """Prompt files: prompts/<name>_<version>.md, filled from [scoring], with the swappable
-rule files and [scoring] house_style for viewer-facing prompts."""
+rule files and [scoring] house_style for viewer-facing prompts.
+
+VERSIONS is the one list of prompts: which [section] key holds each one's version.
+`Prompts(cfg).get(name)` reads that key, so a stage never assigns a version by hand; doctor
+checks every file the table names at the configured versions, and tests/test_prompts.py
+checks the table against prompts/ and against every `prompts.get("...")` in the code. A new
+prompt is a file, a config key with its version, and a row here."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from .errors import ClipperError
+
+VERSIONS: dict[str, tuple[str, str]] = {
+    # scoring (the rule files below follow the same version)
+    "score_a": ("scoring", "prompt_version"), "score_b": ("scoring", "prompt_version"),
+    "scan": ("scoring", "prompt_version"), "summary": ("scoring", "prompt_version"),
+    # the pipeline stages
+    "segments": ("segments", "prompt_version"), "compilation": ("segments", "prompt_version"),
+    "meta": ("meta", "prompt_version"), "chapters": ("meta", "prompt_version"),
+    "thumbnail": ("thumbnail", "prompt_version"),
+    "thumbnail_enquirer": ("thumbnail", "enquirer_prompt_version"),
+    "thumbnail_retry": ("thumbnail", "retry_prompt_version"),
+    "thumbnail_enquirer_retry": ("thumbnail", "retry_prompt_version"),
+    "thumbnail_feedback": ("thumbnail", "retry_prompt_version"),
+    "shorts_layout": ("shorts", "layout_prompt_version"),
+    "retake": ("retake", "prompt_version"),
+    "pick": ("pick", "prompt_version"), "pick_locate": ("pick", "prompt_version"),
+    "preshow": ("preshow", "prompt_version"), "oneoff": ("preshow", "oneoff_prompt_version"),
+    # the extras
+    "receipts_stories": ("receipts", "prompt_version"),
+    "receipts_script": ("receipts", "script_prompt_version"),
+    "archive_expand": ("archive", "ask_prompt_version"), "archive_judge": ("archive", "ask_prompt_version"),
+    "weekly": ("weekly", "prompt_version"), "weekly_article": ("weekly", "article_prompt_version"),
+    "cast_label": ("cast", "prompt_version"),
+    "news_judge": ("news", "prompt_version"),
+    "investigate_facts": ("investigate", "prompt_version"),
+    "investigate_leads": ("investigate", "prompt_version"),
+    "investigate_check": ("investigate", "prompt_version"),
+    "investigate_confirm": ("investigate", "prompt_version"),
+    "swarm_plan": ("swarm", "prompt_version"), "swarm_worker": ("swarm", "prompt_version"),
+    "story_triage": ("story", "prompt_version"), "story_expand": ("story", "prompt_version"),
+    "story_moments": ("story", "prompt_version"), "story_dossier": ("story", "prompt_version"),
+    "story_edit": ("story", "edit_prompt_version"),
+}
+# <kind>_<mode>_<version>.md: rule files spliced into the scoring prompts, at [scoring] prompt_version.
+RULE_FILES = ("third_party", "audience", "gambling")
+
+
+def version_of(cfg: dict, name: str) -> str:
+    """The configured version of prompt `name`, from the [section] key VERSIONS names."""
+    try:
+        section, key = VERSIONS[name]
+    except KeyError:
+        raise ClipperError(f"no prompt named {name!r}: add it to prompts.VERSIONS") from None
+    return cfg[section][key]
 
 
 def read_sections(path: Path, prefix: str, fmt: dict) -> dict[str, str]:
@@ -53,8 +103,13 @@ HOUSE_STYLE_HEADERS = {"weekly": "House style for everything on the page:", "wee
 
 
 class Prompts:
+    """The prompts a config reads, filled with its [scoring] vars (and whatever a stage adds to
+    `vars`). `version` is [scoring] prompt_version, the one the rule files follow; every other
+    prompt's version comes from VERSIONS through `version_of`."""
+
     def __init__(self, cfg: dict):
         sc = cfg["scoring"]
+        self.cfg = cfg
         self.version = sc["prompt_version"]
         self.dir: Path = cfg["paths"]["prompts"]
         self.house_style: list[str] = list(sc.get("house_style") or [])
@@ -80,9 +135,13 @@ class Prompts:
             self.vars["third_party_rule"] = self.vars["third_party_pass_a"]
             self.vars["third_party_rule_b"] = self.vars["third_party_pass_b"]
 
+    def version_of(self, name: str) -> str:
+        return version_of(self.cfg, name)
+
     def get(self, name: str, **fill) -> str:
-        """fill: per-call placeholders on top of vars (e.g. a reviewer's note)."""
-        path = self.dir / f"{name}_{self.version}.md"
+        """The prompt at the version its config key sets (VERSIONS). fill: per-call
+        placeholders on top of vars (e.g. a reviewer's note)."""
+        path = self.dir / f"{name}_{self.version_of(name)}.md"
         try:
             text = path.read_text(encoding="utf-8")
         except FileNotFoundError:

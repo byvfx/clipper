@@ -247,7 +247,6 @@ def answer(cfg: dict, subject: str, question: str, since: str | None, before: st
     db = open_index(cfg, subject)
     cat = load_catalog(subject_dir(cfg, subject))
     prompts = Prompts(cfg)
-    prompts.version = ac["ask_prompt_version"]
     channels = ", ".join(sorted({i.get("channel") or "?" for i in cat.values()}))
     prompts.vars.update(subject=subject, channels=channels, max_queries=ac["ask_max_queries"])
 

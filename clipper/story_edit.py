@@ -190,8 +190,7 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
         claude = Claude(cfg)
         preflight(claude, sc["edit_model"])
     prompts = Prompts(shc)   # the show's own house style, however the show was picked
-    prompts.version = sc["edit_prompt_version"]
-    narrated = prompts.version != "v1"
+    narrated = prompts.version_of("story_edit") != "v1"
     show_name = shc["meta"]["show_name"] or key
     ms = "\n".join(f"{m['id']} | {m['role']}, {m['fit']} | {m['date'] or 'undated'} | {m['channel'] or '?'}"
                    f"{f' (our show, {show_name})' if m['ours'] else ''} | {m['title']}\n    \"{m['quote']}\"\n"
@@ -233,7 +232,7 @@ def plan(cfg: dict, slug: str, force: bool = False, claude=None) -> dict:
             "topic": out["topic"].strip(), "summary": out["summary"].strip(),
             "description": out["description"].strip(), "figures": out["figures"],
             "tldr": out.get("tldr", "").strip(), "close": out.get("close", "").strip(), "parts": parts,
-            "model": sc["edit_model"], "prompt_version": prompts.version,
+            "model": sc["edit_model"], "prompt_version": prompts.version_of("story_edit"),
             "planned_at": datetime.now(UTC).isoformat(timespec="seconds"), "usd": round(claude.cost, 4)}
     sdir.mkdir(parents=True, exist_ok=True)
     if (sdir / "story.json").exists():

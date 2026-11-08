@@ -390,7 +390,6 @@ class Run:
         self.words = terms(goal)
         self.seen = {task_key(t["kind"], t["target"]) for t in trail["tasks"]}
         self.prompts = Prompts(cfg)
-        self.prompts.version = s["prompt_version"]
         kinds = {k: v for k, v in KINDS.items() if k in tools and (k != "archive_search" or archives)}
         self.kinds = kinds
         self.prompts.vars.update(

@@ -152,7 +152,6 @@ def llm_setup(cfg: dict, model: str):
     quiet_http()
     preflight(claude, model)
     prompts = Prompts(cfg)
-    prompts.version = cfg["investigate"]["prompt_version"]
     return claude, prompts
 
 
