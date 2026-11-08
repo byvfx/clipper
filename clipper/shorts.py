@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import statistics
 import subprocess
 import time
 from itertools import pairwise
@@ -220,7 +221,7 @@ def face_centers(layout: dict, faces: list[dict], a: float, b: float) -> dict[in
         inside = [(x, y, t) for x, y, t in inside if 0 <= x <= 1 and 0 <= y <= 1]
         here = [(x, y) for x, y, t in inside if a <= t < b] or [(x, y) for x, y, _ in inside]
         if here:
-            mid = lambda vs: sorted(vs)[len(vs) // 2]
+            mid = statistics.median
             out[i] = (round(mid([x for x, _ in here]), 2), round(mid([y for _, y in here]), 2))
     return out
 

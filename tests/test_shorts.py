@@ -221,6 +221,8 @@ def test_face_centers_take_the_faces_in_the_box_during_the_window():
     assert list(got) == [1] and got[1] == (0.6, 0.5)  # median of 0.5/0.6/0.7 of the box
     assert shorts.face_centers(layout, faces, 400, 600)[1] == (0.2, 0.25)
     assert shorts.face_centers(layout, [face(1, 0.3, 0.5)], 0, 5) == {}
+    two = [face(12, 0.76, 0.7), face(14, 0.88, 0.7)]  # an even count: between the middle two
+    assert shorts.face_centers(layout, two, 10, 20)[1] == (0.4, 0.25)
     assert shorts.face_centers({"panels": [{"src": [0.7, 0.6, 0.3, 0.4]}]}, faces, 10, 20) == {}
 
 

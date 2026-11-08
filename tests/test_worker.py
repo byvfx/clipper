@@ -177,3 +177,24 @@ def test_run_passes_a_show_pin_to_its_stages(tmp_path, defaults, monkeypatch):
     calls.clear()
     worker.run_stream(cfg, tmp_path, stages=["signals"], force=True)
     assert "--show" not in calls[0]
+
+
+def test_face_framed_shorts_render_again_after_the_face_scan(tmp_path, defaults, monkeypatch):
+    """Copilot on #164: the fast lane's Shorts come before `faces`, so a focus = "face"
+    panel kept its middle; the slow lane renders them again once faces.json is there."""
+    cam = {"panels": [{"src": [0.7, 0.6, 0.3, 0.4], "focus": "face"}]}
+    c = {**defaults, "worker": {**defaults["worker"], "fast_lane": True,
+                                "stages": [*SLOW[:4], "faces", *SLOW[4:]]},
+         "shorts": {**defaults["shorts"], "layouts": {"cam": cam}}}
+    calls = []
+    monkeypatch.setattr(worker.subprocess, "call", lambda cmd, **kw: calls.append(cmd[3]) or 0)
+    monkeypatch.setattr(worker, "keep_awake", lambda on: None)
+    (tmp_path / "shorts.json").write_text("{}")  # the fast lane rendered them
+    assert worker.run_stream(c, tmp_path, lane="slow")
+    assert calls[:2] == ["faces", "shorts"]
+    calls.clear()
+    assert worker.run_stream(c, tmp_path, lane="slow")  # faces done before: no second pass
+    assert "shorts" not in calls
+    plain = {**c, "shorts": {**c["shorts"], "layouts": {"cam": {"panels": [{"src": [0, 0, 1, 1]}]}}}}
+    assert not worker.shorts_after_faces(plain, tmp_path, worker.default_stages(plain, tmp_path),
+                                         worker.plan(plain, tmp_path, lane="slow"))
