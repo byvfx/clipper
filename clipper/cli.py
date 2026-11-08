@@ -462,7 +462,7 @@ def cmd_score(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_segments(cfg: dict, args: argparse.Namespace) -> None:
     from . import segments
 
-    segments.run(stream_dir(cfg, args.stream), cfg, force=args.force)
+    segments.run(stream_dir(cfg, args.stream), cfg, force=args.force, dry_run=args.dry_run)
 
 
 def cmd_cut(cfg: dict, args: argparse.Namespace) -> None:
@@ -490,14 +490,18 @@ def cmd_meta(cfg: dict, args: argparse.Namespace) -> None:
     from . import meta
 
     d = stream_dir(cfg, args.stream)
-    meta.captions_only(d, cfg) if args.captions_only else meta.run(d, cfg, missing=args.missing)
+    if args.captions_only:
+        refuse(args, "--captions-only", "--dry-run")
+        meta.captions_only(d, cfg)
+    else:
+        meta.run(d, cfg, missing=args.missing, dry_run=args.dry_run)
 
 
 def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
     from . import thumbs
 
     if args.photo is not None or args.teaser_photo is not None:
-        refuse(args, "--photo/--teaser-photo", "--shorts", "--compose-only", "--missing", "--force")
+        refuse(args, "--photo/--teaser-photo", "--shorts", "--compose-only", "--missing", "--force", "--dry-run")
         if not args.items:
             raise ClipperError("--photo/--teaser-photo need --items")
         changed = thumbs.set_photos(stream_dir(cfg, args.stream), cfg, args.items,
@@ -506,13 +510,15 @@ def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
         print(f"{len(changed)} changed: {', '.join(changed)}" if changed else "nothing to change")
         return
     if args.shorts:
-        refuse(args, "--shorts", "--items", "--compose-only", "--missing", "--force")
+        refuse(args, "--shorts", "--items", "--compose-only", "--missing", "--force", "--dry-run")
         n = thumbs.shorts_only(stream_dir(cfg, args.stream), cfg, kitsu=not args.no_kitsu)
         print(f"{n} Short covers")
         return
+    if args.dry_run:
+        refuse(args, "--dry-run", "--compose-only")
     thumbs.run(stream_dir(cfg, args.stream), cfg, ids=args.items,
                force=args.force, compose_only=args.compose_only, kitsu=not args.no_kitsu,
-               missing=args.missing)
+               missing=args.missing, dry_run=args.dry_run)
 
 
 def cmd_pick(cfg: dict, args: argparse.Namespace) -> None:
@@ -885,6 +891,12 @@ def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
         raise ClipperError("", status=status)
 
 
+def cmd_status(cfg: dict, args: argparse.Namespace) -> None:
+    from . import status
+
+    print("\n".join(status.lines(cfg, days=args.days, sync=args.sync)))
+
+
 def cmd_serve(cfg: dict, args: argparse.Namespace) -> None:
     from . import serve
 
@@ -900,7 +912,7 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
-    ('Services (long-running)', ['services', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
+    ('Services (long-running)', ['services', 'status', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
@@ -977,6 +989,8 @@ def add_pipeline(sub) -> None:
     p = sub.add_parser("segments", help="split the stream into topic segments -> segments.json")
     add_stream(p)
     p.add_argument("--force", action="store_true", help="re-split instead of reusing segments.json")
+    p.add_argument("--dry-run", action="store_true", help="print the estimate (what a run would send, times "
+                                                          "[llm] prices); call nothing")
     p.set_defaults(fn=cmd_segments)
 
     p = sub.add_parser("cut", help="cut segments, topic compilations and Pass B picks")
@@ -992,6 +1006,8 @@ def add_pipeline(sub) -> None:
                    help="rewrite .srt and re-mask metadata text, no model calls")
     p.add_argument("--missing", action="store_true",
                    help="only videos with no draft yet; existing drafts stay as they are")
+    p.add_argument("--dry-run", action="store_true", help="print the estimate (what a run would send, times "
+                                                          "[llm] prices); call nothing")
     p.set_defaults(fn=cmd_meta)
 
     p = sub.add_parser("thumbs", help="thumbnails: pick a frame, write the text -> <video>.jpg")
@@ -1003,6 +1019,8 @@ def add_pipeline(sub) -> None:
     p.add_argument("--no-kitsu", action="store_true", help="don't attach them in Kitsu")
     p.add_argument("--missing", action="store_true",
                    help="only videos with no thumbnail yet; leave the others' covers alone")
+    p.add_argument("--dry-run", action="store_true", help="print the estimate (the picks a run would make, "
+                                                          "frames as images, times [llm] prices); call nothing")
     p.add_argument("--shorts", action="store_true",
                    help="only the Shorts' 9:16 covers, from their clips' choices (no model calls)")
     p.add_argument("--photo", metavar="PERSON",
@@ -1239,6 +1257,12 @@ def add_services(sub) -> None:
     p.add_argument("--force", action="store_true",
                    help="restart or stop the recorder even while it's recording (starts a new part)")
     p.set_defaults(fn=cmd_services)
+
+    p = sub.add_parser("status", help="one screen: services and recorder, the worker's streams, review counts, "
+                                      "the next releases, this month's spend (reads files; runs nothing)")
+    p.add_argument("--days", type=int, default=2, help="releases this far ahead (default 2)")
+    p.add_argument("--sync", action="store_true", help="read Kitsu's decisions first (slower)")
+    p.set_defaults(fn=cmd_status)
 
     p = sub.add_parser("worker", help="GPU machine: `clipper run` each finished recording")
     p.add_argument("--once", action="store_true", help="one pass, then exit")

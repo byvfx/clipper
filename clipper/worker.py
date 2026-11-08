@@ -474,14 +474,25 @@ def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None
             time.sleep(wc["poll_s"])
 
 
-def status(cfg: dict) -> None:
+def status_lines(cfg: dict) -> list[str]:
+    """A line per stream the worker has touched or the recorder is writing (`worker --status`,
+    `clipper status`)."""
     root: Path = cfg["paths"]["streams"]
-    for d in sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir()):
+    dirs = sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir()) \
+        if root.is_dir() else []
+    out = []
+    for d in dirs:
         run = jsonstate.read_or(d / "run.json", {})
         rec = jsonstate.read_or(d / "live" / "state.json", {}).get("status", "-")
         stages = run.get("stages", {})
         last = next((s for s in reversed(STAGES) if stages.get(s, {}).get("status")), "")
-        print(f"{d.name:<18} rec={rec:<10} run={run.get('status', 'new'):<8} "
-              f"last={last}:{stages.get(last, {}).get('status', '')} "
-              + (f"clips in review {run['clips_ready'][5:16]} " if run.get("clips_ready") else "")
-              + f"{run.get('error') or run.get('paused', '')}"[:80])
+        out.append(f"{d.name:<18} rec={rec:<10} run={run.get('status', 'new'):<8} "
+                   f"last={last}:{stages.get(last, {}).get('status', '')} "
+                   + (f"clips in review {run['clips_ready'][5:16]} " if run.get("clips_ready") else "")
+                   + f"{run.get('error') or run.get('paused', '')}"[:80])
+    return out
+
+
+def status(cfg: dict) -> None:
+    for line in status_lines(cfg):
+        print(line)

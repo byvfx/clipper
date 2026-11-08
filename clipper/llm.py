@@ -541,3 +541,27 @@ class Budget:
 def estimate(cfg: dict, model: str, tokens_in: float, tokens_out: float) -> float:
     pin, pout = known_price(cfg, model) or (0.0, 0.0)
     return (tokens_in * pin + tokens_out * pout) / 1e6
+
+
+def tokens(text: str) -> int:
+    """A rough count for an estimate before spending: four characters a token."""
+    return len(text) // 4 + 1
+
+
+def estimate_lines(cfg: dict, rows: list[tuple[str, str, int, int, int]]) -> list[str]:
+    """`--dry-run` lines for a stage's model calls, (label, model, calls, tokens in, tokens out)
+    each, then the total. Priced from [llm] prices alone (an estimate never goes online, not
+    even for an openrouter: model); a model missing there counts $0 and the line says so."""
+    out, total = [], 0.0
+    table = prices(cfg)
+    for label, model, calls, tin, tout in rows:
+        price = price_of(table, model)
+        pin, pout = price or (0.0, 0.0)
+        usd = (tin * pin + tout * pout) / 1e6
+        total += usd
+        note = "" if price else "  (no [llm] price: counted $0)"
+        plural = "s" if calls != 1 else ""
+        out.append(f"  {label:<9} {calls:>4} call{plural:<1}  ~{tin / 1000:>6,.0f}k in  ~{tout / 1000:>4,.0f}k out"
+                   f"  ~${usd:>5.2f}  {model}{note}")
+    out.append(f"  total ~${total:.2f}  (four characters a token, [llm] prices; nothing was called)")
+    return out

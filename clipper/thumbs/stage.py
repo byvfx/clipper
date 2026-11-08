@@ -11,7 +11,7 @@ from pathlib import Path
 from .. import jsonstate
 from ..config import for_stream
 from ..errors import ClipperError
-from ..llm import Claude, preflight
+from ..llm import Claude, estimate_lines, preflight, tokens
 from ..meta import duration, load_assets
 from ..prompts import Prompts
 from ..scoring import load_signals
@@ -188,12 +188,38 @@ def set_photos(stream_dir: Path, cfg: dict, ids: list[str], photo: str | None = 
     return sorted(set(changed))
 
 
+FRAME_TOKENS = 768 * 432 // 750   # a candidate frame as the model sees it (768 px wide, 16:9)
+
+
+def cover_prompts(cfg: dict, tc: dict, style: str) -> tuple[Prompts, str]:
+    """The thumbnail prompt, filled in for this show and its [thumbnail] settings."""
+    prompts = Prompts(cfg)
+    prompts.vars.update(show_name=cfg["meta"]["show_name"] or "the show",
+                        max_words=tc["max_words"], max_words_min=min(2, tc["max_words"]),
+                        min_crop=tc["min_crop"])
+    return prompts, prompts.get("thumbnail_enquirer" if style == "enquirer" else "thumbnail")
+
+
+def estimate(cfg: dict, tc: dict, todo: list[dict], style: str) -> list[str]:
+    """`--dry-run`: one pick per video still to do, its candidate frames sent as images
+    ([thumbnail] clip_frames, or even_frames + heat_frames), priced with [llm] prices."""
+    if not todo:
+        return ["  every video has its cover (no --force): no model call"]
+    _, system = cover_prompts(cfg, tc, style)
+    frames = sum(tc["clip_frames"] if x["kind"] == "clip" else tc["even_frames"] + tc["heat_frames"]
+                 for x in todo)
+    rows = [("covers", tc["model"], len(todo),
+             len(todo) * (tokens(system) + 300) + frames * (FRAME_TOKENS + 20), 200 * len(todo))]
+    return estimate_lines(cfg, rows) + [
+        f"  {frames} candidate frames go as images; enquirer covers add a few face frames"]
+
+
 def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool = False,  # noqa: C901
         compose_only: bool = False, kitsu: bool = True,
-        feedback: dict[str, str] | None = None, missing: bool = False) -> list[dict]:
+        feedback: dict[str, str] | None = None, missing: bool = False, dry_run: bool = False) -> list[dict]:
     """feedback: {asset id: what was wrong with its thumbnail}, for a re-pick (retakes).
     missing: only videos with no thumbnail choice yet; the others' covers (and their
-    Shorts' covers) are not re-rendered."""
+    Shorts' covers) are not re-rendered. dry_run: print the estimate, change nothing."""
     cfg = for_stream(cfg, stream_dir)
     from ..bleep import Bleeper
 
@@ -226,15 +252,14 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         if missing:
             raise ClipperError(f"--compose-only: no choice yet for {missing}; run without it first")
         todo = []
+    if dry_run:
+        print("\n".join(["estimate:"] + estimate(cfg, tc, todo, style)))
+        return []
     claude = None
     if todo:
         claude = Claude(cfg)
         preflight(claude, tc["model"])
-        prompts = Prompts(cfg)
-        prompts.vars.update(show_name=cfg["meta"]["show_name"] or "the show",
-                            max_words=tc["max_words"], max_words_min=min(2, tc["max_words"]),
-                            min_crop=tc["min_crop"])
-        system = prompts.get("thumbnail_enquirer" if style == "enquirer" else "thumbnail")
+        prompts, system = cover_prompts(cfg, tc, style)
         retry = Prompts(cfg)  # the retry and reviewer-feedback wording
         sig = load_signals(stream_dir) if (stream_dir / "signals.parquet").exists() else None
         faces = jsonstate.read(stream_dir / "faces.json", None) if style == "enquirer" else None

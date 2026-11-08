@@ -8,6 +8,11 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-08: `clipper status`: one screen with the services' and the recorder's heartbeats, the
+  worker's streams, review counts, the next releases and the month's spend. `score`, `segments`,
+  `meta` and `thumbs` print an estimate with `--dry-run` (the prompts they would send, four
+  characters a token, times `[llm] prices`) and call nothing; Costs has the measured per-stream
+  figures.
 - 11-08: every flag and positional has help (`clipper <command> -h`; a test keeps it so), `run -h`
   explains the fast lane's twin stages, the wiki stops calling `--limit` and `--from` universal,
   and `clipper doctor` warns on `[youtube] auto_upload_minutes = 0` (serve) and on a bot machine

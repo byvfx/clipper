@@ -35,9 +35,10 @@ auto_upload_minutes` (`clipper schedule`, `clipper upload` by hand when that's 0
 
 ## Check
 
-`clipper doctor --role gpu|serve|bot|nas` (this machine), `clipper worker --status` (each
-recording's stages), `clipper review status` (decisions and what's scheduled), `clipper costs`
-(the month's spend, [Costs](Costs)).
+`clipper status` is the one screen: the services' heartbeats and the recorder, each
+recording's stages, review counts, the next releases and the month's spend. Behind it:
+`clipper doctor --role gpu|serve|bot|nas` (this machine's setup), `clipper worker --status`,
+`clipper review status` (decisions and what's scheduled) and `clipper costs` ([Costs](Costs)).
 
 ## Stop and restart
 

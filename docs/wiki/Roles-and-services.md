@@ -49,4 +49,7 @@ cards get posted then).
 
 Logs go to `logs\` (`serve.log`, `bot.log`, `worker.log`). The bot DMs you when something needs
 you ([Review](Review), "Alerts"). `clipper doctor --role gpu|serve|bot|nas|claude|control` checks a machine
-and prints a fix for each problem.
+and prints a fix for each problem. `clipper status` is the one screen: every service's heartbeat
+and the recorder's, the worker's streams, review counts, the next releases and this month's
+spend, read from the share with nothing started; `clipper services status` has the per-job
+detail and the stop and restart verbs.

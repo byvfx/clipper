@@ -401,11 +401,12 @@ def other_voices(seconds, limit: float) -> str:
     return f"{s:.0f} s of other voices (limit {limit:g} s)" if s > limit else ""
 
 
-def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
+def describe(cfg: dict, sdir: Path, gazu=None, links: bool = True) -> dict[str, dict]:
     """Everything a card or list row shows, per item, from local files (review.json is
-    as of the last sync). Kitsu is only asked for links older publishes didn't save."""
+    as of the last sync). Kitsu is only asked for links older publishes didn't save, and not
+    even that with links=False (`clipper status`: files only)."""
     cfg = for_stream(cfg, sdir)
-    state = review.ensure_links(sdir, cfg, gazu)
+    state = review.ensure_links(sdir, cfg, gazu) if links else jsonstate.load(sdir / "review_state.json")
     decisions = jsonstate.read(sdir / "review.json", {})
     sched = schedule_entries(cfg)
     dropped = schedule_dropped(cfg)
@@ -444,7 +445,7 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
             "uploaded": bool(entry and entry.get("status") == "uploaded"),
             "dropped": "" if entry else dropped.get(f"{sdir.name}/{key}", ""),
             "youtube_url": fields.get("YouTube URL") or "",
-            "kitsu_url": st["kitsu_url"], "episode_url": st["episode_url"],
+            "kitsu_url": st.get("kitsu_url", ""), "episode_url": st.get("episode_url", ""),
             "thumb_text": fields.get(review.THUMB_COL) or proposed.get(review.THUMB_COL) or "",
             **{k: fields.get(n) or proposed.get(n) or "" for k, n in
                (("description", "YouTube description"), ("hashtags", "Hashtags"),
@@ -469,13 +470,14 @@ def list_items(cfg: dict, stream: str | None = None, everything: bool = False,
     return rows
 
 
-def status(cfg: dict, sync: bool = False) -> dict:
-    """Per stream: decision counts; plus what schedule.json has coming up."""
+def status(cfg: dict, sync: bool = False, links: bool = True) -> dict:
+    """Per stream: decision counts; plus what schedule.json has coming up. links=False never
+    asks Kitsu, not even for an old item's missing link."""
     streams = []
     for d in review_dirs(cfg):
         if sync:
             review.sync(d, cfg, quiet=True)
-        rows = describe(cfg, d).values()
+        rows = describe(cfg, d, links=links).values()
         counts: dict[str, int] = {}
         for r in rows:
             counts[r["decision"]] = counts.get(r["decision"], 0) + 1
