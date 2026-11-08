@@ -1052,12 +1052,16 @@ def add_pipeline(sub) -> None:
                               "clips, clips_meta, clips_thumbs and clips_review are the fast lane's early cut,\n"
                               "metadata, covers and review publish of the picks, what the Shorts need first;\n"
                               "cut, meta, thumbs and review are the same stages for the segments and\n"
-                              "compilations ([worker] fast_lane). So --from thumbs redoes the segment covers\n"
-                              "on, and --only clips_thumbs the picks' covers.")
+                              "compilations ([worker] fast_lane). --only and --from choose stages, not what\n"
+                              "they redo: a stage keeps the paid work it finds (drafts, covers, unchanged\n"
+                              "cuts). To redo covers or drafts run the stage itself:\n"
+                              "clipper thumbs STREAM --items IDS --force, clipper meta STREAM.")
     add_stream(p)
-    p.add_argument("--only", metavar="STAGES", help="just these stages, comma-separated (the list below)")
+    p.add_argument("--only", metavar="STAGES", help="just these stages, comma-separated (the list below); "
+                                                    "done ones need --force")
     p.add_argument("--from", dest="from_", choices=STAGE_NAMES, metavar="STAGE",
-                   help="redo this stage and every one after it (each with --force)")
+                   help="run this stage and every one after it again, done or not "
+                        "(score, cut and clips get --force)")
     p.add_argument("--force", action="store_true", help="rerun stages even if done")
     p.set_defaults(fn=cmd_run)
 

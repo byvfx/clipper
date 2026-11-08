@@ -243,5 +243,5 @@ def test_no_masthead_no_draft(cfg, monkeypatch):
 
 def test_masthead_is_two_stripped_words_or_nothing():
     assert style.masthead({"masthead": [" DAILY ", "PLANET"]}) == ("DAILY", "PLANET")
-    for bad in ([], ["DAILY"], ["", ""], ["   ", "PLANET"], ["A", "B", "C"], [1, "B"]):
+    for bad in ([], ["DAILY"], ["", ""], ["   ", "PLANET"], ["A", "B", "C"], [1, "B"], 42, "AB"):
         assert style.masthead({"masthead": bad}) is None, bad
