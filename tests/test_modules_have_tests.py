@@ -75,7 +75,7 @@ def used_through(src: str, local: str, pkg: str, all_modules: set[str]) -> set[s
     """The submodules behind `local.<attr>` uses of a package in one test file: a submodule
     named outright, a re-exported name, or an object whose __module__ is inside the package."""
     table, module, named = reexports(pkg), importlib.import_module(pkg), set()
-    for attr in set(re.findall(rf"{re.escape(local)}\.(\w+)", src)):
+    for attr in set(re.findall(rf"\b{re.escape(local)}\.(\w+)", src)):
         if f"{pkg}.{attr}" in all_modules:
             named.add(f"{pkg}.{attr}")
         elif attr in table:
