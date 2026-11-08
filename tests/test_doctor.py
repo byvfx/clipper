@@ -26,6 +26,16 @@ prompts = "mine"
     assert status == "OK" and "read first" in what
 
 
+def test_a_shows_own_prompts_folder_is_checked_too(tmp_path):
+    """Each show resolves its own [paths] prompts, so a typo there is named with the show (Copilot on #184)."""
+    (status, _, what, _), = prompts_check(tmp_path, '''[shows.kino]
+channels = ["kinocasinogaming"]
+[shows.kino.paths]
+prompts = "missing"
+''')
+    assert status == "WARN" and "missing (kino)" in what and "base" not in what
+
+
 def test_the_example_shows_find_their_prompts():
     cfg = config.load(ROOT / "clipper.example.toml", use_local=False)
     (status, _, what, _), = doctor.collect(doctor.check_prompts, cfg)
