@@ -60,10 +60,17 @@ EXTRA_MODULE = {"gpu": "whisperx", "mac": "mlx_whisper", "modal": "modal", "disc
 # ---------- questions ----------
 
 def _expand(v: str) -> Path:
+    """`~` and `~name` expanded. A `~name` whose user has no home folder is left as typed:
+    POSIX raises for it, Windows makes one up beside the current user's, so the folder is checked."""
     try:
-        return Path(v).expanduser()
-    except RuntimeError:          # ~name for a user that doesn't exist: left as typed
+        p = Path(v).expanduser()
+    except RuntimeError:          # ~name for a user that doesn't exist
         return Path(v)
+    if v[:1] == "~" and v[1:2] not in ("", "/", os.sep):
+        name = v[1:].replace(os.sep, "/").split("/", 1)[0]
+        if not Path("~" + name).expanduser().is_dir():
+            return Path(v)
+    return p
 
 
 def user_path(raw: str) -> Path:
@@ -497,7 +504,7 @@ def step_roles(cfg: dict, st: dict, ask: Ask) -> None:
         raise ClipperError(status=EXIT_SYNC)
 
 
-def step_machine(cfg: dict, st: dict, ask: Ask) -> None:
+def step_machine(cfg: dict, st: dict, ask: Ask) -> None:  # noqa: C901
     shared = shared_cfg(cfg)
     roles = st.get("roles") or ["worker"]
 
@@ -646,7 +653,7 @@ def ensure_env_key(cfg: dict, ask: Ask, name: str, what: str, where: str, check:
         os.environ.pop(name, None)
 
 
-def step_keys(cfg: dict, st: dict, ask: Ask) -> None:
+def step_keys(cfg: dict, st: dict, ask: Ask) -> None:  # noqa: C901
     roles = st.get("roles") or ["worker"]
     if roles == ["recorder"]:
         say("The recorder needs no keys here.")
