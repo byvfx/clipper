@@ -364,6 +364,7 @@ def publish_and_post(stream_dir: Path, cfg: dict, force: bool = False, only: lis
     Returns the published keys."""
     from . import review
 
+    cfg = for_stream(cfg, stream_dir)  # the stream's own [discord] enabled, as publish and post see it
     published = review.publish(stream_dir, cfg, force=force, only=only)
     if post_cards and published and cfg["discord"]["enabled"]:
         post(stream_dir, cfg, keys=published)
