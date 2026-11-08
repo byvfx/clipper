@@ -165,7 +165,7 @@ def prompt_files(cfg: dict) -> list[str]:
     the version its config key sets, the [scoring] rule files for that version, and the weekly
     article example."""
     sc, v = cfg["scoring"], cfg["scoring"]["prompt_version"]
-    tc, enquirer = cfg["thumbnail"], cfg["thumbnail"]["style"] == "enquirer"
+    enquirer = cfg["thumbnail"]["style"] == "enquirer"
     # Prompts a config may never read: the other thumbnail style's, and the cast and news
     # labellers' when those features are off (Copilot on #174).
     unread = {"thumbnail": enquirer, "thumbnail_retry": enquirer,
