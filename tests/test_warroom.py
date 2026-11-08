@@ -224,8 +224,9 @@ def test_hidden_shows_leave_the_page(tmp_path):
     assert list(warroom.shown_shows(config.load(path))) == ["kino"]
 
 
-def test_bad_headers_and_queries_are_bad_requests_not_crashes(serve, defaults):
+def test_bad_headers_and_queries_are_bad_requests_not_crashes(serve, defaults, tmp_path):
     """A malformed Content-Length, Range or ?t= answers with a status, never a 500 (Copilot on #176)."""
+    defaults["paths"]["streams"] = tmp_path / "streams"   # before serve(): the handler reads it then
     port = serve("")
     root = defaults["paths"]["streams"]
     (root / "kick-1").mkdir(parents=True)
