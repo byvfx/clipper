@@ -24,7 +24,9 @@ reports/              the audits and the monthly analytics reports
 - Stages read and write files in `streams/<id>/` and are idempotent. JSON state goes through
   `clipper/jsonstate.py`.
 - Config: defaults in `clipper/config.py` < `clipper.toml` < `clipper.local.toml` < `CLIPPER_*`
-  env ([Configuration](Configuration)). Use `config.for_stream(cfg, sdir)` whenever a stream is known.
+  env ([Configuration](Configuration)). Use `config.for_stream(cfg, sdir)` whenever a stream is known; `config.base(cfg)` is the config
+  before any override. A two-letter section alias (`sc`, `rc`, `wc`) only in a module that reads
+  one section; elsewhere spell the section out.
 - Model calls go through `clipper/llm.py`; the provider is the model string's prefix
   ([Model providers](Model-providers)).
 - Library code raises `ClipperError` (`clipper/errors.py`); only `cli.main` exits.
@@ -50,7 +52,8 @@ Each step is checked by a test where it can be, so a missing one fails `pytest`,
 3. A pipeline stage is also a row in `clipper/stages.py` (test).
 4. A `clipper doctor` check when it needs a key, a service or a file, with the fix in the message.
 5. A wiki page or section, in the sidebar (test), and `wiki.page(...)` links in its messages (test).
-6. Tests for its pure logic in `tests/`, and the cost printed before any model call it makes.
+6. Tests for its pure logic in `tests/`, and the cost printed before any model call it makes. A
+   new module needs a test that names it (`tests/test_modules_have_tests.py` fails otherwise).
 
 ## Checks
 

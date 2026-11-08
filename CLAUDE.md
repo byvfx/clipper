@@ -30,7 +30,9 @@ the same PR as the change.
   over show and stream overrides.
   `config.for_stream(cfg, sdir)` resolves the show from the stream's `meta.json` channel,
   then the stream's own `streams/<id>/config.toml` if any; use it rather than the base config
-  whenever a stream is known.
+  whenever a stream is known. `config.base(cfg)` is the config before any override (the old `_root`).
+  A two-letter section alias (`sc`, `rc`, `wc`) only in a module that reads one section; elsewhere
+  spell the section out, since `sc` is scoring in one file and story or schedule in the next.
 - Shows: `[shows.<key>]` tables; a show's sub-tables override base sections. Each show has
   its own Kitsu production. Everything uploads to one YouTube channel.
 - Model calls go through `clipper/llm.py` (`llm.Claude` is an alias of `LLM`); the provider is the

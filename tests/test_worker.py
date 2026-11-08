@@ -219,3 +219,19 @@ def test_a_pre_show_is_known_by_its_meta_kind(tmp_path):
     assert is_preshow(d)
     jsonstate.write(d / "meta.json", {"stream_id": "kick-1"})
     assert not is_preshow(d)
+
+
+def test_a_failed_stage_is_recorded_with_the_logs_last_lines(tmp_path, defaults, monkeypatch):
+    """A stage child that exits non-zero: run.json names the stage, its exit code and the log's
+    tail, and run_stream returns False so the worker moves on (wiki: How the processes talk)."""
+    def fake_call(cmd, stdout=None, **kw):
+        stdout.write("reading windows.json\nTraceback: boom\n")
+        return 3
+    monkeypatch.setattr(worker.subprocess, "call", fake_call)
+    monkeypatch.setattr(worker, "keep_awake", lambda on: None)
+    assert worker.run_stream(defaults, tmp_path, stages=["signals"], force=True) is False
+    run = jsonstate.read_or(tmp_path / "run.json", {})
+    assert run["status"] == "failed" and run["stages"]["signals"]["status"] == "failed"
+    assert run["stages"]["signals"]["exit"] == 3 and run["error"].startswith("signals exited 3: ") and "boom" in run["error"]
+    assert (tmp_path / "run_signals.log").read_text(encoding="utf-8").rstrip().endswith("boom")
+    assert not (tmp_path / ".run.lock").exists()   # released, so the next worker pass can retry

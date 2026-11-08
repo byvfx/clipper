@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import jsonstate
-from .config import _root, for_stream, stream_dir
+from .config import base, for_stream, stream_dir
 from .errors import ClipperError
 
 LOCK_STALE_S = 3600
@@ -564,7 +564,7 @@ def run(cfg: dict, stream: str | None = None, item: str | None = None,
         comment: str | None = None, dry_run: bool = False, sync: bool = True) -> list[dict]:
     from . import actions, review
 
-    root = _root(cfg)
+    root = base(cfg)
     if item:
         it = actions.resolve(root, item, stream)
         if comment is None:
