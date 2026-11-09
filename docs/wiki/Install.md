@@ -20,11 +20,6 @@ powershell -ExecutionPolicy Bypass -File deploy\bootstrap.ps1     # Windows
 bash deploy/bootstrap.sh                                         # macOS / Linux
 ```
 
-On Linux the bootstrap also installs the fonts covers and captions use, which Windows and macOS
-come with: Impact, Georgia and Arial (`ttf-mscorefonts-installer`, which asks you to accept
-Microsoft's license; if you decline, `sudo dpkg-reconfigure ttf-mscorefonts-installer` asks
-again) and Roboto Condensed.
-
 The bootstrap installs uv (which brings Python 3.12) and ffmpeg if they're missing (winget,
 else uv's installer and BtbN's ffmpeg build; Homebrew or apt on macOS/Linux), syncs the
 packages, adds a `clipper` command to `~/.local/bin` (on PATH; it runs this folder's
@@ -51,6 +46,11 @@ packages, adds a `clipper` command to `~/.local/bin` (on PATH; it runs this fold
    service, saved as Windows user env vars / in your shell profile / in `secrets/`.
 5. **Check.** `clipper doctor` for the chosen roles, then what to run next.
 
+On Linux the bootstrap also installs the fonts covers and captions use, which Windows and macOS
+come with: Impact, Georgia and Arial (`ttf-mscorefonts-installer`, which asks you to accept
+Microsoft's license; if you decline, `sudo dpkg-reconfigure ttf-mscorefonts-installer` asks
+again) and Roboto Condensed.
+
 Values that only this machine needs go in **`clipper.local.toml`** beside clipper.toml
 (gitignored), written only where they differ from the shared file, so clipper.toml can stay
 identical everywhere. It wins over clipper.toml and its shows; `CLIPPER_*` env vars still win
@@ -73,6 +73,9 @@ kitsu = "http://<nas>:8090"
 > under ~80 characters (`C:\clipper` is fine): the anthropic package has files ~160 characters
 > deep inside `.venv`, and past 260 in total Python can't import them. The bootstrap refuses a
 > longer folder and doctor warns.
+
+After a new install, the [Install checklist](Install-checklist) is a by-hand pass over what the
+sandbox runs can't reach (the prompts, real keys, online checks, first real work).
 
 Not in the walkthrough (each has its page): [Kitsu](Kitsu) and its accounts, the
 [Discord app](Discord-app) and its ids, [YouTube sign-in](YouTube-sign-in), the first show

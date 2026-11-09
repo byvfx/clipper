@@ -13,6 +13,7 @@
 
 **Install**
 - [Install](Install)
+- [Install checklist](Install-checklist)
 - [Kitsu](Kitsu)
 - [Discord app](Discord-app)
 - [YouTube sign-in](YouTube-sign-in)
