@@ -212,7 +212,7 @@ function openModal(ref) {
       </div>
       <div class="form">
         <div class="row" id="mActs"></div>
-        <label>Ask for changes (clipper does the retake)</label>
+        <label>Ask for changes (Clippa does the retake)</label>
         <textarea id="fChanges" placeholder="e.g. start 5 s earlier · the thumbnail shows the back of his head · use the cams layout"></textarea>
         <div class="row"><button class="btn warn" id="bChanges">✎ Send retake note</button><button class="btn bad" id="bReject">✕ Reject with this as the reason</button></div>
         <label>YouTube title</label><input id="fTitle" maxlength="100" data-check="title"><div class="warn-line" id="w_title"></div>

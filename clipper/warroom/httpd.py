@@ -78,7 +78,7 @@ def watch_page(qs: dict) -> bytes:
     src = (qs.get("src") or [""])[0]
     if not src.startswith("/media/"):
         raise ClipperError("no such video")
-    title = html.escape((qs.get("title") or ["clipper"])[0])
+    title = html.escape((qs.get("title") or ["Clippa"])[0])
     try:
         t = float((qs.get("t") or ["0"])[0] or 0)
     except ValueError:   # ?t=abc: from the start

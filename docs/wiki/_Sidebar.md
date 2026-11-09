@@ -1,4 +1,4 @@
-### [clipper](Home)
+### [Clippa](Home)
 
 **Run it**
 - [Getting started](Getting-started)
@@ -48,6 +48,6 @@
 - [Search swarm](Search-swarm)
 - [Story dossiers](Story-dossiers)
 
-**Working on clipper**
+**Working on Clippa**
 - [Developing](Developing)
 - [How the processes talk](How-the-processes-talk)

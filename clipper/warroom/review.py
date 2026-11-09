@@ -134,7 +134,7 @@ def do_action(cfg: dict, body: dict) -> dict:
     uid = remember(cfg, action, f"{action} {item.short}",
                    [{"ref": item.ref, "before": before, "values": body.get("values") or {}}])
     if action == "changes" and cfg["retake"]["auto"]:
-        note = "clipper is working on the retake" if start_retake(cfg) else \
+        note = "Clippa is working on the retake" if start_retake(cfg) else \
             "a retake run is going; this one is next"
     return {"row": row_json(item.stream_dir, row), "note": note, "undo": uid}
 

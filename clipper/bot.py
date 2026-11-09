@@ -254,7 +254,7 @@ class Bot(discord.Client):
                     share_down = time.monotonic()
                     try:
                         user = self.get_user(uid) or await self.fetch_user(uid)
-                        await user.send(f"❌ clipper bot can't read the streams share: {e}")
+                        await user.send(f"❌ The Clippa bot can't read the streams share: {e}")
                     except Exception:
                         log.exception("notify: DM failed")
             except (Exception, SystemExit):  # SystemExit would stop the event loop, and the bot
@@ -475,7 +475,7 @@ class Bot(discord.Client):
         if action == "changes" and self.cfg["retake"]["auto"]:
             try:
                 await asyncio.to_thread(serve.start_retake, self.cfg)
-                note += "; clipper is working on it and will post the new version here"
+                note += "; Clippa is working on it and will post the new version here"
             except ClipperError as e:
                 note += f"; retake not started ({e}); serve's next check will"
         await interaction.followup.send(f"{verb} `{row['short']}` in Kitsu{note}.", ephemeral=True)
@@ -521,7 +521,7 @@ def register_commands(bot: Bot) -> None:  # noqa: C901
                      + (f"\nNext: {nxt['publish_at'][:16].replace('T', ' ')} · {nxt['title']}"
                         if nxt else ""))
         await interaction.followup.send(embed=discord.Embed(
-            title="clipper status", description="\n".join(lines)[:4096], color=0x5865F2))
+            title="Clippa status", description="\n".join(lines)[:4096], color=0x5865F2))
 
     @tree.command(description="Items waiting on a decision, with Kitsu links")
     @app_commands.describe(stream="only this stream", all="every item, decided or not")
