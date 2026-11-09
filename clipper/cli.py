@@ -852,6 +852,18 @@ def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
         alerts.send(cfg, "test", "Test from `clipper alert test`: clipper's DMs reach you.")
         print(f"queued in {alerts.outbox(cfg)}; the bot DMs it within a minute "
               f"(not during quiet hours {cfg['notify']['quiet_hours'] or 'none'})")
+    elif args.what == "send":
+        text = (sys.stdin.read() if args.text in (None, "-") else args.text).strip()
+        if not text:
+            raise ClipperError("alert send: no text (give it, or '-' to read stdin)")
+        if args.kind not in alerts.ICON:
+            raise ClipperError(f"alert send: --kind {args.kind!r} isn't one of {', '.join(sorted(alerts.ICON))}")
+        if len(text) > 1900:
+            print(f"note: {len(text)} characters; Discord takes 1900, the rest is cut", file=sys.stderr)
+        alerts.send(cfg, args.kind, text, key=f"{args.kind}-send:{time.time_ns()}")
+        on = args.kind in cfg["notify"]["kinds"] or args.kind == "test"
+        print("queued; the bot DMs it within a minute (not during quiet hours)" if on
+              else f"queued, but [notify] kinds has no {args.kind!r}: the bot won't send it")
     else:
         text = digest.text(cfg)
         print(text)
@@ -902,6 +914,19 @@ def cmd_status(cfg: dict, args: argparse.Namespace) -> None:
     print("\n".join(status.lines(cfg, days=args.days, sync=args.sync)))
 
 
+def cmd_checkup(cfg: dict, args: argparse.Namespace) -> None:
+    from zoneinfo import ZoneInfo
+
+    from . import checkup
+
+    report = checkup.run(cfg, only=args.only, mark=args.mark)
+    if args.json:
+        print(json.dumps(report, indent=1, ensure_ascii=False))
+    else:
+        print("\n".join(checkup.lines(report, ZoneInfo(cfg["schedule"]["timezone"]))))
+    raise SystemExit(1 if report["findings"] else 0)
+
+
 def cmd_serve(cfg: dict, args: argparse.Namespace) -> None:
     from . import serve
 
@@ -917,7 +942,7 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
-    ('Services (long-running)', ['services', 'status', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
+    ('Services (long-running)', ['services', 'status', 'checkup', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows']),
@@ -1272,6 +1297,15 @@ def add_services(sub) -> None:
     p.add_argument("--sync", action="store_true", help="read Kitsu's decisions first (slower)")
     p.set_defaults(fn=cmd_status)
 
+    p = sub.add_parser("checkup", help="what the alerts don't catch: stuck streams, quiet services, late uploads, "
+                                       "title slips (reads files; exit 1 on findings)")
+    p.add_argument("--only", action="append", choices=("services", "streams", "schedule", "lint"),
+                   help="just this check (repeatable)")
+    p.add_argument("--json", action="store_true", help="the report as JSON (the nightly Claude run reads it)")
+    p.add_argument("--mark", action="store_true",
+                   help="remember these findings, so the next run says which are new (the scheduled run)")
+    p.set_defaults(fn=cmd_checkup)
+
     p = sub.add_parser("worker", help="GPU machine: `clipper run` each finished recording")
     p.add_argument("--once", action="store_true", help="one pass, then exit")
     p.add_argument("--status", action="store_true", help="run state of each recording")
@@ -1291,8 +1325,11 @@ def add_services(sub) -> None:
                    help="serve it on this machine's tailnet over HTTPS (tailscale serve), for the phone")
     p.set_defaults(fn=cmd_warroom)
 
-    p = sub.add_parser("alert", help="notifications (Discord DMs from the bot): test one, see the digest")
-    p.add_argument("what", choices=("test", "digest"), help="test: DM yourself a test alert; digest: print today's")
+    p = sub.add_parser("alert", help="notifications (Discord DMs from the bot): test one, see the digest, send one")
+    p.add_argument("what", choices=("test", "digest", "send"),
+                   help="test: DM yourself a test alert; digest: print today's; send: DM this text")
+    p.add_argument("text", nargs="?", help="send: the message ('-' or none reads stdin)")
+    p.add_argument("--kind", default="checkup", help="send: its kind in [notify] kinds (default checkup)")
     p.add_argument("--send", action="store_true", help="digest: DM it now too")
     p.set_defaults(fn=cmd_alert)
 

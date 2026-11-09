@@ -52,7 +52,9 @@ driven by the same command. The recorder is its own container on the NAS:
 ## When something breaks
 
 The bot DMs you (`[notify]`, see [Review](Review)); logs are in `logs/` (`serve.log`,
-`bot.log`, `worker.log`); `clipper doctor` prints a fix for each problem it finds.
+`bot.log`, `worker.log`); `clipper doctor` prints a fix for each problem it finds. `clipper
+checkup` finds the quiet ones: a stuck stage, a service that stopped, a late upload
+([Checkup](Checkup)).
 
 ## Commands and flags
 
