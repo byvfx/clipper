@@ -27,20 +27,52 @@ the newer one is only reached as `deepseek/deepseek-v4.1-flash-1017`, at $0.15 /
 tokens (the 09-10 snapshot is $0.045 / $0.50). Pinning a dated slug is the only way to know
 which one ran.
 
-Same three streams as the 11-05 runs, prompt v6, reasoning off (`--effort none`), Sonnet Pass B:
+Four tests, $1.98 in all. Not adopted: it picks as many approved moments as Haiku only by
+keeping five times as many windows, it misses most of what a hard rule should drop, and its
+reasoning makes it worse.
 
-| Run | approved (of 18) | same (of 194) | kept | rej>kept | err | Cost, 3 streams |
-|---|---|---|---|---|---|---|
-| Haiku v5, a plain rerun | 7 | 142 | 25 | 7 | 0 | $0.34 |
-| Haiku v6 | 7 | 116 | 47 | 15 | 0 | $0.42 |
-| **V4.1 Flash 10-17 v6** | **7** (3+2+2) | 69 | 125 | 57 | 0 | $0.43 |
-| V4.1 Flash 09-10 v6 | 4 (1+2+1) | 66 | 102 | 42 | 7 | $0.41 |
+**On three reviewed streams** (`compare score`), the same three as the 11-05 runs, prompt v6,
+Sonnet Pass B:
 
-The 10-17 snapshot fixes the 09-10 one's errors and ties Haiku on approved picks, but it keeps
-five times as many windows and 57 that Haiku threw out, so Pass B and review would carry the
-filtering Haiku does now. Not adopted. Reports, on kick-135553454, kick-134467434 and
-kick-134812118:
-`<stream>/compare/score_openrouter-deepseek-deepseek-v4.1-flash-1017-none-v6_a.md`.
+| Run | approved (of 18) | same (of 194) | kept | rej>kept | err | Cost | Time a stream |
+|---|---|---|---|---|---|---|---|
+| Haiku v5, a plain rerun | 7 | 142 | 25 | 7 | 0 | $0.34 | ~2 min |
+| Haiku v6 | 7 | 116 | 47 | 15 | 0 | $0.42 | ~2 min |
+| **V4.1 Flash 10-17 v6 @none** | **7** (3+2+2) | 69 | 125 | 57 | 0 | $0.43 | ~1.5 min |
+| V4.1 Flash 10-17 v6 @medium | 2 (2+0+0) | 76 | 128 | 53 | 0 | $0.73 | ~6 min |
+| V4.1 Flash 09-10 v6 @none | 4 (1+2+1) | 66 | 102 | 42 | 7 | $0.41 | ~1.5 min |
+
+The 10-17 snapshot fixes the 09-10 one's errors. Reasoning on cost 1.7 times as much, took
+four times as long and picked fewer approved moments. Reports, on kick-135553454,
+kick-134467434 and kick-134812118:
+`<stream>/compare/score_openrouter-deepseek-deepseek-v4.1-flash-1017-<effort>-v6_a.md`.
+
+**Against the labelled windows** (`models gold run`, 66 windows from 12 streams, reasoning off).
+Every row is a fresh run, so Haiku is graded here like the others:
+
+| Model | labels right, v5 / v7 | keep-or-not, v5 / v7 | Cost a run |
+|---|---|---|---|
+| Haiku | 26 / 39 | 35 / 47 | $0.07-0.09 |
+| DeepSeek V4 Pro | 46 / 48 | 48 / 51 | $0.22-0.29 |
+| Qwen 3.8 Flash | 44 / 40 | 50 / 47 | $0.03 |
+| **V4.1 Flash 10-17** | **45 / 43** | **48 / 48** | $0.03-0.04 |
+
+It finds 87% of the keeps but almost none of the rejects: 0 of 6 needs-context windows, 3-4 of
+9 other creators' audio, and it kept 4 windows against a hard rule. Haiku's trouble is the
+opposite: it throws keeps away.
+
+**The built-in checks** (`models test`, $0.016): JSON, vision, the house-style title and the
+~9 h transcript all pass. The Pass A check fails on one thing only: all 12 verdicts were right,
+but the clip it cut for a keeper was 28 s, under the 30 s minimum. That rules it out of
+`scoring.model_a` and leaves the other 24 stages.
+
+**The decision-model lab's test** (`lab/run.py brief`, all 1,341 windows, $0.73): the same 20
+yes/no questions Jev answered, asked as one structured call. DeepSeek answers 0 or 1 nearly
+every time instead of a probability. It said yes to "has a clip" on 74% of windows and flagged
+casino gameplay on 5, where Haiku flagged 31. Its best question ranks windows at 0.65 AUC
+against Haiku's keeps (Jev 0.77 on its best one, 0.83 combined), and combining its answers
+does no better than chance (0.49). The lab ran from main's code with two small changes on
+branch `jev-lab`: `run.py --effort`, and `decider.py` working without the Jev provider.
 
 ## 2026-11-05: a stricter prompt (v6) and the noise floor
 
