@@ -2,24 +2,20 @@ One stream in, a reviewed set of videos out:
 
 ```mermaid
 flowchart TB
-  subgraph find ["① Find the moments"]
+  subgraph find ["1. Find the moments"]
     direction LR
     rec["fetch / record"] --> sig["signals"] --> tr["transcribe"] --> sc["score"] --> seg["segments"]
   end
-  subgraph make ["② Make the videos"]
+  subgraph make ["2. Make the videos"]
     direction LR
     fa["faces"] --> cut["cut"] --> me["meta"] --> th["thumbs"] --> sh["shorts"]
   end
-  subgraph ship ["③ Ship"]
+  subgraph ship ["3. Ship"]
     direction LR
     rv{{"review<br/>Kitsu · Discord · war room"}} -->|approved| sch["schedule"] --> up["upload to YouTube"]
     rv -. "note" .-> rt["retake<br/>re-cut or re-cover, back to review"]
   end
   find --> make --> ship
-  classDef stage fill:#fff4c2,stroke:#ce1126,stroke-width:1.5px,color:#111
-  classDef gate fill:#ce1126,stroke:#111,color:#fff
-  class rec,sig,tr,sc,seg,fa,cut,me,th,sh,sch,up,rt stage
-  class rv gate
 ```
 
 Everything is a `clipper <stage>` subcommand working on one stream's folder, `streams/<id>/`.
