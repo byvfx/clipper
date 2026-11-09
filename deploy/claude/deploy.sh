@@ -35,7 +35,7 @@ CDIR=$(setting CLAUDE_DIR); CDIR=${CDIR:-/volume1/docker/clipper-claude}
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/src"
-cp "$HERE/Dockerfile" "$HERE/entrypoint.sh" "$HERE/checkup.sh" "$HERE/checkup.md" "$TMP/src/"
+cp "$HERE/Dockerfile" "$HERE/entrypoint.sh" "$HERE/checkup.sh" "$HERE/checkup-git.sh" "$HERE/checkup.md" "$TMP/src/"
 cp "$HERE/compose.yaml" "$TMP/"
 cp "$ENV_LOCAL" "$TMP/.env"
 # The repo to clone and who commits there default to this checkout's.

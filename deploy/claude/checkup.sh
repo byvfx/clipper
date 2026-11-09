@@ -42,7 +42,9 @@ if [ "$code" -eq 0 ]; then
     echo "Checkup $day: all good." | dm
     exit 0
 fi
-if [ "$code" -ne 1 ]; then   # the checkup itself broke: say so without a model run
+# Exit 1 is findings only with a report; without one (a CLI error, --mark's write failing) the
+# checkup itself broke: say so without a model run.
+if [ "$code" -ne 1 ] || ! printf '%s' "$report" | grep -q '"findings"'; then
     echo "Checkup $day: \`clipper checkup\` exited $code: $(tail -n 3 /tmp/checkup.err)" | dm
     exit 0
 fi
@@ -52,14 +54,18 @@ prompt=$(cat /usr/local/share/clipper/checkup.md)
 [ -n "$DRY" ] && prompt="$prompt
 
 DRY RUN: don't run \`clipper alert send\`; print the message as your final answer instead."
-# One argument per rule (a rule has spaces in it); in -p mode anything else is refused.
+# One argument per rule (a rule has spaces in it); in -p mode anything else is refused. Exact
+# commands, not prefixes, wherever an extra flag could write (`status --sync`, `checkup --mark`);
+# git goes through checkup-git, which refuses the options that write. Logs are read with Read.
 set -- Read Grep Glob \
-    "Bash(clipper checkup:*)" "Bash(clipper status:*)" "Bash(clipper doctor --offline:*)" \
+    "Bash(clipper checkup)" "Bash(clipper checkup --json)" "Bash(clipper status)" \
+    "Bash(clipper doctor --offline)" "Bash(clipper doctor --offline --role claude)" \
     "Bash(clipper record status)" "Bash(clipper worker --status)" "Bash(clipper alert send:*)" \
-    "Bash(git log:*)" "Bash(git show:*)" "Bash(git diff:*)" "Bash(tail:*)" "Bash(head:*)"
+    "Bash(checkup-git:*)"
 if ! claude -p "$prompt" --max-turns 40 \
         --disallowedTools Edit Write NotebookEdit WebFetch WebSearch \
         --allowedTools "$@" </dev/null; then
-    # No diagnosis (signed out, usage limit): the findings alone still go out.
-    clipper checkup 2>&1 | head -c 1800 | dm
+    # No diagnosis (signed out, usage limit): the findings alone still go out (alert send cuts
+    # them to Discord's length by characters).
+    clipper checkup 2>&1 | dm
 fi

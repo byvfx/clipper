@@ -179,3 +179,27 @@ def test_alert_send_queues_a_checkup_dm(defaults, tmp_path, capsys):
     ev = jsonstate.load(f)
     assert ev["kind"] == "checkup" and ev["text"] == "Checkup: kick-1 is stuck in cut"
     assert "queued; the bot DMs it" in capsys.readouterr().out
+
+
+def test_a_streams_own_config_can_allow_a_longer_stage(defaults, tmp_path):
+    cfg = in_tmp(defaults, tmp_path)
+    d = stream(cfg, "kick-1", {"status": "running", "heartbeat": iso(-timedelta(minutes=1)), "stages": {
+        "cut": {"status": "running", "started": iso(-timedelta(hours=7))}}})
+    (d / "config.toml").write_text("[checkup]\nstuck_hours = 12\n", encoding="utf-8")
+    assert checkup.check_streams(cfg, NOW) == []
+
+
+def test_alert_send_reads_cut_utf8_from_stdin_and_trims_to_discord(defaults, tmp_path, monkeypatch, capsys):
+    import io
+    import sys
+
+    from clipper import alerts
+
+    cfg = in_tmp(defaults, tmp_path)
+    raw = ("é" * 1950).encode() + "—".encode()[:2]   # over 1900 characters, cut mid-character
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw), encoding="utf-8"))
+    cli.cmd_alert(cfg, cli.build_parser().parse_args(["alert", "send", "-"]))
+    (f,) = alerts.outbox(cfg).glob("*.json")
+    text = jsonstate.load(f)["text"]
+    assert text.startswith("é" * 10) and len(text) <= 1900
+    assert "rest is cut" in capsys.readouterr().err

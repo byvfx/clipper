@@ -24,7 +24,8 @@ clipper checkup --json           # the report as JSON, for a script or Claude
 | schedule | nothing at all releases in the next `gap_hours` | `gap_hours` (24; 0 = off) |
 | lint | a title, description or thumbnail text about to go out has one of `words` in it, is over YouTube's limit, or has no description. It checks what `clipper upload` would send (Kitsu's columns, then the draft) | `words` |
 
-The settings are `[checkup]` in the config. A check that crashes is reported as a finding of
+The settings are `[checkup]` in the config; a show's table or a stream's own `config.toml` can
+override them for its streams and items. A check that crashes is reported as a finding of
 its own, so the other checks still run.
 
 Each finding has a stable key (`stuck:kick-1:cut`, `late:kick-1/s04_x`). `--mark` saves the
@@ -43,10 +44,11 @@ The [claude container](Claude-on-the-NAS) runs the checkup every morning at `CHE
   likely cause and the next step. It runs on the Claude subscription, not the API key.
 - **Claude can't run** (signed out, usage limit): the plain findings go out instead.
 
-That run is read-only. It may use the read tools, `clipper checkup`, `status`,
-`doctor --offline`, `record status`, `worker --status`, `alert send` and `git log/show/diff`,
-and nothing else: no stage, no model call, no upload, no schedule, config or Kitsu change, no
-commit, no PR. When a fix needs one of those, the DM says what to run.
+That run is read-only. It may use the read tools and a fixed list of commands, each exactly as
+written (`clipper checkup`, `checkup --json`, `status`, `doctor --offline`, `record status`,
+`worker --status`), `alert send`, and git through `checkup-git log|show|diff`, which refuses the
+options that write (`--output`). Nothing else: no stage, no model call, no upload, no schedule,
+config or Kitsu change, no commit, no PR. When a fix needs one of those, the DM says what to run.
 
 It runs `main`'s code from its own worktree (`~/checkup-src` in the container, updated every
 run), not the clone, which a phone session may have on any branch; `CHECKUP_REF` in

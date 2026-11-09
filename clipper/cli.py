@@ -853,13 +853,16 @@ def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
         print(f"queued in {alerts.outbox(cfg)}; the bot DMs it within a minute "
               f"(not during quiet hours {cfg['notify']['quiet_hours'] or 'none'})")
     elif args.what == "send":
-        text = (sys.stdin.read() if args.text in (None, "-") else args.text).strip()
+        # stdin as bytes: a pipe cut mid-character mustn't lose the whole message
+        text = (sys.stdin.buffer.read().decode("utf-8", "replace") if args.text in (None, "-")
+                else args.text).strip()
         if not text:
             raise ClipperError("alert send: no text (give it, or '-' to read stdin)")
         if args.kind not in alerts.ICON:
             raise ClipperError(f"alert send: --kind {args.kind!r} isn't one of {', '.join(sorted(alerts.ICON))}")
         if len(text) > 1900:
             print(f"note: {len(text)} characters; Discord takes 1900, the rest is cut", file=sys.stderr)
+            text = text[:1899].rstrip() + "…"
         alerts.send(cfg, args.kind, text, key=f"{args.kind}-send:{time.time_ns()}")
         on = args.kind in cfg["notify"]["kinds"] or args.kind == "test"
         print("queued; the bot DMs it within a minute (not during quiet hours)" if on

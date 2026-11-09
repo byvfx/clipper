@@ -27,6 +27,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import daemon, jsonstate, services, worker
+from .config import for_stream
 from .errors import ClipperError
 
 BAD, WARN = "bad", "warn"
@@ -91,13 +92,16 @@ def _waiting_since(d: Path, run: dict) -> str:
 
 
 def check_streams(cfg: dict, now: datetime) -> list[dict]:
-    wc, ck = cfg["worker"], cfg["checkup"]
+    """[worker] from the base config, as the worker reads it; [checkup] per stream (a show's or the
+    stream's own config.toml may allow a longer stage)."""
+    wc = cfg["worker"]
     root: Path = cfg["paths"]["streams"]
     if not root.is_dir():
         return [finding("streams:unreadable", "streams", BAD, f"can't read the streams folder {root}")]
     out, busy = [], False
     for d in sorted(p for p in root.iterdir() if (p / "run.json").exists()):
         run = jsonstate.read_or(d / "run.json", {})
+        ck = for_stream(cfg, d)["checkup"]
         status = run.get("status")
         if status == "running":
             beat = _age_s(run.get("heartbeat"), now)
@@ -128,6 +132,7 @@ def check_streams(cfg: dict, now: datetime) -> list[dict]:
     for d in worker.pending(cfg):
         run = jsonstate.read_or(d / "run.json", {})
         waited = _age_s(_waiting_since(d, run), now)
+        ck = for_stream(cfg, d)["checkup"]
         if waited != float("inf") and waited > ck["queue_hours"] * 3600:
             out.append(finding(f"queued:{d.name}", "streams", BAD,
                                f"{d.name}: ready for the worker for {_hours(waited)} "
@@ -178,7 +183,6 @@ def lint_text(words: list[str], fields: dict[str, str]) -> list[str]:
 def check_lint(cfg: dict, now: datetime) -> list[dict]:
     from . import youtube
 
-    words = cfg["checkup"]["words"]
     out = []
     for e in _entries(cfg):
         t = _when(e.get("publish_at"))
@@ -191,6 +195,7 @@ def check_lint(cfg: dict, now: datetime) -> list[dict]:
                                f"{e['key']}: its title and description can't be read: {err}",
                                stream=e.get("stream", "")))
             continue
+        words = for_stream(cfg, m["stream_dir"])["checkup"]["words"]
         problems = lint_text(words, {"title": m["title"], "description": m["description"],
                                      "thumbnail text": m["thumb_text"]})
         problems += [f"{n} is over YouTube's limit and will be cut" for n in m["cut"]]
