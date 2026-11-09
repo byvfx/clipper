@@ -46,9 +46,15 @@ The [claude container](Claude-on-the-NAS) runs the checkup every morning at `CHE
 That run is read-only. It may use the read tools, `clipper checkup`, `status`,
 `doctor --offline`, `record status`, `worker --status`, `alert send` and `git log/show/diff`,
 and nothing else: no stage, no model call, no upload, no schedule, config or Kitsu change, no
-commit, no PR. When a fix needs one of those, the DM says what to run. Run it by hand with
-`ssh nas 'cd clipper-claude && docker compose exec claude clipper-checkup'`; its output is in
-`/tmp/checkup.log` in the container.
+commit, no PR. When a fix needs one of those, the DM says what to run.
+
+It runs `main`'s code from its own worktree (`~/checkup-src` in the container, updated every
+run), not the clone, which a phone session may have on any branch; `CHECKUP_REF` in
+`env.local` picks another branch. Run it by hand with
+`ssh nas 'cd clipper-claude && docker compose exec claude clipper-checkup --dry-run'`
+(`--dry-run` prints the DM instead of sending it and doesn't `--mark`); the timer's output is in
+`/tmp/checkup.log` in the container. The bot sends `checkup` DMs only once the hub runs code
+that has the kind (deployed after 2026-11-09).
 
 The DM is kind `checkup` in `[notify] kinds`, and `clipper alert send` is how any script queues
 one: `clipper alert send --kind checkup "text"`, or `-` to read stdin.
