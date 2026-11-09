@@ -16,6 +16,7 @@ streams/.serve/status.json   heartbeats: serve, bot, recorder
 streams/.bot/status.json
 streams/.record/status.json
 streams/.notify/outbox/      DMs waiting for the bot, one JSON file each
+streams/.checkup/state.json  the findings the last scheduled checkup saw (Checkup)
 ```
 
 ## 1. State files and their locks (`clipper/jsonstate.py`)

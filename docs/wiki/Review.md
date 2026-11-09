@@ -31,5 +31,6 @@ turns it off.
 
 The bot also DMs you when something needs you (`[notify]`): a stream ready for review, an
 upload failing, a stage failing after its retries, recorder trouble, the streams share
-filling up, and a daily digest at 09:00. Quiet hours (00:00-08:00) hold them until morning.
-`clipper alert test` sends a test DM; `clipper alert digest` prints the digest.
+filling up, a daily digest at 09:00, and the morning [checkup](Checkup) report. Quiet hours
+(00:00-08:00) hold them until morning. `clipper alert test` sends a test DM; `clipper alert
+digest` prints the digest; `clipper alert send "text"` queues one of your own.

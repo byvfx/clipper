@@ -148,13 +148,13 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   (Claude's own count needs `ANTHROPIC_ADMIN_KEY`, not set). Monthly analytics check-in task on the 1st at
   09:00; October's (`reports/analytics/2026-10-checkin.md`): 1-4 taken, 5 skipped, its Decisions section is what
   November's follows up. October: 12.7k views, 68.5 h watch, +28 subs, Shorts 80% of views.
-- **Model providers (#72):** the baseline stays Haiku + Sonnet. Tools: `clipper compare score <stream> --model
+- **Model providers (#72, closed 11-09; its edit-plan proof moved to #67):** the baseline stays Haiku + Sonnet. Tools: `clipper compare score <stream> --model
   openrouter:<vendor>/<model> --dry-run`, `clipper models test <model>` (conformance), `clipper models gold
   propose|confirm|run` (the user's 66-window answer key, `logs/model_tests/gold.json`); OpenRouter key in
   secrets/openrouter_secret.txt, no OpenAI/Gemini key, no Ollama. Findings (wiki Model-providers, log 11-04/05):
   no model near the baseline; on the gold set v7 Haiku 39/66, DeepSeek V4 Pro 48/66 (27 cents a run, no image
   input), Qwen 3.8 Flash 40/66; Haiku over-calls needs_context, every model keeps 5-11 of the 21 non-keeps.
-  Open: a stage moved after a compare, `clipper edit`.
+  Moving a stage (e.g. Pass A to DeepSeek V4 Pro) is a config change whenever the user wants it.
 
 ## Waiting on the user
 - Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/`).
@@ -191,12 +191,18 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: NAS hub #14 (#13 chat panel left),
+Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 closed 11-09),
+self-checks #185 (first version 11-09: `clipper checkup` + the claude container's nightly report, see below),
 YouTube Posts magazine #30 (#32-#38), Instagram Reels #39, cast library #41, lore-order playlists #43,
-archive fun #63, transcript-framed edits #66 (#67-#71), model-agnostic #72, crisis mode #73, setup #78,
+archive fun #63, transcript-framed edits #66 (#67-#71), crisis mode #73, setup #78,
 live clips #81, blind items #111, investigate anyone #138, agent exploration #158, Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
+- **Checkup (#185, 11-09):** `clipper checkup` (services, streams, schedule, lint; `[checkup]`; wiki Checkup)
+  and `clipper alert send`. The nightly run (`deploy/claude/checkup.sh`, prompt `checkup.md`, both baked into
+  the image) starts only once `CHECKUP_AT=08:30` is in `deploy/claude/env.local` and the claude container is
+  redeployed; untested on the NAS so far: whether headless `claude -p` runs on the Remote Control sign-in, and
+  the `--allowedTools` rules. Then a week of reports before hourly runs or PRs.
 - **Bootstrap follow-up (11-07):** `deploy/bootstrap.sh` installs Homebrew `ffmpeg`, which has no `subtitles`
   (libass) filter, so a Mac worker fails Short captions; `ffmpeg-full` has it but is keg-only. Pick one:
   install `ffmpeg-full` and point clipper at it, or document it. `deploy/hub/deploy.sh` from `lofn` needs
@@ -279,6 +285,8 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
   that never made it into HANDOFF.
 
 ## Gotchas learned
+- Deploys from PowerShell: plain `bash` is WSL's (broken: "getpwuid(0) failed", "Failed to translate"). Use
+  `& "C:\Program Files\Git\bin\bash.exe" deploy/hub/deploy.sh`; the user forgets, so always give that form.
 - The claude container: its clone sits on a mount where every file is executable, so ruff there needs
   `--extend-ignore EXE002`; its GitHub token can't read checks or Actions (403), so the user confirms CI on the
   PR. Relative config paths outside `[paths]` resolve against the config's folder (hub /data, container /app).
