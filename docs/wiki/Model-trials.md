@@ -20,6 +20,30 @@ picked only 7 of the 18 moments it picked the first time, so 7 of 18 is where "a
 Haiku" sits, and the picks nobody reviewed can't count either way. Read `same`, `kept` and
 `rej>kept` alongside it.
 
+## 2026-11-09: prompt v8 on Haiku
+
+`score_a_v8` is a restructured v7: headed sections (role, input, speaker tags, selection,
+the decision order, hard rejections, examples, output rules) and numbered output rules. It
+keeps everything v7 decides on: the per-show gambling and third-party rules, reading aloud as
+the show's own audio, the order payoff, context, quality, the four examples, crude is not a
+reason to reject, and about one window in eight. A kept clip scores 5-10. The rule files are
+copies of v7, so only the main prompt differs. Config stays on v7 (kino, c404) and v5 (base).
+
+| Haiku, prompt | approved (of 18) | same (of 194) | kept | rej>kept | labels right (of 66) | keep-or-not | Cost |
+|---|---|---|---|---|---|---|---|
+| v5 | 7 (a plain rerun) | 142 | 25 | 7 | 26 | 35 | $0.34 + $0.07 |
+| v6 | 7 | 116 | 47 | 15 | 28 | 37 | $0.42 + $0.08 |
+| v7 | 6 (2+3+1) | 112 | 92 | 37 | 39 (35 on a rerun) | 47 (42) | $0.55 + $0.09 |
+| **v8** | **8** (3+1+4) | 125 | 62 | 27 | 36 | 46 | $0.51 + $0.09 |
+
+Cost is the three streams plus one labelled run. On the streams v8 picks the most approved
+moments of any prompt so far and keeps a third fewer windows than v7, with fewer of the ones
+Haiku's original run threw out. On the labels it is within v7's own rerun spread (35-39), it
+kept nothing against a hard rule (v7 kept 1), and its keeps are the most precise (88%). Its
+main miss: 13 of the 45 keeps called needs-context (v7: 8), so the context step still bites
+too hard. Neither gap is bigger than a rerun's, so v8 is a candidate, not a winner yet: the
+next test is a week of live streams on one show.
+
 ## 2026-11-09: DeepSeek V4.1 Flash, the 10-17 snapshot
 
 OpenRouter's plain `deepseek/deepseek-v4.1-flash` still points at the 2026-09-10 snapshot;
