@@ -11,7 +11,12 @@ from __future__ import annotations
 import json
 import re
 
-from clipper.llm import DECIDERS, LLM, split
+from clipper.llm import LLM, split
+
+try:
+    from clipper.llm import DECIDERS
+except ImportError:  # main's llm.py, which has no Jev provider: other models only
+    DECIDERS = ()
 
 SYSTEM = """You answer typed questions about the STATE below, each on its own.
 - yes/no questions: the probability (0 to 1) that the answer is yes.

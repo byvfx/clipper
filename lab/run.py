@@ -162,6 +162,7 @@ def main() -> None:
     ap.add_argument("--streams", default="")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--model", default=MODEL, help="any clipper model string; default Jev (pinned)")
+    ap.add_argument("--effort", default="low", help="a non-Jev model's effort; none = reasoning off")
     args = ap.parse_args()
     cfg = config.load()
     rows = [json.loads(x) for x in open(DATA / "windows.jsonl", encoding="utf-8")]
@@ -183,7 +184,7 @@ def main() -> None:
         nonlocal errs
         ctx = show_ctx(cfg, r["stream"])
         try:
-            answers, meta = ask(llm, args.model, state_fn(r, ctx), q_fn(ctx))
+            answers, meta = ask(llm, args.model, state_fn(r, ctx), q_fn(ctx), args.effort)
         except Exception as e:  # noqa: BLE001
             with lock:
                 errs += 1
