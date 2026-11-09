@@ -191,18 +191,20 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 closed 11-09),
-self-checks #185 (first version 11-09: `clipper checkup` + the claude container's nightly report, see below),
+Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 closed 11-09;
+self-checks #185 closed 11-09, its turn-on steps are under Checkup below),
 YouTube Posts magazine #30 (#32-#38), Instagram Reels #39, cast library #41, lore-order playlists #43,
 archive fun #63, transcript-framed edits #66 (#67-#71), crisis mode #73, setup #78,
 live clips #81, blind items #111, investigate anyone #138, agent exploration #158, Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
-- **Checkup (#185, 11-09):** `clipper checkup` (services, streams, schedule, lint; `[checkup]`; wiki Checkup)
-  and `clipper alert send`. The nightly run (`deploy/claude/checkup.sh`, prompt `checkup.md`, both baked into
-  the image) starts only once `CHECKUP_AT=08:30` is in `deploy/claude/env.local` and the claude container is
-  redeployed; untested on the NAS so far: whether headless `claude -p` runs on the Remote Control sign-in, and
-  the `--allowedTools` rules. Then a week of reports before hourly runs or PRs.
+- **Checkup (#185 closed 11-09, the rest is tracked here):** `clipper checkup` (services, streams, schedule,
+  lint; `[checkup]`; wiki Checkup) and `clipper alert send` are merged (#189). The nightly run
+  (`deploy/claude/checkup.sh`, prompt `checkup.md`, both baked into the image) is not on yet. Left:
+  1. The user puts `CHECKUP_AT=08:30` in `deploy/claude/env.local` and redeploys the claude container.
+  2. First run on the NAS: check that headless `claude -p` runs on the Remote Control sign-in, and that the
+     `--allowedTools` rules work (`checkup.sh --dry-run` first).
+  3. A week of nightly reports, then decide on hourly runs and PRs (#158's "act within limits").
 - **Bootstrap follow-up (11-07):** `deploy/bootstrap.sh` installs Homebrew `ffmpeg`, which has no `subtitles`
   (libass) filter, so a Mac worker fails Short captions; `ffmpeg-full` has it but is keg-only. Pick one:
   install `ffmpeg-full` and point clipper at it, or document it. `deploy/hub/deploy.sh` from `lofn` needs
