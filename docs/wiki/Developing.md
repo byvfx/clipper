@@ -86,3 +86,6 @@ Mermaid diagrams and `<kbd>` keys all render.
   repo files with their full GitHub URL.
 - `tests/test_wiki.py` checks that every page link resolves and that the sidebar lists every
   page.
+- Keep the look plain: no emoji in headings or the sidebar, and no colours of our own in the
+  Mermaid diagrams (GitHub's theme handles light and dark). The tabloid style belongs to the
+  covers and the weekly, not to these pages.

@@ -1,6 +1,6 @@
-### [🏠 clipper](Home)
+### [clipper](Home)
 
-**🚀 Run it**
+**Run it**
 - [Getting started](Getting-started)
 - [Roles and services](Roles-and-services)
 - [Configuration](Configuration)
@@ -11,7 +11,7 @@
 - [Scheduling and uploads](Scheduling-and-uploads)
 - [Costs](Costs)
 
-**🛠️ Install**
+**Install**
 - [Install](Install)
 - [Kitsu](Kitsu)
 - [Discord app](Discord-app)
@@ -27,7 +27,7 @@
 - [Adding a show](Adding-a-show)
 - [YouTube channel](YouTube-channel)
 
-**✨ Features**
+**Features**
 - [Pre-shows](Pre-shows)
 - [Speakers](Speakers)
 - [Faces](Faces)
@@ -39,7 +39,7 @@
 - [News watcher](News-watcher)
 - [Character pieces](Character-pieces)
 
-**🔎 Research**
+**Research**
 - [Archives](Archives)
 - [People](People)
 - [Receipts](Receipts)
@@ -47,6 +47,6 @@
 - [Search swarm](Search-swarm)
 - [Story dossiers](Story-dossiers)
 
-**💻 Working on clipper**
+**Working on clipper**
 - [Developing](Developing)
 - [How the processes talk](How-the-processes-talk)
