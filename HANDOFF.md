@@ -191,8 +191,8 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 closed 11-09;
-self-checks #185 closed 11-09, its turn-on steps are under Checkup below),
+Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 and self-checks #185
+closed 11-09; checkup's turn-on steps are under Checkup below),
 YouTube Posts magazine #30 (#32-#38), Instagram Reels #39, cast library #41, lore-order playlists #43,
 archive fun #63, transcript-framed edits #66 (#67-#71), crisis mode #73, setup #78,
 live clips #81, blind items #111, investigate anyone #138, agent exploration #158, Modal ideas #53, #55, #56,
