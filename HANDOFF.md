@@ -1,4 +1,4 @@
-# Clipper handoff (current state, rewritten 2026-11-08)
+# Clippa handoff (current state, rewritten 2026-11-08)
 
 This file is the **current state** between sessions: what runs where, what the user decided,
 what is waiting on them, open work, recipes, gotchas. Keep it short (under ~300 lines): update
@@ -41,6 +41,10 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 `rumble`, `analytics`, `costs`, `compare` / `models` (other providers), `status`, `services`, `alert`, `doctor`.
 
 ## User decisions (keep)
+- The app is **Clippa** (2026-11-09, branding only): war room, Discord status card, wiki Home/sidebar/banner,
+  README. The `clipper` command, package, `CLIPPER_*` env, config files, containers, Modal apps, the
+  `clipper:` button ids and the `[clipper]` Kitsu note prefix keep the old name on purpose (old cards and
+  notes depend on the last two). A full rename needs both prefixes accepted and the old compose project stopped first.
 - Titles/descriptions/cut points approved as-is; fun descriptions are liked. Long video per recurring topic
   (compilations) plus segments plus short picks. `third_party_audio = "allow_reactions"`,
   `audience_knowledge = "fans"`, Victor/blackjack segments stay; Kino's gambling is commentary, not play

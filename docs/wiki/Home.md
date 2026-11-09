@@ -1,11 +1,12 @@
 <p align="center">
-  <img src="https://github.com/byvfx/clipper/wiki/images/banner.png" alt="clipper: long Kick streams in, reviewed YouTube videos out" width="100%">
+  <img src="https://github.com/byvfx/clipper/wiki/images/banner.png" alt="Clippa: long Kick streams in, reviewed YouTube videos out" width="100%">
 </p>
 
-**clipper** turns long Kick streams into YouTube uploads: full-length segments, topic
+**Clippa** turns long Kick streams into YouTube uploads: full-length segments, topic
 compilations, Shorts, titles, descriptions, chapters and thumbnails, with a person approving
 every one before it goes out. Everything is a `clipper <stage>` command, and the always-on
-pieces (the recorder, the worker, serve and the Discord bot) run it unattended.
+pieces (the recorder, the worker, serve and the Discord bot) run it unattended. (The app was
+called clipper; the command, package, config files and containers still are.)
 
 > [!TIP]
 > New here? Start with **[Getting started](Getting-started)**: install a machine, run one
@@ -82,7 +83,7 @@ flowchart TB
 </td>
 <td valign="top">
 
-### Working on clipper
+### Working on Clippa
 [Developing](Developing): layout, code shape, checks, and how these pages are built<br>
 [How the processes talk](How-the-processes-talk): locks, heartbeats, the outbox, serve's API, which log to read
 

@@ -135,7 +135,7 @@ function renderRetakes() {
       <q>${esc(h.comment)}</q>
       <div class="r-${esc(h.result)}">${h.result === "applied" ? "✓ " + esc(h.summary || h.applied.join("; "))
         : h.result === "unsupported" ? "⚠ " + esc(h.unsupported || "not applied") : h.result === "error" ? "✕ " + esc(h.error) : esc(h.result)}</div></div>`).join("")
-    || `<div class="empty">No retakes yet. Set an item to retake with a note and clipper re-cuts it.</div>`;
+    || `<div class="empty">No retakes yet. Set an item to retake with a note and Clippa re-cuts it.</div>`;
 }
 
 function renderHealth() {

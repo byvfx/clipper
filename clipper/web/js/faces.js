@@ -97,7 +97,7 @@ function renderPick() {
   $("#tool").innerHTML = `<div class="m-head"><b>Who's this?</b><span style="color:var(--faint);font-size:12px">${esc(FP.ref)} · ${mmss(FP.t)}</span><button class="x" data-close>×</button></div>
     <div class="cv"><div>
       <div class="boxwrap fpwrap" id="fpWrap"><img src="${FP.frame}" alt="" draggable="false">${b ? `<div class="box" style="left:${b.x * 100}%;top:${b.y * 100}%;width:${b.width * 100}%;height:${b.height * 100}%"></div>` : ""}</div>
-      <div class="f" style="font-size:11px;color:var(--faint);margin-top:6px">Drag a box round one face, forehead to chin. clipper finds it in the full-size frame.</div>
+      <div class="f" style="font-size:11px;color:var(--faint);margin-top:6px">Drag a box round one face, forehead to chin. Clippa finds it in the full-size frame.</div>
     </div><div class="form">
       ${FP.busy ? `<div class="f">Looking…</div>` : f ? `
         <div class="fpres"><img src="${f.tile}" alt="the face"><div>

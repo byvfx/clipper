@@ -1,8 +1,9 @@
-# clipper
+# Clippa
 
 Turns long Kick streams into YouTube uploads: full-length segments, topic compilations,
 Shorts, titles, descriptions, chapters and thumbnails, with a human review step before
-anything goes out.
+anything goes out. The app was called clipper; the `clipper` command, package, config files
+and containers keep that name.
 
 ```
 fetch / record -> signals -> transcribe -> score -> segments -> faces -> cut -> meta -> thumbs -> shorts
