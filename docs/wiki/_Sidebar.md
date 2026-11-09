@@ -51,3 +51,4 @@
 **Working on Clippa**
 - [Developing](Developing)
 - [How the processes talk](How-the-processes-talk)
+- [Model trials](Model-trials)

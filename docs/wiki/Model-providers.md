@@ -66,7 +66,12 @@ on since, so compare a few recent reviewed streams before moving a stage's defau
 
 The approved-moments count is noisy: on 11-05 Haiku scoring the same three streams again with
 its own prompt found only 7 of the 18 moments it had found the first time. Use the two checks
-below to choose a model, and `compare` to see what a change does on a real stream.
+below to choose a model, and `compare` to see what a change does on a real stream. Every model
+tried so far, with its numbers, is on [Model trials](Model-trials).
+
+On OpenRouter a model's plain name can stay on an older snapshot after a newer one ships
+(`deepseek/deepseek-v4.1-flash` was still the 09-10 snapshot on 11-09, the newer one only
+`-1017`); give the dated slug when it matters which one ran.
 
 ## Checking a model
 
