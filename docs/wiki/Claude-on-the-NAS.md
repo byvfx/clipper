@@ -14,6 +14,10 @@ What it can't: restart or deploy containers (no Docker socket, no ssh). serve, t
 worker keep running the code of the last hub deploy; a merged change reaches them when you run
 `bash deploy/hub/deploy.sh` from the laptop.
 
+It also runs the nightly [checkup](Checkup#the-nightly-report) at `CHECKUP_AT` (in
+`env.local`; empty = off): `clipper checkup`, then, only if that finds something, a read-only
+`claude -p` that works out the causes and DMs you one report.
+
 ## Deploy
 
 `bash deploy/claude/deploy.sh` from the repo root (Git Bash; ssh alias `nas`). Its own compose

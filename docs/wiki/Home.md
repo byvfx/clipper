@@ -41,7 +41,7 @@ flowchart TB
 [Pipeline](Pipeline)<br>
 [Review](Review) · [Reviewing](Reviewing) · [War room](War-room)<br>
 [Scheduling and uploads](Scheduling-and-uploads)<br>
-[Costs](Costs)
+[Costs](Costs) · [Checkup](Checkup)
 
 </td>
 <td width="33%" valign="top">
@@ -91,7 +91,8 @@ flowchart TB
 <td valign="top">
 
 ### Something broke?
-`clipper doctor` prints a fix for each problem; the bot DMs you; logs are in `logs/`
+`clipper doctor` prints a fix for each problem; the bot DMs you; `clipper checkup` finds what
+never raised an error; logs are in `logs/`
 ([more](Getting-started#when-something-breaks))
 
 </td>

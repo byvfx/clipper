@@ -10,6 +10,7 @@
 - [War room](War-room)
 - [Scheduling and uploads](Scheduling-and-uploads)
 - [Costs](Costs)
+- [Checkup](Checkup)
 
 **Install**
 - [Install](Install)

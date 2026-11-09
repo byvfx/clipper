@@ -49,7 +49,7 @@ from . import jsonstate, schedule, ytquota
 from .bleep import Bleeper
 from .config import for_stream
 from .errors import ClipperError
-from .review import draft_fields, full_title, hashtag_line
+from .review import THUMB_COL, draft_fields, full_title, hashtag_line
 from .states import split_key
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload",
@@ -146,6 +146,8 @@ def metadata(entry: dict, cfg: dict) -> dict:
     masked = [n for n, v in (("title", title), ("description", description), ("tags", ",".join(tags)))
               if mask(v) != v]
     title, description, tags = mask(title), mask(description), [mask(t) for t in tags]
+    cut = [n for n, v, limit in (("title", title, 100), ("description", description, 5000))
+           if clean(v, limit) != clean(v, len(v.encode("utf-8")) * 3)]   # over YouTube's limit (‹ is 3 bytes)
     srt, jpg = video.with_suffix(".srt"), video.with_suffix(".jpg")
     playlist = value("Playlist").strip()
     show_list = (cfg["youtube"]["show_playlist"].format(show=cfg["meta"]["show_name"])
@@ -155,7 +157,8 @@ def metadata(entry: dict, cfg: dict) -> dict:
             "srt": srt if srt.exists() else None,
             "thumb": jpg if jpg.exists() and cfg["youtube"]["thumbnails"]
             and (entry["kind"] != "short" or cfg["youtube"]["short_thumbnails"]) else None,
-            "review_key": key, "stream_dir": sdir, "masked": masked}
+            "review_key": key, "stream_dir": sdir, "masked": masked, "cut": cut,
+            "thumb_text": value(THUMB_COL)}
 
 
 def refresh_review(cfg: dict, entries: list[dict]) -> None:

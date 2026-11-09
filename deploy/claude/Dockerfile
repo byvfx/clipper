@@ -27,7 +27,13 @@ RUN echo "claude code build $CLAUDE_CODE_BUILD" \
     && claude --version
 
 COPY entrypoint.sh /usr/local/bin/clipper-claude
-RUN chmod 755 /usr/local/bin/clipper-claude
+# The nightly checkup (#185): the script and its prompt as deployed, not the clone's (a phone
+# session may have /app on any branch).
+COPY checkup.sh /usr/local/bin/clipper-checkup
+COPY checkup-git.sh /usr/local/bin/checkup-git
+COPY checkup.md /usr/local/share/clipper/checkup.md
+RUN chmod 755 /usr/local/bin/clipper-claude /usr/local/bin/clipper-checkup /usr/local/bin/checkup-git \
+    && chmod 644 /usr/local/share/clipper/checkup.md
 
 # /app is the clone, /home/claude Claude Code's home (both volumes). The config and every
 # relative [paths] entry live in /data, as in the hub; prompts come with the clone.

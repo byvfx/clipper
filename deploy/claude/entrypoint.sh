@@ -36,6 +36,21 @@ if ! claude auth status >/dev/null 2>&1; then
     echo "signed in"
 fi
 
+# The nightly checkup (#185) at CHECKUP_AT (HH:MM, the container's TZ; "" = off), in the
+# background beside the session: checkup.sh runs `clipper checkup` and, when it finds
+# something, a read-only `claude -p` that DMs one report.
+if [ -n "${CHECKUP_AT:-}" ]; then
+    (
+        while :; do
+            now=$(date +%s)
+            next=$(date -d "today $CHECKUP_AT" +%s) || { echo "CHECKUP_AT=$CHECKUP_AT isn't HH:MM: no checkup" >&2; exit 0; }
+            [ "$next" -gt "$now" ] || next=$(date -d "tomorrow $CHECKUP_AT" +%s)
+            sleep $((next - now))
+            clipper-checkup >>/tmp/checkup.log 2>&1 || echo "checkup failed, see /tmp/checkup.log" >&2
+        done
+    ) &
+fi
+
 # The first start asks to enable Remote Control and to trust /app: answer once with
 # `docker attach clipper-claude` (detach with Ctrl-P Ctrl-Q). Both answers are kept in home/.
 exec claude remote-control --name "${CLAUDE_SESSION_NAME:-clipper on the NAS}" \
