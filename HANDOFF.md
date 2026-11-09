@@ -170,8 +170,13 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - **Weekly:** issue 03 (Oct 25-31, Jer's Huck MRI grift cover) built 2026-11-01 in `weekly/2026-10-31/`,
   posting page https://claude.ai/artifact/TnP9uXjpyGVpJC2KPipM6o; the user posts TikTok/YouTube by hand.
   On X since 11-01 as a thread (`clipper x --issue`, after the user OKs the text):
-  https://x.com/lolcowcinema/status/2116852491925254298. Issue 04 is
-  Saturday 2026-11-07 (`clipper weekly --headline "..."`; on a Sunday add `--week <Saturday>`).
+  https://x.com/lolcowcinema/status/2116852491925254298. Issue 04 (Nov 1-7, Jer's midterm meltdown cover,
+  the user's pick) built 2026-11-08 in `weekly/2026-11-07/`, $1.11 ($0.38 draft + $0.73: all three articles
+  needed the "shorter" retry); Jer and PPP faces pinned by hand in issue.json (the auto picks were a Jer-movie
+  actor with a burned-in caption and a costume torso); in Discord `#weekly`. Not posted yet, no X thread yet: the
+  thread text is in issue.json `post.x` (user OK'd 11-08), held by the X cap; a one-time scheduled task
+  (`clipper-weekly-04-x-thread`) posts it 11-09 11:42 when 3 slots free, unless the hourly auto job takes them.
+  Issue 05 is Saturday 2026-11-14 (on a Sunday add `--week <Saturday>`).
 - **The Udder Truth:** storyboard complete, voice and pipeline chosen; next is the newsroom set (Brass Eye
   refs in studio/mockups/udder_truth/refs/, blank-screen set for Fusion), new desk plates, then Moo's WAN renders
   (~1,550 credits; 18,457 Runway credits left on 10-24).
@@ -260,7 +265,8 @@ pieces, stitch), `tiktok`, `x`, `rumble`, `analytics`, `costs`, `modal`, `alert`
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the
   desktop (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the
   MacBook (#7). Sandbox is enabled on the laptop; the test recipe is under Recipes.
-- Weekly issue 03: post it by hand (TikTok carousel + two YouTube Posts) from the artifact page (X done).
+- Weekly issue 04: post it by hand (TikTok carousel + two YouTube Posts) from Discord `#weekly`; X thread
+  (`clipper x --issue`) after the user OKs the text. Issue 03 was posted from its artifact page (X done).
   `clipper weekly --discord` (11-02) put its pages + captions in Discord `#weekly` (the bot made it) for the phone;
   run it each Saturday after the render (PR #125 merged as c019eab). The user gave the bot full permissions 11-02
   (could be cut back to Send Messages + Attach Files).
@@ -385,7 +391,9 @@ metadata checkpoints honoured), per-stream costs on Costs, `clipper status` (fil
 `deploy/worker` stays), product pages without this install's names; #182 `clipper/defaults.toml` as the one
 source of defaults (config.py 1,330 → 446 lines), `clipper.example.toml` a 58-line starter. Copilot had 1/2/5/4
 comments on #178-#181, all taken. The last plan item followed the same day (PR #184): the prompts moved into the package
-(`clipper/prompts/`, found with `importlib.resources`; `[paths] prompts` is now an optional folder of your own).
+(`clipper/prompts/`, found with `importlib.resources`; `[paths] prompts` is now an optional folder of your own). The
+hub was deployed again at 21:51, in the gap after Don's stream ended and before the worker started on it: the
+containers run main as of #184 (#183's heartbeat retry included).
 The hub was deployed with all of it on 2026-11-08 13:14, right after chudlogic's stream ended (serve, bot and
 worker on the new image, heartbeats fresh, the image loads the 626 defaults). Found while waiting for that
 stream: one read of the recorder's heartbeat landed mid-replace and `clipper record status` said "no heartbeat"
