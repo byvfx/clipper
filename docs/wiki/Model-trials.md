@@ -38,8 +38,9 @@ Same three streams as the 11-05 runs, prompt v6, reasoning off (`--effort none`)
 
 The 10-17 snapshot fixes the 09-10 one's errors and ties Haiku on approved picks, but it keeps
 five times as many windows and 57 that Haiku threw out, so Pass B and review would carry the
-filtering Haiku does now. Not adopted. Reports: `<stream>/compare/score_openrouter-deepseek-
-deepseek-v4.1-flash-1017-none-v6_a.md` on kick-135553454, kick-134467434 and kick-134812118.
+filtering Haiku does now. Not adopted. Reports, on kick-135553454, kick-134467434 and
+kick-134812118:
+`<stream>/compare/score_openrouter-deepseek-deepseek-v4.1-flash-1017-none-v6_a.md`.
 
 ## 2026-11-05: a stricter prompt (v6) and the noise floor
 
