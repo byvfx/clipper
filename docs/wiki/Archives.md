@@ -40,8 +40,8 @@ working yet, issue #44).
 `clipper archive transcribe` downloads anonymously; a video
 YouTube won't serve without sign-in ("Sign in to confirm your age") is retried with `[paths]
 youtube_cookies` (`secrets/youtube_cookies.txt`) when that file exists. Export it as Netscape
-cookies.txt or as JSON (Cookie-Editor's default; converted to `youtube_cookies.netscape.txt`
-beside it) with a browser extension (e.g. "Get cookies.txt LOCALLY") from a private
+cookies.txt or as JSON (Cookie-Editor's default; converted on the fly). Each signed-in run hands
+yt-dlp a private copy, because yt-dlp writes its cookies back to the file when it exits with a browser extension (e.g. "Get cookies.txt LOCALLY") from a private
 window signed in to an adult Google account (not the upload channel's, if you can avoid it),
 then close the window so the session isn't rotated. Rerun `transcribe` to pick up the failures.
 A JSON export left in the same folder under the extension's own name (`www.youtube.com_<date>.json`)
@@ -75,17 +75,24 @@ it; the pre-show DM says the same.
 
 ### Keeping the NAS hub's cookies fresh
 
-The [NAS hub](NAS-hub)'s containers have no browser, so their signed-in retries read the file
-`secrets/youtube_cookies.txt`, which goes stale the same way an export does. The laptop keeps it
-fresh from the Firefox profile above: `clipper cookies export` copies the profile's youtube.com
-cookies into `[paths] youtube_cookies` (Netscape, through a temp file; `--browser` and `--to`
-override the two settings), and refuses, leaving the file alone, when the profile isn't signed in.
+The [NAS hub](NAS-hub)'s containers have no browser, so their signed-in retries copy the file
+`secrets/youtube_cookies.txt`, which goes stale the same way an export does. The laptop copies
+the Firefox profile above into it: `clipper cookies export` writes the profile's live youtube.com
+cookies to `[paths] youtube_cookies` (Netscape, through a temp file; `--browser` and `--to`, the
+latter relative to the config file's folder, override the two settings). It refuses, leaving the
+file alone, when the profile isn't signed in or the share can't be reached. Only the export writes
+that file (yt-dlp gets a private copy), so it holds exactly what the profile held at the last run.
+The task doesn't refresh the sign-in itself: it copies the profile, so when YouTube signs the
+profile out, sign in again there. Close the profile before an export: yt-dlp reads only the saved
+cookie database, not what an open Firefox hasn't written yet.
 Install the task once, on the laptop (the profile and `cookies_from_browser = "firefox:clipper"`
 set up as above):
 
     deploy\cookies\cookies-task.ps1 -Install    # "clipper-cookies": at logon and every 4 hours
 
 `-Status` shows the last run and `logs\cookies.log`, `-Run` exports now, `-Uninstall` removes it.
+Where there's no browser profile set, `clipper doctor` checks the file instead: it fails when the
+file has no live YouTube sign-in and warns when the last export is over 24 hours old.
 
 This makes the NAS depend on the laptop: while the laptop is off or logged out the file isn't
 refreshed, and once YouTube rotates the session, pre-show grabs (and story and archive signed-in

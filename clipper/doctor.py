@@ -512,12 +512,45 @@ def check_keys(cfg: dict, role: str) -> None:
                  f"or put it in {cfg['paths'].get('anthropic_admin_key')}")
 
 
+COOKIES_STALE_HOURS = 24  # the laptop's clipper-cookies task exports every 4 h
+
+
+def check_youtube_cookies_file(cfg: dict, now: float | None = None) -> None:
+    """No browser here (the NAS hub): the cookies file the signed-in retries copy, when there is
+    one, still holds a YouTube sign-in, and the laptop's export task has written it lately. Only
+    the export writes it: yt-dlp gets a private copy (11-09)."""
+    from . import ytdl
+
+    f = ytdl.cookies_file(cfg)
+    if not f.is_file():
+        return  # optional: no signed-in retries
+    hint = wiki.page("Archives", "keeping-the-nas-hubs-cookies-fresh")
+    try:
+        names = ytdl.session_names(ytdl.read_cookies(f), now)
+    except (OSError, ValueError, KeyError) as e:
+        fail("keys", f"YouTube cookies {f.name} unreadable: {e}", hint)
+        return
+    if not names:
+        fail("keys", f"YouTube cookies {f.name} hold no live sign-in",
+             "sign in again in the laptop's firefox:clipper profile, close it, run "
+             "deploy\\cookies\\cookies-task.ps1 -Run; " + hint)
+        return
+    hours = ((time.time() if now is None else now) - f.stat().st_mtime) / 3600
+    if hours > COOKIES_STALE_HOURS:
+        warn("keys", f"YouTube cookies {f.name} last exported {hours:.0f} h ago",
+             "is the laptop on and its clipper-cookies task running? "
+             "deploy\\cookies\\cookies-task.ps1 -Status; " + hint)
+    else:
+        ok("keys", f"YouTube cookies {f.name} signed in, exported {hours:.0f} h ago")
+
+
 def check_youtube_cookies(cfg: dict) -> None:
     """[youtube] cookies_from_browser, when set: the profile is there and still signed in to
-    YouTube (its cookie database on disk, no network)."""
+    YouTube (its cookie database on disk, no network). Unset: the cookies file instead."""
     from . import ytdl
 
     if not (spec := ytdl.browser(cfg)):
+        check_youtube_cookies_file(cfg)
         return
     hint = wiki.page("Archives", "signed-in-through-a-browser-profile")
     try:

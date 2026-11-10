@@ -160,10 +160,11 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   Moving a stage (e.g. Pass A to DeepSeek V4 Pro) is a config change whenever the user wants it.
 
 ## Waiting on the user
-- YouTube cookies for the hub (11-09): merge PR #195, `git pull`, then on the laptop
-  `deploy\cookies\cookies-task.ps1 -Install` (the `firefox:clipper` profile must still be signed in; `-Status`
-  checks it). Until then pre-show grabs on the NAS fail the bot check because the 11-03 export is stale. A
-  manual export into `secrets/` fixes that at once. No deploy needed: the containers only read the file.
+- YouTube cookies for the hub (11-09): merge PR #195, `bash deploy/hub/deploy.sh` (signed-in runs then use a
+  private copy, so yt-dlp's write-back can't undo an export), then on the laptop from main
+  `deploy\cookies\cookies-task.ps1 -Install` (`-Status` checks it). A first export by hand from the PR
+  branch on 11-09 22:55 got the 11/9 pre-show grabbed at 23:00. `secrets/youtube_cookies.netscape.txt` is
+  now unused and can be deleted.
 - Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/`).
   Stale worktrees to delete, then `git worktree prune`: `C:\clipper-wt\*`, `C:\clipper-jevlab`,
   `.claude/worktrees/*` (branches `investigate-swarm`, `swarm-109`, `narrate-pcm48k`, `source-audio-hold`,

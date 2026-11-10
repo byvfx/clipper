@@ -899,7 +899,7 @@ def cmd_cookies(cfg: dict, args: argparse.Namespace) -> None:
     if not spec:
         raise ClipperError("no browser profile: set [youtube] cookies_from_browser or pass --browser; "
                            + wiki.page("Archives", "keeping-the-nas-hubs-cookies-fresh"))
-    out = Path(args.to) if args.to else cfg["paths"]["youtube_cookies"]
+    out = cfg["_dir"] / Path(args.to).expanduser() if args.to else cfg["paths"]["youtube_cookies"]  # as [paths]
     n = ytdl.export_browser_cookies(spec, out)
     print(f"{n} YouTube cookies from {spec} -> {out}")
 
@@ -1740,7 +1740,8 @@ def add_setup(sub) -> None:
     r = ksub.add_parser("export", help="copy a browser profile's YouTube cookies into [paths] youtube_cookies "
                                        "(the laptop task that keeps the NAS hub's file fresh)")
     r.add_argument("--browser", metavar="SPEC", help="yt-dlp browser spec (default: [youtube] cookies_from_browser)")
-    r.add_argument("--to", metavar="FILE", help="where to write (default: [paths] youtube_cookies)")
+    r.add_argument("--to", metavar="FILE", help="where to write, relative to the config file's folder "
+                                                "(default: [paths] youtube_cookies)")
     p.set_defaults(fn=cmd_cookies)
 
 

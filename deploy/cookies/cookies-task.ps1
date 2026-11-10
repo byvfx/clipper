@@ -35,7 +35,7 @@ function Invoke-Export {
     Set-Location $ClipperRoot
     # 5.1 turns a native command's redirected stderr into a terminating error under 'Stop'.
     $ErrorActionPreference = 'Continue'
-    $out = & $ClipperExe cookies export 2>&1 | Out-String
+    $out = & $ClipperExe cookies export 2>&1 | ForEach-Object { "$_" } | Out-String  # an ErrorRecord's message only
     $code = $LASTEXITCODE
     "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') exit $code $($out.Trim())" | Add-Content -Encoding utf8 $log
     Write-Host $out.Trim()
