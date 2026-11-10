@@ -214,9 +214,11 @@ def bot_check_alert(cfg: dict, e: dict) -> None:
                     key=f"preshow-bot:{e['video_id']}")
         return
     p = cfg["paths"]["youtube_cookies"]
-    alerts.send(cfg, "failure", f"Pre-show \"{e['title']}\" is stuck on YouTube's bot check: export fresh "
-                f"YouTube cookies into {p.parent} as {ytdl.EXPORT_GLOB.replace('*', '<date>')} (the "
-                f"extension's own name) or over {p.name}. The next check picks them up.",
+    alerts.send(cfg, "failure", f"Pre-show \"{e['title']}\" is stuck on YouTube's bot check even signed in "
+                f"with {p.name}: on the laptop, open the firefox:clipper profile, check it is still signed "
+                "in to YouTube and play any video, close it, then run deploy\\cookies\\cookies-task.ps1 -Run "
+                "(-Status shows whether the 4-hourly export runs). Or export fresh cookies into "
+                f"{p.parent} as {ytdl.EXPORT_GLOB.replace('*', '<date>')}. The next check picks them up.",
                 key=f"preshow-bot:{e['video_id']}")
 
 
