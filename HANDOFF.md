@@ -41,6 +41,9 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 `rumble`, `analytics`, `costs`, `compare` / `models` (other providers), `status`, `services`, `alert`, `doctor`.
 
 ## User decisions (keep)
+- The NAS hub's YouTube cookies come from the laptop (11-09, user: "lets just setup that task but note it that it
+  prevents full offline autonomous usage"): the `clipper-cookies` task runs `clipper cookies export` every 4 h.
+  The NAS isn't laptop-free for signed-in yt-dlp retries: with the laptop off for days, pre-show grabs get stuck.
 - The app is **Clippa** (2026-11-09, branding only): war room, Discord status card, wiki Home/sidebar/banner,
   README. The `clipper` command, package, `CLIPPER_*` env, config files, containers, Modal apps, the
   `clipper:` button ids and the `[clipper]` Kitsu note prefix keep the old name on purpose (old cards and
@@ -157,6 +160,10 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   Moving a stage (e.g. Pass A to DeepSeek V4 Pro) is a config change whenever the user wants it.
 
 ## Waiting on the user
+- YouTube cookies for the hub (11-09): merge PR #195, `git pull`, then on the laptop
+  `deploy\cookies\cookies-task.ps1 -Install` (the `firefox:clipper` profile must still be signed in; `-Status`
+  checks it). Until then pre-show grabs on the NAS fail the bot check because the 11-03 export is stale. A
+  manual export into `secrets/` fixes that at once. No deploy needed: the containers only read the file.
 - Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/`).
   Stale worktrees to delete, then `git worktree prune`: `C:\clipper-wt\*`, `C:\clipper-jevlab`,
   `.claude/worktrees/*` (branches `investigate-swarm`, `swarm-109`, `narrate-pcm48k`, `source-audio-hold`,
@@ -333,7 +340,9 @@ like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an
 - YouTube bot-checks this IP for yt-dlp: pre-show, one-off and story grabs retry signed in through the
   dedicated Firefox profile (`[youtube] cookies_from_browser = "firefox:clipper"`, doctor checks it is signed
   in) or secrets/youtube_cookies.txt (browsers rotate exports: re-export when "cookies are no longer valid").
-  A pre-show stuck on the bot check DMs once per video. A PO-token provider doesn't get past it.
+  A pre-show stuck on the bot check DMs once per video. A PO-token provider doesn't get past it. The hub
+  containers have no browser (compose empties the setting), so since the 11-05 move they read the file; the
+  laptop's `clipper-cookies` task refreshes it (wiki Archives#keeping-the-nas-hubs-cookies-fresh).
 - Kino's pre-shows are on the main channel @TheKinoCasino since 11-04 (`clipper.toml` since 11-06). That
   feed's RSS 404s from the NAS, so the check reads yt-dlp's undated listing: entries below a grabbed pre-show
   count as older (#162). After a channel switch, grab the latest by hand.
