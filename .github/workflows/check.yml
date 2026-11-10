@@ -1,11 +1,18 @@
-# Lint and tests on every push to main and every pull request. The same two commands
-# run locally (see CLAUDE.md "Checks").
+# Lint and tests on every push to main and every pull request, except one that changes only
+# notes no test reads (the two paths-ignore lists below; keep them the same). The same two
+# commands run locally (see CLAUDE.md "Checks").
+#
+# Not on the lists on purpose, because a test reads them: docs/wiki/ (tests/test_wiki.py checks
+# the links and the sidebar), docs/big-story.toml and clipper.example.toml (tests/test_config.py),
+# and clipper/prompts/*.md. "*.md" is the repo root only: `*` doesn't cross a `/`.
 name: check
 
 on:
   push:
     branches: [main]
+    paths-ignore: ["*.md", "LICENSE", "docs/log/**", "docs/archive/**", "reports/**", "studio/**"]
   pull_request:
+    paths-ignore: ["*.md", "LICENSE", "docs/log/**", "docs/archive/**", "reports/**", "studio/**"]
 
 jobs:
   check:

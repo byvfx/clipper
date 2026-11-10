@@ -133,7 +133,8 @@ Windows notes above don't apply.
   bugbear, pyupgrade, blind excepts, stale noqa, McCabe over 15), pinned to the version in
   `required-version`; bump the pin there and in the dev group together. Tests are offline and
   take about 25 s; new pure logic gets a test in `tests/`. CI runs both on every push, on Linux
-  and Windows (`.github/workflows/check.yml`).
+  and Windows (`.github/workflows/check.yml`), except one that changes only notes no test reads
+  (root `*.md`, `docs/log/`, `docs/archive/`, `reports/`, `studio/`): that PR shows no checks.
   Merging a PR: wait for Copilot's automatic review (a few minutes after the PR opens), handle
   each comment and show the user, then merge. Green CI alone isn't enough.
   Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running
