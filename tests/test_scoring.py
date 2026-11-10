@@ -73,3 +73,13 @@ def test_a_rescan_that_moves_a_transcript_id_retires_its_number():
                             {"id": "t02", "source": "transcript", "window": [100, 160]}]
     assert scoring.moved_ids(old, rescanned) == ["t01"]  # t02 had no window recorded: not counted
     assert scoring.moved_ids(old, same[:1]) == ["t01"]  # gone: its number goes before t01 can return
+
+
+def test_pass_a_schema_why_first_from_v9():
+    for v in ("v5", "v8", "pick_v1", ""):
+        assert scoring.pass_a_schema(v) is scoring.PASS_A_SCHEMA
+    for v in ("v9", "v10"):
+        s = scoring.pass_a_schema(v)
+        assert list(s["properties"])[0] == "why" and s["required"][0] == "why"
+        assert set(s["properties"]) == set(scoring.PASS_A_SCHEMA["properties"])
+        assert sorted(s["required"]) == sorted(scoring.PASS_A_SCHEMA["required"])

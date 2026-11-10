@@ -51,6 +51,20 @@ PASS_A_SCHEMA = {
                  "source_audio_s", "needs_context"],
     "additionalProperties": False,
 }
+# v9 and on: why first. The answer is written in schema order, so the reasoning comes before
+# the verdict and the cuts instead of justifying them afterwards.
+PASS_A_SCHEMA_WHY_FIRST = {**PASS_A_SCHEMA,
+                           "properties": {"why": PASS_A_SCHEMA["properties"]["why"],
+                                          **{k: v for k, v in PASS_A_SCHEMA["properties"].items() if k != "why"}},
+                           "required": ["why", *[k for k in PASS_A_SCHEMA["required"] if k != "why"]]}
+
+
+def pass_a_schema(version: str) -> dict:
+    """The Pass A schema for a prompt version: why first from v9 ("v9", "v10"; a name that isn't
+    v<number> keeps the old order)."""
+    n = version[1:]
+    return PASS_A_SCHEMA_WHY_FIRST if version[:1] == "v" and n.isdigit() and int(n) >= 9 else PASS_A_SCHEMA
+
 
 PASS_B_SCHEMA = {
     "type": "object",
@@ -277,6 +291,7 @@ def run_pass_a(windows: list[dict], words: list[dict], sig: dict, cfg: dict,
                claude: Claude, prompts: Prompts) -> list[dict]:
     sc = cfg["scoring"]
     system = prompts.get("score_a")
+    schema = pass_a_schema(prompts.version)
 
     def one(w: dict) -> dict:
         rec = {"id": w.get("id") or f"w{w['rank']:02d}", "source": w.get("source", "chat"),
@@ -285,7 +300,7 @@ def run_pass_a(windows: list[dict], words: list[dict], sig: dict, cfg: dict,
                "prompt_version": prompts.version}
         user = pass_a_user(w, words, sig, sc["lead_in_s"])
         try:
-            out, meta = claude.json_call(sc["model_a"], system, user, PASS_A_SCHEMA, sc["effort_a"])
+            out, meta = claude.json_call(sc["model_a"], system, user, schema, sc["effort_a"])
         except ClipperError:  # no key, or the API down after retries: stop the stage
             raise
         except Exception as e:  # noqa: BLE001  # one bad window shouldn't sink the stream
