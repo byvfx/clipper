@@ -104,8 +104,10 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   is fixed or answered, then delete the branch; green CI alone isn't enough, and don't wait for Copilot
   until the user says it is back. Grok's review is the `clipper codereview` comment (#196: Grok 4.7 on
   OpenRouter, ~$0.80 and ~25 min on a big PR, the `review` workflow, wiki Developing#code-review-on-prs),
-  copied to the PR's linked issues; check each finding against the code. A notes-only PR (e.g. HANDOFF and
-  the log) has no CI since 11-10 (`check.yml` paths-ignore) and no review: it merges on the user's word.
+  copied to the PR's linked issues; check each finding against the code. It runs only when a PR touches
+  `clipper/`, `tests/`, `deploy/`, `.github/` or `pyproject.toml`: any other PR (the wiki, `uv.lock` alone,
+  `clipper.example.toml`, `streamers.json`) has CI but no review, and a notes-only one (e.g. HANDOFF and the
+  log) has neither since 11-10 (`check.yml` paths); both merge on the user's word, the first once CI is green.
 
 ## State now (2026-11-08)
 - **Hub on the NAS** since 2026-11-05 (wiki NAS-hub): compose project `clipper-hub` in `~/clipper-hub`, containers

@@ -136,9 +136,12 @@ Windows notes above don't apply.
   and Windows (`.github/workflows/check.yml`), except one that changes only notes no test reads
   (root `*.md`, `docs/log/`, `docs/archive/`, `reports/`, `studio/` but for its `streamers.json`):
   that PR shows no checks.
-  Merging a PR: wait for Grok's review (the `review` workflow's `clipper codereview` comment, up to
+  Merging a PR that changes code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`: the
+  `review` workflow's paths): wait for Grok's review (its `clipper codereview` comment, up to
   ~25 min on a big PR), check each finding against the code, handle it and show the user, then
-  merge. Green CI alone isn't enough. Copilot's review is paused since 2026-11-10 (the user's
-  credits ran out): don't wait for it until the user says it is back.
+  merge. Green CI alone isn't enough. A PR that touches none of those (the wiki, `uv.lock` alone,
+  `clipper.example.toml`, `streamers.json`, notes) gets no review: don't wait for one, merge on
+  green CI where it runs and the user's word. Copilot's review is paused since 2026-11-10 (the
+  user's credits ran out): don't wait for it until the user says it is back.
   Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running
   clipper.exe (`uv pip install --python .venv/Scripts/python.exe pytest` installs pytest alone).

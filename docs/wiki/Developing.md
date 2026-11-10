@@ -72,7 +72,8 @@ notes no test reads: the root `*.md` files, `LICENSE`, `docs/log/`, `docs/archiv
 `studio/research_notes/streamers.json`, which a test reads. The ruff rules are the defaults plus
 the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on a short test stream
 first. Before merging a PR that changes code, wait for the review below and handle each finding
-(Copilot's automatic review is paused since 2026-11-10).
+(Copilot's automatic review is paused since 2026-11-10). A PR outside that review's paths, such as
+a wiki page or `uv.lock` alone, gets no review comment: don't wait for one.
 
 ## Code review on PRs
 
