@@ -99,12 +99,13 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - Hand-over (2026-11-08 audits, `reports/code-audit-2026-11-08.md` §7): build as a public package but this
   deployment first, little tech debt, simple for the user; `studio/` holds mockups, research notes and media
   reports, out of the package; serve and the bot are compose-only, the Windows task scripts stay for a GPU
-  worker only. Merge policy: each PR once CI is green on both OSes and every Copilot comment is fixed or
-  answered on its thread, then delete the branch; green CI alone isn't enough (a notes-only PR, e.g. HANDOFF
-  and the log, has no CI since 11-10: `check.yml` paths-ignore). Since 11-10 (#196) every code
-  PR also gets a `clipper codereview` comment (Grok 4.7 on OpenRouter, ~$0.80 and ~25 min, the `review`
-  workflow, wiki Developing#code-review-on-prs), copied to its linked issues; check each finding against the
-  code like a Copilot one. Copilot's review quota ran out 11-09, so Grok's is often the only review.
+  worker only. Merge policy (11-10, user: "just use groks ... switching from copilot for now since my
+  credits ran out"): a code PR merges once CI is green on both OSes and Grok's review is in and each finding
+  is fixed or answered, then delete the branch; green CI alone isn't enough, and don't wait for Copilot
+  until the user says it is back. Grok's review is the `clipper codereview` comment (#196: Grok 4.7 on
+  OpenRouter, ~$0.80 and ~25 min on a big PR, the `review` workflow, wiki Developing#code-review-on-prs),
+  copied to the PR's linked issues; check each finding against the code. A notes-only PR (e.g. HANDOFF and
+  the log) has no CI since 11-10 (`check.yml` paths-ignore) and no review: it merges on the user's word.
 
 ## State now (2026-11-08)
 - **Hub on the NAS** since 2026-11-05 (wiki NAS-hub): compose project `clipper-hub` in `~/clipper-hub`, containers

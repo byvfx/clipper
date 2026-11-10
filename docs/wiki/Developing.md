@@ -70,7 +70,8 @@ notes no test reads: the root `*.md` files, `LICENSE`, `docs/log/`, `docs/archiv
 `studio/`. Such a PR shows no checks at all; that is expected, not a stuck run. A change under
 `docs/wiki/` still runs them, since a test checks the links and the sidebar. The ruff rules are the defaults plus
 the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on a short test stream
-first. Before merging a PR, wait for Copilot's automatic review and handle each comment.
+first. Before merging a PR that changes code, wait for the review below and handle each finding
+(Copilot's automatic review is paused since 2026-11-10).
 
 ## Code review on PRs
 

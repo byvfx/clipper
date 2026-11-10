@@ -135,7 +135,9 @@ Windows notes above don't apply.
   take about 25 s; new pure logic gets a test in `tests/`. CI runs both on every push, on Linux
   and Windows (`.github/workflows/check.yml`), except one that changes only notes no test reads
   (root `*.md`, `docs/log/`, `docs/archive/`, `reports/`, `studio/`): that PR shows no checks.
-  Merging a PR: wait for Copilot's automatic review (a few minutes after the PR opens), handle
-  each comment and show the user, then merge. Green CI alone isn't enough.
+  Merging a PR: wait for Grok's review (the `review` workflow's `clipper codereview` comment, up to
+  ~25 min on a big PR), check each finding against the code, handle it and show the user, then
+  merge. Green CI alone isn't enough. Copilot's review is paused since 2026-11-10 (the user's
+  credits ran out): don't wait for it until the user says it is back.
   Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running
   clipper.exe (`uv pip install --python .venv/Scripts/python.exe pytest` installs pytest alone).
