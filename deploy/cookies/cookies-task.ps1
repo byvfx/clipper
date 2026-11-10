@@ -33,6 +33,8 @@ function Invoke-Export {
     New-Item -ItemType Directory -Force $ClipperLogs | Out-Null
     Limit-Log $log 1
     Set-Location $ClipperRoot
+    # 5.1 turns a native command's redirected stderr into a terminating error under 'Stop'.
+    $ErrorActionPreference = 'Continue'
     $out = & $ClipperExe cookies export 2>&1 | Out-String
     $code = $LASTEXITCODE
     "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') exit $code $($out.Trim())" | Add-Content -Encoding utf8 $log
