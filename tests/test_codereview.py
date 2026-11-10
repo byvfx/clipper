@@ -33,6 +33,9 @@ def test_linked_takes_this_repos_numbers_once_in_order():
             "https://github.com/byvfx/clipper/issues/70 and https://github.com/x/y/issues/9. "
             "Not a ref: abc#3, a/b/#4")
     assert codereview.linked(text, "byvfx/clipper") == [70, 66, 12]
+    links = ("See [#5](https://github.com/other/repo/issues/5) and "
+             "[#71](https://github.com/byvfx/clipper/issues/71), and [#72]")
+    assert codereview.linked(links, "byvfx/clipper") == [72, 71]   # a link's own repo, not its label
 
 
 def test_comment_bodies_start_with_their_marker_and_digest():
@@ -168,6 +171,22 @@ def test_merging_main_in_keeps_the_digest_a_real_change_doesnt(repo, defaults):
     assert codereview.gather(defaults, "main", "HEAD", root)["digest"] != before["digest"]
 
 
+def test_a_binary_or_mode_change_has_a_digest_of_its_own(repo, defaults):
+    root, git = repo
+    logo = root / "clipper" / "logo.png"
+    logo.write_bytes(b"\x89PNG\0one")
+    git("add", ".")
+    git("commit", "-qm", "a logo")
+    first = codereview.gather(defaults, "main", "HEAD", root)["digest"]
+    logo.write_bytes(b"\x89PNG\0two")
+    git("commit", "-qam", "another logo")
+    second = codereview.gather(defaults, "main", "HEAD", root)["digest"]
+    git("update-index", "--chmod=+x", "clipper/a.py")
+    git("commit", "-qm", "a.py runs")
+    third = codereview.gather(defaults, "main", "HEAD", root)["digest"]
+    assert len({first, second, third}) == 3
+
+
 def test_a_review_that_quotes_a_failure_is_still_a_good_one():
     quoting = codereview.comment("The comment becomes:\n\nReview failed: timeout", INFO)
     assert codereview.good(quoting) and "Review failed: timeout" in codereview.last_good(quoting)
@@ -248,7 +267,7 @@ def test_a_long_call_isnt_sent_again_after_a_gateway_error(monkeypatch, defaults
         def __init__(self, status):
             self.status_code, self.headers, self.text, self.ok = status, {}, "", False
 
-    for status, tries in ((502, 1), (504, 1), (429, 6)):
+    for status, tries in ((408, 1), (502, 1), (504, 1), (429, 6)):
         sent = []
         monkeypatch.setattr(requests, "post", lambda *a, sent=sent, status=status, **kw: sent.append(1) or R(status))
         monkeypatch.setattr(llm.time, "sleep", lambda s: None)
@@ -279,3 +298,26 @@ def test_a_timed_out_long_call_is_not_sent_again(monkeypatch, defaults):
     with pytest.raises(RuntimeError, match="ReadTimeout"):
         llm.LLM(defaults).text_call("openrouter:x/y", "s", "u", "high", 100, thinking_tokens=10, timeout_s=5)
     assert tries == [5]
+
+
+@pytest.mark.parametrize("error", ["ConnectionError", "ChunkedEncodingError"])
+def test_a_dropped_long_call_is_not_sent_again(monkeypatch, defaults, error):
+    """A proxy that resets the socket, or cuts the answer off, after the model began."""
+    import requests
+
+    tries = []
+
+    def post(*a, **kw):
+        tries.append(1)
+        raise getattr(requests.exceptions, error)("reset")
+
+    monkeypatch.setattr(requests, "post", post)
+    monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    with pytest.raises(RuntimeError, match=error):
+        llm.LLM(defaults).text_call("openrouter:x/y", "s", "u", "high", 100, timeout_s=5)
+    assert tries == [1]
+    tries.clear()
+    with pytest.raises(RuntimeError, match=error):                   # a stage's call still retries
+        llm.LLM(defaults).text_call("openrouter:x/y", "s", "u", "high", 100)
+    assert len(tries) == 6

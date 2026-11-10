@@ -79,12 +79,13 @@ and 25 minutes for a PR that changes 9 files. It posts the correctness bugs it f
 comment on the PR, and the same review on every issue the PR links (`Closes #70`, or `#70` in the PR's title or body). Each comment is edited in
 place on later pushes, never added again. A push that leaves the PR's own code changes as they were
 (a docs-only push, or merging main into the branch) isn't reviewed again: the comment carries a
-digest of the PR's added and removed lines, without the context and positions a merge moves. Such
+digest of the PR's added and removed lines (a binary file's new contents, a file's mode), without
+the context and positions a merge moves. Such
 a push still copies the review to a linked issue that doesn't have it yet (a failed post, a
 `Closes #N` added later), and a push that reverts all the PR's code changes replaces the findings
 with a note that none stand. A notes-only PR, a draft or a
-fork's PR gets no review. A failed review (no key, the model down, a 30-minute timeout or a
-gateway's 502/504, never retried since each try may be paid for) says so in the comment, keeps the last good review below
+fork's PR gets no review. A failed review (no key, the model down, a 30-minute timeout, a dropped
+connection or a gateway's 408/502/504, never retried since each try may be paid for) says so in the comment, keeps the last good review below
 it, and never fails the PR's checks. The review is printed in the workflow's log before it is
 posted, so a failed post loses nothing.
 
