@@ -44,6 +44,15 @@ main miss: 13 of the 45 keeps called needs-context (v7: 8), so the context step 
 too hard. Neither gap is bigger than a rerun's, so v8 is a candidate, not a winner yet: the
 next test is a week of live streams on one show.
 
+## Prompt v9, built, not tried yet
+
+`score_a_v9` is v8 with two changes. `why` is the first field of the answer (from v9 on the
+Pass A schema puts it first; models write in schema order), so the model reasons through
+payoff, context and quality before it gives a verdict or a cut, rather than justifying one.
+And the prompt says where the cuts may go: anywhere in the lead-in, and up to 30 s past the
+window, which is the range the cuts are snapped to. The rule files are copies of v8. No show
+is on it; it gets the same three streams and the labels, next to v8's week on Kino.
+
 ## 2026-11-09: DeepSeek V4.1 Flash, the 10-17 snapshot
 
 OpenRouter's plain `deepseek/deepseek-v4.1-flash` still points at the 2026-09-10 snapshot;
