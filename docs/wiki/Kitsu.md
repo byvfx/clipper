@@ -54,7 +54,8 @@ item is re-cut or re-covered and comes back), **rejected** drops it; anything el
 pending. Columns on a segment (sequence) or clip (shot): YouTube title, YouTube description,
 Hashtags, Tags and Playlist (what `clipper upload` sends), Hook, Category, Score and Found by
 (how the clip was chosen), Layout (a Short's crop), Other voices (seconds of voices that aren't
-the show's own), Publish at (your pin), Hold, Scheduled (the slot clipper gave it) and
+the show's own), Tightened (the pauses cut out of a Short, [Pipeline](Pipeline#tightening)),
+Publish at (your pin), Hold, Scheduled (the slot clipper gave it) and
 Thumbnail text (the cover's words; a sync re-renders the cover). clipper fills a column when it
 is empty or still shows what clipper wrote last, never over an edit of yours, and `clipper
 review sync` reads them back.

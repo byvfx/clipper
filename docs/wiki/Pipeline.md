@@ -52,7 +52,8 @@ publish` run on the picks alone, before the slow stages do the segments and comp
   pick's scored hot-take moment (15-59 s here, under YouTube's 60 s Content ID block line),
   ending on a full sentence. Picks are also cut as horizontal clips; leave `"picks"` out of
   `[review] include` to post only their Shorts. Each show's screen layouts are measured once
-  ([Adding a show](Adding-a-show)).
+  ([Adding a show](Adding-a-show)). With `[edit] tighten` on, the dead air goes too
+  ([Tightening](#tightening)).
 - **review**: every item goes to Kitsu and Discord. Approve, reject, hold, or leave a note
   asking for a change. Notes become retakes: the item is re-cut or re-thumbnailed and comes
   back for review ([Review](Review), [War room](War-room)).
@@ -61,6 +62,23 @@ publish` run on the picks alone, before the slow stages do the segments and comp
 
 Elsewhere after review: [X posts](X-posts), [TikTok](TikTok) (by hand), and `clipper rumble`,
 which prepares folders for Rumble's upload form.
+
+## Tightening
+
+`[edit] tighten = true` (per show: `[shows.<key>.edit]`; off by default) cuts the dead air out of
+each Short as `clipper shorts` renders it. A pause between two words longer than `max_gap_s`
+(0.7 s) is cut down to `keep_gap_s` (0.25 s), or `keep_turn_s` (0.45 s) where the voice changes so
+a reply keeps its beat. It only cuts where the audio is quiet too (under `silence_db`, -35 dB):
+a laugh, a video playing or a reaction in a gap stays. No cut is under `min_cut_s`, none reaches
+into a word or a bleep, and a Short never drops under `[shorts] min_s`. Captions and scene
+changes move with the cuts.
+
+The Kitsu "Tightened" column says what went ("3 pauses, 1.6 s"); the Short's sidecar lists each
+cut with the words either side, and a retake is told where they were so a note's times still
+land. To put one Short's pauses back:
+`clipper shorts <stream> --items v03 --no-tighten` (`--tighten` undoes it), then
+`clipper review publish <stream> --only shorts`. Tried on the test stream on 2026-11-09: about
+1.5 s out of a 30-40 s Short at these settings.
 
 ## Shorts from a stretch you name
 

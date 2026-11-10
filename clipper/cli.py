@@ -542,7 +542,8 @@ def cmd_shorts(cfg: dict, args: argparse.Namespace) -> None:
         shorts.save_example(stream_dir(cfg, args.stream), cfg, args.save_example, args.at)
         return
     shorts.run(stream_dir(cfg, args.stream), cfg, ids=args.items,
-               layout=args.layout, force=args.force, rescene=args.rescene, check=args.check)
+               layout=args.layout, force=args.force, rescene=args.rescene, check=args.check,
+               tight=args.tighten)
 
 
 def cmd_retake(cfg: dict, args: argparse.Namespace) -> None:
@@ -1084,6 +1085,12 @@ def add_pipeline(sub) -> None:
                    help="label scene layouts again where the model chose them; re-render what changes")
     p.add_argument("--check", action="store_true",
                    help="print each Short's scene layouts (labels frames again), render nothing")
+    t = p.add_mutually_exclusive_group()
+    t.add_argument("--no-tighten", dest="tighten", action="store_false", default=None,
+                   help="keep these Shorts' pauses from now on, re-rendering any that were tightened "
+                        "([edit] tighten)")
+    t.add_argument("--tighten", dest="tighten", action="store_true", default=None,
+                   help="undo --no-tighten for these Shorts")
     p.add_argument("--save-example", metavar="LAYOUT",
                    help="save the stream's frame at --at as LAYOUT's reference screenshot (scene matching)")
     p.add_argument("--at", type=time_arg, metavar="TIME",

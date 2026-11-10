@@ -495,6 +495,22 @@ caption_max_chars = 18         # a group also ends before it would pass this man
 caption_gap_s = 0.6            # a pause this long starts a new group
 hashtag = "#Shorts"
 
+[edit]
+# Edits beyond the plain cut (the roadmap is #66). Per show: [shows.<key>.edit].
+# tighten (#70): `clipper shorts` cuts the dead air out of each Short. A pause between two
+# words longer than max_gap_s is cut down to keep_gap_s (keep_turn_s where the voice
+# changes, so a reply keeps its beat), and only where the audio is quieter than silence_db
+# too: a laugh, a video playing or a reaction in a gap stays. No cut is under min_cut_s,
+# and a Short never drops under [shorts] min_s. The cuts are listed in the Short's sidecar
+# and its Kitsu "Tightened" column; `clipper shorts <stream> --items v03 --no-tighten`
+# puts one Short's pauses back (--tighten undoes that).
+tighten = false
+max_gap_s = 0.7
+keep_gap_s = 0.25
+keep_turn_s = 0.45
+min_cut_s = 0.3
+silence_db = -35
+
 # Layouts for streams whose show sets none (a show's own layouts replace these); usually
 # per show instead, see above. Add [shorts.layouts.<name>] tables after this line.
 [shorts.layouts]
