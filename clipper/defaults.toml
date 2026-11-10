@@ -1017,3 +1017,21 @@ latentsync_steps = 20          # 20-50: higher is better and slower
 latentsync_guidance = 1.5      # 1.0-3.0: higher syncs harder, may jitter
 sync_model = "lipsync-2"       # sync.so: lipsync-2 | lipsync-2-pro
 sync_key_env = "SYNC_API_KEY"  # env var with the sync.so key; else [paths] sync_key
+
+[codereview]
+# `clipper codereview`: a second reviewer for a branch, in one model call: the code diff
+# against main plus the changed files in full, back as a list of correctness bugs. The
+# `review` workflow (.github/workflows/review.yml) runs it on every PR and posts the review
+# on the PR and on the issues it links. Not a pipeline stage, so doctor doesn't ask for its
+# key: `reviewer` is spelled so doctor's model checks and `clipper costs` estimates skip it.
+# reviewer: picked 2026-11-09 from 13 models on PR #191 (wiki Developing): about $0.90 and
+# 25 min for 9 files at high effort, real bugs and no false ones
+reviewer = "openrouter:x-ai/grok-4.7"
+effort = "high"                # none | low | medium | high: full strength, the cost is small
+prompt_version = "v1"
+paths = ["clipper/", "tests/", "deploy/", ".github/", "pyproject.toml"]  # what counts as code
+max_chars = 600000             # diff plus whole files sent; files past it go as diff only
+max_tokens = 8000              # the review's own length (thinking comes on top)
+thinking_tokens = 200000       # room to think before it ([llm] thinking_max_tokens is for stages;
+                               # V4 Pro used all 64k of that at medium and wrote nothing)
+timeout_s = 1800               # one request may think this long ([llm] timeout_s is 600)

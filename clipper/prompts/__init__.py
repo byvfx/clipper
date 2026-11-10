@@ -45,6 +45,8 @@ VERSIONS: dict[str, tuple[str, str]] = {
     "story_triage": ("story", "prompt_version"), "story_expand": ("story", "prompt_version"),
     "story_moments": ("story", "prompt_version"), "story_dossier": ("story", "prompt_version"),
     "story_edit": ("story", "edit_prompt_version"),
+    # the repo's own PRs (clipper codereview)
+    "codereview": ("codereview", "prompt_version"),
 }
 # <kind>_<mode>_<version>.md: rule files spliced into the scoring prompts, at [scoring] prompt_version.
 RULE_FILES = ("third_party", "audience", "gambling")

@@ -8,6 +8,11 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-09: `clipper codereview` and the `review` workflow: every code PR gets a second review in one
+  OpenRouter call (`[codereview] reviewer`, Grok 4.7 at high effort, about $1 a PR), posted on the PR
+  and on the issues it links, one comment each, edited in place. Needs the repo secret
+  `OPENROUTER_API_KEY`. Copilot's review quota had run out (PR #191). wiki Developing has the 13-model
+  comparison behind the choice.
 - 11-08: the prompt files ship inside the package: `prompts/` moved to `clipper/prompts/`, beside the
   loader (`clipper/prompts/__init__.py`, which finds them with `importlib.resources`), so a wheel and
   the hub image carry them without a copy step. `[paths] prompts` is optional now (`""`, the default,
