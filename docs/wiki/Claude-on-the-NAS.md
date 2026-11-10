@@ -32,7 +32,7 @@ stops. Fill in:
 - the same keys as `deploy/hub/env.local` (`ANTHROPIC_API_KEY`, `KITSU_TOKEN`, the Modal token,
   the alert webhook);
 - `GH_TOKEN`: a GitHub fine-grained token for this repo only, with Contents and Pull requests
-  read and write, so it can clone the private repo, push branches and open PRs;
+  read and write, so it can push branches and open PRs (and clone the repo, if yours is private);
 - `CLIPPER_REPO`, `GIT_USER_NAME`, `GIT_USER_EMAIL` can stay empty: the deploy fills them from
   the checkout it runs in.
 
