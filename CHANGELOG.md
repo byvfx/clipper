@@ -8,6 +8,11 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-09: `clipper codereview` and the `review` workflow: every code PR gets a second review in one
+  OpenRouter call (`[codereview] reviewer`, Grok 4.7 at high effort, about $1 a PR), posted on the PR
+  and on the issues it links, one comment each, edited in place. Needs the repo secret
+  `OPENROUTER_API_KEY`. Copilot's review quota had run out (PR #191). wiki Developing has the 13-model
+  comparison behind the choice.
 - 11-09: `[edit] tighten` (#70, the first piece of the edits roadmap #66; off by default): `clipper
   shorts` cuts pauses over `max_gap_s` down to `keep_gap_s` (`keep_turn_s` at a change of voice),
   only where the audio is quiet too, never under `[shorts] min_s`; captions and scene changes move

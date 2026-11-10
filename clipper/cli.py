@@ -887,6 +887,12 @@ def cmd_config(cfg: dict, args: argparse.Namespace) -> None:
         print(f"  {'->' if last else '  '} {layer:<28} {json.dumps(value, default=str)}")
 
 
+def cmd_codereview(cfg: dict, args: argparse.Namespace) -> None:
+    from . import codereview
+
+    codereview.run(cfg, args.base, args.head, args.pr, args.repo or "", args.dry_run)
+
+
 def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     from . import doctor
 
@@ -961,7 +967,7 @@ COMMAND_GROUPS = [
     ('Services (long-running)', ['services', 'status', 'checkup', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
-    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'cookies']),
+    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'cookies', 'codereview']),
 ]
 
 
@@ -1750,6 +1756,16 @@ def add_setup(sub) -> None:
     r.add_argument("--to", metavar="FILE", help="where to write, relative to the config file's folder "
                                                 "(default: [paths] youtube_cookies)")
     p.set_defaults(fn=cmd_cookies)
+
+    p = sub.add_parser("codereview", help="a second reviewer for this branch: its code diff to one "
+                                          "model call ([codereview] reviewer), bugs back")
+    p.add_argument("--base", default="origin/main", help="what the branch is compared with (default origin/main)")
+    p.add_argument("--head", default="HEAD", help="the commit reviewed (default HEAD)")
+    p.add_argument("--pr", type=int, metavar="N",
+                   help="post it on PR N and the issues it links (the review workflow; needs GITHUB_TOKEN)")
+    p.add_argument("--repo", help="owner/name for --pr (default $GITHUB_REPOSITORY)")
+    p.add_argument("--dry-run", action="store_true", help="what would be sent and its cost; no model call")
+    p.set_defaults(fn=cmd_codereview)
 
 
 def build_parser() -> argparse.ArgumentParser:

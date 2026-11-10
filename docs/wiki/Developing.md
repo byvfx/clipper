@@ -69,6 +69,60 @@ push, on Linux and Windows (`.github/workflows/check.yml`). The ruff rules are t
 the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on a short test stream
 first. Before merging a PR, wait for Copilot's automatic review and handle each comment.
 
+## Code review on PRs
+
+Every PR that changes code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`) also
+gets a second review from `clipper codereview` (the `review` workflow,
+`.github/workflows/review.yml`). It sends the diff against main and the changed files in full to
+`[codereview] reviewer` in one model call at high effort: Grok 4.7 through OpenRouter, about $1
+and 25 minutes for a PR that changes 9 files. It posts the correctness bugs it finds as one
+comment on the PR, and the same review on every issue the PR links (`Closes #70`, or `#70` in the PR's title or body). Each comment is edited in
+place on later pushes, never added again. A push that leaves the PR's own code changes as they were
+(a docs-only push, or merging main into the branch) isn't reviewed again: the comment carries a
+digest of the PR's added and removed lines, without the context and positions a merge moves. Such
+a push still copies the review to a linked issue that doesn't have it yet (a failed post, a
+`Closes #N` added later), and a push that reverts all the PR's code changes replaces the findings
+with a note that none stand. A notes-only PR, a draft or a
+fork's PR gets no review. A failed review (no key, the model down, a 30-minute timeout or a
+gateway's 502/504, never retried since each try may be paid for) says so in the comment, keeps the last good review below
+it, and never fails the PR's checks. The review is printed in the workflow's log before it is
+posted, so a failed post loses nothing.
+
+It needs the repo secret `OPENROUTER_API_KEY`, set once from the laptop (set 2026-11-10), in Git Bash:
+
+```bash
+gh secret set OPENROUTER_API_KEY --repo byvfx/clipper < //192.168.0.155/docker/clipper/secrets/openrouter_secret.txt
+```
+
+or in PowerShell, which has no `<`:
+
+```powershell
+Get-Content \\192.168.0.155\docker\clipper\secrets\openrouter_secret.txt -Raw | gh secret set OPENROUTER_API_KEY --repo byvfx/clipper
+```
+
+To try another model, set `CLIPPER_CODEREVIEW_REVIEWER` in the workflow's env (e.g.
+`openrouter:openai/gpt-5.6-sol-pro`). Run it locally before pushing with `clipper codereview`
+(prints the review, nothing posted) or `clipper codereview --dry-run` (what would be sent and its
+cost). Treat it as a second opinion: check each finding against the code.
+
+Why Grok: on 2026-11-09, 13 models reviewed the same commit of PR #191 (about 88k tokens in).
+The real findings were minor ones (loudness measured before the pauses were cut, a raw
+subprocess error, a flag dropped for uploaded Shorts):
+
+| Model (OpenRouter) | Effort | Real findings | False ones | Cost | Time |
+|---|---|---|---|---|---|
+| `openai/gpt-5.6-sol-pro` | high | 2 | 0 | $3.12 | 3.5 min |
+| `x-ai/grok-4.7` | high | 2 | 0 | $0.87 | 25 min |
+| `google/gemini-4-argon`, `moonshotai/kimi-k3.1-pro`, `z-ai/glm-5.3-prime` | high | 0 | 0 | $0.38–0.79 | 6–7 min |
+| `deepseek/deepseek-v4-pro` | high | 0 (one guess) | 0 | $0.18 | 20 min |
+| `z-ai/glm-5.3`, `moonshotai/kimi-k2.7-code`, `deepseek/deepseek-v4-flash` | medium | 0 | 0–1 | $0.02–0.15 | 3–20 min |
+| `qwen/qwen3.8-max-0902`, `qwen/qwen3.8-flash`, `google/gemini-3.8-flash` | medium | 0–1 | 1 | $0.03–0.32 | 4–7 min |
+
+The false one, from all three in the last row, was that `asetpts=N/SR/TB` collapses the audio:
+for audio ffmpeg's `N` counts samples, so it is right. `qwen/qwen3.8-max-prime` used its whole
+output on thinking and wrote nothing, as `deepseek/deepseek-v4-pro` did at medium effort before
+`[codereview] thinking_tokens` gave it room.
+
 ## Editing these docs
 
 > [!IMPORTANT]
