@@ -20,6 +20,7 @@ One supported way per role, unattended:
 |---|---|---|
 | serve, bot, worker (with a GPU or Modal) | Docker compose, `deploy/hub`, on any Docker host that sees the streams folder (here the NAS, [NAS hub](NAS-hub)) | `clipper services status\|stop\|restart serve\|bot\|worker\|all` runs `docker compose` there over ssh with `[serve] hub` set; `bash deploy/hub/deploy.sh` ships main |
 | GPU worker on a Windows machine | a scheduled task, `deploy\worker\worker-task.ps1 -Install` (at logon, restarted if it exits, no admin needed; [Install on Windows](Install-Windows), step 8) | `-Status`, `-Restart`, `-Stop`, `-Uninstall`; `clipper services` without `[serve] hub` runs the same script, which also stops the supervisor and the stage processes |
+| YouTube cookies for the hub (laptop) | a scheduled task, `deploy\cookies\cookies-task.ps1 -Install` (at logon and every 4 hours, `clipper cookies export`; [Archives](Archives#keeping-the-nas-hubs-cookies-fresh)). The NAS depends on the laptop for this | `-Status`, `-Run`, `-Uninstall` |
 | recorder | its own compose project on the NAS ([NAS recorder](NAS-recorder)) | `clipper services restart recorder` over ssh, refused while a show is recording; `bash deploy/record/deploy.sh` |
 
 `deploy/hub` is written for the NAS but runs on any Docker host: `env.local` sets
