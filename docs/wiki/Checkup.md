@@ -61,6 +61,6 @@ that has the kind (deployed after 2026-11-09).
 The DM is kind `checkup` in `[notify] kinds`, and `clipper alert send` is how any script queues
 one: `clipper alert send --kind checkup "text"`, or `-` to read stdin.
 
-Planned (#185): more checks (repeated errors in `logs/`, cookies and tokens about to expire,
+Planned (#185 is closed; HANDOFF.md tracks the rest): more checks (repeated errors in `logs/`, cookies and tokens about to expire,
 Kitsu approvals that never reached the schedule), hourly runs once the nightly reports prove
 right, and then PRs for clear code fixes.

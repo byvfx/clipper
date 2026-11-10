@@ -194,8 +194,10 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 and self-checks #185
 closed 11-09; checkup's turn-on steps are under Checkup below),
 Posts blind items #36 (the rest of the YouTube Posts roadmap #30 closed 11-09), Instagram Reels #39, cast library #41, lore-order playlists #43,
-archive fun #63, transcript-framed edits #66 (#67-#71), crisis mode #73, setup #78,
-live clips #81, blind items #111, investigate anyone #138, agent exploration #158, Modal ideas #53, #55, #56,
+archive fun #63, transcript-framed edits #66 (#67-#71; 11-09 the user wasn't sure #67 is needed: suggested
+#70 first, no model, and the full edit plan only if edited clips do better; undecided), crisis mode #73, setup #78,
+live clips #81, blind items #111, investigate anyone #138, agent exploration #158 (on hold at the user's word 11-09; next would be a week of phone use, then
+a small `clipper mcp`; #13 may fold into it), Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
 - **Checkup (#185 closed 11-09, the rest is tracked here):** `clipper checkup` (services, streams, schedule,
