@@ -100,7 +100,10 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   deployment first, little tech debt, simple for the user; `studio/` holds mockups, research notes and media
   reports, out of the package; serve and the bot are compose-only, the Windows task scripts stay for a GPU
   worker only. Merge policy: each PR once CI is green on both OSes and every Copilot comment is fixed or
-  answered on its thread, then delete the branch; green CI alone isn't enough.
+  answered on its thread, then delete the branch; green CI alone isn't enough. Since 11-10 (#196) every code
+  PR also gets a `clipper codereview` comment (Grok 4.7 on OpenRouter, ~$0.80 and ~25 min, the `review`
+  workflow, wiki Developing#code-review-on-prs), copied to its linked issues; check each finding against the
+  code like a Copilot one. Copilot's review quota ran out 11-09, so Grok's is often the only review.
 
 ## State now (2026-11-08)
 - **Hub on the NAS** since 2026-11-05 (wiki NAS-hub): compose project `clipper-hub` in `~/clipper-hub`, containers
