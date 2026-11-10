@@ -56,7 +56,10 @@ The first run copies `deploy/hub/env.template` to `deploy/hub/env.local` (gitign
 stops: fill in the keys (`ANTHROPIC_API_KEY`, `KITSU_TOKEN`, `MODAL_TOKEN_ID` /
 `MODAL_TOKEN_SECRET` from `~/.modal.toml`, the alert webhook). The other keys are files in
 `secrets/`. There is no browser in the containers, so pre-shows use
-`secrets/youtube_cookies.txt` (`CLIPPER_YOUTUBE_COOKIES_FROM_BROWSER` is empty there).
+`secrets/youtube_cookies.txt` (`CLIPPER_YOUTUBE_COOKIES_FROM_BROWSER` is empty there), which
+the laptop's `clipper-cookies` task refreshes from its Firefox profile every 4 hours
+([Archives](Archives#keeping-the-nas-hubs-cookies-fresh)). That one job ties the NAS to the
+laptop: with the laptop off for days, signed-in pre-show grabs stop once the cookies rotate.
 
 ## Day to day
 

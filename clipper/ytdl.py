@@ -76,9 +76,9 @@ class _Quiet:
     def progress_bar(self): ...
 
 
-def browser_session(spec: str) -> list[str]:
-    """The YouTube sign-in cookies (names only) the browser profile `spec` holds now, read
-    from its cookie database on disk (no network). [] = that profile isn't signed in."""
+def _browser_cookies(spec: str) -> list:
+    """The youtube.com cookies the browser profile `spec` holds now, read from its cookie
+    database on disk (no network)."""
     m = SPEC.fullmatch(spec)
     if not m:
         raise ClipperError(f"[youtube] cookies_from_browser {spec!r}: not BROWSER[:PROFILE]")
@@ -89,9 +89,45 @@ def browser_session(spec: str) -> list[str]:
                                            container=m["container"])
     except Exception as e:  # a missing profile, a locked or unreadable database
         raise ClipperError(f"[youtube] cookies_from_browser {spec!r}: {e}") from e
-    now = time.time()
-    return sorted({c.name for c in jar if c.domain.endswith("youtube.com") and c.name in SESSION
+    return [c for c in jar if c.domain.endswith("youtube.com")]
+
+
+def session_names(cookies: list, now: float | None = None) -> list[str]:
+    """The sign-in cookies (names only) among `cookies` that haven't expired. [] = signed out."""
+    now = time.time() if now is None else now
+    return sorted({c.name for c in cookies if c.name in SESSION
                    and (c.expires is None or c.expires > now)})
+
+
+def browser_session(spec: str) -> list[str]:
+    """The YouTube sign-in cookies (names only) the browser profile `spec` holds now, read
+    from its cookie database on disk (no network). [] = that profile isn't signed in."""
+    return session_names(_browser_cookies(spec))
+
+
+def netscape_text(cookies: list) -> str:
+    """http.cookiejar cookies as a Netscape cookies.txt (expiry 0 = a session cookie)."""
+    lines = ["# Netscape HTTP Cookie File"]
+    for c in cookies:
+        lines.append("\t".join([c.domain, "TRUE" if c.domain.startswith(".") else "FALSE", c.path or "/",
+                                "TRUE" if c.secure else "FALSE", str(int(c.expires or 0)),
+                                c.name, c.value or ""]))
+    return "\n".join(lines) + "\n"
+
+
+def export_browser_cookies(spec: str, out: Path) -> int:
+    """Write the browser profile `spec`'s youtube.com cookies to `out` (Netscape, via a temp
+    file and a replace), for machines with no browser of their own: the NAS hub's containers
+    read [paths] youtube_cookies, and a laptop task refreshes it (11-09). Refuses when the
+    profile isn't signed in, so a signed-out profile never overwrites a working file.
+    Returns the number of cookies written."""
+    cookies = _browser_cookies(spec)
+    if not session_names(cookies):
+        raise ClipperError(f"the browser profile {spec} isn't signed in to YouTube; {out.name} left as it is")
+    tmp = out.with_name(f"{out.name}.tmp")
+    tmp.write_text(netscape_text(cookies), encoding="utf-8")
+    tmp.replace(out)
+    return len(cookies)
 
 
 EXPORT_GLOB = "www.youtube.com_*.json"  # Cookie-Editor's own name for a JSON export

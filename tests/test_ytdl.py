@@ -125,3 +125,34 @@ def test_browser_session_errors_name_the_setting(monkeypatch):
         ytdl.browser_session("firefox:nope")
     with pytest.raises(ClipperError, match="not BROWSER"):
         ytdl.browser_session(":x")
+
+
+def fake_profile(monkeypatch, *cookies):
+    def extract(*a, **k):
+        jar = CookieJar()
+        for c in cookies:
+            jar.set_cookie(c)
+        return jar
+    import yt_dlp.cookies
+    monkeypatch.setattr(yt_dlp.cookies, "extract_cookies_from_browser", extract)
+
+
+def test_export_writes_only_youtube_cookies_as_netscape(monkeypatch, tmp_path):
+    fake_profile(monkeypatch, cookie("SID"), cookie("PREF", expires=2000000000),
+                 cookie("SID", domain=".google.com"))
+    out = tmp_path / "youtube_cookies.txt"
+    assert ytdl.export_browser_cookies("firefox:clipper", out) == 2
+    lines = out.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "# Netscape HTTP Cookie File"
+    assert sorted(lines[1:]) == [".youtube.com\tTRUE\t/\tTRUE\t0\tSID\tv",
+                                 ".youtube.com\tTRUE\t/\tTRUE\t2000000000\tPREF\tv"]
+    assert not (tmp_path / "youtube_cookies.txt.tmp").exists()
+
+
+def test_export_keeps_the_old_file_when_the_profile_is_signed_out(monkeypatch, tmp_path):
+    fake_profile(monkeypatch, cookie("PREF"), cookie("SID", expires=1))
+    out = tmp_path / "youtube_cookies.txt"
+    out.write_text("old", encoding="utf-8")
+    with pytest.raises(ClipperError, match="isn't signed in"):
+        ytdl.export_browser_cookies("firefox:clipper", out)
+    assert out.read_text(encoding="utf-8") == "old"

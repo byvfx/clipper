@@ -72,3 +72,22 @@ so that yt-dlp can't read them. Set it up once, as the Windows user that runs `c
 `clipper doctor` reads the profile's cookie database (no network) and fails when it has no YouTube
 sign-in. Don't browse with the profile. If YouTube signs it out, open it, sign in again and close
 it; the pre-show DM says the same.
+
+### Keeping the NAS hub's cookies fresh
+
+The [NAS hub](NAS-hub)'s containers have no browser, so their signed-in retries read the file
+`secrets/youtube_cookies.txt`, which goes stale the same way an export does. The laptop keeps it
+fresh from the Firefox profile above: `clipper cookies export` copies the profile's youtube.com
+cookies into `[paths] youtube_cookies` (Netscape, through a temp file; `--browser` and `--to`
+override the two settings), and refuses, leaving the file alone, when the profile isn't signed in.
+Install the task once, on the laptop (the profile and `cookies_from_browser = "firefox:clipper"`
+set up as above):
+
+    deploy\cookies\cookies-task.ps1 -Install    # "clipper-cookies": at logon and every 4 hours
+
+`-Status` shows the last run and `logs\cookies.log`, `-Run` exports now, `-Uninstall` removes it.
+
+This makes the NAS depend on the laptop: while the laptop is off or logged out the file isn't
+refreshed, and once YouTube rotates the session, pre-show grabs (and story and archive signed-in
+retries) on the NAS fail the bot check and DM until the laptop is back. Running fully on the NAS
+with the laptop off would need another source of cookies, such as a browser in a container.
