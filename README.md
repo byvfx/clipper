@@ -1,5 +1,7 @@
 # Clippa
 
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Clippa-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/byvfx)
+
 Turns long Kick streams into YouTube uploads: full-length segments, topic compilations,
 Shorts, titles, descriptions, chapters and thumbnails, with a human review step before
 anything goes out. The app was called clipper; the `clipper` command, package, config files
