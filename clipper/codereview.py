@@ -31,10 +31,10 @@ DIGEST = "<!-- diff={} -->"  # the code diff a review covered (a failed one has 
 LAST = "<details><summary>The last review, still standing</summary>"
 BODY_MAX = 65000  # GitHub refuses a comment over 65536 characters
 BOT = "github-actions[bot]"  # who GITHUB_TOKEN posts as (it can't read /user)
-# #12, owner/name#12 (kept only when it is this repo), or a link to an issue here.
+# #12, owner/name#12 (kept only when it is this repo), or a link to an issue or PR here.
 REF = re.compile(r"(?<![\w/])(?:([\w.-]+/[\w.-]+))?#(\d+)\b")
-URL = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/issues/(\d+)")
-MDLINK = re.compile(r"\[([^\]\n]*)\]\(([^)\s]+)(?:\s+(?:\"[^\"\n]*\"|'[^'\n]*'))?\)")  # [label](target "title")
+URL = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/(?:issues|pull)/(\d+)")
+MDLINK = re.compile(r"\[([^\]\n]*)\]\(([^)\s]+)(?:\s+(?:\"([^\"\n]*)\"|'([^'\n]*)'))?\)")  # [label](target "title")
 ROOTED = re.compile(r"^/(?=[\w.-]+/[\w.-]+/(?:issues|pull)/\d)")  # /owner/name/issues/N, within GitHub
 NOTHING = "No correctness bugs found."
 FINDING = re.compile(r"^### \d+\.\s+\S.*\n+\s*\S", re.MULTILINE)  # a numbered finding with text under it
@@ -170,11 +170,12 @@ def is_review(text: str) -> bool:
 def _unlink(m: re.Match, repo: str) -> str:
     """[label](target) as plain text for linked. The label goes when the target says which
     issue it is (an issue or PR link) or is in another repo; a link elsewhere in this repo, or
-    off GitHub, keeps it (a #N there means this repo)."""
+    off GitHub, keeps it (a #N there means this repo). A title is kept either way."""
     target = ROOTED.sub("github.com/", m[2])
+    title = m[3] or m[4] or ""
     on = re.search(r"github\.com/([\w.-]+/[\w.-]+)(/(?:issues|pull)/\d)?", target)
     drop = on and (on[2] or on[1].lower() != repo.lower())
-    return f" {target} " if drop else f" {m[1]} {target} "
+    return f" {target} {title} " if drop else f" {m[1]} {target} {title} "
 
 
 def review(cfg: dict, base: str = "origin/main", head: str = "HEAD", root: Path = Path("."),

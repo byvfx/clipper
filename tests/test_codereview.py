@@ -40,6 +40,9 @@ def test_linked_takes_this_repos_numbers_once_in_order():
             "[#7](https://github.com/other/repo/blob/main/a.py) [#73](/byvfx/clipper/issues/73) "
             "[#74](https://github.com/byvfx/clipper/blob/main/a.py#L10) [#75](https://example.com/x)")
     assert codereview.linked(more, "byvfx/clipper") == [74, 75, 73]
+    pulls = ('[#76](https://github.com/byvfx/clipper/pull/76) [a.py](/byvfx/clipper/blob/main/a.py "fixes #77") '
+             "[#78](https://github.com/byvfx/clipper/issues/78 'also #79')")
+    assert codereview.linked(pulls, "byvfx/clipper") == [77, 79, 76, 78]
 
 
 def test_comment_bodies_start_with_their_marker_and_digest():
