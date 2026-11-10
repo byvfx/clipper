@@ -80,10 +80,16 @@ comment on the PR, and the same review on every issue the PR links (`Closes #70`
 place on later pushes, never added again. A notes-only PR, a draft or a fork's PR gets no review.
 A failed review (no key, the model down) says so in the comment and never fails the PR's checks.
 
-It needs the repo secret `OPENROUTER_API_KEY`, set once from the laptop:
+It needs the repo secret `OPENROUTER_API_KEY`, set once from the laptop (set 2026-11-10), in Git Bash:
 
 ```bash
 gh secret set OPENROUTER_API_KEY --repo byvfx/clipper < //192.168.0.155/docker/clipper/secrets/openrouter_secret.txt
+```
+
+or in PowerShell, which has no `<`:
+
+```powershell
+Get-Content \\192.168.0.155\docker\clipper\secrets\openrouter_secret.txt -Raw | gh secret set OPENROUTER_API_KEY --repo byvfx/clipper
 ```
 
 To try another model, set `CLIPPER_CODEREVIEW_REVIEWER` in the workflow's env (e.g.
