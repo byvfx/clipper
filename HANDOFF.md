@@ -8,7 +8,8 @@ lists every entry by date; grep the log, don't read it whole). At the end of a s
 changed here, then add a dated entry at the end of the log.
 
 Stream clipper for Kino Casino (Kick channel `kinocasinogaming`), Channel 404 News and ChudLogic → YouTube
-channel **Lolcow Cinema**. Repo `C:\clipper`, remote https://github.com/byvfx/clipper (private).
+channel **Lolcow Cinema**. Repo `C:\clipper`, remote https://github.com/byvfx/clipper (public, on purpose:
+the user said so 2026-11-10; every tracked file, issue and PR comment is readable by anyone).
 Python package `clipper/` (`clipper/defaults.toml` is every setting, documented; prompts in `clipper/prompts/`),
 config `clipper.toml` (gitignored, on the NAS; `clipper.example.toml` is a tracked starter). The user docs are
 the GitHub wiki, built from `docs/wiki/` (`.github/workflows/wiki.yml` pushes it on every push to main);
@@ -219,7 +220,8 @@ messages: GitHub closes the issue on "fix".
   above: a try-it route, not a second record; close it if unwanted); war room stale data #201, double sends /
   lost edits / bulk actions on hidden items #202, cost before a paid action #203; `clipper streams prune` and
   `clipper backup` #204; checklists: CLI polish #205, war room small fixes #206 (`core.js:145` has a
-  mis-encoded dot), new users and going public #207 (private values in tracked files, packaging).
+  mis-encoded dot), new users and the public repo #207 (this install's values in tracked files, which are already visible since the
+  repo is public; packaging).
 - **Checkup (#185 closed 11-09, the rest is tracked here):** `clipper checkup` (services, streams, schedule,
   lint; `[checkup]`; wiki Checkup) and `clipper alert send` are merged (#189). The nightly run
   (`deploy/claude/checkup.sh`, prompt `checkup.md`, both baked into the image) is not on yet. Left:
