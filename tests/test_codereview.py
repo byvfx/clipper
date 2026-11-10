@@ -142,6 +142,32 @@ def test_gather_sends_only_code_and_the_changed_files(repo, defaults):
     assert codereview.gather(defaults, "main", "HEAD", root)["digest"] == g["digest"]   # docs: same diff
 
 
+def test_merging_main_in_keeps_the_digest_a_real_change_doesnt(repo, defaults):
+    root, git = repo
+    a = root / "clipper" / "a.py"
+    a.write_text("".join(f"line{i} = {i}\n" for i in range(30)), encoding="utf-8")
+    git("commit", "-qam", "longer a.py")
+    git("checkout", "-q", "main")
+    git("merge", "-q", "work")                       # main has the long a.py too
+    git("checkout", "-q", "work")
+    a.write_text(a.read_text(encoding="utf-8").replace("line25 = 25", "line25 = 99"), encoding="utf-8")
+    git("commit", "-qam", "the PR's change")
+    before = codereview.gather(defaults, "main", "HEAD", root)
+    git("checkout", "-q", "main")                    # main moves: lines above, in the same file
+    a.write_text("import os\nimport re\n" + a.read_text(encoding="utf-8"), encoding="utf-8")
+    (root / "clipper" / "b.py").write_text("z = 1\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-qm", "main moves")
+    git("checkout", "-q", "work")
+    git("merge", "-q", "--no-edit", "main")
+    after = codereview.gather(defaults, "main", "HEAD", root)
+    assert after["user"] != before["user"]           # what is sent moved with main...
+    assert after["digest"] == before["digest"] and after["sha"] != before["sha"]   # ...the PR didn't
+    a.write_text(a.read_text(encoding="utf-8").replace("line3 = 3", "line3 = 4"), encoding="utf-8")
+    git("commit", "-qam", "another real change")
+    assert codereview.gather(defaults, "main", "HEAD", root)["digest"] != before["digest"]
+
+
 def test_the_reviewer_is_no_stage_model(defaults):
     """doctor and `clipper models` read llm.configured: a dev tool's model mustn't make every
     install need an OpenRouter key."""

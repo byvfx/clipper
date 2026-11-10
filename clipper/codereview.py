@@ -8,8 +8,8 @@ what it is sent and nothing else.
 With --pr (the `review` workflow, on every PR) the review goes on the PR as one comment,
 edited in place on each push, and on every issue the PR links (GitHub's closing references
 in this repo, or #N in its title or body): one comment per issue and PR, edited the same way.
-A push that leaves the code diff as it was (a docs-only push) is not reviewed again: the
-comment carries the diff's digest. A failed call says so and keeps the last good review
+A push that leaves the PR's own code changes as they were (a docs-only push, or a merge of
+main into the branch) is not reviewed again: the comment carries their digest. A failed call says so and keeps the last good review
 below; the review is printed to the log before it is posted, so a failed post loses nothing.
 """
 from __future__ import annotations
@@ -109,7 +109,15 @@ def gather(cfg: dict, base: str, head: str, root: Path) -> dict:
     user, left_out = message(diff, files, rc["max_chars"], unreadable)
     return {"user": user, "names": names, "left_out": left_out,
             "sha": git(root, "rev-parse", "--verify", f"{head}^{{commit}}").strip(),
-            "digest": hashlib.sha256(diff.encode("utf-8")).hexdigest()[:16]}
+            "digest": digest(git(root, "diff", "--no-color", "--unified=0", span, "--", *rc["paths"]))}
+
+
+def digest(diff: str) -> str:
+    """The fingerprint of a PR's own changes: its added and removed lines (and file names), with
+    no context, hunk positions or blob ids. Merging main into the branch moves those but not
+    these, so a catch-up merge isn't reviewed (and paid for) again."""
+    own = "\n".join(line for line in diff.splitlines() if line[:1] in "+-")
+    return hashlib.sha256(own.encode("utf-8")).hexdigest()[:16]
 
 
 def call(cfg: dict, g: dict, dry_run: bool = False) -> tuple[str, dict]:
