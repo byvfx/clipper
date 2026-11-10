@@ -898,6 +898,18 @@ def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     raise SystemExit(doctor.main(cfg, offline=args.offline, role=args.role))
 
 
+def cmd_cookies(cfg: dict, args: argparse.Namespace) -> None:
+    from . import wiki, ytdl
+
+    spec = args.browser or ytdl.browser(cfg)
+    if not spec:
+        raise ClipperError("no browser profile: set [youtube] cookies_from_browser or pass --browser; "
+                           + wiki.page("Archives", "keeping-the-nas-hubs-cookies-fresh"))
+    out = cfg["_dir"] / Path(args.to).expanduser() if args.to else cfg["paths"]["youtube_cookies"]  # as [paths]
+    n = ytdl.export_browser_cookies(spec, out)
+    print(f"{n} YouTube cookies from {spec} -> {out}")
+
+
 def cmd_setup(cfg: dict, args: argparse.Namespace) -> None:
     from . import setup
 
@@ -954,7 +966,7 @@ COMMAND_GROUPS = [
     ('Services (long-running)', ['services', 'status', 'checkup', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
-    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'codereview']),
+    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'cookies', 'codereview']),
 ]
 
 
@@ -1728,6 +1740,15 @@ def add_setup(sub) -> None:
 
     p = sub.add_parser("shows", help="list the [shows] profiles and which streams belong to each")
     p.set_defaults(fn=cmd_shows)
+
+    p = sub.add_parser("cookies", help="YouTube sign-in cookies for yt-dlp's signed-in retries")
+    ksub = p.add_subparsers(dest="action", required=True)
+    r = ksub.add_parser("export", help="copy a browser profile's YouTube cookies into [paths] youtube_cookies "
+                                       "(the laptop task that keeps the NAS hub's file fresh)")
+    r.add_argument("--browser", metavar="SPEC", help="yt-dlp browser spec (default: [youtube] cookies_from_browser)")
+    r.add_argument("--to", metavar="FILE", help="where to write, relative to the config file's folder "
+                                                "(default: [paths] youtube_cookies)")
+    p.set_defaults(fn=cmd_cookies)
 
     p = sub.add_parser("codereview", help="a second reviewer for this branch: its code diff to one "
                                           "model call ([codereview] reviewer), bugs back")

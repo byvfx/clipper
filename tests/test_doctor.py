@@ -122,3 +122,34 @@ def test_role_settings_warn_on_uploads_by_hand_and_a_bot_with_discord_off(defaul
     assert not any("[discord] enabled" in what for _, _, what, _ in rows("all"))
     defaults["discord"]["enabled"] = True
     assert not any("[discord] enabled" in what for _, _, what, _ in rows("bot"))
+
+
+def test_doctor_checks_the_hubs_cookies_file(tmp_path, monkeypatch):
+    import os
+    import time
+
+    from clipper import doctor, ytdl
+
+    said = []
+    monkeypatch.setattr(doctor, "RESULTS", said)
+
+    def last():
+        out = " ".join(f"{st} {what}" for st, _, what, _ in said)
+        said.clear()
+        return out
+    f = tmp_path / "youtube_cookies.txt"
+    cfg = {"paths": {"youtube_cookies": f}, "youtube": {"cookies_from_browser": ""}}
+    doctor.check_youtube_cookies(cfg)  # no file: optional, nothing said
+    assert last() == ""
+    live = ytdl.Row(".youtube.com", "/", True, None, "SID", "x")
+    f.write_text(ytdl.netscape_text([live]), encoding="utf-8")
+    now = time.time()
+    os.utime(f, (now - 3600, now - 3600))
+    doctor.check_youtube_cookies(cfg)
+    assert last() == "OK YouTube cookies youtube_cookies.txt signed in, exported 1 h ago"
+    os.utime(f, (now - 30 * 3600, now - 30 * 3600))
+    doctor.check_youtube_cookies(cfg)
+    assert last() == "WARN YouTube cookies youtube_cookies.txt last exported 30 h ago"
+    f.write_text(ytdl.netscape_text([ytdl.Row(".youtube.com", "/", True, None, "PREF", "x")]), encoding="utf-8")
+    doctor.check_youtube_cookies(cfg)
+    assert last() == "FAIL YouTube cookies youtube_cookies.txt hold no live sign-in"
