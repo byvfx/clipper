@@ -52,6 +52,7 @@ EFFORT = {"none": "none", "low": "low", "medium": "medium", "high": "high", "xhi
 def claude_effort(effort: str) -> str:
     return "low" if effort == "none" else effort
 RETRY_STATUS = (408, 429, 500, 502, 503, 504, 529)
+STARTED = (500, 502, 504)  # errors that can come after the model began (and was billed)
 MODEL_KEY = re.compile(r"(^|_)model(_[ab])?$")
 
 
@@ -426,7 +427,8 @@ class LLM:
         """One chat/completions request with retries. Returns (response JSON, meta); meta has
         "refusal" when the model refused. length_ok: running out of max_tokens isn't an error
         (the preflight, where a reasoning model can spend them all thinking). thinking_tokens,
-        timeout_s: this call's own (text_call); a timeout_s given is never retried."""
+        timeout_s: this call's own (text_call); with timeout_s, a timeout or a gateway error
+        (STARTED) is not sent again."""
         import requests
 
         prov, name = split(model)
@@ -469,7 +471,9 @@ class LLM:
                     raise RuntimeError(f"{model}: {type(e).__name__}: {e}") from None
                 time.sleep(2 ** attempt)
                 continue
-            if r.status_code in RETRY_STATUS and attempt < 5:
+            # A long call (timeout_s) that a gateway gave up on may be thinking still, and billed:
+            # only a refusal before it started (rate limit, overloaded) is worth sending again.
+            if r.status_code in RETRY_STATUS and attempt < 5 and not (timeout_s and r.status_code in STARTED):
                 time.sleep(min(60.0, float(r.headers.get("retry-after") or 2 ** (attempt + 1))))
                 continue
             if r.status_code == 400:

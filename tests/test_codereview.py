@@ -168,6 +168,96 @@ def test_merging_main_in_keeps_the_digest_a_real_change_doesnt(repo, defaults):
     assert codereview.gather(defaults, "main", "HEAD", root)["digest"] != before["digest"]
 
 
+def test_a_review_that_quotes_a_failure_is_still_a_good_one():
+    quoting = codereview.comment("The comment becomes:\n\nReview failed: timeout", INFO)
+    assert codereview.good(quoting) and "Review failed: timeout" in codereview.last_good(quoting)
+    failed = codereview.comment("", INFO, failed="HTTP 502", previous=codereview.last_good(quoting))
+    assert not codereview.good(failed) and "Review failed: timeout" in codereview.last_good(failed)
+    assert not codereview.good(codereview.cleared(codereview.MARKER, "abc1234"))
+
+
+class Hub:
+    """GitHub as run() uses it: comments per issue/PR number, PR 9 linking issue 70."""
+
+    repo, me = "o/r", codereview.BOT
+
+    def __init__(self, comments=None):
+        self.comments = comments or {}
+        self.posts = []
+
+    def pr(self, n):
+        return {"head": {"sha": "f" * 40}, "title": "t", "body": "Closes #70"}
+
+    def closing(self, n):
+        return [70]
+
+    def is_issue(self, n):
+        return n == 70
+
+    def find(self, n, marker):
+        return next((c for c in self.comments.get(n, []) if c["body"].startswith(marker + "\n")), None)
+
+    def upsert(self, n, body, old):
+        self.posts.append((n, body))
+        if old:
+            old["body"] = body
+        else:
+            self.comments.setdefault(n, []).append({"id": len(self.posts), "body": body})
+        return f"url{n}"
+
+
+def run_with(monkeypatch, defaults, hub, g, review_text="### 1. a bug"):
+    calls = []
+    monkeypatch.setattr(codereview, "GitHub", lambda repo, token: hub)
+    monkeypatch.setattr(codereview, "gather", lambda *a: g)
+    monkeypatch.setattr(codereview, "call", lambda cfg, g: calls.append(g) or (review_text, {**INFO, **g}))
+    codereview.run(defaults, "main", "HEAD", pr=9, repo="o/r")
+    return calls
+
+
+G = {"user": "u", "names": ["clipper/a.py"], "left_out": [], "sha": "a" * 40, "digest": "d1"}
+
+
+def test_run_reviews_once_then_only_fills_issues_missing_it(monkeypatch, defaults):
+    hub = Hub()
+    assert run_with(monkeypatch, defaults, hub, G)          # first push: reviewed, on PR and #70
+    assert [n for n, _ in hub.posts] == [9, 70] and "<!-- diff=d1 -->" in hub.comments[70][0]["body"]
+    del hub.comments[70]                                     # that issue post was lost
+    hub.posts.clear()
+    assert not run_with(monkeypatch, defaults, hub, G)      # same diff: no model call...
+    assert [n for n, _ in hub.posts] == [70]                # ...but the issue gets it again
+    body = hub.comments[70][0]["body"]
+    assert body.startswith("<!-- clipper-codereview pr=9 -->\n") and "Code review of #9" in body
+    hub.posts.clear()
+    assert not run_with(monkeypatch, defaults, hub, G) and hub.posts == []   # nothing left to do
+
+
+def test_run_clears_the_findings_when_no_code_is_left(monkeypatch, defaults):
+    hub = Hub()
+    run_with(monkeypatch, defaults, hub, G)
+    hub.posts.clear()
+    assert not run_with(monkeypatch, defaults, hub, {})     # the code changes were reverted
+    assert [n for n, _ in hub.posts] == [9, 70]
+    assert all("no longer changes any code" in b and "a bug" not in b for _, b in hub.posts)
+
+
+def test_a_long_call_isnt_sent_again_after_a_gateway_error(monkeypatch, defaults):
+    import requests
+
+    class R:
+        def __init__(self, status):
+            self.status_code, self.headers, self.text, self.ok = status, {}, "", False
+
+    for status, tries in ((502, 1), (504, 1), (429, 6)):
+        sent = []
+        monkeypatch.setattr(requests, "post", lambda *a, sent=sent, status=status, **kw: sent.append(1) or R(status))
+        monkeypatch.setattr(llm.time, "sleep", lambda s: None)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+        with pytest.raises(RuntimeError, match=f"HTTP {status}"):
+            llm.LLM(defaults).text_call("openrouter:x/y", "s", "u", "high", 100, timeout_s=5)
+        assert len(sent) == tries, status                   # a rate limit is still retried
+
+
 def test_the_reviewer_is_no_stage_model(defaults):
     """doctor and `clipper models` read llm.configured: a dev tool's model mustn't make every
     install need an OpenRouter key."""

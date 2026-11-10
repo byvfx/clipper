@@ -163,11 +163,18 @@ def linked(text: str, repo: str) -> list[int]:
 
 def last_good(body: str) -> str:
     """The review a comment shows, for keeping under a failed one: a good comment's own text,
-    or the review a failed one kept; "" when there is none."""
-    if "\nReview failed: " in body:
+    or the review a failed one kept; "" when there is none. A good comment is the one with a
+    digest line (whatever its review says, "Review failed:" included)."""
+    if not good(body):
         m = re.search(re.escape(LAST) + r"\n\n(.*)\n</details>", body, re.DOTALL)
         return m[1] if m else ""
     return "\n".join(line for line in body.splitlines() if not line.startswith("<!-- ")).strip()
+
+
+def good(body: str) -> bool:
+    """A comment holding a review (its second line is the digest), not a failure or a note."""
+    lines = body.split("\n", 2)
+    return len(lines) > 1 and lines[1].startswith("<!-- diff=")
 
 
 def comment(text: str, info: dict, pr: int | None = None, failed: str = "", previous: str = "") -> str:
@@ -282,6 +289,38 @@ def post(gh: GitHub, n: int, marker: str, text: str, info: dict, pr: int | None,
     return gh.upsert(n, comment(text, info, pr, failed, previous), old)
 
 
+def for_issue(body: str, pr: int) -> str:
+    """The PR's own comment as a linked issue's: the issue marker and "Code review of #pr"."""
+    return (body.replace(MARKER, ISSUE_MARKER.format(pr=pr), 1)
+            .replace("**Code review** by", f"**Code review of #{pr}** by", 1))
+
+
+def cleared(marker: str, sha: str, pr: int | None = None) -> str:
+    """The note that replaces a review once the PR changes no code at all (it was reverted)."""
+    what = f"Code review of #{pr}" if pr else "Code review"
+    return (f"{marker}\n**{what}** at {sha[:7]}: this PR no longer changes any code, so the "
+            "findings that were here are gone with it.\n")
+
+
+def each_issue(gh: GitHub, pr: int, pinfo: dict, act) -> None:
+    """act(issue number) on every issue the PR links; act returns the comment's url, or None
+    when there was nothing to do. One failure doesn't stop the rest; all are raised after."""
+    errors = []
+    try:
+        nums = issues_for(gh, pr, pinfo)
+    except ClipperError as e:
+        raise ClipperError(f"codereview: the linked issues weren't read: {e}") from None
+    for n in nums:
+        try:
+            url = act(n)
+            if url:
+                print(f"issue #{n}: {url}")
+        except ClipperError as e:
+            errors.append(f"#{n}: {e}")
+    if errors:
+        raise ClipperError("codereview: not posted on " + "; ".join(errors))
+
+
 def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
         dry_run: bool = False, root: Path = Path(".")) -> None:
     """Review the branch; print it, or with pr post it on the PR and the issues it links."""
@@ -296,28 +335,41 @@ def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
     gh = GitHub(repo or os.environ.get("GITHUB_REPOSITORY", ""),
                 os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN", ""))
     pinfo = gh.pr(pr)
+    im = ISSUE_MARKER.format(pr=pr)
     text, failed, g = "", "", {}
     info = {"model": cfg["codereview"]["reviewer"], "sha": pinfo["head"]["sha"]}
+    old = gh.find(pr, MARKER)
     try:
         g = gather(cfg, base, head, root)
-        if not g:
-            print("codereview: no code changed: nothing to post")
-            return
-        old = gh.find(pr, MARKER)
-        if old and DIGEST.format(g["digest"]) in old["body"]:
-            print(f"codereview: the code diff is the one already reviewed ({g['digest']}): nothing to do")
-            return
-        text, info = call(cfg, g)
+    except ClipperError as e:  # git failed: said on the PR below like a failed call
+        failed = str(e)[:400]
+    if not g and not failed:  # no code changed, or the changes were all reverted: no findings stand
+        print("codereview: no code changed: nothing to review")
+        if old:
+            gh.upsert(pr, cleared(MARKER, info["sha"]), old)
+
+            def clear(n):
+                mine = gh.find(n, im)
+                return gh.upsert(n, cleared(im, info["sha"], pr), mine) if mine else None
+            each_issue(gh, pr, pinfo, clear)
+        return
+    if g and old and good(old["body"]) and DIGEST.format(g["digest"]) in old["body"]:
+        # Reviewed already (a docs push, a merge of main): only issues still missing it.
+        print(f"codereview: the PR's code changes are the ones already reviewed ({g['digest']})")
+        want = for_issue(old["body"], pr)
+
+        def fill(n):
+            mine = gh.find(n, im)
+            done = mine and good(mine["body"]) and DIGEST.format(g["digest"]) in mine["body"]
+            return None if done else gh.upsert(n, want, mine)
+        each_issue(gh, pr, pinfo, fill)
+        return
+    try:
+        if g:
+            text, info = call(cfg, g)
     except Exception as e:  # noqa: BLE001  # say so on the PR; a review never fails its checks
         failed = f"{type(e).__name__}: {e}"[:400]
         info = {**info, "sha": g.get("sha", info["sha"])}
     print(text or f"codereview: review failed: {failed}", flush=True)  # in the log before any post
     print(f"PR #{pr}: {post(gh, pr, MARKER, text, info, None, failed)}")
-    errors = []
-    for n in issues_for(gh, pr, pinfo):
-        try:
-            print(f"issue #{n}: {post(gh, n, ISSUE_MARKER.format(pr=pr), text, info, pr, failed)}")
-        except ClipperError as e:
-            errors.append(f"#{n}: {e}")
-    if errors:
-        raise ClipperError("codereview: not posted on " + "; ".join(errors))
+    each_issue(gh, pr, pinfo, lambda n: post(gh, n, im, text, info, pr, failed))
