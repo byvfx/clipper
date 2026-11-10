@@ -49,9 +49,11 @@ next test is a week of live streams on one show.
 `score_a_v9` is v8 with two changes. `why` is the first field of the answer (from v9 on the
 Pass A schema puts it first; models write in schema order), so the model reasons through
 payoff, context and quality before it gives a verdict or a cut, rather than justifying one.
-And the prompt says where the cuts may go: anywhere in the lead-in, and up to 30 s past the
-window, which is the range the cuts are snapped to. The rule files are copies of v8. No show
-is on it; it gets the same three streams and the labels, next to v8's week on Kino.
+Claude and OpenAI keep schema order; a provider on JSON mode, or Gemini, may not, so try v9
+on Claude. And the prompt says where the cuts may go: a cut may start in the lead-in when the
+setup is said there, and ends by the window's last timestamp (the model sees nothing after
+it). The rule files are copies of v8. No show is on it; it gets the same three streams and
+the labels, next to v8's week on Kino.
 
 ## 2026-11-09: DeepSeek V4.1 Flash, the 10-17 snapshot
 

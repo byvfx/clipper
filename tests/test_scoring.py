@@ -80,6 +80,6 @@ def test_pass_a_schema_why_first_from_v9():
         assert scoring.pass_a_schema(v) is scoring.PASS_A_SCHEMA
     for v in ("v9", "v10"):
         s = scoring.pass_a_schema(v)
-        assert list(s["properties"])[0] == "why" and s["required"][0] == "why"
+        assert list(s["properties"])[0] == "why"
         assert set(s["properties"]) == set(scoring.PASS_A_SCHEMA["properties"])
         assert sorted(s["required"]) == sorted(scoring.PASS_A_SCHEMA["required"])

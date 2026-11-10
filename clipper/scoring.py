@@ -53,10 +53,9 @@ PASS_A_SCHEMA = {
 }
 # v9 and on: why first. The answer is written in schema order, so the reasoning comes before
 # the verdict and the cuts instead of justifying them afterwards.
+# (Claude and OpenAI keep the order; a provider on JSON mode or Gemini may not.)
 PASS_A_SCHEMA_WHY_FIRST = {**PASS_A_SCHEMA,
-                           "properties": {"why": PASS_A_SCHEMA["properties"]["why"],
-                                          **{k: v for k, v in PASS_A_SCHEMA["properties"].items() if k != "why"}},
-                           "required": ["why", *[k for k in PASS_A_SCHEMA["required"] if k != "why"]]}
+                           "properties": {"why": PASS_A_SCHEMA["properties"]["why"], **PASS_A_SCHEMA["properties"]}}
 
 
 def pass_a_schema(version: str) -> dict:
