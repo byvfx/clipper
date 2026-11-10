@@ -8,6 +8,9 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-10: the `check` workflow skips a push or PR that changes only notes no test reads (root `*.md`,
+  `LICENSE`, `docs/log/`, `docs/archive/`, `reports/`, `studio/`). `docs/wiki/` still runs it, and so
+  does `studio/research_notes/streamers.json` (a test reads it).
 - 11-09: `clipper codereview` and the `review` workflow: every code PR gets a second review in one
   OpenRouter call (`[codereview] reviewer`, Grok 4.7 at high effort, about $1 a PR), posted on the PR
   and on the issues it links, one comment each, edited in place. Needs the repo secret

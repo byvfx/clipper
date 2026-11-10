@@ -99,11 +99,16 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - Hand-over (2026-11-08 audits, `reports/code-audit-2026-11-08.md` §7): build as a public package but this
   deployment first, little tech debt, simple for the user; `studio/` holds mockups, research notes and media
   reports, out of the package; serve and the bot are compose-only, the Windows task scripts stay for a GPU
-  worker only. Merge policy: each PR once CI is green on both OSes and every Copilot comment is fixed or
-  answered on its thread, then delete the branch; green CI alone isn't enough. Since 11-10 (#196) every code
-  PR also gets a `clipper codereview` comment (Grok 4.7 on OpenRouter, ~$0.80 and ~25 min, the `review`
-  workflow, wiki Developing#code-review-on-prs), copied to its linked issues; check each finding against the
-  code like a Copilot one. Copilot's review quota ran out 11-09, so Grok's is often the only review.
+  worker only. Merge policy (11-10, user: "just use groks ... switching from copilot for now since my
+  credits ran out"): a code PR merges once CI is green on both OSes and Grok's review is in and each finding
+  is fixed or answered, then delete the branch; green CI alone isn't enough, and don't wait for Copilot
+  until the user says it is back. Grok's review is the `clipper codereview` comment (#196: Grok 4.7 on
+  OpenRouter, ~$0.80 and ~25 min on a big PR, the `review` workflow, wiki Developing#code-review-on-prs),
+  copied to the PR's linked issues; check each finding against the code. It runs only when a PR touches
+  `clipper/`, `tests/`, `deploy/`, `.github/` or `pyproject.toml`: any other PR (the wiki, `uv.lock` alone,
+  `clipper.example.toml`, `streamers.json`) has CI but no review, and a notes-only one (e.g. HANDOFF and the
+  log) has neither since 11-10 (`check.yml` paths); both merge on the user's word, the first once CI is green.
+  A fork's PR gets no Grok review either (the workflow skips it): read the diff by hand, then the user's word.
 
 ## State now (2026-11-08)
 - **Hub on the NAS** since 2026-11-05 (wiki NAS-hub): compose project `clipper-hub` in `~/clipper-hub`, containers
@@ -209,6 +214,12 @@ live clips #81, blind items #111, investigate anyone #138, agent exploration #15
 a small `clipper mcp`; #13 may fold into it), Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
+- **Usability review (11-10, issues only, nothing built):** `clipper status` takes a minute from the laptop
+  and buries what needs the user #199; a first run without Kitsu #200 (against "Kitsu-optional is not a goal"
+  above: a try-it route, not a second record; close it if unwanted); war room stale data #201, double sends /
+  lost edits / bulk actions on hidden items #202, cost before a paid action #203; `clipper streams prune` and
+  `clipper backup` #204; checklists: CLI polish #205, war room small fixes #206 (`core.js:145` has a
+  mis-encoded dot), new users and going public #207 (private values in tracked files, packaging).
 - **Checkup (#185 closed 11-09, the rest is tracked here):** `clipper checkup` (services, streams, schedule,
   lint; `[checkup]`; wiki Checkup) and `clipper alert send` are merged (#189). The nightly run
   (`deploy/claude/checkup.sh`, prompt `checkup.md`, both baked into the image) is not on yet. Left:
@@ -242,8 +253,8 @@ messages: GitHub closes the issue on "fix".
 - **Older notes not on an issue:** republish the 2026-10-19 re-cut streams to Kitsu (user said not yet); Blade
   compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`); a daily
   "post kit" folder; thumbs: reject a picked frame with no face, `--frame-at <s>`; Discord excerpts for one-offs
-  could start after the intro; pick/preshow/retake prompts don't read speaker tags yet; a `clipper backup` for
-  the taste layer.
+  could start after the intro; pick/preshow/retake prompts don't read speaker tags yet (a `clipper backup` for
+  the taste layer is #204 now).
 
 ## Recipes (how we did it last time; details in the log)
 - **Restart serve / the bot / the worker:** `clipper services restart serve|bot|worker` (docker compose on the
@@ -285,7 +296,7 @@ messages: GitHub closes the issue on "fix".
 
 ## Back up the taste layer (user, 2026-10-24)
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
-like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built).
+like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built: #204).
 - **In git (push it):** `clipper/prompts/` (every version, never edit one that produced reviewed output),
   `clipper.example.toml`, `studio/`, `reports/`, this file.
 - **Not in git, copy by hand or script** (all in the NAS folder since 2026-11-05): `clipper.toml` (show tables,
