@@ -1044,7 +1044,7 @@ sync_key_env = "SYNC_API_KEY"  # env var with the sync.so key; else [paths] sync
 # 25 min for 9 files at high effort, real bugs and no false ones
 reviewer = "openrouter:x-ai/grok-4.7"
 effort = "high"                # none | low | medium | high: full strength, the cost is small
-prompt_version = "v1"
+prompt_version = "v2"          # clipper/prompts/codereview_<v>.md (v2: one reply, no plan in place of a review)
 paths = ["clipper/", "tests/", "deploy/", ".github/", "pyproject.toml"]  # what counts as code
 max_chars = 600000             # diff plus whole files sent; files past it go as diff only
 max_tokens = 8000              # the review's own length (thinking comes on top)

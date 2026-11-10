@@ -187,6 +187,27 @@ def test_a_binary_or_mode_change_has_a_digest_of_its_own(repo, defaults):
     assert len({first, second, third}) == 3
 
 
+def test_a_plan_with_no_review_after_it_is_a_failed_review(monkeypatch, defaults):
+    plan = "I'll trace the digest and issue-link changes against real git output before calling anything a bug."
+    assert not codereview.is_review(plan)
+    assert codereview.is_review("No correctness bugs found.")
+    assert codereview.is_review("Traced it all.\n\n### 1. a bug\n`a.py:3`\n\nit breaks")
+
+    class Fake:
+        cost = 0.1
+
+        def __init__(self, cfg):
+            pass
+
+        def text_call(self, *a, **kw):
+            return plan, {}
+
+    monkeypatch.setattr(llm, "LLM", Fake)
+    g = {"user": "u", "names": ["a.py"], "left_out": [], "sha": "abc", "digest": "d"}
+    with pytest.raises(ClipperError, match="gave no review, only: I'll trace"):
+        codereview.call(defaults, g)
+
+
 def test_a_review_that_quotes_a_failure_is_still_a_good_one():
     quoting = codereview.comment("The comment becomes:\n\nReview failed: timeout", INFO)
     assert codereview.good(quoting) and "Review failed: timeout" in codereview.last_good(quoting)

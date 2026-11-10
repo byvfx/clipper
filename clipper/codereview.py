@@ -152,7 +152,14 @@ def call(cfg: dict, g: dict, dry_run: bool = False) -> tuple[str, dict]:
         raise ClipperError(f"codereview: {e}") from None
     if not text:
         raise ClipperError(f"{model} gave no review (an empty answer or a refusal)")
+    if not is_review(text):  # a plan ("I'll trace…") with nothing after it, as Grok once did
+        raise ClipperError(f"{model} gave no review, only: {' '.join(text.split())[:150]}")
     return text, {**info, "cost": client.cost}
+
+
+def is_review(text: str) -> bool:
+    """The prompt's answer: NOTHING, or findings under "### " headings."""
+    return NOTHING.rstrip(".") in text or any(line.startswith("### ") for line in text.splitlines())
 
 
 def review(cfg: dict, base: str = "origin/main", head: str = "HEAD", root: Path = Path("."),
