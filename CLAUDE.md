@@ -141,7 +141,8 @@ Windows notes above don't apply.
   ~25 min on a big PR), check each finding against the code, handle it and show the user, then
   merge. Green CI alone isn't enough. A PR that touches none of those (the wiki, `uv.lock` alone,
   `clipper.example.toml`, `streamers.json`, notes) gets no review: don't wait for one, merge on
-  green CI where it runs and the user's word. Copilot's review is paused since 2026-11-10 (the
+  green CI where it runs and the user's word. A fork's PR gets none either (the workflow skips it:
+  no secrets): read its diff yourself, tell the user what you found, and merge only on their word. Copilot's review is paused since 2026-11-10 (the
   user's credits ran out): don't wait for it until the user says it is back.
   Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running
   clipper.exe (`uv pip install --python .venv/Scripts/python.exe pytest` installs pytest alone).

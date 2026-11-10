@@ -108,6 +108,7 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   `clipper/`, `tests/`, `deploy/`, `.github/` or `pyproject.toml`: any other PR (the wiki, `uv.lock` alone,
   `clipper.example.toml`, `streamers.json`) has CI but no review, and a notes-only one (e.g. HANDOFF and the
   log) has neither since 11-10 (`check.yml` paths); both merge on the user's word, the first once CI is green.
+  A fork's PR gets no Grok review either (the workflow skips it): read the diff by hand, then the user's word.
 
 ## State now (2026-11-08)
 - **Hub on the NAS** since 2026-11-05 (wiki NAS-hub): compose project `clipper-hub` in `~/clipper-hub`, containers
