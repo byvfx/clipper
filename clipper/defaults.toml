@@ -918,6 +918,27 @@ voice_id = ""                  # the narrator's voice (clipper narrate voices), 
 tts_settings = {}              # the narrator's voice_settings, e.g. { stability = 0.5, speed = 1.0 }
 read_wpm = 160                 # a silent card's reading pace
 
+[story.dig]
+# `clipper story dig <slug>`: after `story run`, follow what the moments mention and don't
+# explain (people, earlier events, claims, vague allusions), round by round, for side stories
+# and hints; then the dossier again. Everything found is kept in dig.json (noise too) and
+# graph.json. A [story.dig] table may set only the keys it changes. Cost: models ~$0.05-0.30
+# a round, plus Modal for up to max_videos / max_hours a round.
+rounds = 2                     # rounds per `story dig` (--rounds)
+max_threads = 4                # threads searched a round; the rest wait, open, for the next
+max_depth = 2                  # a thread's steps from the first pass's moments: 1 = only what they mention
+queries_per_thread = 3         # transcript searches per thread
+lookback_days = 90             # threads are searched this far before the story's window, to its end
+max_videos = 3                 # videos transcribed a round, at most
+max_hours = 2.0                # ...and hours of audio
+per_query = 10                 # transcript windows kept per search and subject
+candidates = 80                # windows the find model reads a round
+dossier_sources = 40           # the dig's kept sources the dossier may cite, best first
+model = "claude-sonnet-5-5"    # reads the moments for threads; the judge and find use [story] find_model
+effort = "medium"
+budget_usd = 1.5               # models per `story dig`, the swarms included (Modal is extra)
+swarm = { first_tasks = 4, max_tasks = 10, max_rounds = 2, budget_usd = 0.06, max_wall_s = 240 }   # per thread
+
 [signals]
 chat_lag_s = 6             # shift chat earlier: stream delay + typing time
 baseline_s = 300           # rolling median baseline

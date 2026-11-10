@@ -365,7 +365,7 @@ def listing(results: list[dict]) -> str:
         # the real ids, so a follow-up names the channel found, not a guess from its display name
         lines.append(f"    {r.get('url', '')}" + (f" | channel {r['channel_url']}" if r.get("channel_url") else ""))
         if r.get("summary"):
-            lines.append(f"    {r['summary'][:300]}")
+            lines.append(f"    {r['summary'][:600]}")
     return "\n".join(lines)
 
 

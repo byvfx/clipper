@@ -106,6 +106,14 @@ DOSSIER_SCHEMA = {
             "properties": {"angle": {"type": "string"}, "moments": CITES}}},
     },
 }
+# after `story dig`: the same, plus the side stories and hints it found
+DOSSIER_DIG_SCHEMA = {
+    **DOSSIER_SCHEMA, "required": [*DOSSIER_SCHEMA["required"], "side_stories"],
+    "properties": {**DOSSIER_SCHEMA["properties"], "side_stories": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False, "required": ["what", "label", "link", "cites"],
+        "properties": {"what": {"type": "string"}, "label": {"type": "string", "enum": ["side", "hint"]},
+                       "link": {"type": "string"}, "cites": CITES}}}},
+}
 
 
 def subject(slug: str) -> str:
@@ -392,15 +400,32 @@ def triage(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict
             "linked": [it["id"] for it in ours], "picked": [it["id"] for it in keep],
             "over_limits": [it["id"] for it in left]}
     jsonstate.write(d / "triage.json", data)
-    todo = [it for it in cat.values() if not (item_dir(d, it) / "words.jsonl").exists()]
-    hours = sum((it["duration_s"] or UNKNOWN_S) for it in todo) / 3600
     print(f"triage: {len(cands)} videos found, {len(keep)} picked, {len(ours)} of our own streams linked"
           + (f", {len(left)} over the limits" if left else ""))
-    for it in ours + keep:
+    print_items(ours + keep)
+    print(to_transcribe(cfg, d))
+    return data
+
+
+def print_items(items: list[dict]) -> None:
+    for it in items:
         tag = "ours" if it.get("ours") else it["source"]
         dur = f"{it['duration_s'] / 60:.0f} min" if it["duration_s"] else "? min"
         print(f"  [{tag}] {it['date'] or 'undated'} {it['channel'] or '?'}: {it['title'][:70]} ({dur})\n"
               f"      {it.get('page') or it['url']}")
+
+
+def untranscribed(d: Path, only: set[str] | None = None) -> list[dict]:
+    """The catalog's items not transcribed yet (of `only`, when given)."""
+    return [it for it in load_catalog(d).values() if not (item_dir(d, it) / "words.jsonl").exists()
+            and (only is None or it["id"] in only)]
+
+
+def to_transcribe(cfg: dict, d: Path, only: set[str] | None = None) -> str:
+    """What ingest would transcribe and its Modal estimate, as a line."""
+    sc = cfg["story"]
+    todo = untranscribed(d, only)
+    hours = sum((it["duration_s"] or UNKNOWN_S) for it in todo) / 3600
     try:  # the GPU speeds and prices live in modal_app, which needs the modal package
         from .modal_app import GPU_PRICES
 
@@ -410,16 +435,17 @@ def triage(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict
                f" (${starts:.2f} of it container starts)")
     except ImportError:
         usd = "no estimate (modal isn't installed: uv sync --extra modal)"
-    print(f"to transcribe: {len(todo)} items, ~{hours:.1f} h on {sc['gpu']}: {usd}")
-    return data
+    return f"to transcribe: {len(todo)} items, ~{hours:.1f} h on {sc['gpu']}: {usd}"
 
 
 # ---------- 4. ingest ----------
 
-def ingest(cfg: dict, d: Path) -> None:
+def ingest(cfg: dict, d: Path, only: set[str] | None = None) -> None:
+    """Transcribes the catalog's items not done yet (only those in `only`, when given: a
+    dig's picks, not the first pass's), then indexes."""
     sc = cfg["story"]
     cat = load_catalog(d)
-    todo = [it for it in cat.values() if not (item_dir(d, it) / "words.jsonl").exists()]
+    todo = untranscribed(d, only)
     if todo:
         fh = logging.FileHandler(d / "transcribe.log", encoding="utf-8")
         fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"))
@@ -585,19 +611,33 @@ def sources(trail: dict, n: int) -> list[dict]:
 
 def unresolved(out: dict, ids: set[str], moment_ids: set[str]) -> list[str]:
     """Cites that aren't listed ids, and claims that cite nothing."""
-    bad = [c for x in out["timeline"] + out["conflicts"] for c in x["cites"] if c not in ids]
+    sides = out.get("side_stories", [])
+    bad = [c for x in out["timeline"] + out["conflicts"] + sides for c in x["cites"] if c not in ids]
     bad += [x["moment"] for x in out["who_said_what"] if x["moment"] not in moment_ids]
     bad += [c for x in out["angles"] for c in x["moments"] if c not in moment_ids]
     bad += [f"no cite: {part} {x.get('what') or x.get('angle')!r}"[:90] for part in ("timeline", "conflicts", "angles")
             for x in out[part] if not x.get("cites" if part != "angles" else "moments")]
+    bad += [f"no cite: side_stories {x['what']!r}"[:90] for x in sides if not x["cites"]]
     return sorted(set(bad))
 
 
 def dossier(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict:
+    from . import story_dig
+
     sc = cfg["story"]
     trail = jsonstate.read(d / "swarm.json", {}) or {}
     moments = (jsonstate.read(d / "moments.json", {}) or {}).get("moments", [])
     srcs = sources(trail, sc["dossier_sources"])
+    dug = story_dig.material(d)
+    if dug:  # the dig's moments (D01 ..) and the sources it kept, numbered on from the swarm's
+        moments = moments + dug["moments"]
+        for s in dug["sources"][:story_dig.settings(cfg)["dossier_sources"]]:
+            kind = "video" if s["key"].startswith(VIDEO) else "reddit" if s.get("source") == "reddit" else "web"
+            srcs.append({"key": s["key"], "kind": kind, "source": s.get("source") or "",
+                         "channel": s.get("channel") or "", "date": s.get("date") or "", "title": s.get("title") or "",
+                         "url": s.get("url") or "", "relevance": s.get("relevance") or "", "why": s.get("label_why") or "",
+                         "summary": s.get("summary") or "", "label": s.get("label") or "",
+                         "thread": s.get("link_thread") or s["thread"], "id": f"S{len(srcs) + 1:02d}"})
     old = jsonstate.read(d / "dossier.json", {}) or {}
     struck = {s["key"] for s in old.get("sources", []) if s.get("struck")}
     for s in srcs:
@@ -605,32 +645,41 @@ def dossier(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dic
     # transcribed, not only picked: a failed download stays in the catalog (--from find goes on without it)
     ingested = {it.get("key") for it in load_catalog(d).values()
                 if (item_dir(d, it) / "words.jsonl").exists()} - {"", None}
-    ms = "\n".join(f"{m['id']} | {m['role']}, {m['fit']} | {m['date'] or 'undated'} | {m['channel'] or '?'}"
+    ms = "\n".join(f"{m['id']} | {m['role']}, {m['fit']}"
+                   + (f", dig {m['label']} via {m['thread']}" if m.get("label") else "")
+                   + f" | {m['date'] or 'undated'} | {m['channel'] or '?'}"
                    f"{' (our show)' if m['ours'] else ''} | {m['title']}\n    \"{m['quote']}\"\n    {m['why']}"
                    for m in moments)
-    ss = "\n".join(f"{s['id']} | {s['kind']}{' (transcribed)' if s['key'] in ingested else ''} | "
+    ss = "\n".join(f"{s['id']} | {s['kind']}{' (transcribed)' if s['key'] in ingested else ''}"
+                   + (f", dig {s['label']} via {s['thread']}" if s.get("label") else "") + " | "
                    f"{s['date'] or 'undated'} | {s['channel'] or '?'} | {s['title']}"
-                   + (f"\n    {s['summary'][:300]}" if s["summary"] else "") + f"\n    found because: {s['why']}"
+                   + (f"\n    {s['summary'][:500]}" if s["summary"] else "") + f"\n    found because: {s['why']}"
                    for s in srcs if not s["struck"])
     user = (f"Story: {b['brief']}\n\n{context(b)}\n\n<moments>\n{ms or '(none)'}\n</moments>\n\n"
             f"<sources>\n{ss or '(none)'}\n</sources>")
     ids = {m["id"] for m in moments} | {s["id"] for s in srcs if not s["struck"]}
-    system = prompts.get("story_dossier")
-    out = ask(cfg, claude, budget, sc["dossier_model"], sc["dossier_effort"], system, user, DOSSIER_SCHEMA, 4000)
+    system, schema = prompts.get("story_dossier"), DOSSIER_SCHEMA
+    if dug:
+        system += "\n\n" + prompts.get("story_dossier_dig")
+        schema = DOSSIER_DIG_SCHEMA
+        ts = "\n".join(f"{t['id']} | {t['kind']} | {t['name']}: {t['what']} (mentioned in {', '.join(t['links']) or '-'})"
+                       for t in dug["threads"])
+        user += f"\n\n<threads>\n{ts or '(none)'}\n</threads>"
+    out = ask(cfg, claude, budget, sc["dossier_model"], sc["dossier_effort"], system, user, schema, 5000 if dug else 4000)
     if out is None:
         raise ClipperError("the dossier model declined to write one")
     if bad := unresolved(out, ids, {m["id"] for m in moments}):
         print(f"dossier: {len(bad)} cites don't resolve ({'; '.join(bad)}); asking once more")
         out = ask(cfg, claude, budget, sc["dossier_model"], sc["dossier_effort"], system,
                   user + f"\n\nYour last answer had cites that aren't listed ids, or claims citing nothing: "
-                         f"{'; '.join(bad)}. Cite only the M and S ids above, and leave out a claim nothing "
-                         "above supports.", DOSSIER_SCHEMA, 4000)
+                         f"{'; '.join(bad)}. Cite only the M, D and S ids above, and leave out a claim nothing "
+                         "above supports.", schema, 5000 if dug else 4000)
         if out is None or (bad := unresolved(out, ids, {m["id"] for m in moments})):
             raise ClipperError(f"dossier: cites still don't resolve: {'; '.join(bad) if out else 'declined'}")
     data = {"slug": b["slug"], "brief": b["brief"], "since": b["since"], "before": b["before"],
             "people": [p["name"] for p in b["people"]], "made_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "model": sc["dossier_model"], "notes": old.get("notes", ""), "dossier": out,
-            "moments": moments, "sources": srcs}
+            "moments": moments, "sources": srcs, "dug": bool(dug)}
     jsonstate.write(d / "dossier.json", data)
     (d / "dossier.md").write_text(render(data), encoding="utf-8")
     print(f"dossier: {d / 'dossier.md'}")
@@ -665,6 +714,10 @@ def render(data: dict) -> str:
                 f"{w['note']}"), f"  > {m['quote']}", f"  {m['link']}"]
     if x["conflicts"]:
         out += ["", "## Conflicts", ""] + [f"- {c['what']}{cite(c['cites'])}" for c in x["conflicts"]]
+    if "side_stories" in x:
+        out += ["", "## Side stories and hints", ""]
+        out += [f"- [{s['label']}] {s['what']} Link: {s['link']}{cite(s['cites'])}" for s in x["side_stories"]] \
+            or ["- none found"]
     out += ["", "## Coverage", "", x["coverage"]]
     if x["gaps"]:
         out += ["", "## Gaps", ""] + [f"- {g}" for g in x["gaps"]]
@@ -672,12 +725,14 @@ def render(data: dict) -> str:
     out += ["", "## Moments", ""]
     for m in data["moments"]:
         ours = ", our show" if m["ours"] else ""
-        out += [(f"- {m['id']} [{m['role']}, {m['fit']}{ours}] {m['date'] or 'undated'}, {m['channel']}, "
+        dig = f", dig {m['label']} via {m['thread']}" if m.get("label") else ""
+        out += [(f"- {m['id']} [{m['role']}, {m['fit']}{ours}{dig}] {m['date'] or 'undated'}, {m['channel']}, "
                 f"\"{m['title']}\" at {clock(m['t'])}"), f"  > {m['quote']}", f"  {m['link']}", f"  {m['why']}"]
     out += ["", "## Sources", ""]
     for s in data["sources"]:
         mark = " (struck)" if s["struck"] else ""
-        out += [(f"- {s['id']}{mark} [{s['kind']}, {s['relevance']}] {s['date'] or 'undated'}, "
+        dig = f", dig {s['label']} via {s['thread']}" if s.get("label") else ""
+        out += [(f"- {s['id']}{mark} [{s['kind']}, {s['relevance']}{dig}] {s['date'] or 'undated'}, "
                 f"{s['channel'] or s['source']}: {s['title']}"), f"  {s['url']}"]
     return "\n".join(out) + "\n"
 
@@ -685,12 +740,12 @@ def render(data: dict) -> str:
 # ---------- running ----------
 
 def ask(cfg: dict, claude, budget: Budget, model: str, effort: str, system: str, user: str, schema: dict,
-        out_tokens: int) -> dict | None:
+        out_tokens: int, section: str = "story") -> dict | None:
     est = estimate(cfg, model, (len(system) + len(user)) / 4, out_tokens)
     try:
         budget.reserve(est)
     except OverBudget as e:
-        raise ClipperError(f"[story] {e}: raise budget_usd to go on") from None
+        raise ClipperError(f"[{section}] {e}: raise budget_usd to go on") from None
     try:
         out, _ = claude.json_call(model, system, user, schema, effort)
     finally:

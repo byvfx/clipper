@@ -44,6 +44,8 @@ VERSIONS: dict[str, tuple[str, str]] = {
     "swarm_plan": ("swarm", "prompt_version"), "swarm_worker": ("swarm", "prompt_version"),
     "story_triage": ("story", "prompt_version"), "story_expand": ("story", "prompt_version"),
     "story_moments": ("story", "prompt_version"), "story_dossier": ("story", "prompt_version"),
+    "story_dig_threads": ("story", "prompt_version"), "story_dig_judge": ("story", "prompt_version"),
+    "story_dig_moments": ("story", "prompt_version"), "story_dossier_dig": ("story", "prompt_version"),
     "story_edit": ("story", "edit_prompt_version"),
 }
 # <kind>_<mode>_<version>.md: rule files spliced into the scoring prompts, at [scoring] prompt_version.

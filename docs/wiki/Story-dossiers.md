@@ -3,6 +3,9 @@ clipper story new "Jer banned from Kick after the FDA call" --days 7 --dry-run  
 clipper story run jer-banned-kick-fda-call     # transcribe, find the moments, write the dossier
 clipper story show jer-banned-kick-fda-call    # dossier.md again (keeps hand edits)
 clipper story add <slug> <video url>...        # then: clipper story run <slug> --from triage
+clipper story dig <slug> --dry-run             # deeper: threads, searches, labels, the Modal estimate
+clipper story dig <slug> [--rounds 2] [--thread "words"]   # side stories and hints, then the dossier again
+clipper story dig <slug> --list                # everything the dig found, noise too (no model call)
 clipper story status | trail <slug>
 clipper --show kino story plan <slug>          # the edit: streams/story-<slug>/story.json (~$0.03)
 clipper story cut <slug>                       # render it, meta, thumbs, the Kitsu card
@@ -42,6 +45,50 @@ cut again (unchanged parts aren't re-rendered). Approved, it goes out as soon as
 watching it yourself. It skips sending the story to review; it doesn't block uploads. A story
 that was never sent to review has no card to approve, so it never uploads, but re-cutting one that
 was already approved replaces the video that approval covers, and the hourly uploads can pick it up.
+
+## Digging deeper
+
+The first pass finds what the brief's own words find. `clipper story dig <slug>` follows what
+those moments mention and don't explain, the way a researcher snowballs, looking for side
+stories (a related fight, deal or ban with some of the same people) and hints (a vague "you
+know what happened", a thread asking what's going on). Each round:
+
+1. **Threads** (`[story.dig] model`, Sonnet) reads the moments and dossier gaps it hasn't read
+   yet (M.., D.., G..) and names up to `max_threads` threads: a person, an event, a claim, or an
+   allusion, each linking the moments that mention it. A thread linking nothing is rejected; one
+   more than `max_depth` steps from the first pass's moments is "too deep", so the dig can't
+   drift into unrelated news.
+2. **Search**: a small swarm per thread (`[story.dig] swarm`): YouTube, Kick, Odysee, the web and
+   Reddit, back to `lookback_days` before the story's window.
+3. **Judge** (`[story] find_model`, Haiku) labels every result core, side, hint or noise, with the
+   thread it connects to and why; code scores it. The best videos, up to `max_videos` /
+   `max_hours` a round, are transcribed (Modal). A video that won't download is marked failed and
+   the dig goes on.
+4. **Find** (Haiku) searches the transcripts, old and new, for the threads and picks moments
+   (D01 ..) with a label and a thread; a quote not in the transcript word for word is dropped.
+
+It stops after `--rounds` (default 2), when nothing new is left to follow, or at
+`[story.dig] budget_usd` (the swarms count). Then the dossier is written again with a **Side
+stories and hints** section, the D moments and the dig's sources citable everywhere; the dossier
+from before the first dig stays as `dossier.before_dig.md` for comparison. `--dry-run` stops
+before the first transcription and prints what it would transcribe and the estimate; the next
+`story dig` goes on from there. Models are about $0.30 a round at most and Modal about $0.35
+(mostly container starts).
+
+Nothing is thrown away. `dig.json` keeps every thread (rejected and too deep too), every
+candidate with its label, score and why (noise too), every moment, every transcript window read
+and every quote that didn't check out; `story dig <slug> --list` prints it. Flag what the dig
+got wrong there, between runs: `"flag": "follow"` on a thread searches it next round (even a
+too deep one), on a candidate transcribes it whatever its label; `"flag": "drop"` never. `--thread
+"words"` adds a thread by hand. `graph.json` is the same as nodes and edges (the brief, threads,
+moments and sources, and how each links), for a graph view. The edit (`story plan`) still uses
+the first pass's moments only. A `story run --from find` renumbers the M moments, so threads'
+links to them go stale: dig after it, not before.
+
+Reddit is read through search results: with the Brave key each thread comes with Brave's
+extra snippets (a few lines of its comments, its votes and comment count), which the swarm, the
+judge and the dossier all see. The threads themselves aren't fetched: Reddit turns unsigned
+clients away, and its Data API needs Reddit's approval.
 
 ## Narration
 

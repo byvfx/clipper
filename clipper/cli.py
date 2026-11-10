@@ -745,6 +745,15 @@ def cmd_story(cfg: dict, args: argparse.Namespace) -> None:
         from . import story_edit
 
         story_edit.cut(cfg, args.slug, args.force, review=not args.no_review)
+    elif a == "dig":
+        from . import story_dig
+
+        if args.list:
+            story_dig.show(cfg, args.slug)
+            return
+        over = {k: v for k, v in (("max_videos", args.max_videos), ("max_hours", args.max_hours)) if v is not None}
+        cfg = {**cfg, "story": {**cfg["story"], "dig": {**(cfg["story"].get("dig") or {}), **over}}}
+        story_dig.run(cfg, args.slug, args.rounds, args.thread, args.dry_run)
     else:
         story.show(cfg, args.slug)
 
@@ -1488,6 +1497,17 @@ def add_extras(sub) -> None:
     add_slug(r)
     r = rsub.add_parser("show", help="the dossier, re-rendered from dossier.json (keeps hand edits; no model call)")
     add_slug(r)
+    r = rsub.add_parser("dig", help="dig deeper: follow what the moments mention, round by round, for side "
+                                    "stories and hints; then the dossier again")
+    add_slug(r)
+    r.add_argument("--rounds", type=int, help="rounds this time (default [story.dig] rounds)")
+    r.add_argument("--thread", action="append", default=[], help="a thread to follow, by hand (repeatable)")
+    r.add_argument("--max-videos", type=int, help="videos transcribed a round (default [story.dig] max_videos)")
+    r.add_argument("--max-hours", type=float, help="hours of audio a round (default [story.dig] max_hours)")
+    r.add_argument("--dry-run", action="store_true", help="stop before the first transcription: threads, "
+                   "searches and labels, and the Modal estimate (models ~$0.10-0.30)")
+    r.add_argument("--list", action="store_true", help="dig.json, readable: threads, candidates by label, "
+                   "moments (no model call)")
     r = rsub.add_parser("plan", help="the edit from the moments -> streams/story-<slug>/story.json (~$0.03; "
                                      "clipper --show <key> story plan ... picks the show)")
     add_slug(r)

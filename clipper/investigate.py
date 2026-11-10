@@ -123,6 +123,7 @@ CONFIRM_SCHEMA = {
                    "used": {"type": "array", "items": {"type": "integer"}}},
 }
 CONFIDENCE = {"high": 0, "medium": 1, "low": 2}
+SNIPPET_CHARS = 900     # a web result's description and extra snippets, kept
 MAX_THREAD_FACTS = 60   # facts one candidate shows the leads model (evenly spread over time)
 COMMON_SHARE = 0.25     # a name in more of the videos than this is the background, not a thread
 BASELINE_WEEKS = 26
@@ -972,9 +973,24 @@ def youtube_search(query: str, n: int) -> list[dict]:
              "views": e.get("view_count")} for e in json.loads(r.stdout).get("entries") or []]
 
 
+def snippet_text(x: dict) -> str:
+    """A Brave result's description and its extra snippets (for a Reddit thread, mostly bits of
+    the comments, and its votes and comment count) as one plain text, each part once."""
+    import html
+
+    parts = [x.get("description") or "", *(x.get("extra_snippets") or [])]
+    seen, out = set(), []
+    for p in parts:
+        p = " ".join(html.unescape(re.sub(r"<[^>]+>", "", p)).split())
+        if p and p.lower() not in seen and not any(p.lower() in s for s in seen):
+            seen.add(p.lower())
+            out.append(p)
+    return " … ".join(out)[:SNIPPET_CHARS]
+
+
 def brave_search(cfg: dict, query: str, n: int, source: str) -> list[dict]:
     """Brave web search ($BRAVE_API_KEY or [paths] brave_key, as `clipper cast` uses):
-    titles, sites and ages of the pages."""
+    titles, sites and ages of the pages, and what Brave quotes from them (extra_snippets)."""
     import requests
 
     from .cast import search_key
@@ -983,13 +999,13 @@ def brave_search(cfg: dict, query: str, n: int, source: str) -> list[dict]:
     if not key:
         raise RuntimeError("no $BRAVE_API_KEY or [paths] brave_key")
     r = requests.get("https://api.search.brave.com/res/v1/web/search", timeout=20,
-                     params={"q": query, "count": n},
+                     params={"q": query, "count": n, "extra_snippets": "true"},
                      headers={"Accept": "application/json", "X-Subscription-Token": key})
     r.raise_for_status()
     return [{"source": source, "title": x.get("title") or "", "url": x.get("url") or "",
              "channel": (x.get("profile") or {}).get("name") or (x.get("meta_url") or {}).get("hostname") or "",
              "date": x.get("page_age", "")[:10] or x.get("age") or "",
-             "summary": re.sub(r"<[^>]+>", "", x.get("description") or "")[:300]}
+             "summary": snippet_text(x)}
             for x in (r.json().get("web") or {}).get("results", [])]
 
 
