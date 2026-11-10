@@ -156,6 +156,12 @@ def context(cfg: dict, sdir: Path, key: str, st: dict, row: dict) -> str:
                              f"{s['start_s']:.1f}-{s['end_s']:.1f} s {s['title']!r}" for s in segs))
         else:
             lines.append(f"Current cut: {a:.1f} to {b:.1f} s ({b - a:.0f} s long)")
+        pauses = (jsonstate.read(sdir / "shorts.json", {}).get(short_key(st), {}).get("pauses_cut")
+                  if st["kind"] == "short" else None)
+        if pauses:  # [edit] tighten: the video runs shorter than its stream times say
+            lines.append(f"Pauses cut out of this Short ({sum(y - x for x, y in pauses):.1f} s in all, "
+                         "so a time into the video is that much earlier than in the stream after "
+                         "each one): " + ", ".join(f"{x:.1f}-{y:.1f} s" for x, y in pauses))
         pad = cfg["retake"]["context_s"]
         if st["kind"] in ("segment", "compilation") and b - a > 4 * pad:
             parts = [(max(0, a - pad), a + pad, "around the start"),

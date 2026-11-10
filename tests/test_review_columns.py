@@ -50,3 +50,12 @@ def test_columns_to_fill_keeps_edits():
     # A reviewer's thumbnail text stays.
     assert "f_thumb" not in review.columns_to_fill(values, before, current, "f_thumb", "CLIPPER'S")
     assert review.columns_to_fill(values, before, dict(values), "f_thumb", "OLD WORDS") == {}
+
+
+def test_an_empty_proposal_clears_only_its_own_value():
+    # Tightened: nothing cut, column empty: nothing to write (not a "" every publish)...
+    assert review.columns_to_fill({"f_t": ""}, {}, {}, None, None) == {}
+    assert review.columns_to_fill({"f_t": ""}, {"f_t": ""}, {"f_t": ""}, None, None) == {}
+    # ...but the pauses put back clear what clipper wrote there.
+    assert review.columns_to_fill({"f_t": ""}, {"f_t": "4 pauses, 3.2 s"}, {"f_t": "4 pauses, 3.2 s"},
+                                  None, None) == {"f_t": ""}

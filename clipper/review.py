@@ -50,7 +50,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from . import jsonstate
+from . import jsonstate, tighten
 from .config import for_stream
 from .errors import ClipperError
 from .segments import slug
@@ -100,6 +100,8 @@ COLUMNS = [
     # Shorts: seconds of voices that aren't the show's own people (speaker tags); over
     # [scoring] max_source_audio_s the Short is proposed held ([shorts] hold_source_audio).
     ("Shot", "Other voices", "number", None),
+    # Shorts: the pauses [edit] tighten cut out ("4 pauses, 3.2 s"); empty when none were.
+    ("Shot", "Tightened", "string", None),
     # Scheduling (clipper schedule): Publish at and Hold are yours to set; Scheduled is
     # written by clipper with the slot it assigned.
     ("Sequence", "Publish at", "string", None),
@@ -265,6 +267,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "duration_s": d["duration_s"],
                         "fields": {"Hook": d.get("hook"), "Category": d.get("category"),
                                    "Score": d.get("score_a"), "Layout": d["layout"],
+                                   "Tightened": tighten.label(d.get("tightened", {}).get("pauses", [])),
                                    "Found by": found_by(d["id"]), **source_hold(d, cfg)},
                         "meta": d})
     if "compilations" in include:
@@ -588,8 +591,10 @@ def columns_to_fill(values: dict, before: dict, current: dict, tf: str | None,
     what we last proposed (before) when the proposal changed; a value edited in Kitsu or
     Discord is never overwritten. Thumbnail text (field tf) also follows a re-picked
     thumbnail while the column still shows what clipper last wrote there (last_thumb)."""
-    missing = {k: v for k, v in values.items()
-               if current.get(k) in (None, "") or current.get(k) == before.get(k) != v}
+    empty = (None, "")
+    missing = {k: v for k, v in values.items()  # an empty value onto an empty column is no change
+               if (current.get(k) in empty and v not in empty)
+               or (k in before and current.get(k) == before[k] != v)}
     if tf in values and current.get(tf) == last_thumb != values[tf]:
         missing[tf] = values[tf]
     return missing

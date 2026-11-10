@@ -53,6 +53,8 @@ def short_covers(stream_dir: Path, state: dict, tc_enq: dict, date: str, own_ban
     out = []
     for skey, s in jsonstate.load(shorts_path).items():
         cid = skey.split("_", 1)[1] if "_" in skey else skey  # v01_t20 -> t20
+        if not s.get("file"):  # an override (retake window, --no-tighten) on a Short not rendered yet
+            continue
         video = stream_dir / s["file"]
         if (clip_ids is not None and cid not in clip_ids) or (short_keys is not None and skey not in short_keys):
             continue
