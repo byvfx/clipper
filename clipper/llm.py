@@ -311,10 +311,15 @@ class LLM:
         return json.loads(text), meta
 
     def text_call(self, model: str, system: str, user: str | list[dict], effort: str,
-                  max_tokens: int = 4000) -> tuple[str, dict]:
-        """Plain text answer; "" on refusal."""
+                  max_tokens: int = 4000, thinking_tokens: int | None = None,
+                  timeout_s: float | None = None) -> tuple[str, dict]:
+        """Plain text answer; "" on refusal. For a long call on another provider (clipper
+        codereview): thinking_tokens in place of [llm] thinking_max_tokens, and timeout_s in
+        place of [llm] timeout_s, after which the call fails rather than being sent again
+        (each try of a long thinking call is paid for)."""
         if split(model)[0] != "anthropic":
-            data, meta = self._compat(model, self._messages(system, user), effort, max_tokens)
+            data, meta = self._compat(model, self._messages(system, user), effort, max_tokens,
+                                      thinking_tokens=thinking_tokens, timeout_s=timeout_s)
             if meta.get("refusal") is not None:
                 return "", meta
             return (data["choices"][0]["message"].get("content") or "").strip(), meta
@@ -416,10 +421,12 @@ class LLM:
         return {"type": "json_object"}
 
     def _compat(self, model: str, messages: list[dict], effort: str, max_tokens: int,  # noqa: C901
-                response_format: dict | None = None, length_ok: bool = False) -> tuple[dict, dict]:
+                response_format: dict | None = None, length_ok: bool = False,
+                thinking_tokens: int | None = None, timeout_s: float | None = None) -> tuple[dict, dict]:
         """One chat/completions request with retries. Returns (response JSON, meta); meta has
         "refusal" when the model refused. length_ok: running out of max_tokens isn't an error
-        (the preflight, where a reasoning model can spend them all thinking)."""
+        (the preflight, where a reasoning model can spend them all thinking). thinking_tokens,
+        timeout_s: this call's own (text_call); a timeout_s given is never retried."""
         import requests
 
         prov, name = split(model)
@@ -437,7 +444,8 @@ class LLM:
             # Thinking is output: room for it and the answer, within what the model can write
             # (published for OpenRouter; elsewhere a 400 about it falls back to what was asked).
             cap = max_output(model)
-            max_tokens = max(asked, min(self.lc["thinking_max_tokens"], cap or self.lc["thinking_max_tokens"]))
+            room = thinking_tokens or self.lc["thinking_max_tokens"]
+            max_tokens = max(asked, min(room, cap or room))
         limit = "max_completion_tokens" if prov == "openai" else "max_tokens"
         body: dict[str, Any] = {"model": name, "messages": messages, limit: max_tokens}
         if response_format:
@@ -455,9 +463,9 @@ class LLM:
         for attempt in range(6):
             try:
                 r = requests.post(f"{base}/chat/completions", json=body, headers=headers,
-                                  timeout=self.lc["timeout_s"])
+                                  timeout=timeout_s or self.lc["timeout_s"])
             except requests.RequestException as e:
-                if attempt == 5:
+                if attempt == 5 or (timeout_s and isinstance(e, requests.Timeout)):
                     raise RuntimeError(f"{model}: {type(e).__name__}: {e}") from None
                 time.sleep(2 ** attempt)
                 continue

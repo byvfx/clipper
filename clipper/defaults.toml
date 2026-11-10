@@ -1034,4 +1034,5 @@ max_chars = 600000             # diff plus whole files sent; files past it go as
 max_tokens = 8000              # the review's own length (thinking comes on top)
 thinking_tokens = 200000       # room to think before it ([llm] thinking_max_tokens is for stages;
                                # V4 Pro used all 64k of that at medium and wrote nothing)
-timeout_s = 1800               # one request may think this long ([llm] timeout_s is 600)
+timeout_s = 1800               # one request may think this long ([llm] timeout_s is 600); a
+                               # timeout fails the review rather than paying for a second try
