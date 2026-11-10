@@ -68,7 +68,8 @@ Tests are offline and take about 25 s; new pure logic gets a test. CI runs both 
 push, on Linux and Windows (`.github/workflows/check.yml`), except a push or PR that changes only
 notes no test reads: the root `*.md` files, `LICENSE`, `docs/log/`, `docs/archive/`, `reports/` and
 `studio/`. Such a PR shows no checks at all; that is expected, not a stuck run. A change under
-`docs/wiki/` still runs them, since a test checks the links and the sidebar. The ruff rules are the defaults plus
+`docs/wiki/` still runs them, since a test checks the links and the sidebar, and so does one to
+`studio/research_notes/streamers.json`, which a test reads. The ruff rules are the defaults plus
 the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on a short test stream
 first. Before merging a PR that changes code, wait for the review below and handle each finding
 (Copilot's automatic review is paused since 2026-11-10).

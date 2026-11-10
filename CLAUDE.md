@@ -134,7 +134,8 @@ Windows notes above don't apply.
   `required-version`; bump the pin there and in the dev group together. Tests are offline and
   take about 25 s; new pure logic gets a test in `tests/`. CI runs both on every push, on Linux
   and Windows (`.github/workflows/check.yml`), except one that changes only notes no test reads
-  (root `*.md`, `docs/log/`, `docs/archive/`, `reports/`, `studio/`): that PR shows no checks.
+  (root `*.md`, `docs/log/`, `docs/archive/`, `reports/`, `studio/` but for its `streamers.json`):
+  that PR shows no checks.
   Merging a PR: wait for Grok's review (the `review` workflow's `clipper codereview` comment, up to
   ~25 min on a big PR), check each finding against the code, handle it and show the user, then
   merge. Green CI alone isn't enough. Copilot's review is paused since 2026-11-10 (the user's
