@@ -1075,7 +1075,8 @@ def add_pipeline(sub) -> None:
                    help="print each Short's scene layouts (labels frames again), render nothing")
     t = p.add_mutually_exclusive_group()
     t.add_argument("--no-tighten", dest="tighten", action="store_false", default=None,
-                   help="keep these Shorts' pauses from now on ([edit] tighten) and re-render them")
+                   help="keep these Shorts' pauses from now on, re-rendering any that were tightened "
+                        "([edit] tighten)")
     t.add_argument("--tighten", dest="tighten", action="store_true", default=None,
                    help="undo --no-tighten for these Shorts")
     p.add_argument("--save-example", metavar="LAYOUT",

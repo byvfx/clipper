@@ -11,7 +11,8 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 - 11-09: `[edit] tighten` (#70, the first piece of the edits roadmap #66; off by default): `clipper
   shorts` cuts pauses over `max_gap_s` down to `keep_gap_s` (`keep_turn_s` at a change of voice),
   only where the audio is quiet too, never under `[shorts] min_s`; captions and scene changes move
-  with the cuts (`clipper/tighten.py`). Kitsu column "Tightened", `pauses_cut` in shorts.json for
+  with the cuts, which sit on whole frames so the picture and sound stay together
+  (`clipper/tighten.py`). Kitsu column "Tightened", `pauses_cut` in shorts.json for
   retakes, `clipper shorts --no-tighten/--tighten` per Short. Kitsu columns no longer get an empty
   value written onto an empty column on every publish.
 - 11-08: the prompt files ship inside the package: `prompts/` moved to `clipper/prompts/`, beside the

@@ -27,18 +27,20 @@ def quiet_spans(video: Path, ec: dict) -> list[tuple[float, float]]:
     min_cut_s, in seconds from its start. A silence still going at the end runs to inf."""
     log = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-vn", "-af",
                           f"silencedetect=noise={ec['silence_db']}dB:d={ec['min_cut_s']}",
-                          "-f", "null", "-"], check=True, capture_output=True, text=True).stderr
+                          "-f", "null", "-"], check=True, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace").stderr
     starts = [max(0.0, float(m)) for m in re.findall(r"silence_start: (-?[\d.]+)", log)]
     ends = [float(m) for m in re.findall(r"silence_end: ([\d.]+)", log)]
     return list(zip(starts, ends + [math.inf] * (len(starts) - len(ends))))
 
 
 def cuts(words: list[dict], a: float, b: float, quiet: list[tuple[float, float]], ec: dict,
-         bleep_pad: float = 0.0, max_removed: float = math.inf) -> list[dict]:
+         bleep_pad: float = 0.0, max_removed: float = math.inf, fps: float = 30) -> list[dict]:
     """The pauses to cut from the Short a..b (stream seconds): {"from", "to"} in seconds
     into the Short, with the words either side ("before", "after") for the review card.
     quiet: the cut's silences (quiet_spans). max_removed: the most all cuts together may
-    take out; the longest pauses go first."""
+    take out; the longest pauses go first. Each cut is moved in onto whole frames of fps,
+    so the picture and the sound lose exactly the same time (Timeline.select)."""
     ws = [w for w in words if w["start"] >= a and w["end"] <= b]
     found = []
     for w1, w2 in pairwise(ws):
@@ -49,8 +51,9 @@ def cuts(words: list[dict], a: float, b: float, quiet: list[tuple[float, float]]
         edge = max(keep / 2, bleep_pad + 0.02)  # never into a word, nor its bleep's padding
         lo, hi = w1["end"] - a + edge, w2["start"] - a - edge
         for qa, qb in quiet:
-            x, y = max(lo, qa), min(hi, qb)
-            if y - x >= ec["min_cut_s"]:
+            x = math.ceil(max(lo, qa) * fps - 1e-6) / fps
+            y = math.floor(min(hi, qb) * fps + 1e-6) / fps
+            if y - x >= ec["min_cut_s"] - 1e-9:
                 found.append({"from": round(x, 3), "to": round(y, 3),
                               "before": w1["word"], "after": w2["word"]})
     chosen, total = [], 0.0
@@ -90,9 +93,13 @@ class Timeline:
         edges = [0.0, *(v for c in self.cuts for v in c), self.dur]
         return list(zip(edges[::2], edges[1::2]))
 
-    def select(self) -> str:
-        """The kept stretches as an ffmpeg select/aselect expression."""
-        return "+".join(f"between(t,{x:.3f},{y:.3f})" for x, y in self.keeps())
+    def select(self, fps: float = 30) -> str:
+        """The kept stretches as an ffmpeg select/aselect expression, by whole frames of fps:
+        a frame (or an audio frame of the same length) is kept when it starts in a stretch.
+        The edges sit half a frame early so a frame starting right on one is never in doubt."""
+        def edge(t):
+            return (round(t * fps) - 0.5) / fps
+        return "+".join(f"gte(t,{edge(x):.4f})*lt(t,{edge(y):.4f})" for x, y in self.keeps())
 
     def scenes(self, scenes: list[list]) -> list[list]:
         """[start, end, layout] scenes of the cut, moved onto the Short. A scene that was all

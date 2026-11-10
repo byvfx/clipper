@@ -572,7 +572,9 @@ def render(src_cut: Path, dst: Path, parts: list[tuple], ass: Path | None, dur: 
     W = sc["width"]
     loud = measure_loudness(src_cut, sc)
     k = len(parts)
-    pick = f",select='{keep}',setpts=N/{sc['fps']}/TB" if keep else ""
+    # After fps the time base is one frame, so N lines the kept frames up exactly; STARTPTS
+    # keeps the cut's first frame where it was against the sound (often a frame in).
+    pick = f",select='{keep}',setpts=STARTPTS+N" if keep else ""
     graph = [f"[0:v]fps={sc['fps']}{pick}" + (f",split={k}" + "".join(f"[v{j}]" for j in range(k))
                                                if k > 1 else "[v0]")]
     outs = []
@@ -591,8 +593,11 @@ def render(src_cut: Path, dst: Path, parts: list[tuple], ass: Path | None, dur: 
         tail += ",format=nv12"
     graph.append(tail + "[vout]")
     fo = min(sc["fade_out_s"], dur / 4)
+    # The sound in frames one video frame long, so aselect keeps the same stretches select does.
+    per_frame = round(48000 / sc["fps"])
     graph.append(
-        "[0:a]" + (f"aselect='{keep}',asetpts=N/SR/TB," if keep else "")
+        "[0:a]" + (f"aresample=48000,asetnsamples=n={per_frame}:p=0,aselect='{keep}',asetpts=STARTPTS+N/SR/TB,"
+                   if keep else "")
         + f"loudnorm=I={sc['lufs']}:TP={sc['true_peak']}:LRA={sc['lra']}"
         f":measured_I={loud['input_i']}:measured_TP={loud['input_tp']}"
         f":measured_LRA={loud['input_lra']}:measured_thresh={loud['input_thresh']}"
@@ -621,7 +626,7 @@ def cut_and_render(stream_dir: Path, cfg: dict, src: Path, words: list[dict], bl
     panels framed on the face: faces, per scene, from scene_faces), burn in the captions
     and render dst. bleepers: (audio, captions). tight: cut the dead air out ([edit]
     tighten). Returns (bleeps, captions, loudness, the pauses cut, the Short's length)."""
-    sc, ec = cfg["shorts"], cfg["edit"]
+    sc, edit = cfg["shorts"], cfg["edit"]
     audio_bleeper, bleeper = bleepers
     dur = round(b - a, 3)
     work.mkdir(parents=True, exist_ok=True)
@@ -629,9 +634,9 @@ def cut_and_render(stream_dir: Path, cfg: dict, src: Path, words: list[dict], bl
     n_bleeps = ffmpeg_cut(src, cut, a, b, sc["cut_codec"] or cfg["cut"]["clip_codec"], sc["cut_crf"],
                           keyframe=keyframe_before(stream_dir, src, a),
                           bleep=(audio_bleeper, words))
-    pauses = tighten.cuts(words, a, b, tighten.quiet_spans(cut, ec), ec,
+    pauses = tighten.cuts(words, a, b, tighten.quiet_spans(cut, edit), edit,
                           audio_bleeper.pad if audio_bleeper.on else 0.0,
-                          max(0.0, dur - sc["min_s"])) if tight else []
+                          max(0.0, dur - sc["min_s"]), sc["fps"]) if tight else []
     tl = tighten.Timeline(pauses, dur)
     if pauses:  # the scenes and captions move onto the tightened clock; a scene that was all pause goes
         faces = faces or [{}] * len(scenes)
@@ -644,7 +649,7 @@ def cut_and_render(stream_dir: Path, cfg: dict, src: Path, words: list[dict], bl
     ass = work / f"{key}.ass" if sc["captions"] else None
     n_caps = write_ass(words, a, tl.length, sc, [(s, e, layouts[n]) for s, e, n in scenes],
                        bleeper, ass) if ass else 0
-    loud = render(cut, dst, parts, ass, tl.length, sc, codec, tl.select() if pauses else "")
+    loud = render(cut, dst, parts, ass, tl.length, sc, codec, tl.select(sc["fps"]) if pauses else "")
     if not sc["keep_work"]:
         cut.unlink(missing_ok=True)
         if ass:
@@ -762,7 +767,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
             continue
         a, b = short_window(c, sc, words, segs, end_of_stream)
         dst = out_dir / f"{key}_{slug(p['title'])}.mp4"
-        if tight is not None:  # --no-tighten keeps this Short's pauses; --tighten lifts that
+        if tight is not None and not check:  # --no-tighten keeps this Short's pauses; --tighten lifts that
             with jsonstate.update(state_path, {}) as state:
                 entry = state.setdefault(key, {})
                 if tight:
@@ -791,16 +796,20 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
             continue
         t = time.time()
         in_scenes = scene_faces(layouts, scenes, faces, a)
-        tight = cfg["edit"]["tighten"] and prev.get("tighten") is not False  # --no-tighten
+        cut_tight = cfg["edit"]["tighten"] and prev.get("tighten") is not False  # --no-tighten
         sig = short_signature(sc, codec, a, b, scenes, layouts, in_scenes,
-                              {k: cfg["edit"][k] for k in tighten.KEYS} if tight else None)
+                              {**{k: cfg["edit"][k] for k in tighten.KEYS}, "min_s": sc["min_s"],
+                               "fps": sc["fps"], "bleep_pad": audio_bleeper.pad if audio_bleeper.on else 0.0}
+                              if cut_tight else None)
         if not force and dst.exists() and prev.get("sig") == sig:
             continue
         if dur < sc["min_s"]:  # grow_window found no whole lines to add (#77 L16)
             print(f"  {key}: {dur:.1f} s is under [shorts] min_s ({sc['min_s']} s)", flush=True)
         n_bleeps, n_caps, loud, pauses, length = cut_and_render(
             stream_dir, cfg, src, words, (audio_bleeper, bleeper), layouts, scenes,
-            a, b, work, key, dst, codec, in_scenes, tight)
+            a, b, work, key, dst, codec, in_scenes, cut_tight)
+        if pauses:  # the review card's scene times as the tightened Short plays them
+            label = scenes_label([s for s in tighten.Timeline(pauses, dur).scenes(scenes) if s[1] > s[0]])
         clips = sorted((stream_dir / "clips").glob(f"{i:02d}_{p['id']}_*.mp4"))
         clip_video = clips[0] if clips else dst
         multi = {"scenes": scenes} if len(scenes) > 1 else {}
