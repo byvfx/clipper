@@ -31,10 +31,13 @@ DIGEST = "<!-- diff={} -->"  # the code diff a review covered (a failed one has 
 LAST = "<details><summary>The last review, still standing</summary>"
 BODY_MAX = 65000  # GitHub refuses a comment over 65536 characters
 BOT = "github-actions[bot]"  # who GITHUB_TOKEN posts as (it can't read /user)
-# #12, owner/name#12 (kept only when it is this repo), or a link to an issue here.
+# #12, owner/name#12 (kept only when it is this repo), or a link to an issue or PR here.
 REF = re.compile(r"(?<![\w/])(?:([\w.-]+/[\w.-]+))?#(\d+)\b")
-URL = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/issues/(\d+)")
+URL = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/(?:issues|pull)/(\d+)")
+MDLINK = re.compile(r"\[([^\]\n]*)\]\(([^)\s]+)(?:\s+(?:\"([^\"\n]*)\"|'([^'\n]*)'))?\)")  # [label](target "title")
+ROOTED = re.compile(r"^/(?=[\w.-]+/[\w.-]+/(?:issues|pull)/\d)")  # /owner/name/issues/N, within GitHub
 NOTHING = "No correctness bugs found."
+FINDING = re.compile(r"^### \d+\.\s+\S.*\n+\s*\S", re.MULTILINE)  # a numbered finding with text under it
 
 
 # ---------- what goes to the model ----------
@@ -109,15 +112,25 @@ def gather(cfg: dict, base: str, head: str, root: Path) -> dict:
     user, left_out = message(diff, files, rc["max_chars"], unreadable)
     return {"user": user, "names": names, "left_out": left_out,
             "sha": git(root, "rev-parse", "--verify", f"{head}^{{commit}}").strip(),
-            "digest": digest(git(root, "diff", "--no-color", "--unified=0", span, "--", *rc["paths"]))}
+            "digest": digest(git(root, "diff", "--no-color", "--unified=0", "--full-index", span, "--",
+                                 *rc["paths"]))}
 
 
 def digest(diff: str) -> str:
-    """The fingerprint of a PR's own changes: its added and removed lines (and file names), with
-    no context, hunk positions or blob ids. Merging main into the branch moves those but not
-    these, so a catch-up merge isn't reviewed (and paid for) again."""
-    own = "\n".join(line for line in diff.splitlines() if line[:1] in "+-")
-    return hashlib.sha256(own.encode("utf-8")).hexdigest()[:16]
+    """The fingerprint of a PR's own changes: its added and removed lines, the files and their
+    modes, with no context, hunk positions or a text file's blob ids. Merging main into the
+    branch moves those but not these, so a catch-up merge isn't reviewed (and paid for) again.
+    A binary file has no lines, so its new blob id (--full-index) stands in for them."""
+    own, blob = [], ""
+    for line in diff.splitlines():
+        if line.startswith("index "):
+            blob = line.split()[1].split("..")[-1]
+        elif line.startswith("Binary files "):
+            own.append(f"{line} {blob}")
+        elif line[:1] in "+-" or line.startswith(("diff --git ", "old mode ", "new mode ",
+                                                   "new file mode ", "deleted file mode ")):
+            own.append(line)
+    return hashlib.sha256("\n".join(own).encode("utf-8")).hexdigest()[:16]
 
 
 def call(cfg: dict, g: dict, dry_run: bool = False) -> tuple[str, dict]:
@@ -142,7 +155,27 @@ def call(cfg: dict, g: dict, dry_run: bool = False) -> tuple[str, dict]:
         raise ClipperError(f"codereview: {e}") from None
     if not text:
         raise ClipperError(f"{model} gave no review (an empty answer or a refusal)")
+    if not is_review(text):  # a plan ("I'll trace…") with nothing after it, as Grok once did
+        raise ClipperError(f"{model} gave no review, only: {' '.join(text.split())[:150]}")
     return text, {**info, "cost": client.cost}
+
+
+def is_review(text: str) -> bool:
+    """The prompt's answer: NOTHING on a line of its own, or numbered findings under "### "
+    headings with text under them. A plan that only quotes either is not a review."""
+    lines = {line.strip().strip("*_").strip().rstrip(".") for line in text.splitlines()}
+    return NOTHING.rstrip(".") in lines or bool(FINDING.search(text))
+
+
+def _unlink(m: re.Match, repo: str) -> str:
+    """[label](target) as plain text for linked. The label goes when the target says which
+    issue it is (an issue or PR link) or is in another repo; a link elsewhere in this repo, or
+    off GitHub, keeps it (a #N there means this repo). A title is kept either way."""
+    target = ROOTED.sub("github.com/", m[2])
+    title = m[3] or m[4] or ""
+    on = re.search(r"github\.com/([\w.-]+/[\w.-]+)(/(?:issues|pull)/\d)?", target)
+    drop = on and (on[2] or on[1].lower() != repo.lower())
+    return f" {target} {title} " if drop else f" {m[1]} {target} {title} "
 
 
 def review(cfg: dict, base: str = "origin/main", head: str = "HEAD", root: Path = Path("."),
@@ -156,6 +189,7 @@ def review(cfg: dict, base: str = "origin/main", head: str = "HEAD", root: Path 
 
 def linked(text: str, repo: str) -> list[int]:
     """Issue or PR numbers text names in this repo (#12, owner/name#12, an issue link), in order."""
+    text = MDLINK.sub(lambda m: _unlink(m, repo), text)
     nums = [int(n) for r, n in REF.findall(text) if not r or r.lower() == repo.lower()]
     nums += [int(n) for r, n in URL.findall(text) if r.lower() == repo.lower()]
     return list(dict.fromkeys(nums))
