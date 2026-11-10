@@ -34,8 +34,10 @@ BOT = "github-actions[bot]"  # who GITHUB_TOKEN posts as (it can't read /user)
 # #12, owner/name#12 (kept only when it is this repo), or a link to an issue here.
 REF = re.compile(r"(?<![\w/])(?:([\w.-]+/[\w.-]+))?#(\d+)\b")
 URL = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/issues/(\d+)")
-MDLINK = re.compile(r"\[[^\]\n]*\]\(([^)\s]+)\)")  # [label](target)
+MDLINK = re.compile(r"\[([^\]\n]*)\]\(([^)\s]+)(?:\s+(?:\"[^\"\n]*\"|'[^'\n]*'))?\)")  # [label](target "title")
+ROOTED = re.compile(r"^/(?=[\w.-]+/[\w.-]+/(?:issues|pull)/\d)")  # /owner/name/issues/N, within GitHub
 NOTHING = "No correctness bugs found."
+FINDING = re.compile(r"^### \d+\.\s+\S.*\n+\s*\S", re.MULTILINE)  # a numbered finding with text under it
 
 
 # ---------- what goes to the model ----------
@@ -125,7 +127,8 @@ def digest(diff: str) -> str:
             blob = line.split()[1].split("..")[-1]
         elif line.startswith("Binary files "):
             own.append(f"{line} {blob}")
-        elif line[:1] in "+-" or line.startswith(("diff --git ", "old mode ", "new mode ")):
+        elif line[:1] in "+-" or line.startswith(("diff --git ", "old mode ", "new mode ",
+                                                   "new file mode ", "deleted file mode ")):
             own.append(line)
     return hashlib.sha256("\n".join(own).encode("utf-8")).hexdigest()[:16]
 
@@ -158,8 +161,20 @@ def call(cfg: dict, g: dict, dry_run: bool = False) -> tuple[str, dict]:
 
 
 def is_review(text: str) -> bool:
-    """The prompt's answer: NOTHING, or findings under "### " headings."""
-    return NOTHING.rstrip(".") in text or any(line.startswith("### ") for line in text.splitlines())
+    """The prompt's answer: NOTHING on a line of its own, or numbered findings under "### "
+    headings with text under them. A plan that only quotes either is not a review."""
+    lines = {line.strip().strip("*_").strip().rstrip(".") for line in text.splitlines()}
+    return NOTHING.rstrip(".") in lines or bool(FINDING.search(text))
+
+
+def _unlink(m: re.Match, repo: str) -> str:
+    """[label](target) as plain text for linked. The label goes when the target says which
+    issue it is (an issue or PR link) or is in another repo; a link elsewhere in this repo, or
+    off GitHub, keeps it (a #N there means this repo)."""
+    target = ROOTED.sub("github.com/", m[2])
+    on = re.search(r"github\.com/([\w.-]+/[\w.-]+)(/(?:issues|pull)/\d)?", target)
+    drop = on and (on[2] or on[1].lower() != repo.lower())
+    return f" {target} " if drop else f" {m[1]} {target} "
 
 
 def review(cfg: dict, base: str = "origin/main", head: str = "HEAD", root: Path = Path("."),
@@ -173,7 +188,7 @@ def review(cfg: dict, base: str = "origin/main", head: str = "HEAD", root: Path 
 
 def linked(text: str, repo: str) -> list[int]:
     """Issue or PR numbers text names in this repo (#12, owner/name#12, an issue link), in order."""
-    text = MDLINK.sub(r" \1 ", text)  # [#70](a link): the link says which repo, not the label
+    text = MDLINK.sub(lambda m: _unlink(m, repo), text)
     nums = [int(n) for r, n in REF.findall(text) if not r or r.lower() == repo.lower()]
     nums += [int(n) for r, n in URL.findall(text) if r.lower() == repo.lower()]
     return list(dict.fromkeys(nums))

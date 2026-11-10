@@ -36,6 +36,10 @@ def test_linked_takes_this_repos_numbers_once_in_order():
     links = ("See [#5](https://github.com/other/repo/issues/5) and "
              "[#71](https://github.com/byvfx/clipper/issues/71), and [#72]")
     assert codereview.linked(links, "byvfx/clipper") == [72, 71]   # a link's own repo, not its label
+    more = ('[#5](https://github.com/other/repo/issues/5 "a title") [#6](https://github.com/other/repo/pull/6) '
+            "[#7](https://github.com/other/repo/blob/main/a.py) [#73](/byvfx/clipper/issues/73) "
+            "[#74](https://github.com/byvfx/clipper/blob/main/a.py#L10) [#75](https://example.com/x)")
+    assert codereview.linked(more, "byvfx/clipper") == [74, 75, 73]
 
 
 def test_comment_bodies_start_with_their_marker_and_digest():
@@ -184,13 +188,19 @@ def test_a_binary_or_mode_change_has_a_digest_of_its_own(repo, defaults):
     git("update-index", "--chmod=+x", "clipper/a.py")
     git("commit", "-qm", "a.py runs")
     third = codereview.gather(defaults, "main", "HEAD", root)["digest"]
-    assert len({first, second, third}) == 3
+    git("update-index", "--chmod=+x", "clipper/logo.png")   # added on the branch: "new file mode"
+    git("commit", "-qm", "the logo runs")
+    fourth = codereview.gather(defaults, "main", "HEAD", root)["digest"]
+    assert len({first, second, third, fourth}) == 4
 
 
 def test_a_plan_with_no_review_after_it_is_a_failed_review(monkeypatch, defaults):
     plan = "I'll trace the digest and issue-link changes against real git output before calling anything a bug."
     assert not codereview.is_review(plan)
+    assert not codereview.is_review(plan + " If I find none I'll write: No correctness bugs found.")
+    assert not codereview.is_review("### <n>. <one-line summary>")   # the template, echoed
     assert codereview.is_review("No correctness bugs found.")
+    assert codereview.is_review("Traced it all.\n\n**No correctness bugs found**")
     assert codereview.is_review("Traced it all.\n\n### 1. a bug\n`a.py:3`\n\nit breaks")
 
     class Fake:
