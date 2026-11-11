@@ -35,7 +35,12 @@ function tick() {
 setInterval(tick, 1000);
 
 async function refresh() {
-  try { STATE = await api("/api/overview"); render(); }
+  try {
+    const s = await api("/api/overview");
+    // #202: answers aren't ordered; one older than what's on screen would undo an action for a moment
+    if (STATE && new Date(s.generated_at) < new Date(STATE.generated_at)) return;
+    STATE = s; render();
+  }
   catch (e) { toast("Refresh failed: " + e.message, true); }
 }
 // ---------- live shows ----------
