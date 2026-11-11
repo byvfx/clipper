@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import logging
 import sys
@@ -14,6 +15,20 @@ from .config import stream_dir
 from .errors import ClipperError
 
 STREAM_HELP = "stream id under paths.streams, or a stream dir"
+
+
+class Parser(argparse.ArgumentParser):
+    """A mistyped command or stage name gets a suggestion, not all 51 choices (#205). Subparsers
+    inherit this class."""
+
+    def _check_value(self, action, value):
+        if action.choices is None or value in action.choices:
+            return
+        names = [str(c) for c in action.choices]
+        near = difflib.get_close_matches(str(value), names, 3)
+        hint = (f"did you mean {', '.join(near)}?" if near
+                else f"choose from {', '.join(names)}" if len(names) <= 10 else "see --help")
+        raise argparse.ArgumentError(action, f"invalid choice: {value!r}; {hint}")
 
 
 class Items(argparse.Action):
@@ -985,7 +1000,7 @@ def add_pipeline(sub) -> None:
     p.set_defaults(fn=cmd_fetch)
 
     p = sub.add_parser("preshow", help="grab a show's pre-show from its YouTube channel, as one whole video")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_preshow)
     r = rsub.add_parser("check", help="grab new uploads matching [preshow] title_pattern (the bot does this)")
     r.add_argument("--run", action="store_true", help="then run the pipeline on grabbed pre-shows not done yet")
@@ -1145,7 +1160,7 @@ def add_pipeline(sub) -> None:
 def add_review(sub) -> None:
     """Review and publish."""
     p = sub.add_parser("review", help="Kitsu review: publish, sync, and per-item decisions")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_review)
     r = rsub.add_parser("publish", help="upload previews to Kitsu (and post to Discord)")
     add_stream(r)
@@ -1297,7 +1312,7 @@ def add_review(sub) -> None:
 def add_services(sub) -> None:
     """Services: long-running."""
     p = sub.add_parser("record", help="record live streams with real-time chat (NAS service)")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_record)
     r = rsub.add_parser("watch", help="watch [record] channels; record each stream they go live with")
     r.add_argument("--channel", action="append", help="only this channel (repeatable)")
@@ -1391,7 +1406,7 @@ def add_extras(sub) -> None:
     p.set_defaults(fn=cmd_receipts)
 
     p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee): list, transcribe on Modal")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_archive)
     r = rsub.add_parser("add", help="list a channel's long-form videos into a subject's catalog")
     r.add_argument("subject", help="a short name for the person, e.g. jane: their folder is paths.archive/<subject>")
@@ -1437,7 +1452,7 @@ def add_extras(sub) -> None:
 
     p = sub.add_parser("investigate", help="an archive subject's own videos -> facts -> leads nobody has "
                                            "picked up (#108; research only, never uploaded)")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_investigate)
 
     def span(r) -> None:
@@ -1480,7 +1495,7 @@ def add_extras(sub) -> None:
 
     p = sub.add_parser("story", help="a news brief -> the swarm -> transcripts -> the moments -> a dossier; "
                                      "then plan and cut a video of it for review (#84)")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_story)
 
     def limits(r) -> None:
@@ -1524,7 +1539,7 @@ def add_extras(sub) -> None:
     r.add_argument("--no-review", action="store_true", help="only the video: no meta, thumbs or Kitsu")
 
     p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_narrate)
     r = rsub.add_parser("speak", help="script text file -> <script>.read.wav in [narrate] voice_id (perform to it)")
     r.add_argument("script", help="UTF-8 text; eleven_v3 tags like [sighs] [pause] allowed")
@@ -1546,7 +1561,7 @@ def add_extras(sub) -> None:
     r.add_argument("--name", default="Mother Moo", help="name for --add")
 
     p = sub.add_parser("perform", help="lip-sync take to a read: find takes, cut at pauses, stitch the renders")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_perform)
     r = rsub.add_parser("prepare", help="find the takes, cut take N at the read's pauses -> DIR/pieceN.mp4")
     r.add_argument("recording", help="the phone/webcam video, the read playing out loud in it")
@@ -1571,7 +1586,7 @@ def add_extras(sub) -> None:
 
     p = sub.add_parser("cast", help="the cast library: a few good photos of each regular, from streams "
                                     "and the web, for covers and the weekly (#41)")
-    csub = p.add_subparsers(dest="action", required=True)
+    csub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_cast)
     csub.add_parser("list", help="everyone: photos kept and new, who has fewer than [cast] min_photos")
     r = csub.add_parser("grab", help="the sharpest faces `clipper faces` named in a stream, as new photos")
@@ -1610,7 +1625,7 @@ def add_extras(sub) -> None:
 
     p = sub.add_parser("people", help="one record per person: names, channels, archive subject, cast folder "
                                       "(story and investigate look people up here)")
-    psub = p.add_subparsers(dest="action", required=True)
+    psub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_people)
     psub.add_parser("list", help="everyone, and which lists each record comes from")
     r = psub.add_parser("show", help="one person's record")
@@ -1636,7 +1651,7 @@ def add_extras(sub) -> None:
     r.add_argument("other", help="the record to fold into it")
 
     p = sub.add_parser("news", help="headlines about the shows' people: feeds, Reddit, Google News (#110)")
-    nsub = p.add_subparsers(dest="news_cmd", required=True)
+    nsub = p.add_subparsers(dest="news_cmd", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_news)
     r = nsub.add_parser("check", help="fetch what's due, match the watchlist, judge the matches "
                                       "(the bot runs it every [news] check_minutes)")
@@ -1668,7 +1683,7 @@ def add_extras(sub) -> None:
 
     p = sub.add_parser("compare", help="another model on a stage that already ran, side by side with "
                                        "its output and the review decisions (#72)")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     q = rsub.add_parser("score", help="score a stream again with --model; candidates.json is left alone")
     add_stream(q)
     q.add_argument("--model", required=True,
@@ -1691,7 +1706,7 @@ def add_extras(sub) -> None:
     q.set_defaults(fn=cmd_compare)
 
     p = sub.add_parser("models", help="can a model do clipper's jobs? built-in checks, no stream needed (#72)")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     q = rsub.add_parser("test", help="Pass A on made-up windows, JSON, vision, text, a long transcript; "
                                      "which stages it could take")
     q.add_argument("model", help="e.g. claude-haiku-5-5, openrouter:qwen/qwen3.8-flash, local:qwen3")
@@ -1704,7 +1719,7 @@ def add_extras(sub) -> None:
     q = rsub.add_parser("list", help="every saved test, newest first")
     q.set_defaults(fn=cmd_models)
     q = rsub.add_parser("gold", help="Pass A against windows a person labelled: propose them, then run a model")
-    gsub = q.add_subparsers(dest="gold_action", required=True)
+    gsub = q.add_subparsers(dest="gold_action", required=True, metavar="<action>")
     g = gsub.add_parser("propose", help="windows from reviewed streams to label, into [paths] model_gold")
     g.add_argument("--streams", type=int, default=12, help="the newest this many reviewed streams (12)")
     g.set_defaults(fn=cmd_models)
@@ -1739,7 +1754,7 @@ def add_setup(sub) -> None:
     p.set_defaults(fn=cmd_doctor)
 
     p = sub.add_parser("config", help="settings: where a value comes from (default, clipper.toml, show, ...)")
-    csub = p.add_subparsers(dest="action", required=True)
+    csub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     r = csub.add_parser("get", help="a setting's value and every layer that sets it, e.g. meta.model")
     r.add_argument("name", help="section.key, e.g. bleep.mode")
     r.add_argument("--stream", dest="for_stream", help="as this stream sees it (its show, its config.toml)")
@@ -1749,7 +1764,7 @@ def add_setup(sub) -> None:
     p.set_defaults(fn=cmd_shows)
 
     p = sub.add_parser("cookies", help="YouTube sign-in cookies for yt-dlp's signed-in retries")
-    ksub = p.add_subparsers(dest="action", required=True)
+    ksub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     r = ksub.add_parser("export", help="copy a browser profile's YouTube cookies into [paths] youtube_cookies "
                                        "(the laptop task that keeps the NAS hub's file fresh)")
     r.add_argument("--browser", metavar="SPEC", help="yt-dlp browser spec (default: [youtube] cookies_from_browser)")
@@ -1769,12 +1784,11 @@ def add_setup(sub) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="clipper", epilog=command_list(),
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = Parser(prog="clipper", epilog=command_list(), formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"clipper {__version__}")
     ap.add_argument("--config", help="path to clipper.toml (default: $CLIPPER_CONFIG or ./clipper.toml)")
     ap.add_argument("--show", help="use this [shows.<key>] profile (default: the stream's, by Kick channel)")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub = ap.add_subparsers(dest="cmd", required=True, metavar="<command>")
     for add in (add_pipeline, add_review, add_services, add_extras, add_setup):
         add(sub)
     return ap
