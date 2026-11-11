@@ -188,8 +188,6 @@ def issues(snap: dict, max_days: int) -> list[dict]:
                   f"{r['stream']}: {r['stage'] or 'the run'} failed: {r['error'][:140]}",
                   f"streams/{r['stream']}/run_{r['stage']}.log" if r["stage"] else "", r["stream"])
             for r in runs.get("failed", [])]
-    out += [issue(f"section:{name}", WARN, f"the {name} section couldn't be read: {err}")
-            for name, err in snap["errors"].items()]
     b = snap.get("backups")
     if b and not b["set_up"]:
         out.append(issue("backups:none", BAD, "nothing backs up the taste files, secrets and state yet",
@@ -197,6 +195,8 @@ def issues(snap: dict, max_days: int) -> list[dict]:
     elif b and (b["age_days"] is None or b["age_days"] > max_days):
         age = "it is empty" if b["age_days"] is None else f"the newest is {b['age_days']:.0f} days old"
         out.append(issue("backups:old", BAD, f"backups have stopped: {age}", look="[audit] backup_folder"))
+    out += [issue(f"section:{name}", WARN, f"the {name} section couldn't be read: {err}")
+            for name, err in snap["errors"].items()]
     out += [issue(f["key"], WARN, f["text"], f["look"], f["stream"]) for f in found if f["level"] != BAD]
     out += [issue(f"reminder:{r}", WARN, r) for r in snap.get("reminders") or []]
     out += [issue("pr:stale", WARN, f"PR {p['number']} has sat for {p['days']} days: {p['title'][:90]}")
@@ -292,6 +292,11 @@ def _last_deep(cfg: dict, month: str) -> str:
     return older[-1].read_text(encoding="utf-8", errors="replace")[:DEEP_KEPT] if older else ""
 
 
+def _cell(section: dict | None, show: Callable[[dict], object]) -> object:
+    """"?" for a section that couldn't be read that week: a zero would read as a quiet week."""
+    return "?" if section is None else show(section)
+
+
 def brief(cfg: dict, weeks: int | None = None, now: datetime | None = None) -> str:
     """What the deep audit starts from; "" when no week has been saved yet."""
     tz = _tz(cfg)
@@ -308,10 +313,12 @@ def brief(cfg: dict, weeks: int | None = None, now: datetime | None = None) -> s
     out += ["", "## Week by week", "", "| Week ending | Done | Failed | Out | Missed | Spend | Rejected | Disk GB |",
             "|---|---|---|---|---|---|---|---|"]
     for s in snaps:
-        r, u, m, v, d = (s.get(k) or {} for k in ("runs", "uploads", "spend", "reviews", "disk"))
-        out.append(f"| {s['at'][:10]} | {r.get('done', '?')} | {len(r.get('failed', []))} | {u.get('uploaded', '?')} "
-                   f"| {u.get('missed', '?')} | ${m.get('usd', 0):.2f} | {(v.get('counts') or {}).get('rejected', 0)} "
-                   f"| {d.get('free_gb', '?')} |")
+        r, u, m, v, d = (s.get(k) for k in ("runs", "uploads", "spend", "reviews", "disk"))
+        row = (s["at"][:10], _cell(r, lambda x: x["done"]), _cell(r, lambda x: len(x["failed"])),
+               _cell(u, lambda x: x["uploaded"]), _cell(u, lambda x: x["missed"]),
+               _cell(m, lambda x: f"${x['usd']:.2f}"), _cell(v, lambda x: x["counts"].get("rejected", 0)),
+               _cell(d, lambda x: x["free_gb"]))
+        out.append("| " + " | ".join(map(str, row)) + " |")
     reasons = [x for s in snaps for x in (s.get("reviews") or {}).get("rejected_because", [])]
     if reasons:
         out += ["", "## Why picks were rejected", ""] + [f"- {x['item']}: {x['comment']}" for x in reasons[-30:]]

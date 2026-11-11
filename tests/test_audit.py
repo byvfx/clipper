@@ -121,6 +121,24 @@ def test_a_failed_stream_is_listed_once(cfg, monkeypatch):
     assert [i["key"][:5] for i in audit.collect(cfg, NOW)["issues"] if "kick-1" in i["key"]] == ["fail:"]
 
 
+def test_a_missing_backup_outranks_sections_that_couldnt_be_read(cfg, monkeypatch):
+    def boom(c, n, d):
+        raise OSError("share gone")
+
+    for name in ("repo", "best", "spend"):
+        monkeypatch.setitem(audit.SECTIONS, name, boom)
+    snap = audit.collect(cfg, NOW)
+    assert snap["issues"][0]["key"] == "backups:none" and "nothing backs up" in audit.text(snap, TZ)
+
+
+def test_a_section_that_couldnt_be_read_is_no_zero_in_the_brief(cfg):
+    audit.folder(cfg).mkdir()
+    jsonstate.write(audit.folder(cfg) / "weekly-2026-11-08.json", {
+        "at": "2026-11-08T16:30:00+00:00", "days": 7, "errors": {}, "issues": [],
+        "runs": None, "uploads": None, "spend": None, "reviews": None, "disk": {"free_gb": 9}})
+    assert "| 2026-11-08 | ? | ? | ? | ? | ? | ? | 9 |" in audit.brief(cfg, now=NOW)
+
+
 def test_the_digest_shows_three_and_says_how_many_more(cfg):
     for n in range(5):
         stream(cfg, f"kick-{n}", failed(error=f"cut exited 1: x | problem {'abcde'[n]}"))

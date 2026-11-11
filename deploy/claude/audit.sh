@@ -86,7 +86,11 @@ DRY RUN: don't run \`clipper alert send\`; put the message at the top of your fi
         } | dm
         return
     fi
-    if [ -n "$DRY" ]; then cat /tmp/audit-deep.md; else clipper audit --keep-deep /tmp/audit-deep.md; fi
+    if [ -n "$DRY" ]; then
+        cat /tmp/audit-deep.md
+    elif ! clipper audit --keep-deep /tmp/audit-deep.md 2>/tmp/audit.err; then
+        echo "Deep audit $month: the report wasn't saved: $(tail -n 3 /tmp/audit.err)" | dm
+    fi
 }
 
 [ -n "$WEEK" ] && weekly
