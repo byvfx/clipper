@@ -67,7 +67,9 @@ function move(d) {
   if (!VISIBLE.length) return;
   const at = VISIBLE.indexOf(OPEN || SEL);
   if (OPEN && at < 0) return;  // opened from the schedule: not in the queue list
-  SEL = VISIBLE[at < 0 ? 0 : Math.max(0, Math.min(VISIBLE.length - 1, at + d))];
+  const to = VISIBLE[at < 0 ? 0 : Math.max(0, Math.min(VISIBLE.length - 1, at + d))];
+  if (OPEN && to !== OPEN && !discardOk()) return;
+  SEL = to;
   renderQueue();
   if (OPEN) { if (SEL !== OPEN) openModal(SEL); return; }
   $(".card.sel")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -77,9 +79,10 @@ function keyAct(key, ref) {
   if (!i) return;
   if (key === "a") {
     if (i.decision === "approved") return toast("Already approved.");
+    if (OPEN && !discardOk()) return;  // approving moves on to the next item
     const at = VISIBLE.indexOf(ref), next = VISIBLE[at + 1] || VISIBLE[at - 1];
     act(ref, "approve");
-    if (OPEN) { if (next && next !== ref) { SEL = next; openModal(next); } else closeModal(); }
+    if (OPEN) { if (next && next !== ref) { SEL = next; openModal(next); } else closeModal(true); }
   } else if (key === "u") { if (i.decision === "approved") act(ref, "reopen"); else toast("Only approved items reopen."); }
   else if (key === "r") { const n = ask(`Reject ${i.short}? Say why (kept as a scoring example):`, true); if (n) act(ref, "reject", { text: n }); }
   else if (key === "c") {

@@ -34,8 +34,15 @@ function tick() {
 }
 setInterval(tick, 1000);
 
+let MUTATED = 0;  // bumped when an action's answer changes STATE.items here
 async function refresh() {
-  try { STATE = await api("/api/overview"); render(); }
+  try {
+    const asked = MUTATED, s = await api("/api/overview");
+    // #202: answers aren't ordered, and one asked for before an action landed would undo it for a
+    // moment; the refresh each action starts afterwards brings the real state
+    if (asked !== MUTATED || STATE && new Date(s.generated_at) < new Date(STATE.generated_at)) return;
+    STATE = s; render();
+  }
   catch (e) { toast("Refresh failed: " + e.message, true); }
 }
 // ---------- live shows ----------
@@ -157,7 +164,7 @@ function renderHealth() {
     <div>Kitsu sync: <span class="${h.sync.error ? "bad" : h.sync.running ? "mid" : "ok"}">${h.sync.running ? "syncing…" : h.sync.error ? esc(h.sync.error) : h.sync.last ? ago(h.sync.last) : "via serve"}</span></div>
     <div>YouTube uploads: <span class="${h.auto_upload_minutes ? "ok" : "mid"}">${h.auto_upload_minutes ? "automatic, every " + h.auto_upload_minutes + " min" : "by hand (clipper upload)"}</span></div>
     <div>Schedule: ${STATE.schedule_generated_at ? "planned " + ago(STATE.schedule_generated_at) : "never planned"}</div>`;
-  $("#syncBtn").disabled = h.sync.running;
+  renderBusy();
 }
 
 // #24: one search box over every stream's titles, descriptions, topics, hashtags and, from

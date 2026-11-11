@@ -44,6 +44,10 @@ Every action, single or bulk, can be undone from its toast for 10 s or from "Und
 last 20). Undo goes through Kitsu too, and an item already on YouTube keeps its live text
 (change it in Studio).
 
+A button sends once: a double tap is one request, and Sync Kitsu and Replan stay greyed out
+until they finish. Closing an item's window, or moving on with J/K, a swipe or Approve, asks
+before throwing away a title, description, note or release time you typed but didn't save.
+
 Titles, descriptions, hashtags and cover words are checked as you type ("hosts", unmasked
 swearing, YouTube's length limits with the show prefix), and cards with a problem carry a ⚠
 badge.
