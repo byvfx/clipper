@@ -317,6 +317,11 @@ def test_copilot_state_tells_a_review_from_its_out_of_credits_notice():
     assert codereview.copilot_state([copilot(OUT_NOTICE)], sha) == "out"
     assert codereview.copilot_state([copilot(OUT_NOTICE), copilot("real")], sha) == "reviewed"  # re-requested
     assert codereview.copilot_state([{**copilot("real"), "state": "DISMISSED"}], sha) == ""
+    for real in ("This pull request fixes quota accounting.",          # a review about another quota
+                 "<!-- ccr-overview-v2 -->\n\nCopilot can't find a bug; the YouTube quota is fine",
+                 "Copilot reviewed 4 out of 4 changed files and generated 1 comment about the quota."):
+        assert codereview.copilot_state([copilot(real)], sha) == "reviewed", real
+    assert codereview.copilot_state([copilot("Copilot could not review this pull request: no credits")], sha) == "out"
 
 
 def test_a_commit_copilot_reviewed_gets_a_note_and_no_model_call(monkeypatch, defaults):
