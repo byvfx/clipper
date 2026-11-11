@@ -34,11 +34,13 @@ function tick() {
 }
 setInterval(tick, 1000);
 
+let MUTATED = 0;  // bumped when an action's answer changes STATE.items here
 async function refresh() {
   try {
-    const s = await api("/api/overview");
-    // #202: answers aren't ordered; one older than what's on screen would undo an action for a moment
-    if (STATE && new Date(s.generated_at) < new Date(STATE.generated_at)) return;
+    const asked = MUTATED, s = await api("/api/overview");
+    // #202: answers aren't ordered, and one asked for before an action landed would undo it for a
+    // moment; the refresh each action starts afterwards brings the real state
+    if (asked !== MUTATED || STATE && new Date(s.generated_at) < new Date(STATE.generated_at)) return;
     STATE = s; render();
   }
   catch (e) { toast("Refresh failed: " + e.message, true); }

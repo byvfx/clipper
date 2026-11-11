@@ -10,7 +10,8 @@ async function act(ref, action, extra = {}) {  // true when done, false when it 
   try {
     const r = await api("/api/action", { ref, action, ...extra });
     const i = STATE.items.findIndex(x => x.ref === ref);
-    if (i >= 0) STATE.items[i] = { ...STATE.items[i], ...r.row };
+    if (i >= 0) { STATE.items[i] = { ...STATE.items[i], ...r.row }; MUTATED++; }
+    if (OPEN === ref) rebase(action, extra);
     toast(`${{ approve: "Approved", reject: "Rejected", changes: "Changes requested for", reopen: "Reopened", hold: extra.on ? "Held" : "Released", pin: extra.text ? "Pinned" : "Unpinned", edit: "Saved", thumbtext: "New thumbnail words for" }[action]} ${ref.split("/")[1].split("_")[0]}${r.note ? " — " + r.note : ""}`, false, r.undo);
     if (OPEN === ref) fillModalState(STATE.items.find(x => x.ref === ref));
     refresh();
@@ -18,7 +19,7 @@ async function act(ref, action, extra = {}) {  // true when done, false when it 
   } catch (e) { toast(e.message, true); return false; }
   finally { SENDING.delete(send); BUSY.delete(ref); renderQueue(); }
 }
-function upsert(row) { const k = STATE.items.findIndex(x => x.ref === row.ref); if (k >= 0) STATE.items[k] = { ...STATE.items[k], ...row }; }
+function upsert(row) { const k = STATE.items.findIndex(x => x.ref === row.ref); if (k >= 0) { STATE.items[k] = { ...STATE.items[k], ...row }; MUTATED++; } }
 
 // ---------- #23 undo ----------
 
@@ -265,8 +266,8 @@ function openModal(ref) {
       </div>
     </div>`;
   fillModalState(i, true);
-  // the box empties on send; a failed send puts the note back, unless a new one was typed meanwhile
-  const note = async (action, n) => { $("#fChanges").value = ""; if (await act(ref, action, { text: n }) === false && OPEN === ref && !$("#fChanges").value) $("#fChanges").value = n; };
+  // the note stays in the box (and counts as unsaved) until it is sent, then goes unless it was changed meanwhile
+  const note = async (action, n) => { if (await act(ref, action, { text: n }) && OPEN === ref && $("#fChanges").value.trim() === n) $("#fChanges").value = ""; };
   $("#bChanges").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write what should change.", true); note("changes", n); };
   $("#bReject").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write the reason in the box first.", true); note("reject", n); };
   $("#bSave").onclick = () => {
@@ -313,6 +314,13 @@ const MODAL_FIELDS = [["#fTitle", "title", i => i.title], ["#fDesc", "descriptio
   ["#fTags", "hashtags", i => i.hashtags], ["#fThumb", "thumbnail words", i => i.thumb_text],
   ["#fPin", "release time", i => (i.publish_at || "").replace(" ", "T").slice(0, 16)], ["#fChanges", "retake note", () => ""]];
 let LOADED = {};
+function rebase(action, extra) {  // after a Save, Pin or Re-render, what was sent is the box's new baseline
+  const v = extra.values || {};
+  const sent = action === "edit" ? { "#fTitle": v["YouTube title"], "#fDesc": v["YouTube description"], "#fTags": v["Hashtags"] }
+    : action === "pin" && extra.text ? { "#fPin": extra.text.replace(" ", "T") }  // Unpin leaves the box as it was
+    : action === "thumbtext" ? { "#fThumb": extra.text } : {};
+  for (const [id, s] of Object.entries(sent)) if (s !== undefined && id in LOADED) LOADED[id] = s.trim();
+}
 function unsaved() {
   const i = OPEN && STATE.items.find(x => x.ref === OPEN);
   if (!i || !$("#mActs")) return [];
