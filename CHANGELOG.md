@@ -11,6 +11,10 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 - 11-10: `clipper audit`: a weekly digest of how the week went (no model), saved each week, and a monthly
   read-only deep audit that traces what keeps coming back (wiki Audit). Dependabot opens grouped weekly
   update PRs.
+- 11-10: war room fixes from the usability review (#201, #202, #206): bulk actions only touch what is on
+  screen and the bar counts the picks left out; a double tap can't send an action twice; bulk reject; the
+  header says how old the data is; a hidden tab stops polling; `?key=` leaves the address bar once the
+  cookie is set; the Health panel's mis-encoded dot, with a test for mis-encoded text in `clipper/web/`.
 - 11-10: the `check` workflow skips a push or PR that changes only notes no test reads (root `*.md`,
   `LICENSE`, `docs/log/`, `docs/archive/`, `reports/`, `studio/`). `docs/wiki/` still runs it, and so
   does `studio/research_notes/streamers.json` (a test reads it).

@@ -17,6 +17,8 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .brand { font: 700 15px var(--mono); letter-spacing: .14em; white-space: nowrap; }
 .brand b { color: var(--accent); }
 .clock { font: 600 13px var(--mono); color: var(--dim); }
+.updated { font: 600 11px var(--mono); color: var(--dim); white-space: nowrap; }
+.updated.mid { color: var(--amber); } .updated.bad { color: var(--red); }
 .lives { display: flex; gap: 8px; flex-wrap: wrap; }
 .live { display: flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 99px;
   font-size: 12px; color: var(--dim); background: var(--panel); }
