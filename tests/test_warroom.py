@@ -102,6 +102,13 @@ def test_the_page_loads_every_script_app_last():
     assert "<script>" not in html and "<style>" not in html
 
 
+def test_the_page_has_no_mis_encoded_text():
+    """UTF-8 read as cp1252 and saved again: a middle dot became "Â·" in the Health panel (#206)."""
+    broken = re.compile("[ÂÃ][\x80-\xbf]|â[€œš]")
+    files = [warroom.PAGE, warroom.WEB / "warroom.css", *(warroom.WEB / "js").glob("*.js")]
+    assert not [(p.name, m.group()) for p in files for m in broken.finditer(p.read_text(encoding="utf-8"))]
+
+
 def test_faces_window(tmp_path, defaults, monkeypatch):
     import numpy as np
 
