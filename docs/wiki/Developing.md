@@ -89,7 +89,8 @@ code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`) the `review
 | Isn't a requested reviewer | Grok reviews after a minute at most |
 | GitHub won't say | Grok reviews |
 
-Nothing asks Copilot on its own account: that takes GitHub's automatic Copilot review, or
+A repository rule (Settings, Rules, "Copilot reviews new PRs") requests Copilot when a PR opens.
+It doesn't review later pushes on its own, so those go to Grok unless you ask with
 `gh pr edit N --add-reviewer @copilot`. To run Grok on every PR even when Copilot reviewed, set
 `CLIPPER_CODEREVIEW_COPILOT_WAIT_S: 0` in the workflow's env.
 

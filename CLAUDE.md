@@ -142,7 +142,7 @@ Windows notes above don't apply.
   merge. Green CI alone isn't enough. A PR that touches none of those (the wiki, `uv.lock` alone,
   `clipper.example.toml`, `streamers.json`, notes) gets no review: don't wait for one, merge on
   green CI where it runs and the user's word. A fork's PR gets none either (the workflow skips it:
-  no secrets): read its diff yourself, tell the user what you found, and merge only on their word. Copilot's review is paused since 2026-11-10 (the
-  user's credits ran out): don't request it or wait for it until the user says it is back.
+  no secrets): read its diff yourself, tell the user what you found, and merge only on their word. Copilot is the default reviewer (user, 2026-11-10): a repo ruleset requests it
+  when a PR opens, not on later pushes, and the `review` workflow runs Grok by itself for any commit it didn't review.
   Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running
   clipper.exe (`uv pip install --python .venv/Scripts/python.exe pytest` installs pytest alone).
