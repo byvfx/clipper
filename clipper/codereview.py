@@ -391,10 +391,29 @@ def is_copilot_note(body: str) -> bool:
 
 def copilot_state(reviews: list[dict], sha: str) -> str:
     """Copilot's latest word on commit sha: "reviewed", "out" (it couldn't: no credits), or ""."""
-    theirs = [r for r in reviews if (r.get("user") or {}).get("login") == COPILOT and r.get("commit_id") == sha]
+    theirs = [r for r in _copilots(reviews) if r.get("commit_id") == sha]
     if not theirs:
         return ""
-    return "out" if COPILOT_OUT.search((theirs[-1].get("body") or "")[:300]) else "reviewed"
+    return "out" if _copilot_out(theirs[-1]) else "reviewed"
+
+
+def _copilots(reviews: list[dict]) -> list[dict]:
+    """Copilot's reviews that still count: GitHub keeps listing a dismissed one."""
+    return [r for r in reviews if (r.get("user") or {}).get("login") == COPILOT and r.get("state") != "DISMISSED"]
+
+
+def _copilot_out(review: dict) -> bool:
+    return bool(COPILOT_OUT.search((review.get("body") or "")[:300]))
+
+
+def copilot_stands(gh: GitHub, pr: int) -> bool:
+    """Whether a review of Copilot's still stands on the PR (behind a note, a later commit may
+    be a merge of main it never saw). A GitHub error says no, so the model runs."""
+    try:
+        return any(not _copilot_out(r) for r in _copilots(gh.reviews(pr)))
+    except Exception as e:  # noqa: BLE001  # GitHub's trouble must not cost the PR its review
+        print(f"codereview: Copilot's reviews weren't read, reviewing anyway: {type(e).__name__}: {e}", flush=True)
+        return False
 
 
 def copilot_reviewed(gh: GitHub, pr: int, sha: str, wait_s: int) -> bool:
@@ -453,10 +472,21 @@ def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
                 return gh.upsert(n, cleared(im, info["sha"], pr), mine) if mine else None
             each_issue(gh, pr, pinfo, clear)
         return
-    if g and old and good(old["body"]) and DIGEST.format(g["digest"]) in old["body"]:
+
+    def note(n):  # only a copy that is there already: it may hold findings about older code
+        mine = gh.find(n, im)
+        done = not mine or DIGEST.format(g["digest"]) in mine["body"]
+        return None if done else gh.upsert(n, copilot_note(im, g["digest"], g["sha"], pr), mine)
+
+    wait_s = cfg["codereview"]["copilot_wait_s"]
+    noted = bool(old) and is_copilot_note(old["body"])
+    # A note stops counting at wait 0 (always the model) or once Copilot's review was dismissed.
+    if g and old and good(old["body"]) and DIGEST.format(g["digest"]) in old["body"] \
+            and (not noted or (wait_s > 0 and copilot_stands(gh, pr))):
         # Reviewed already (a docs push, a merge of main): only issues still missing it.
         print(f"codereview: the PR's code changes are the ones already reviewed ({g['digest']})")
-        if is_copilot_note(old["body"]):   # Copilot's review is on the PR: nothing to copy to the issues
+        if noted:
+            each_issue(gh, pr, pinfo, note)
             return
         want = for_issue(old["body"], pr)
 
@@ -466,14 +496,9 @@ def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
             return None if done else gh.upsert(n, want, mine)
         each_issue(gh, pr, pinfo, fill)
         return
-    wait_s = cfg["codereview"]["copilot_wait_s"]
     if g and wait_s > 0 and copilot_reviewed(gh, pr, g["sha"], wait_s):
         print("codereview: Copilot reviewed this commit: no second review")
         gh.upsert(pr, copilot_note(MARKER, g["digest"], g["sha"]), old)
-
-        def note(n):  # only a copy that is there already: it may hold findings about older code
-            mine = gh.find(n, im)
-            return gh.upsert(n, copilot_note(im, g["digest"], g["sha"], pr), mine) if mine else None
         each_issue(gh, pr, pinfo, note)
         return
     try:

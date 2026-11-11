@@ -316,6 +316,7 @@ def test_copilot_state_tells_a_review_from_its_out_of_credits_notice():
     assert codereview.copilot_state([copilot("<!-- ccr-overview-v2 -->\nLooks fine")], sha) == "reviewed"
     assert codereview.copilot_state([copilot(OUT_NOTICE)], sha) == "out"
     assert codereview.copilot_state([copilot(OUT_NOTICE), copilot("real")], sha) == "reviewed"  # re-requested
+    assert codereview.copilot_state([{**copilot("real"), "state": "DISMISSED"}], sha) == ""
 
 
 def test_a_commit_copilot_reviewed_gets_a_note_and_no_model_call(monkeypatch, defaults):
@@ -345,9 +346,42 @@ def test_copilots_review_replaces_a_failed_one(monkeypatch, defaults):
 def test_a_merge_of_main_after_copilot_isnt_reviewed_again(monkeypatch, defaults):
     hub = Hub(reviews=[copilot("Looks fine")])
     run_with(monkeypatch, defaults, hub, G)
-    hub.posts.clear()
-    hub.got_reviews = []                                    # Copilot hasn't seen the merge commit
+    hub.posts.clear()                                       # Copilot's review is of the commit before the merge
     assert not run_with(monkeypatch, defaults, hub, {**G, "sha": "b" * 40}) and hub.posts == []
+
+
+def test_a_note_stops_counting_when_copilots_review_is_dismissed(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    run_with(monkeypatch, defaults, hub, G)
+    hub.got_reviews = [{**copilot("Looks fine"), "state": "DISMISSED"}]
+    assert run_with(monkeypatch, defaults, hub, G)
+    assert "a bug" in hub.comments[9][0]["body"]
+
+
+def test_a_dismissed_review_gets_the_model_and_no_note(monkeypatch, defaults):
+    hub = Hub(reviews=[{**copilot("Looks fine"), "state": "DISMISSED"}])
+    assert run_with(monkeypatch, defaults, hub, G)
+    assert codereview.COPILOT_NOTE not in hub.comments[9][0]["body"]
+
+
+def test_a_later_run_repairs_an_issue_the_note_didnt_reach(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"})      # the note, on the PR only
+    stale = codereview.comment("### 1. a bug", {**INFO, **G}, pr=9)  # #70's copy, about older code
+    hub.comments[70] = [{"id": 2, "body": stale}]
+    hub.posts.clear()
+    assert not run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"})
+    assert [n for n, _ in hub.posts] == [70] and "a bug" not in hub.comments[70][0]["body"]
+    hub.posts.clear()
+    assert not run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"}) and hub.posts == []   # once only
+
+
+def test_copilot_wait_0_runs_the_model_past_a_note(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    run_with(monkeypatch, defaults, hub, G)
+    defaults["codereview"]["copilot_wait_s"] = 0
+    assert run_with(monkeypatch, defaults, hub, G)
+    assert "a bug" in hub.comments[9][0]["body"]
 
 
 def test_only_copilots_own_note_counts_as_one():
