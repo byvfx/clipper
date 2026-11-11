@@ -234,12 +234,17 @@ class Hub:
 
     repo, me = "o/r", codereview.BOT
 
-    def __init__(self, comments=None):
+    def __init__(self, comments=None, reviews=(), requested=()):
         self.comments = comments or {}
         self.posts = []
+        self.got_reviews, self.requested = list(reviews), list(requested)
 
     def pr(self, n):
-        return {"head": {"sha": "f" * 40}, "title": "t", "body": "Closes #70"}
+        return {"head": {"sha": "f" * 40}, "title": "t", "body": "Closes #70",
+                "requested_reviewers": [{"login": u} for u in self.requested]}
+
+    def reviews(self, n):
+        return self.got_reviews
 
     def closing(self, n):
         return [70]
@@ -261,6 +266,7 @@ class Hub:
 
 def run_with(monkeypatch, defaults, hub, g, review_text="### 1. a bug"):
     calls = []
+    monkeypatch.setattr(codereview.time, "sleep", lambda s: None)
     monkeypatch.setattr(codereview, "GitHub", lambda repo, token: hub)
     monkeypatch.setattr(codereview, "gather", lambda *a: g)
     monkeypatch.setattr(codereview, "call", lambda cfg, g: calls.append(g) or (review_text, {**INFO, **g}))
@@ -292,6 +298,134 @@ def test_run_clears_the_findings_when_no_code_is_left(monkeypatch, defaults):
     assert not run_with(monkeypatch, defaults, hub, {})     # the code changes were reverted
     assert [n for n, _ in hub.posts] == [9, 70]
     assert all("no longer changes any code" in b and "a bug" not in b for _, b in hub.posts)
+
+
+OUT_NOTICE = ("Copilot was unable to review this pull request because the user who requested the "
+              "review has insufficient remaining quota. Try requesting a review at a lower effort level.")
+
+
+def copilot(body, sha=G["sha"], login=codereview.COPILOT):
+    return {"user": {"login": login}, "commit_id": sha, "body": body}
+
+
+def test_copilot_state_tells_a_review_from_its_out_of_credits_notice():
+    sha = G["sha"]
+    assert codereview.copilot_state([], sha) == ""
+    assert codereview.copilot_state([copilot("real", sha="b" * 40)], sha) == ""      # an older commit
+    assert codereview.copilot_state([copilot("real", login="coderabbitai[bot]")], sha) == ""
+    assert codereview.copilot_state([copilot("<!-- ccr-overview-v2 -->\nLooks fine")], sha) == "reviewed"
+    assert codereview.copilot_state([copilot(OUT_NOTICE)], sha) == "out"
+    assert codereview.copilot_state([copilot(OUT_NOTICE), copilot("real")], sha) == "reviewed"  # re-requested
+    assert codereview.copilot_state([{**copilot("real"), "state": "DISMISSED"}], sha) == ""
+    for real in ("This pull request fixes quota accounting.",          # a review about another quota
+                 "<!-- ccr-overview-v2 -->\n\nCopilot can't find a bug; the YouTube quota is fine",
+                 "Copilot reviewed 4 out of 4 changed files and generated 1 comment about the quota."):
+        assert codereview.copilot_state([copilot(real)], sha) == "reviewed", real
+    assert codereview.copilot_state([copilot("Copilot could not review this pull request: no credits")], sha) == "out"
+
+
+def test_a_commit_copilot_reviewed_gets_a_note_and_no_model_call(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    assert not run_with(monkeypatch, defaults, hub, G)
+    assert [n for n, _ in hub.posts] == [9]                 # no new comment on the linked issue
+    assert codereview.COPILOT_NOTE in hub.posts[0][1] and "<!-- diff=d1 -->" in hub.posts[0][1]
+
+
+def test_copilots_review_replaces_findings_about_older_code(monkeypatch, defaults):
+    hub = Hub()
+    assert run_with(monkeypatch, defaults, hub, G)          # the first push: findings on PR and issue
+    hub.posts.clear()
+    hub.got_reviews = [copilot("Looks fine")]
+    assert not run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"})
+    assert [n for n, _ in hub.posts] == [9, 70]
+    assert all(codereview.COPILOT_NOTE in b and "a bug" not in b and "<!-- diff=d2 -->" in b for _, b in hub.posts)
+
+
+def test_copilots_review_replaces_a_failed_one(monkeypatch, defaults):
+    failed = codereview.comment("", {**INFO, **G}, failed="timeout")
+    hub = Hub({9: [{"id": 1, "body": failed}]}, reviews=[copilot("Looks fine")])
+    assert not run_with(monkeypatch, defaults, hub, G)
+    assert "Review failed" not in hub.comments[9][0]["body"]
+
+
+def test_a_merge_of_main_after_copilot_isnt_reviewed_again(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    run_with(monkeypatch, defaults, hub, G)
+    hub.posts.clear()                                       # Copilot's review is of the commit before the merge
+    assert not run_with(monkeypatch, defaults, hub, {**G, "sha": "b" * 40}) and hub.posts == []
+
+
+def test_a_note_stops_counting_when_copilots_review_is_dismissed(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    run_with(monkeypatch, defaults, hub, G)
+    hub.got_reviews = [{**copilot("Looks fine"), "state": "DISMISSED"}]
+    assert run_with(monkeypatch, defaults, hub, G)
+    assert "a bug" in hub.comments[9][0]["body"]
+
+
+def test_a_dismissed_review_gets_the_model_and_no_note(monkeypatch, defaults):
+    hub = Hub(reviews=[{**copilot("Looks fine"), "state": "DISMISSED"}])
+    assert run_with(monkeypatch, defaults, hub, G)
+    assert codereview.COPILOT_NOTE not in hub.comments[9][0]["body"]
+
+
+def test_a_later_run_repairs_an_issue_the_note_didnt_reach(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"})      # the note, on the PR only
+    stale = codereview.comment("### 1. a bug", {**INFO, **G}, pr=9)  # #70's copy, about older code
+    hub.comments[70] = [{"id": 2, "body": stale}]
+    hub.posts.clear()
+    assert not run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"})
+    assert [n for n, _ in hub.posts] == [70] and "a bug" not in hub.comments[70][0]["body"]
+    hub.posts.clear()
+    assert not run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"}) and hub.posts == []   # once only
+
+
+def test_copilot_wait_0_runs_the_model_past_a_note(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    run_with(monkeypatch, defaults, hub, G)
+    defaults["codereview"]["copilot_wait_s"] = 0
+    assert run_with(monkeypatch, defaults, hub, G)
+    assert "a bug" in hub.comments[9][0]["body"]
+
+
+def test_only_copilots_own_note_counts_as_one():
+    note = codereview.copilot_note(codereview.MARKER, "d1", "a" * 40)
+    assert codereview.good(note) and codereview.is_copilot_note(note)
+    assert not codereview.is_copilot_note(codereview.comment(f"quoting: {codereview.COPILOT_NOTE}", INFO))
+
+
+def test_run_switches_to_the_model_when_copilot_is_out_of_credits(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot(OUT_NOTICE)])
+    assert run_with(monkeypatch, defaults, hub, G) and [n for n, _ in hub.posts] == [9, 70]
+
+
+def test_a_copilot_that_was_not_asked_costs_a_minute_at_most(monkeypatch, defaults):
+    slept = []
+    monkeypatch.setattr(codereview.time, "sleep", slept.append)
+    assert not codereview.copilot_reviewed(Hub(), 9, G["sha"], 600)
+    assert sum(slept) == codereview.COPILOT_GRACE_S
+
+
+def test_a_requested_copilot_gets_the_whole_wait_then_the_model_runs(monkeypatch, defaults):
+    slept = []
+    monkeypatch.setattr(codereview.time, "sleep", slept.append)
+    assert not codereview.copilot_reviewed(Hub(requested=["Copilot"]), 9, G["sha"], 600)
+    assert sum(slept) == 600
+
+
+def test_a_github_error_reading_copilot_still_reviews(monkeypatch, defaults):
+    class Down(Hub):
+        def reviews(self, n):
+            raise ClipperError("HTTP 502")
+
+    assert run_with(monkeypatch, defaults, Down(), G)
+
+
+def test_copilot_wait_0_always_runs_the_model(monkeypatch, defaults):
+    defaults["codereview"]["copilot_wait_s"] = 0
+    hub = Hub(reviews=[copilot("Looks fine")])
+    assert run_with(monkeypatch, defaults, hub, G)
 
 
 def test_a_long_call_isnt_sent_again_after_a_gateway_error(monkeypatch, defaults):

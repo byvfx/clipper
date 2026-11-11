@@ -11,6 +11,8 @@ in this repo, or #N in its title or body): one comment per issue and PR, edited 
 A push that leaves the PR's own code changes as they were (a docs-only push, or a merge of
 main into the branch) is not reviewed again: the comment carries their digest. A failed call says so and keeps the last good review
 below; the review is printed to the log before it is posted, so a failed post loses nothing.
+Copilot goes first when it was asked: a commit it reviewed gets no paid review here, and its
+out-of-credits notice, its silence or a GitHub error all fall through to the model.
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ import hashlib
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 from . import llm
@@ -31,6 +34,15 @@ DIGEST = "<!-- diff={} -->"  # the code diff a review covered (a failed one has 
 LAST = "<details><summary>The last review, still standing</summary>"
 BODY_MAX = 65000  # GitHub refuses a comment over 65536 characters
 BOT = "github-actions[bot]"  # who GITHUB_TOKEN posts as (it can't read /user)
+COPILOT = "copilot-pull-request-reviewer[bot]"
+# Its "Copilot was unable to review ... insufficient remaining quota" notice arrives as a review.
+# Only its first sentence counts: a real review opens with its overview (<!-- ccr-overview... or
+# "Copilot reviewed N files"), and may well be about some other quota.
+COPILOT_OUT = re.compile(r"\s*Copilot (?:was |is )?(?:unable|not able|could not|couldn't|can't|cannot|ran out)\b",
+                         re.IGNORECASE)
+COPILOT_NOTE = "Copilot reviewed this commit, so there is no second review here."
+COPILOT_GRACE_S = 60  # how long an automatic request has to show up on a new PR
+COPILOT_POLL_S = 20
 # #12, owner/name#12 (kept only when it is this repo), or a link to an issue or PR here.
 REF = re.compile(r"(?<![\w/])(?:([\w.-]+/[\w.-]+))?#(\d+)\b")
 URL = re.compile(r"github\.com/([\w.-]+/[\w.-]+)/(?:issues|pull)/(\d+)")
@@ -272,6 +284,17 @@ class GitHub:
     def pr(self, n: int) -> dict:
         return self.call("GET", f"/repos/{self.repo}/pulls/{n}")
 
+    def reviews(self, n: int) -> list[dict]:
+        """PR n's reviews, oldest first."""
+        out, page = [], 1
+        while True:
+            got = self.call("GET", f"/repos/{self.repo}/pulls/{n}/reviews",
+                            params={"per_page": 100, "page": page})
+            out += got
+            if len(got) < 100:
+                return out
+            page += 1
+
     def closing(self, n: int) -> list[int]:
         """The issues in this repo GitHub links to PR n as closed by it (Closes #N, or linked
         by hand); one in another repo is left out, its number means another issue here."""
@@ -355,6 +378,70 @@ def each_issue(gh: GitHub, pr: int, pinfo: dict, act) -> None:
         raise ClipperError("codereview: not posted on " + "; ".join(errors))
 
 
+def copilot_note(marker: str, digest_: str, sha: str, pr: int | None = None) -> str:
+    """Stands for a commit Copilot reviewed: findings here were about older code, and with the
+    digest a merge of main into the branch isn't reviewed (and paid for) after all."""
+    what = f"Code review of #{pr}" if pr else "Code review"
+    return f"{marker}\n{DIGEST.format(digest_)}\n**{what}** at {sha[:7]}: {COPILOT_NOTE}\n"
+
+
+def is_copilot_note(body: str) -> bool:
+    """Its third line, where a real review has its "by `model`" and can't quote this."""
+    lines = body.split("\n", 3)
+    return len(lines) > 2 and COPILOT_NOTE in lines[2]
+
+
+def copilot_state(reviews: list[dict], sha: str) -> str:
+    """Copilot's latest word on commit sha: "reviewed", "out" (it couldn't: no credits), or ""."""
+    theirs = [r for r in _copilots(reviews) if r.get("commit_id") == sha]
+    if not theirs:
+        return ""
+    return "out" if _copilot_out(theirs[-1]) else "reviewed"
+
+
+def _copilots(reviews: list[dict]) -> list[dict]:
+    """Copilot's reviews that still count: GitHub keeps listing a dismissed one."""
+    return [r for r in reviews if (r.get("user") or {}).get("login") == COPILOT and r.get("state") != "DISMISSED"]
+
+
+def _copilot_out(review: dict) -> bool:
+    return bool(COPILOT_OUT.match(review.get("body") or ""))
+
+
+def copilot_stands(gh: GitHub, pr: int) -> bool:
+    """Whether a review of Copilot's still stands on the PR (behind a note, a later commit may
+    be a merge of main it never saw). A GitHub error says no, so the model runs."""
+    try:
+        return any(not _copilot_out(r) for r in _copilots(gh.reviews(pr)))
+    except Exception as e:  # noqa: BLE001  # GitHub's trouble must not cost the PR its review
+        print(f"codereview: Copilot's reviews weren't read, reviewing anyway: {type(e).__name__}: {e}", flush=True)
+        return False
+
+
+def copilot_reviewed(gh: GitHub, pr: int, sha: str, wait_s: int) -> bool:
+    """Whether Copilot reviewed commit sha. Waits up to wait_s while it is a requested reviewer,
+    and only COPILOT_GRACE_S when it isn't. Anything but a review it finished is False, so a PR
+    is never left with no review."""
+    waited = 0
+    try:
+        while True:
+            state = copilot_state(gh.reviews(pr), sha)
+            if state:
+                print(f"codereview: Copilot on {sha[:7]}: {state}", flush=True)
+                return state == "reviewed"
+            asked = any("copilot" in (u.get("login") or "").lower()
+                        for u in gh.pr(pr).get("requested_reviewers") or [])
+            if waited >= (wait_s if asked else min(wait_s, COPILOT_GRACE_S)):
+                print(f"codereview: no Copilot review of {sha[:7]} ({'timed out' if asked else 'not requested'})",
+                      flush=True)
+                return False
+            time.sleep(COPILOT_POLL_S)
+            waited += COPILOT_POLL_S
+    except Exception as e:  # noqa: BLE001  # GitHub's trouble must not cost the PR its review
+        print(f"codereview: Copilot's review wasn't read, reviewing anyway: {type(e).__name__}: {e}", flush=True)
+        return False
+
+
 def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
         dry_run: bool = False, root: Path = Path(".")) -> None:
     """Review the branch; print it, or with pr post it on the PR and the issues it links."""
@@ -387,9 +474,22 @@ def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
                 return gh.upsert(n, cleared(im, info["sha"], pr), mine) if mine else None
             each_issue(gh, pr, pinfo, clear)
         return
-    if g and old and good(old["body"]) and DIGEST.format(g["digest"]) in old["body"]:
+
+    def note(n):  # only a copy that is there already: it may hold findings about older code
+        mine = gh.find(n, im)
+        done = not mine or DIGEST.format(g["digest"]) in mine["body"]
+        return None if done else gh.upsert(n, copilot_note(im, g["digest"], g["sha"], pr), mine)
+
+    wait_s = cfg["codereview"]["copilot_wait_s"]
+    noted = bool(old) and is_copilot_note(old["body"])
+    # A note stops counting at wait 0 (always the model) or once Copilot's review was dismissed.
+    if g and old and good(old["body"]) and DIGEST.format(g["digest"]) in old["body"] \
+            and (not noted or (wait_s > 0 and copilot_stands(gh, pr))):
         # Reviewed already (a docs push, a merge of main): only issues still missing it.
         print(f"codereview: the PR's code changes are the ones already reviewed ({g['digest']})")
+        if noted:
+            each_issue(gh, pr, pinfo, note)
+            return
         want = for_issue(old["body"], pr)
 
         def fill(n):
@@ -397,6 +497,11 @@ def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
             done = mine and good(mine["body"]) and DIGEST.format(g["digest"]) in mine["body"]
             return None if done else gh.upsert(n, want, mine)
         each_issue(gh, pr, pinfo, fill)
+        return
+    if g and wait_s > 0 and copilot_reviewed(gh, pr, g["sha"], wait_s):
+        print("codereview: Copilot reviewed this commit: no second review")
+        gh.upsert(pr, copilot_note(MARKER, g["digest"], g["sha"]), old)
+        each_issue(gh, pr, pinfo, note)
         return
     try:
         if g:
