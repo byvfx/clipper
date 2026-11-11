@@ -3,6 +3,7 @@
 // ---------- actions ----------
 
 async function act(ref, action, extra = {}) {
+  if (BUSY.has(ref)) return;  // a double tap, or a second button while the first is running
   BUSY.add(ref); renderQueue();
   try {
     const r = await api("/api/action", { ref, action, ...extra });
@@ -42,16 +43,19 @@ async function showUndo() {
 
 // ---------- #17 select, bulk actions, find and replace ----------
 
-function picked() { return [...PICK].filter(r => STATE.items.some(i => i.ref === r)); }
+// A selection survives a filter change, but only what is on screen gets acted on.
+function picked() { return [...PICK].filter(r => VISIBLE.includes(r)); }
 function renderBulk() {
   const n = picked().length, b = $("#bulk");
+  const off = [...PICK].filter(r => !VISIBLE.includes(r) && STATE.items.some(i => i.ref === r)).length;
   b.hidden = !n;
   if (!n) return;
-  b.innerHTML = `<b>${n} selected</b>
+  b.innerHTML = `<b>${n} selected</b>${off ? `<span style="color:var(--amber)" title="Picked under another tab or filter. Bulk actions leave them out until they're on screen again.">+ ${off} not shown, left out</span>` : ""}
     <button class="btn good" data-bulk="approve">✓ Approve</button>
     <button class="btn" data-bulk="hold">Hold</button><button class="btn" data-bulk="release">Release</button>
     <button class="btn" data-bulk="pin" title="Publish at for all of them">📌 Pin…</button>
     <button class="btn warn" data-bulk="changes">✎ Same retake note…</button>
+    <button class="btn bad" data-bulk="reject">✕ Reject…</button>
     <button class="btn" data-bulk="reopen">↺ Reopen</button>
     <button class="btn" data-bulk="replace">Find and replace…</button>
     <button class="btn" data-bulk="clear">Clear</button>`;
@@ -76,11 +80,13 @@ async function bulk(action) {
     if (t === null) return; extra.text = t;
   }
   if (action === "changes") { const t = ask(`What should change, for all ${n}? clipper re-cuts each from this note:`, true); if (!t) return; extra.text = t; }
-  if (!["changes", "pin"].includes(action) && !confirm(`${action[0].toUpperCase() + action.slice(1)} ${n} item${n > 1 ? "s" : ""}?`)) return;
+  if (action === "reject") { const t = ask(`Why reject all ${n}? (kept as a scoring example)`, true); if (!t) return; extra.text = t; }
+  if (!["changes", "pin", "reject"].includes(action) && !confirm(`${action[0].toUpperCase() + action.slice(1)} ${n} item${n > 1 ? "s" : ""}?`)) return;
   refs.forEach(r => BUSY.add(r)); renderQueue();
   try {
     const r = await api("/api/bulk", { action: api_action, refs, ...extra });
     (r.rows || []).forEach(upsert);
+    renderQueue(); refs.forEach(r2 => VISIBLE.includes(r2) || PICK.delete(r2));  // moved off this tab: done with
     const f = r.failed || [];
     toast(`${action}: ${r.done} done${f.length ? `, ${f.length} failed (${f[0].ref.split("/")[1]}: ${f[0].error})` : ""}`, !!f.length && !r.done, r.undo);
     refresh();
@@ -88,14 +94,15 @@ async function bulk(action) {
   finally { refs.forEach(r => BUSY.delete(r)); renderQueue(); }
 }
 const REP_FIELDS = { title: "Title", description: "Description", hashtags: "Hashtags", tags: "Tags", playlist: "Playlist" };
-let REP_LAST = "";  // the inputs the last dry run was for: Apply needs a preview of exactly these
+let REP_LAST = "", REP_REFS = [];  // the inputs the last dry run was for: Apply needs a preview of exactly these
 function repBody(dry) {
-  return { refs: picked(), find: $("#rFind").value, replace: $("#rRepl").value, dry_run: dry,
+  return { refs: REP_REFS, find: $("#rFind").value, replace: $("#rRepl").value, dry_run: dry,
     fields: Object.keys(REP_FIELDS).filter(f => $(`#rf_${f}`).checked),
     word: $("#rWord").checked, case: $("#rCase").checked, regex: $("#rRegex").checked };
 }
 function showReplace() {
-  const d = $("#tool"), n = picked().length; d.dataset.kind = "replace";
+  REP_REFS = picked();  // fixed while the window is open: a refresh can't change what Apply touches
+  const d = $("#tool"), n = REP_REFS.length; d.dataset.kind = "replace";
   d.innerHTML = `<div class="m-head"><b>Find and replace</b><span style="color:var(--faint);font-size:12px">in ${n} selected item${n > 1 ? "s" : ""}, through Kitsu</span><button class="x" data-close>×</button></div>
     <div class="tbody">
       <input class="search" id="rFind" placeholder="Find">
@@ -226,7 +233,7 @@ function openModal(ref) {
       </div>
     </div>`;
   fillModalState(i, true);
-  $("#bChanges").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write what should change.", true); act(ref, "changes", { text: n }); $("#fChanges").value = ""; };
+  $("#bChanges").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write what should change.", true); if (!BUSY.has(ref)) $("#fChanges").value = ""; act(ref, "changes", { text: n }); };
   $("#bReject").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write the reason in the box first.", true); act(ref, "reject", { text: n }); };
   $("#bSave").onclick = () => {
     const cur = STATE.items.find(x => x.ref === ref), values = {};
