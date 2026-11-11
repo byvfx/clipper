@@ -2,9 +2,11 @@
 
 // ---------- actions ----------
 
+const SENDING = new Set();  // a double tap sends once; a different action or note still goes
 async function act(ref, action, extra = {}) {
-  if (BUSY.has(ref)) return;  // a double tap, or a second button while the first is running
-  BUSY.add(ref); renderQueue();
+  const send = JSON.stringify([ref, action, extra]);
+  if (SENDING.has(send)) return;
+  SENDING.add(send); BUSY.add(ref); renderQueue();
   try {
     const r = await api("/api/action", { ref, action, ...extra });
     const i = STATE.items.findIndex(x => x.ref === ref);
@@ -13,7 +15,7 @@ async function act(ref, action, extra = {}) {
     if (OPEN === ref) fillModalState(STATE.items.find(x => x.ref === ref));
     refresh();
   } catch (e) { toast(e.message, true); }
-  finally { BUSY.delete(ref); renderQueue(); }
+  finally { SENDING.delete(send); BUSY.delete(ref); renderQueue(); }
 }
 function upsert(row) { const k = STATE.items.findIndex(x => x.ref === row.ref); if (k >= 0) STATE.items[k] = { ...STATE.items[k], ...row }; }
 
@@ -83,10 +85,13 @@ async function bulk(action) {
   if (action === "reject") { const t = ask(`Why reject all ${n}? (kept as a scoring example)`, true); if (!t) return; extra.text = t; }
   if (!["changes", "pin", "reject"].includes(action) && !confirm(`${action[0].toUpperCase() + action.slice(1)} ${n} item${n > 1 ? "s" : ""}?`)) return;
   refs.forEach(r => BUSY.add(r)); renderQueue();
+  const inTab = TABS[TAB];  // the tab they were picked on: the page may be on another by the answer
   try {
     const r = await api("/api/bulk", { action: api_action, refs, ...extra });
-    (r.rows || []).forEach(upsert);
-    renderQueue(); refs.forEach(r2 => VISIBLE.includes(r2) || PICK.delete(r2));  // moved off this tab: done with
+    for (const row of r.rows || []) {  // moved off that tab: done with; a failed one stays picked
+      upsert(row);
+      if (!inTab(STATE.items.find(i => i.ref === row.ref) || row)) PICK.delete(row.ref);
+    }
     const f = r.failed || [];
     toast(`${action}: ${r.done} done${f.length ? `, ${f.length} failed (${f[0].ref.split("/")[1]}: ${f[0].error})` : ""}`, !!f.length && !r.done, r.undo);
     refresh();
@@ -233,7 +238,7 @@ function openModal(ref) {
       </div>
     </div>`;
   fillModalState(i, true);
-  $("#bChanges").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write what should change.", true); if (!BUSY.has(ref)) $("#fChanges").value = ""; act(ref, "changes", { text: n }); };
+  $("#bChanges").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write what should change.", true); act(ref, "changes", { text: n }); $("#fChanges").value = ""; };
   $("#bReject").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write the reason in the box first.", true); act(ref, "reject", { text: n }); };
   $("#bSave").onclick = () => {
     const cur = STATE.items.find(x => x.ref === ref), values = {};
