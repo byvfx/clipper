@@ -103,7 +103,10 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   worker only. Merge policy (11-10, user: "just use groks ... switching from copilot for now since my
   credits ran out"): a code PR merges once CI is green on both OSes and Grok's review is in and each finding
   is fixed or answered, then delete the branch; green CI alone isn't enough, and don't wait for Copilot
-  until the user says it is back. Grok's review is the `clipper codereview` comment (#196: Grok 4.7 on
+  until the user says it is back. The switch (11-10, `[codereview] copilot_wait_s`): a commit Copilot
+  reviewed gets no Grok review; its out-of-credits notice, or no request or review, runs Grok on its own, so
+  when Copilot is back the gate is whichever reviewed the head commit (nothing requests Copilot automatically
+  since at least #197: that is a GitHub setting). Grok's review is the `clipper codereview` comment (#196: Grok 4.7 on
   OpenRouter, ~$0.80 and ~25 min on a big PR, the `review` workflow, wiki Developing#code-review-on-prs),
   copied to the PR's linked issues; check each finding against the code. It runs only when a PR touches
   `clipper/`, `tests/`, `deploy/`, `.github/` or `pyproject.toml`: any other PR (the wiki, `uv.lock` alone,

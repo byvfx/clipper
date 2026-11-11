@@ -71,15 +71,29 @@ notes no test reads: the root `*.md` files, `LICENSE`, `docs/log/`, `docs/archiv
 `docs/wiki/` still runs them, since a test checks the links and the sidebar, and so does one to
 `studio/research_notes/streamers.json`, which a test reads. The ruff rules are the defaults plus
 the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on a short test stream
-first. Before merging a PR that changes code, wait for the review below and handle each finding
-(Copilot's automatic review is paused since 2026-11-10). A PR outside that review's paths, such as
+first. Before merging a PR that changes code, wait for the review below (Copilot's, or Grok's when
+Copilot reviewed nothing) and handle each finding. A PR outside that review's paths, such as
 a wiki page or `uv.lock` alone, gets no review comment: don't wait for one.
 
 ## Code review on PRs
 
-Every PR that changes code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`) also
-gets a second review from `clipper codereview` (the `review` workflow,
-`.github/workflows/review.yml`). It sends the diff against main and the changed files in full to
+Copilot goes first, and Grok takes over when Copilot's credits run out. On every PR that changes
+code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`) the `review` workflow
+(`.github/workflows/review.yml`) checks what Copilot did with the PR's latest commit:
+
+| Copilot | What happens |
+|---|---|
+| Reviewed the commit | Nothing more: no Grok review, no cost |
+| Posted "unable to review ... insufficient remaining quota" | Grok reviews, right away |
+| Is a requested reviewer but has said nothing | Grok reviews after `[codereview] copilot_wait_s` (600 s) |
+| Isn't a requested reviewer | Grok reviews after a minute at most |
+| GitHub won't say | Grok reviews |
+
+Nothing asks Copilot on its own account: that takes GitHub's automatic Copilot review, or
+`gh pr edit N --add-reviewer @copilot`. To run Grok on every PR even when Copilot reviewed, set
+`CLIPPER_CODEREVIEW_COPILOT_WAIT_S: 0` in the workflow's env.
+
+The Grok review is `clipper codereview`. It sends the diff against main and the changed files in full to
 `[codereview] reviewer` in one model call at high effort: Grok 4.7 through OpenRouter, about $1
 and 25 minutes for a PR that changes 9 files. It posts the correctness bugs it finds as one
 comment on the PR, and the same review on every issue the PR links (`Closes #70`, or `#70` in the PR's title or body). Each comment is edited in

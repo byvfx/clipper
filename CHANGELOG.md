@@ -8,6 +8,9 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-10: the `review` workflow switches between reviewers by itself: a commit Copilot reviewed gets no
+  Grok review, and Copilot's out-of-credits notice, or no request or review from it, runs Grok
+  (`[codereview] copilot_wait_s`; 0 = always Grok).
 - 11-10: the `check` workflow skips a push or PR that changes only notes no test reads (root `*.md`,
   `LICENSE`, `docs/log/`, `docs/archive/`, `reports/`, `studio/`). `docs/wiki/` still runs it, and so
   does `studio/research_notes/streamers.json` (a test reads it).

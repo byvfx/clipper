@@ -1044,6 +1044,9 @@ sync_key_env = "SYNC_API_KEY"  # env var with the sync.so key; else [paths] sync
 # 25 min for 9 files at high effort, real bugs and no false ones
 reviewer = "openrouter:x-ai/grok-4.7"
 effort = "high"                # none | low | medium | high: full strength, the cost is small
+copilot_wait_s = 600           # the switch: with --pr, a commit Copilot reviewed is skipped; its
+                               # out-of-credits notice, or no review in this long, runs `reviewer`
+                               # (not requested on the PR: 60 s at most). 0 = always `reviewer`
 prompt_version = "v2"          # clipper/prompts/codereview_<v>.md (v2: one reply, no plan in place of a review)
 paths = ["clipper/", "tests/", "deploy/", ".github/", "pyproject.toml"]  # what counts as code
 max_chars = 600000             # diff plus whole files sent; files past it go as diff only
