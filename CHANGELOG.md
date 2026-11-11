@@ -8,6 +8,9 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-10: `clipper audit`: a weekly digest of how the week went (no model), saved each week, and a monthly
+  read-only deep audit that traces what keeps coming back (wiki Audit). Dependabot opens grouped weekly
+  update PRs.
 - 11-10: the `check` workflow skips a push or PR that changes only notes no test reads (root `*.md`,
   `LICENSE`, `docs/log/`, `docs/archive/`, `reports/`, `studio/`). `docs/wiki/` still runs it, and so
   does `studio/research_notes/streamers.json` (a test reads it).

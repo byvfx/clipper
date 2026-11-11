@@ -32,8 +32,11 @@ COPY entrypoint.sh /usr/local/bin/clipper-claude
 COPY checkup.sh /usr/local/bin/clipper-checkup
 COPY checkup-git.sh /usr/local/bin/checkup-git
 COPY checkup.md /usr/local/share/clipper/checkup.md
+COPY audit.sh /usr/local/bin/clipper-audit
+COPY audit-deep.md /usr/local/share/clipper/audit-deep.md
 RUN chmod 755 /usr/local/bin/clipper-claude /usr/local/bin/clipper-checkup /usr/local/bin/checkup-git \
-    && chmod 644 /usr/local/share/clipper/checkup.md
+        /usr/local/bin/clipper-audit \
+    && chmod 644 /usr/local/share/clipper/checkup.md /usr/local/share/clipper/audit-deep.md
 
 # /app is the clone, /home/claude Claude Code's home (both volumes). The config and every
 # relative [paths] entry live in /data, as in the hub; prompts come with the clone.

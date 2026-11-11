@@ -11,6 +11,7 @@
 - [Scheduling and uploads](Scheduling-and-uploads)
 - [Costs](Costs)
 - [Checkup](Checkup)
+- [Audit](Audit)
 
 **Install**
 - [Install](Install)
