@@ -1,4 +1,6 @@
-# A second reviewer on every PR that changes code: `clipper codereview` sends the diff
+# The fallback reviewer on every PR that changes code, for when Copilot reviewed nothing
+# (out of credits, not requested, or silent for [codereview] copilot_wait_s; 0 = always run):
+# `clipper codereview` sends the diff
 # against main and the changed files to [codereview] reviewer (Grok 4.7 through OpenRouter,
 # about $1 a PR) and posts the bugs it finds on the PR and on the issues the PR
 # links, one comment each, edited in place on later pushes. Needs the repo secret
@@ -42,6 +44,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           # CLIPPER_CODEREVIEW_REVIEWER: openrouter:openai/gpt-5.6-sol-pro   # to try another model
+          # CLIPPER_CODEREVIEW_COPILOT_WAIT_S: 0   # to run it even when Copilot reviewed
         run: >-
           uv run --no-sync clipper codereview
           --base origin/${{ github.event.pull_request.base.ref }}
