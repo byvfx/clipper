@@ -3,9 +3,9 @@
 // ---------- actions ----------
 
 const SENDING = new Set();  // a double tap sends once; a different action or note still goes
-async function act(ref, action, extra = {}) {
+async function act(ref, action, extra = {}) {  // true when done, false when it failed, null for a double tap
   const send = JSON.stringify([ref, action, extra]);
-  if (SENDING.has(send)) return;
+  if (SENDING.has(send)) return null;
   SENDING.add(send); BUSY.add(ref); renderQueue();
   try {
     const r = await api("/api/action", { ref, action, ...extra });
@@ -14,7 +14,8 @@ async function act(ref, action, extra = {}) {
     toast(`${{ approve: "Approved", reject: "Rejected", changes: "Changes requested for", reopen: "Reopened", hold: extra.on ? "Held" : "Released", pin: extra.text ? "Pinned" : "Unpinned", edit: "Saved", thumbtext: "New thumbnail words for" }[action]} ${ref.split("/")[1].split("_")[0]}${r.note ? " — " + r.note : ""}`, false, r.undo);
     if (OPEN === ref) fillModalState(STATE.items.find(x => x.ref === ref));
     refresh();
-  } catch (e) { toast(e.message, true); }
+    return true;
+  } catch (e) { toast(e.message, true); return false; }
   finally { SENDING.delete(send); BUSY.delete(ref); renderQueue(); }
 }
 function upsert(row) { const k = STATE.items.findIndex(x => x.ref === row.ref); if (k >= 0) STATE.items[k] = { ...STATE.items[k], ...row }; }
@@ -188,8 +189,34 @@ document.addEventListener("change", e => {
   if (e.target.id === "toD") { TO = e.target.value; renderQueue(); }
 });
 document.addEventListener("input", e => { if (e.target.id === "q") { Q = e.target.value; searchTranscripts(); const pos = e.target.selectionStart; renderQueue(); const q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); } });
-$("#syncBtn").onclick = async () => { try { await api("/api/sync", {}); toast("Syncing from Kitsu…"); setTimeout(refresh, 4000); } catch (e) { toast(e.message, true); } };
-$("#replanBtn").onclick = async () => { try { await api("/api/replan", {}); toast("Schedule replanned"); refresh(); } catch (e) { toast(e.message, true); } };
+// #202: Sync and Replan are busy from the click until the work is done, so a second click can't send again.
+// Sync runs in a thread on serve: the button waits on /api/health until it is done, then refreshes.
+let SYNCING = false, REPLANNING = false;
+function renderBusy() {
+  const s = SYNCING || !!STATE?.health?.sync?.running;
+  $("#syncBtn").disabled = s; $("#syncBtn").textContent = s ? "⟳ Syncing…" : "⟳ Sync Kitsu";
+  $("#replanBtn").disabled = REPLANNING; $("#replanBtn").textContent = REPLANNING ? "Replanning…" : "Replan";
+}
+$("#syncBtn").onclick = async () => {
+  if (SYNCING) return;
+  SYNCING = true; renderBusy();
+  try {
+    await api("/api/sync", {});
+    toast("Syncing from Kitsu…");
+    for (const t0 = Date.now(); Date.now() - t0 < 600000;) {
+      await new Promise(r => setTimeout(r, 2000));
+      const s = (await api("/api/health")).sync;
+      if (!s.running) { toast(s.error ? "Kitsu sync failed: " + s.error : "Synced from Kitsu", !!s.error); break; }
+    }
+  } catch (e) { toast(e.message, true); }
+  finally { SYNCING = false; await refresh(); renderBusy(); }
+};
+$("#replanBtn").onclick = async () => {
+  if (REPLANNING) return;
+  REPLANNING = true; renderBusy();
+  try { await api("/api/replan", {}); toast("Schedule replanned"); } catch (e) { toast(e.message, true); }
+  finally { REPLANNING = false; renderBusy(); refresh(); }
+};
 
 // ---------- modal ----------
 
@@ -238,8 +265,10 @@ function openModal(ref) {
       </div>
     </div>`;
   fillModalState(i, true);
-  $("#bChanges").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write what should change.", true); act(ref, "changes", { text: n }); $("#fChanges").value = ""; };
-  $("#bReject").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write the reason in the box first.", true); act(ref, "reject", { text: n }); };
+  // the box empties on send; a failed send puts the note back, unless a new one was typed meanwhile
+  const note = async (action, n) => { $("#fChanges").value = ""; if (await act(ref, action, { text: n }) === false && OPEN === ref && !$("#fChanges").value) $("#fChanges").value = n; };
+  $("#bChanges").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write what should change.", true); note("changes", n); };
+  $("#bReject").onclick = () => { const n = $("#fChanges").value.trim(); if (!n) return toast("Write the reason in the box first.", true); note("reject", n); };
   $("#bSave").onclick = () => {
     const cur = STATE.items.find(x => x.ref === ref), values = {};
     if ($("#fTitle").value.trim() !== cur.title) values["YouTube title"] = $("#fTitle").value;
@@ -273,8 +302,28 @@ function fillModalState(i, fields) {
     $("#fTitle").value = i.title || ""; $("#fDesc").value = i.description || ""; $("#fTags").value = i.hashtags || "";
     if ($("#fThumb")) $("#fThumb").value = i.thumb_text || "";
     if (i.publish_at) $("#fPin").value = i.publish_at.replace(" ", "T").slice(0, 16);
+    LOADED = Object.fromEntries(MODAL_FIELDS.filter(([id]) => $(id)).map(([id]) => [id, $(id).value.trim()]));
   }
 }
+
+// #202: closing the item window or moving to another item asks before throwing away typed text.
+// A box counts as unsaved when it differs from what it was filled with and from what is saved now
+// (after a Save, or a sync that changed the item underneath, it matches one of them).
+const MODAL_FIELDS = [["#fTitle", "title", i => i.title], ["#fDesc", "description", i => i.description],
+  ["#fTags", "hashtags", i => i.hashtags], ["#fThumb", "thumbnail words", i => i.thumb_text],
+  ["#fPin", "release time", i => (i.publish_at || "").replace(" ", "T").slice(0, 16)], ["#fChanges", "retake note", () => ""]];
+let LOADED = {};
+function unsaved() {
+  const i = OPEN && STATE.items.find(x => x.ref === OPEN);
+  if (!i || !$("#mActs")) return [];
+  return MODAL_FIELDS.filter(([id, , saved]) => {
+    const v = $(id)?.value.trim();
+    return id in LOADED && v !== LOADED[id] && v !== (saved(i) || "").trim();
+  }).map(([, name]) => name);
+}
+function discardOk() { const u = unsaved(); return !u.length || confirm(`Throw away the unsaved ${u.join(", ")}?`); }
+$("#modal").addEventListener("cancel", e => { if (!discardOk()) e.preventDefault(); });  // Esc
+addEventListener("beforeunload", e => { if (unsaved().length) e.preventDefault(); });
 // ---------- style checks (#19) ----------
 
 let CHECK_T = null;

@@ -408,5 +408,5 @@ function renderCloud() {
     ${m.links?.[m.app] ? `<div><a href="${esc(m.links[m.app])}" target="_blank" rel="noopener">Open ${esc(m.app)} on modal.com ↗</a></div>` : ""}`;
 }
 
-function closeModal() { OPEN = null; const v = $("#modal video"); if (v) v.pause(); $("#modal").close(); }
+function closeModal(force) { if (!force && !discardOk()) return; OPEN = null; const v = $("#modal video"); if (v) v.pause(); $("#modal").close(); }
 $("#modal").addEventListener("close", () => { OPEN = null; const v = $("#modal video"); if (v) v.pause(); });

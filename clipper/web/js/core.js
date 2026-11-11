@@ -157,7 +157,7 @@ function renderHealth() {
     <div>Kitsu sync: <span class="${h.sync.error ? "bad" : h.sync.running ? "mid" : "ok"}">${h.sync.running ? "syncing…" : h.sync.error ? esc(h.sync.error) : h.sync.last ? ago(h.sync.last) : "via serve"}</span></div>
     <div>YouTube uploads: <span class="${h.auto_upload_minutes ? "ok" : "mid"}">${h.auto_upload_minutes ? "automatic, every " + h.auto_upload_minutes + " min" : "by hand (clipper upload)"}</span></div>
     <div>Schedule: ${STATE.schedule_generated_at ? "planned " + ago(STATE.schedule_generated_at) : "never planned"}</div>`;
-  $("#syncBtn").disabled = h.sync.running;
+  renderBusy();
 }
 
 // #24: one search box over every stream's titles, descriptions, topics, hashtags and, from
