@@ -964,6 +964,23 @@ def cmd_checkup(cfg: dict, args: argparse.Namespace) -> None:
     raise SystemExit(1 if report["findings"] else 0)
 
 
+def cmd_audit(cfg: dict, args: argparse.Namespace) -> None:
+    from zoneinfo import ZoneInfo
+
+    from . import audit
+
+    if args.keep_deep:
+        print(audit.keep_deep(cfg, Path(args.keep_deep)))
+    elif args.brief:
+        print(audit.brief(cfg, args.weeks) or "no weekly digests saved yet (clipper audit --save)")
+    else:
+        tz = ZoneInfo(cfg["schedule"]["timezone"])
+        snap = audit.collect(cfg)
+        print(audit.text(snap, tz, limit=0 if args.all else audit.TOP))
+        if args.save:
+            audit.save(cfg, snap, tz)
+
+
 def cmd_serve(cfg: dict, args: argparse.Namespace) -> None:
     from . import serve
 
@@ -979,7 +996,7 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
-    ('Services (long-running)', ['services', 'status', 'checkup', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
+    ('Services (long-running)', ['services', 'status', 'checkup', 'audit', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'cookies', 'codereview']),
@@ -1348,6 +1365,15 @@ def add_services(sub) -> None:
     p.add_argument("--mark", action="store_true",
                    help="remember these findings, so the next run says which are new (the scheduled run)")
     p.set_defaults(fn=cmd_checkup)
+
+    p = sub.add_parser("audit", help="how the week went: runs, uploads, spend, backups, what is parked "
+                                     "(no model); --brief feeds the monthly deep audit")
+    p.add_argument("--all", action="store_true", help="every thing to do, not just the top three")
+    p.add_argument("--save", action="store_true", help="keep this week for the monthly deep audit (the scheduled run)")
+    p.add_argument("--brief", action="store_true", help="the saved weeks side by side, repeat problems first")
+    p.add_argument("--weeks", type=int, metavar="N", help="with --brief: how many weeks (default [audit] deep_weeks)")
+    p.add_argument("--keep-deep", metavar="FILE", help="keep FILE as this month's deep audit (the scheduled run)")
+    p.set_defaults(fn=cmd_audit)
 
     p = sub.add_parser("worker", help="GPU machine: `clipper run` each finished recording")
     p.add_argument("--once", action="store_true", help="one pass, then exit")

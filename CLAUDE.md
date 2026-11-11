@@ -140,7 +140,7 @@ Windows notes above don't apply.
   `review` workflow's paths): wait for the review, Copilot's of the head commit or else Grok's (the workflow runs Grok by itself when Copilot reviewed nothing; its `clipper codereview` comment, up to
   ~25 min on a big PR), check each finding against the code, handle it and show the user, then
   merge. Green CI alone isn't enough. A PR that touches none of those (the wiki, `uv.lock` alone,
-  `clipper.example.toml`, `streamers.json`, notes) gets no review: don't wait for one, merge on
+  `clipper.example.toml`, `streamers.json`, notes) or comes from Dependabot gets no review: don't wait for one, merge on
   green CI where it runs and the user's word. A fork's PR gets none either (the workflow skips it:
   no secrets): read its diff yourself, tell the user what you found, and merge only on their word. Copilot is the default reviewer (user, 2026-11-10): a repo ruleset requests it
   when a PR opens, not on later pushes, and the `review` workflow runs Grok by itself for any commit it didn't review.

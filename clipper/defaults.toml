@@ -577,6 +577,19 @@ late_hours = 1               # a release not uploaded this close to its slot (or
 gap_hours = 24               # no release at all this far ahead; 0 = no check
 words = ["hosts", "co-host", "co-hosts"]   # never in a title, description or thumbnail text
 
+[audit]
+# `clipper audit`: the weekly digest (no model) and the monthly deep audit that reads the saved
+# weeks. The claude container runs both (deploy/claude/audit.sh; when: AUDIT_WEEKDAY and
+# AUDIT_MONTHDAY in its env.local).
+window_days = 7              # how far back the digest looks
+stale_pr_days = 14           # an open PR untouched this long is a thing to do
+backup_folder = ""           # where backups land (relative: beside schedule.json); "" = none set up,
+                             # which the digest says every week
+backup_max_days = 8          # the newest file there older than this is a thing to do
+deep_weeks = 5               # how many saved weeks the monthly deep audit reads
+reminders = []               # dated things to come back to, "2026-11-16 compare v8 with v7": shown
+                             # from a week before the date until you take the line out
+
 [serve]
 # `clipper serve`: the always-on process (the war room, the hourly replan and upload,
 # pre-show grabs, retakes, the daily jobs). The bot and `clipper doctor` reach it at url;

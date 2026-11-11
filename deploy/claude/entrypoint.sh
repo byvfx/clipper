@@ -47,6 +47,7 @@ if [ -n "${CHECKUP_AT:-}" ]; then
             [ "$next" -gt "$now" ] || next=$(date -d "tomorrow $CHECKUP_AT" +%s)
             sleep $((next - now))
             clipper-checkup >>/tmp/checkup.log 2>&1 || echo "checkup failed, see /tmp/checkup.log" >&2
+            clipper-audit >>/tmp/audit.log 2>&1 || echo "audit failed, see /tmp/audit.log" >&2   # its days only
         done
     ) &
 fi

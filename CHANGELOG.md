@@ -8,6 +8,9 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-10: `clipper audit`: a weekly digest of how the week went (no model), saved each week, and a monthly
+  read-only deep audit that traces what keeps coming back (wiki Audit). Dependabot opens grouped weekly
+  update PRs.
 - 11-10: the `review` workflow switches between reviewers by itself: a commit Copilot reviewed gets no
   Grok review, and Copilot's out-of-credits notice, or no request or review from it, runs Grok
   (`[codereview] copilot_wait_s`; 0 = always Grok).

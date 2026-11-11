@@ -252,6 +252,12 @@ messages: GitHub closes the issue on "fix".
   done the same day (PRs #170-#182 and #184; each change is a CHANGELOG.md 11-08 bullet, the log has the PR
   list) and deployed 21:51. Left for later: `tests/test_modules_have_tests.py` lists 13 untested modules (the
   list may only shrink); 17 functions over McCabe 15 carry `# noqa: C901`, split when touched.
+- **Weekly and monthly audit (11-10, wiki Audit):** `clipper audit` (no model) DMs how the week went and saves
+  `streams/.audit/weekly-<date>.json`; on the 1st a read-only `claude -p` reads the saved weeks, traces repeat
+  problems and leaves `deep-<YYYY-MM>.md`. The claude container runs both after the checkup (`audit.sh`), so it
+  needs `bash deploy/claude/deploy.sh` once. `[audit] backup_folder` is empty until #204: the digest says so
+  weekly. Dependabot opens grouped weekly PRs (ruff ignored; no Grok review, no secrets). Its security
+  alerts are a separate repo switch, off as of 11-10.
 - **News watcher #110:** off since 2026-11-03 at the user's word (`[news] check_minutes = 0`, no terms); only
   `[news] watch` / `[shows.<key>.news] watch` terms are watched, `auto_watch = true` brings back the
   cast/figures/library list; `#news` exists in Discord.

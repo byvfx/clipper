@@ -23,8 +23,11 @@ permissions:
 
 jobs:
   review:
-    # A fork's PR gets no secrets; a draft waits until it is ready.
-    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    # A fork's PR and Dependabot's get no secrets; a draft waits until it is ready.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && !github.event.pull_request.draft
+      && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 75   # Grok thinks for ~25 min on a big PR; this bounds a retry
     steps:
