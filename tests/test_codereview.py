@@ -318,9 +318,42 @@ def test_copilot_state_tells_a_review_from_its_out_of_credits_notice():
     assert codereview.copilot_state([copilot(OUT_NOTICE), copilot("real")], sha) == "reviewed"  # re-requested
 
 
-def test_run_leaves_a_commit_copilot_reviewed_alone(monkeypatch, defaults):
+def test_a_commit_copilot_reviewed_gets_a_note_and_no_model_call(monkeypatch, defaults):
     hub = Hub(reviews=[copilot("Looks fine")])
-    assert not run_with(monkeypatch, defaults, hub, G) and hub.posts == []
+    assert not run_with(monkeypatch, defaults, hub, G)
+    assert [n for n, _ in hub.posts] == [9]                 # no new comment on the linked issue
+    assert codereview.COPILOT_NOTE in hub.posts[0][1] and "<!-- diff=d1 -->" in hub.posts[0][1]
+
+
+def test_copilots_review_replaces_findings_about_older_code(monkeypatch, defaults):
+    hub = Hub()
+    assert run_with(monkeypatch, defaults, hub, G)          # the first push: findings on PR and issue
+    hub.posts.clear()
+    hub.got_reviews = [copilot("Looks fine")]
+    assert not run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"})
+    assert [n for n, _ in hub.posts] == [9, 70]
+    assert all(codereview.COPILOT_NOTE in b and "a bug" not in b and "<!-- diff=d2 -->" in b for _, b in hub.posts)
+
+
+def test_copilots_review_replaces_a_failed_one(monkeypatch, defaults):
+    failed = codereview.comment("", {**INFO, **G}, failed="timeout")
+    hub = Hub({9: [{"id": 1, "body": failed}]}, reviews=[copilot("Looks fine")])
+    assert not run_with(monkeypatch, defaults, hub, G)
+    assert "Review failed" not in hub.comments[9][0]["body"]
+
+
+def test_a_merge_of_main_after_copilot_isnt_reviewed_again(monkeypatch, defaults):
+    hub = Hub(reviews=[copilot("Looks fine")])
+    run_with(monkeypatch, defaults, hub, G)
+    hub.posts.clear()
+    hub.got_reviews = []                                    # Copilot hasn't seen the merge commit
+    assert not run_with(monkeypatch, defaults, hub, {**G, "sha": "b" * 40}) and hub.posts == []
+
+
+def test_only_copilots_own_note_counts_as_one():
+    note = codereview.copilot_note(codereview.MARKER, "d1", "a" * 40)
+    assert codereview.good(note) and codereview.is_copilot_note(note)
+    assert not codereview.is_copilot_note(codereview.comment(f"quoting: {codereview.COPILOT_NOTE}", INFO))
 
 
 def test_run_switches_to_the_model_when_copilot_is_out_of_credits(monkeypatch, defaults):

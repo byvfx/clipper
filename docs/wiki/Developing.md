@@ -83,7 +83,7 @@ code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`) the `review
 
 | Copilot | What happens |
 |---|---|
-| Reviewed the commit | Nothing more: no Grok review, no cost |
+| Reviewed the commit | No Grok review, no cost; a one-line note replaces any older Grok findings |
 | Posted "unable to review ... insufficient remaining quota" | Grok reviews, right away |
 | Is a requested reviewer but has said nothing | Grok reviews after `[codereview] copilot_wait_s` (600 s) |
 | Isn't a requested reviewer | Grok reviews after a minute at most |

@@ -38,6 +38,7 @@ COPILOT = "copilot-pull-request-reviewer[bot]"
 # Its "unable to review ... insufficient remaining quota" notice arrives as a review. Reading a
 # real review as one costs a paid review; the other way round would leave a PR unreviewed.
 COPILOT_OUT = re.compile(r"unable to review|quota", re.IGNORECASE)
+COPILOT_NOTE = "Copilot reviewed this commit, so there is no second review here."
 COPILOT_GRACE_S = 60  # how long an automatic request has to show up on a new PR
 COPILOT_POLL_S = 20
 # #12, owner/name#12 (kept only when it is this repo), or a link to an issue or PR here.
@@ -375,6 +376,19 @@ def each_issue(gh: GitHub, pr: int, pinfo: dict, act) -> None:
         raise ClipperError("codereview: not posted on " + "; ".join(errors))
 
 
+def copilot_note(marker: str, digest_: str, sha: str, pr: int | None = None) -> str:
+    """Stands for a commit Copilot reviewed: findings here were about older code, and with the
+    digest a merge of main into the branch isn't reviewed (and paid for) after all."""
+    what = f"Code review of #{pr}" if pr else "Code review"
+    return f"{marker}\n{DIGEST.format(digest_)}\n**{what}** at {sha[:7]}: {COPILOT_NOTE}\n"
+
+
+def is_copilot_note(body: str) -> bool:
+    """Its third line, where a real review has its "by `model`" and can't quote this."""
+    lines = body.split("\n", 3)
+    return len(lines) > 2 and COPILOT_NOTE in lines[2]
+
+
 def copilot_state(reviews: list[dict], sha: str) -> str:
     """Copilot's latest word on commit sha: "reviewed", "out" (it couldn't: no credits), or ""."""
     theirs = [r for r in reviews if (r.get("user") or {}).get("login") == COPILOT and r.get("commit_id") == sha]
@@ -442,6 +456,8 @@ def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
     if g and old and good(old["body"]) and DIGEST.format(g["digest"]) in old["body"]:
         # Reviewed already (a docs push, a merge of main): only issues still missing it.
         print(f"codereview: the PR's code changes are the ones already reviewed ({g['digest']})")
+        if is_copilot_note(old["body"]):   # Copilot's review is on the PR: nothing to copy to the issues
+            return
         want = for_issue(old["body"], pr)
 
         def fill(n):
@@ -453,6 +469,12 @@ def run(cfg: dict, base: str, head: str, pr: int | None = None, repo: str = "",
     wait_s = cfg["codereview"]["copilot_wait_s"]
     if g and wait_s > 0 and copilot_reviewed(gh, pr, g["sha"], wait_s):
         print("codereview: Copilot reviewed this commit: no second review")
+        gh.upsert(pr, copilot_note(MARKER, g["digest"], g["sha"]), old)
+
+        def note(n):  # only a copy that is there already: it may hold findings about older code
+            mine = gh.find(n, im)
+            return gh.upsert(n, copilot_note(im, g["digest"], g["sha"], pr), mine) if mine else None
+        each_issue(gh, pr, pinfo, note)
         return
     try:
         if g:
