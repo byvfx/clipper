@@ -35,6 +35,26 @@ def parse(*argv: str) -> argparse.Namespace:
     return cli.build_parser().parse_args(argv)
 
 
+def parse_error(capsys, *argv: str) -> str:
+    with pytest.raises(SystemExit):
+        parse(*argv)
+    return capsys.readouterr().err
+
+
+def test_a_mistyped_name_gets_a_suggestion(capsys):
+    err = parse_error(capsys, "stauts")
+    assert "did you mean status" in err and "{" not in err and "fetch" not in err
+    assert "did you mean score" in parse_error(capsys, "run", "kick-1", "--from", "scroe")
+    assert "see --help" in parse_error(capsys, "zzzzzz")  # nothing close, too many to list
+
+
+def test_help_lists_commands_once(capsys):
+    for argv in (["--help"], ["review", "--help"]):
+        with pytest.raises(SystemExit):
+            parse(*argv)
+        assert "{" not in capsys.readouterr().out.split("options:")[0]
+
+
 def test_one_items_flag_old_spellings_still_work():
     assert parse("cut", "kick-1", "--items", "s03,s07").items == ["s03", "s07"]
     assert parse("cut", "kick-1", "--ids", "s03", "--items", "s07").items == ["s03", "s07"]
