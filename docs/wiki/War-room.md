@@ -30,10 +30,15 @@ The search box looks through every stream's titles, descriptions, topics and has
 what is said in each video (its captions). Status, date and show filters combine with it, and
 the view is in the page's URL, so it can be bookmarked.
 
-Tick items (shift-click for a range, or "Select shown") to approve, hold, release, pin,
-reopen or send the same retake note to all of them, or to find and replace in their titles,
-descriptions, hashtags, tags or playlists: the dry run lists every line that would change
-before anything is written.
+Tick items (shift-click for a range, or "Select shown") to approve, reject, hold, release,
+pin, reopen or send the same retake note to all of them, or to find and replace in their
+titles, descriptions, hashtags, tags or playlists: the dry run lists every line that would
+change before anything is written. A selection survives a change of tab or filter, but bulk
+actions only touch what is on screen: the bar says how many picks are left out.
+
+"Updated N s ago" in the header is the age of the page's numbers: amber past 45 s, red past
+2 min, which means serve isn't answering. A tab in the background stops polling and catches
+up when you come back.
 
 Every action, single or bulk, can be undone from its toast for 10 s or from "Undo…" (the
 last 20). Undo goes through Kitsu too, and an item already on YouTube keeps its live text

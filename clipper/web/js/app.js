@@ -306,4 +306,11 @@ applyLayout();
 const POLL = [[refresh, 15000], [refreshLive, 60000], [refreshCloud, 60000], [refreshCosts, 300000],
               [refreshUsage, 300000], [refreshStats, 900000]];
 loadHash();
-for (const [fn, every] of POLL) { fn(); setInterval(fn, every); }
+// #201: a tab in the background doesn't poll; coming back runs whatever fell due while it was away.
+const POLLED = new Map();
+function poll(fn, every) {
+  if (document.hidden || Date.now() - (POLLED.get(fn) || 0) < every - 1000) return;
+  POLLED.set(fn, Date.now()); fn();
+}
+for (const [fn, every] of POLL) { poll(fn, every); setInterval(() => poll(fn, every), every); }
+document.addEventListener("visibilitychange", () => { for (const [fn, every] of POLL) poll(fn, every); });

@@ -27,6 +27,10 @@ async function api(path, body) {
 function tick() {
   const tz = STATE?.timezone || undefined;
   $("#clock").textContent = new Date().toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  // #201: the clock ticks whatever the last poll did; this says how old the numbers are
+  const age = STATE ? Math.max(0, (Date.now() - new Date(STATE.generated_at)) / 1000) : null, u = $("#updated");
+  u.textContent = age === null ? "no data yet" : age < 90 ? `updated ${Math.round(age)} s ago` : `updated ${ago(STATE.generated_at)}`;
+  u.className = "updated " + (age > 120 ? "bad" : age === null || age > 45 ? "mid" : "");
 }
 setInterval(tick, 1000);
 
@@ -142,7 +146,7 @@ function renderHealth() {
   const h = STATE.health, svc = h.services || {};
   // serve and the bot from their heartbeats (streams/.serve, .bot: any machine), with what serve is running
   const lines = ["serve", "bot"].filter(k => svc[k]).map(k => {
-    const s = svc[k], busy = s.running && s.running.length ? ` Â· ${s.running.join(", ")} running` : "";
+    const s = svc[k], busy = s.running && s.running.length ? ` · ${s.running.join(", ")} running` : "";
     return `<div>${esc(s.label)}: <span class="${s.level}">${esc(s.text)}</span>${esc(busy)}</div>`;
   }).join("");
   const last = svc.serve && svc.serve.last ? Object.entries(svc.serve.last)
@@ -206,6 +210,9 @@ function loadHash() {
   if (Q) searchTranscripts();
 }
 window.addEventListener("hashchange", () => { loadHash(); if (STATE) renderQueue(); });
+// The link's ?key= has set the cookie by now: keep it out of the address bar, screenshots and copied links.
+const URLQ = new URLSearchParams(location.search);
+if (URLQ.has("key")) { URLQ.delete("key"); history.replaceState(null, "", location.pathname + (URLQ.toString() ? "?" + URLQ : "") + location.hash); }
 const TABS = { waiting: i => i.decision === "pending", changes: i => i.decision === "changes_requested",
   approved: i => i.decision === "approved" && !i.uploaded, live: i => i.uploaded, rejected: i => i.decision === "rejected", all: () => true };
 const TAB_LABEL = { waiting: "Waiting", changes: "Changes", approved: "Approved", live: "Uploaded", rejected: "Rejected", all: "All" };
