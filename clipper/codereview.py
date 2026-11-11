@@ -35,9 +35,10 @@ LAST = "<details><summary>The last review, still standing</summary>"
 BODY_MAX = 65000  # GitHub refuses a comment over 65536 characters
 BOT = "github-actions[bot]"  # who GITHUB_TOKEN posts as (it can't read /user)
 COPILOT = "copilot-pull-request-reviewer[bot]"
-# Its "unable to review ... insufficient remaining quota" notice arrives as a review. Reading a
-# real review as one costs a paid review; the other way round would leave a PR unreviewed.
-COPILOT_OUT = re.compile(r"unable to review|quota", re.IGNORECASE)
+# Its "Copilot was unable to review ... insufficient remaining quota" notice arrives as a review.
+# Only its first sentence counts: a real review opens with its overview (<!-- ccr-overview... or
+# "Copilot reviewed N files"), and may well be about some other quota.
+COPILOT_OUT = re.compile(r"\s*Copilot\b[^.\n]*\b(?:unable|could not|can't|cannot|quota)", re.IGNORECASE)
 COPILOT_NOTE = "Copilot reviewed this commit, so there is no second review here."
 COPILOT_GRACE_S = 60  # how long an automatic request has to show up on a new PR
 COPILOT_POLL_S = 20
@@ -403,7 +404,7 @@ def _copilots(reviews: list[dict]) -> list[dict]:
 
 
 def _copilot_out(review: dict) -> bool:
-    return bool(COPILOT_OUT.search((review.get("body") or "")[:300]))
+    return bool(COPILOT_OUT.match(review.get("body") or ""))
 
 
 def copilot_stands(gh: GitHub, pr: int) -> bool:
