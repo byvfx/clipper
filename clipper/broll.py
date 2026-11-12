@@ -51,7 +51,8 @@ VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".ts", ".mpg", ".mpeg", ".
 OWNED = re.compile(r"©|\(c\) ?\d{4}|\bcopyright(ed)?\b|all rights reserved|used (with|by) permission"
                    r"|\blicensed (from|by|to)\b|\bgetty\b|shutterstock|\bistock|\bpond5\b|storyful"
                    r"|associated press|\bap (photo|video|images?|footage)\b|\breuters\b|\bafp\b", re.I)
-NOT_OWNED = re.compile(r"(not subject to|no known|free of|without) (any )?copyright", re.I)
+NOT_OWNED = re.compile(r"(not subject to|no known|free of|without) (any )?copyright|\bno copyright"
+                       r"|copyright\W{0,3}(status\W{0,3})?(public domain|none|expired|not renewed)", re.I)
 MUSIC = re.compile(r"\bmusic\b", re.I)
 
 
@@ -256,8 +257,10 @@ def commons(query: str, n: int, cfg: dict | None = None, title: str = "") -> lis
     if title:
         params["titles"] = title
     else:
-        params.update(generator="search", gsrnamespace=6, gsrlimit=max(n * 3, 10), gsrsearch=f"{query} filetype:video")
+        params.update(generator="search", gsrnamespace=6, gsrlimit=min(max(n * 3, 10), 50), gsrsearch=f"{query} filetype:video")
     js = _get("https://commons.wikimedia.org/w/api.php", params)
+    if err := js.get("error"):
+        raise ClipperError(f"Commons: {err.get('code', '')} {err.get('info', '')}".strip())
     out = []
     for pg in sorted((js.get("query") or {}).get("pages", {}).values(), key=lambda p: p.get("index", 0)):
         ii = (pg.get("imageinfo") or [None])[0]
@@ -379,7 +382,7 @@ def encode(cfg: dict, src: str, dst: Path, start: float | None = None, end: floa
     bc = cfg["broll"]
     codec = bc["codec"] or cfg["cut"]["clip_codec"]
     args = encode_args(codec, bc["crf"])
-    vf = f"scale=-2:'min(ih,{bc['max_height']})':flags=lanczos"
+    vf = f"scale=-2:'trunc(min(ih,{bc['max_height']})/2)*2':flags=lanczos"  # H.264 needs both even
     if "-vf" in args:  # vaapi uploads in its own filter: after the scale
         i = args.index("-vf")
         vf += "," + args[i + 1]
@@ -528,21 +531,7 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
             start, end = (start or 0) + off, off + (end if end is not None else span)
             c["duration"] = base.get("end")
     else:
-        if Path(target).suffix.lower() in VIDEO_EXT and Path(target).is_file():
-            if not credit:
-                raise ClipperError("a local file needs --credit (who made it, as the video's description will say)")
-            p = Path(target).resolve()
-            c = {"key": p.as_uri(), "source": "file", "title": p.stem, "page": "", "url": str(p), "date": "",
-                 "credit": credit, "licence": licence, "description": "", "duration": None}
-        elif target.startswith(("http://", "https://")):
-            c = resolve(target, cfg)
-            media(c, cfg)
-        else:
-            raise ClipperError(f"{target}: not a clip id (clipper broll list), a web address or a video file")
-        if why := refused(c, cfg):
-            raise ClipperError(f"{c['title'][:60]!r}: {why}")
-        if c.get("duration") is None:
-            c["duration"] = length_of(c["url"])
+        c = _candidate(cfg, target, credit, licence)
         _inside(start, end, c["duration"], c["title"][:60])
         if c["key"] in lib["dropped"]:
             with jsonstate.update(_index(cfg), {}) as idx:  # added by hand: no longer dropped
@@ -550,13 +539,42 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
         if start is None and end is None and c["duration"] > max_s:
             cid = clip_id(c["source"], c["key"])
             old = lib["clips"].get(cid) or {}
+            if old.get("file") and (root(cfg) / old["file"]).exists():  # taken whole before (max_s was higher)
+                _tag(cfg, cid, tags)
+                say(f"{cid}: already in the library ({old['status']})")
+                return load(cfg)["clips"][cid]
             e = _entry(c, cid, "long", [*old.get("tags", []), *tags])
             _save(cfg, e)
             say(f"{e['id']}: {c['title'][:70]} ({c['duration'] / 60:.0f} min, long: add it again with --from/--to)")
             return e
-    if end is None and (c.get("duration") or 0) - (start or 0) > max_s:
-        raise ClipperError(f"from {start or 0:.0f} s to the end is over [broll] max_s ({max_s} s): give --to too")
+    if end is None and start is not None:
+        end = c["duration"]  # known here: _inside refused an open end without it
+        if end - start > max_s:
+            raise ClipperError(f"from {start:.0f} s to the end is over [broll] max_s ({max_s} s): give --to too")
+    elif end is not None and start is None:
+        start = 0.0
     return take(cfg, c, tags, start, end, say=say)
+
+
+def _candidate(cfg: dict, target: str, credit: str, licence: str) -> dict:
+    """A video file or a source page's address -> a checked candidate, its length probed if
+    its source didn't say."""
+    if Path(target).suffix.lower() in VIDEO_EXT and Path(target).is_file():
+        if not credit:
+            raise ClipperError("a local file needs --credit (who made it, as the video's description will say)")
+        p = Path(target).resolve()
+        c = {"key": p.as_uri(), "source": "file", "title": p.stem, "page": "", "url": str(p), "date": "",
+             "credit": credit, "licence": licence, "description": "", "duration": None}
+    elif target.startswith(("http://", "https://")):
+        c = resolve(target, cfg)
+        media(c, cfg)
+    else:
+        raise ClipperError(f"{target}: not a clip id (clipper broll list), a web address or a video file")
+    if why := refused(c, cfg):
+        raise ClipperError(f"{c['title'][:60]!r}: {why}")
+    if c.get("duration") is None:
+        c["duration"] = length_of(c["url"])
+    return c
 
 
 def _inside(start: float | None, end: float | None, span: float | None, what: str) -> None:

@@ -1,9 +1,12 @@
 import json
+from pathlib import Path
 
 import pytest
 
 from clipper import broll, jsonstate
 from clipper.errors import ClipperError
+
+REAL_ENCODE = broll.encode  # before the fixture stubs it
 
 
 @pytest.fixture
@@ -374,3 +377,57 @@ def test_a_long_file_is_listed_long(cfg, tmp_path, monkeypatch):
     assert e["status"] == "long" and not encoded
     part = broll.add(cfg, e["id"], 60.0, 75.0, say=lambda s: None)
     assert part["duration"] == 15 and encoded[-1] == (str(f.resolve()), 60.0, 75.0)
+
+
+def test_encode_keeps_both_sides_even(cfg, tmp_path, monkeypatch):  # Grok's review of #230
+    ran = []
+
+    class Done:
+        returncode, stderr = 0, ""
+
+    def run(cmd, **kw):
+        ran.append(cmd)
+        Path(cmd[-1]).write_bytes(b"x")
+        return Done()
+
+    monkeypatch.setattr(broll.subprocess, "run", run)
+    REAL_ENCODE(cfg, "https://x/a.mp4", tmp_path / "a.mp4", 5.0, 10.0)
+    vf = ran[0][ran[0].index("-vf") + 1]
+    assert vf.startswith("scale=-2:'trunc(min(ih,1080)/2)*2'")
+    assert ran[0][ran[0].index("-ss") + 1] == "5.000" and ran[0][ran[0].index("-t") + 1] == "5.000"
+    assert "-an" in ran[0] and (tmp_path / "a.mp4").exists()
+
+
+def test_public_domain_wording_isnt_an_owner(cfg):
+    for desc in ("Educational short. No copyright.", "Copyright: Public Domain.", "Copyright status: none",
+                 "Copyright expired in 1985.", "Copyright not renewed."):
+        assert broll.refused(cand(description=desc), cfg) == "", desc
+    assert broll.refused(cand(description="Copyright 1985 Coronet Films"), cfg)
+
+
+def test_a_commons_error_is_said(monkeypatch):
+    monkeypatch.setattr(broll, "_get", lambda url, params=None, timeout=20: {
+        "error": {"code": "gsrlimit", "info": "too many"}})
+    with pytest.raises(ClipperError, match="Commons: gsrlimit too many"):
+        broll.commons("storm", 40)
+
+
+def test_readding_a_downloaded_clip_that_is_now_long_keeps_it(cfg, monkeypatch):
+    c = cand("https://images.nasa.gov/details/x", duration=120.0)
+    monkeypatch.setattr(broll, "resolve", lambda url, cfg=None: dict(c))
+    e = broll.add(cfg, c["page"], say=lambda s: None)
+    broll.set_status(cfg, [e["id"]], "keep")
+    cfg["broll"]["max_s"] = 60
+    again = broll.add(cfg, c["page"], tags=["space"], say=lambda s: None)
+    assert again["status"] == "kept" and again["file"] == e["file"] and "space" in again["tags"]
+    assert (cfg["paths"]["broll"] / e["file"]).exists()
+
+
+def test_from_alone_is_the_same_part_as_from_to_the_end(cfg, monkeypatch):
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand("https://c/long", duration=600.0)])
+    broll.find(cfg, "x", ["commons"], say=lambda s: None)
+    (lid,) = broll.load(cfg)["clips"]
+    a = broll.add(cfg, lid, 500.0, say=lambda s: None)
+    n = len(encoded)
+    b = broll.add(cfg, lid, 500.0, 600.0, say=lambda s: None)
+    assert a["id"] == b["id"] and a["end"] == 600 and len(encoded) == n
