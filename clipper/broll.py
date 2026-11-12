@@ -28,6 +28,7 @@ member on a cover or as the subject of a title.
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import os
 import re
@@ -48,7 +49,8 @@ VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".ts", ".mpg", ".mpeg", ".
 
 # Words in a description or credit that say someone outside the archive owns the picture.
 OWNED = re.compile(r"©|\(c\) ?\d{4}|\bcopyright(ed)?\b|all rights reserved|used (with|by) permission"
-                   r"|\blicensed (from|by|to)\b|getty images|shutterstock|\bap photo\b|reuters", re.I)
+                   r"|\blicensed (from|by|to)\b|\bgetty\b|shutterstock|\bistock|\bpond5\b|storyful"
+                   r"|associated press|\bap (photo|video|images?|footage)\b|\breuters\b|\bafp\b", re.I)
 NOT_OWNED = re.compile(r"(not subject to|no known|free of|without) (any )?copyright", re.I)
 MUSIC = re.compile(r"\bmusic\b", re.I)
 
@@ -86,6 +88,8 @@ def licence_code(text: str) -> str:
         return "cc0"
     if "publicdomain" in t or "public domain" in t or re.match(r"pd\b|pd-", t) or "public-domain" in t:
         return "pd"
+    if re.search(r"-nc\b|\bnc\b|non-?commercial|-nd\b|\bnd\b|no-?deriv", t):
+        return "other"  # noncommercial or no-derivatives: not for a monetized channel's edits
     if re.search(r"by-sa|by sa|attribution-sharealike", t):
         return "cc-by-sa"
     if re.search(r"licenses/by/|cc by\b|cc-by\b|attribution", t):
@@ -160,8 +164,9 @@ def _get(url: str, params: dict | None = None, timeout: int = 20):
         raise ClipperError(f"{host}: not JSON") from e
 
 
-def _text(html: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", html or "")).strip()
+def _text(text: str) -> str:
+    """Tags stripped, entities decoded (&copy; is checked as ©), spaces squeezed."""
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", text or ""))).strip()
 
 
 # --- sources: each returns candidates {key, source, title, page, url, date, credit, licence,
@@ -183,7 +188,7 @@ def nasa(query: str, n: int, cfg: dict | None = None, nasa_id: str = "") -> list
                     "manifest": item["href"], "url": "", "date": (d.get("date_created") or "")[:10],
                     "credit": "NASA" + (f" {d['center']}" if d.get("center") else "")
                               + (f" ({d['secondary_creator']})" if d.get("secondary_creator") else ""),
-                    "licence": "public domain (NASA)", "description": d.get("description", "")[:2000],
+                    "licence": "public domain (NASA)", "description": _text(d.get("description", "")),
                     "duration": None})
     return out
 
@@ -229,13 +234,14 @@ def prelinger(query: str, n: int, cfg: dict | None = None, identifier: str = "")
             continue
         f = max(vids, key=lambda f: int(f.get("height") or 0))
         desc = md.get("description", "")
+        desc = " ".join(map(str, desc)) if isinstance(desc, list) else str(desc)
         out.append({"key": f"https://archive.org/details/{ident}", "source": "prelinger",
                     "title": _one(md.get("title")), "page": f"https://archive.org/details/{ident}",
                     "url": f"https://archive.org/download/{quote(ident)}/{quote(f['name'])}",
                     "date": _one(md.get("date") or md.get("year"))[:10],
                     "credit": "Prelinger Archives, Internet Archive" + (f" ({_one(md.get('creator'))})"
                                                                        if md.get("creator") else ""),
-                    "licence": _one(md.get("licenseurl")), "description": _text(_one(desc))[:2000],
+                    "licence": _one(md.get("licenseurl")), "description": _text(desc),
                     "duration": seconds(f.get("length"))})
     return out
 
@@ -262,9 +268,9 @@ def commons(query: str, n: int, cfg: dict | None = None, title: str = "") -> lis
         out.append({"key": page, "source": "commons", "title": meta.get("ObjectName") or pg.get("title", ""),
                     "page": page, "url": ii["url"].split("?")[0],
                     "date": (meta.get("DateTimeOriginal") or meta.get("DateTime") or "")[:10],
-                    "credit": (meta.get("Artist") or "Wikimedia Commons")[:200],
+                    "credit": meta.get("Artist") or "Wikimedia Commons",
                     "licence": meta.get("LicenseShortName") or meta.get("License") or "",
-                    "description": meta.get("ImageDescription", "")[:2000], "duration": ii.get("duration")})
+                    "description": meta.get("ImageDescription", ""), "duration": ii.get("duration")})
     return out
 
 
@@ -295,7 +301,7 @@ def dvids(query: str, n: int, cfg: dict | None = None, asset: str = "") -> list[
                     "asset": d["id"], "url": "", "files": d.get("files"), "date": (d.get("date") or "")[:10],
                     "credit": f"{who} ({d['branch']}), via DVIDS" if d.get("branch") else f"{who}, via DVIDS",
                     "licence": "public domain (DVIDS)",
-                    "description": (d.get("description") or d.get("short_description") or "")[:2000],
+                    "description": _text(d.get("description") or d.get("short_description") or ""),
                     "duration": seconds(d.get("duration"))})
     return out
 
@@ -353,6 +359,18 @@ def resolve(url: str, cfg: dict | None = None) -> dict:
 # --- the library
 
 
+def length_of(src: str) -> float | None:
+    """A video's length by ffprobe, a file or an address (read from its header, not downloaded);
+    None when it can't tell."""
+    ua = ["-user_agent", UA] if str(src).startswith("http") else []
+    try:
+        r = subprocess.run(["ffprobe", "-v", "error", *ua, "-show_entries", "format=duration", "-of", "csv=p=0",
+                            str(src)], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return seconds((r.stdout or "").strip().splitlines()[0] if r.returncode == 0 and r.stdout.strip() else None)
+
+
 def encode(cfg: dict, src: str, dst: Path, start: float | None = None, end: float | None = None) -> None:
     """src (an address or a file), or start..end of it -> dst: H.264 at most [broll] max_height,
     sound only with [broll] audio."""
@@ -388,7 +406,7 @@ def encode(cfg: dict, src: str, dst: Path, start: float | None = None, end: floa
 
 
 def _entry(c: dict, cid: str, status: str, tags: list[str], start=None, end=None) -> dict:
-    keep = ("key", "source", "title", "page", "url", "date", "credit", "licence", "duration")
+    keep = ("key", "source", "title", "page", "url", "date", "credit", "licence", "description", "duration")
     e = {k: c.get(k) for k in keep}
     e.update(id=cid, status=status, tags=sorted(set(tags)), file=f"{cid}.mp4" if status != "long" else "",
              added=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"))
@@ -410,16 +428,23 @@ def _tag(cfg: dict, cid: str, tags: list[str]) -> None:
 
 
 def take(cfg: dict, c: dict, tags: list[str], start=None, end=None, say=print) -> dict:
-    """Download one candidate (or a part of it) into the library as a new clip."""
+    """Download one candidate (or a part of it) into the library as a new clip. The same item
+    and range again isn't downloaded twice: its entry keeps its status and gains the tags."""
     media(c, cfg)
     cid = clip_id(c["source"], c["key"], start, end)
     d = root(cfg)
+    old = load(cfg)["clips"].get(cid)
+    if old and old.get("file") and (d / old["file"]).exists():
+        _tag(cfg, cid, tags)
+        say(f"  {cid}: already in the library ({old['status']})")
+        return load(cfg)["clips"][cid]
     d.mkdir(parents=True, exist_ok=True)
     encode(cfg, c["url"], d / f"{cid}.mp4", start, end)
     e = _entry(c, cid, "new", tags, start, end)
-    from .media import try_duration
-
-    e["duration"] = round(try_duration(d / f"{cid}.mp4") or e.get("duration") or 0, 2)
+    if old:
+        e.update(status=old["status"] if old["status"] != "long" else "new", added=old.get("added", e["added"]),
+                 tags=sorted(set(old.get("tags", [])) | set(tags)))
+    e["duration"] = round(length_of(str(d / f"{cid}.mp4")) or e.get("duration") or 0, 2)
     _save(cfg, e)
     say(f"  {cid}: {c['title'][:70]} ({e['duration']:.0f} s)")
     return e
@@ -458,7 +483,14 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
                 continue
             try:
                 media(c, cfg)  # a long one keeps its address too, for add --from/--to
-                if (c.get("duration") or 0) > bc["max_s"]:
+                if c.get("duration") is None:
+                    c["duration"] = length_of(c["url"])
+                if c["duration"] is None:
+                    skipped += 1
+                    say(f"  skip {c['title'][:60]!r}: its length is unknown (clipper broll add {c['page']} "
+                        "--from/--to takes a part)")
+                    continue
+                if c["duration"] > bc["max_s"]:
                     _save(cfg, _entry(c, cid, "long", [query]))
                     say(f"  {cid}: {c['title'][:70]} ({c['duration'] / 60:.0f} min, long: "
                         f"clipper broll add {cid} --from 0:01:20 --to 0:01:45)")
@@ -479,41 +511,65 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
     or a local file (with credit: who made it)."""
     tags = tags or []
     lib = load(cfg)
+    max_s = cfg["broll"]["max_s"]
     if target in lib["clips"]:
         base = lib["clips"][target]
-        if start is None and end is None and base["status"] != "long":
-            raise ClipperError(f"{target} is already in the library: --from/--to take a part of it")
+        if start is None and end is None:
+            raise ClipperError(f"{target} is {'long' if base['status'] == 'long' else 'already in the library'}: "
+                               "--from/--to take a part of it")
         c = dict(base)
+        if why := refused(c, cfg):  # the settings may have changed since it was taken ([broll] audio)
+            raise ClipperError(f"{target}: {why}")
         tags = [*base.get("tags", []), *tags]
+        span = base.get("duration")
+        _inside(start, end, span, target)
         if base.get("start") is not None:  # a part of a part: times stay the source's
             off = base["start"]
-            start, end = (start or 0) + off, (end + off) if end is not None else base.get("end")
-    elif Path(target).suffix.lower() in VIDEO_EXT and Path(target).is_file():
-        if not credit:
-            raise ClipperError("a local file needs --credit (who made it, as the video's description will say)")
-        p = Path(target).resolve()
-        c = {"key": p.as_uri(), "source": "file", "title": p.stem, "page": "", "url": str(p), "date": "",
-             "credit": credit, "licence": licence, "description": "", "duration": None}
-        if why := refused(c, cfg):
-            raise ClipperError(f"{p.name}: {why}")
-    elif target.startswith(("http://", "https://")):
-        c = resolve(target, cfg)
+            start, end = (start or 0) + off, off + (end if end is not None else span)
+            c["duration"] = base.get("end")
+    else:
+        if Path(target).suffix.lower() in VIDEO_EXT and Path(target).is_file():
+            if not credit:
+                raise ClipperError("a local file needs --credit (who made it, as the video's description will say)")
+            p = Path(target).resolve()
+            c = {"key": p.as_uri(), "source": "file", "title": p.stem, "page": "", "url": str(p), "date": "",
+                 "credit": credit, "licence": licence, "description": "", "duration": None}
+        elif target.startswith(("http://", "https://")):
+            c = resolve(target, cfg)
+            media(c, cfg)
+        else:
+            raise ClipperError(f"{target}: not a clip id (clipper broll list), a web address or a video file")
         if why := refused(c, cfg):
             raise ClipperError(f"{c['title'][:60]!r}: {why}")
+        if c.get("duration") is None:
+            c["duration"] = length_of(c["url"])
+        _inside(start, end, c["duration"], c["title"][:60])
         if c["key"] in lib["dropped"]:
             with jsonstate.update(_index(cfg), {}) as idx:  # added by hand: no longer dropped
                 idx["dropped"] = [k for k in idx.get("dropped", []) if k != c["key"]]
-        media(c, cfg)
-        if start is None and end is None and (c.get("duration") or 0) > cfg["broll"]["max_s"]:
-            e = _entry(c, clip_id(c["source"], c["key"]), "long", tags)
+        if start is None and end is None and c["duration"] > max_s:
+            cid = clip_id(c["source"], c["key"])
+            old = lib["clips"].get(cid) or {}
+            e = _entry(c, cid, "long", [*old.get("tags", []), *tags])
             _save(cfg, e)
             say(f"{e['id']}: {c['title'][:70]} ({c['duration'] / 60:.0f} min, long: add it again with --from/--to)")
             return e
-    else:
-        raise ClipperError(f"{target}: not a clip id (clipper broll list), a web address or a video file")
+    if end is None and (c.get("duration") or 0) - (start or 0) > max_s:
+        raise ClipperError(f"from {start or 0:.0f} s to the end is over [broll] max_s ({max_s} s): give --to too")
+    return take(cfg, c, tags, start, end, say=say)
+
+
+def _inside(start: float | None, end: float | None, span: float | None, what: str) -> None:
+    """A part's times against the clip they're taken from; with no length known, only a part
+    with both ends (nothing unbounded is downloaded)."""
     if start is not None and end is not None and end <= start:
         raise ClipperError("--to must be after --from")
-    return take(cfg, c, tags, start, end, say=say)
+    if span is None:
+        if end is None:
+            raise ClipperError(f"{what}: its length is unknown: give --from and --to")
+        return
+    if (start or 0) >= span or (end is not None and end > span + 0.5):
+        raise ClipperError(f"{what} is {span:.0f} s long: --from/--to must be inside it")
 
 
 def set_status(cfg: dict, ids: list[str], status: str) -> None:

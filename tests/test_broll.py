@@ -16,7 +16,7 @@ def cfg(defaults, tmp_path, monkeypatch):
 
     encoded.clear()
     monkeypatch.setattr(broll, "encode", encode)
-    monkeypatch.setattr("clipper.media.try_duration", lambda p, video=False: None)
+    monkeypatch.setattr(broll, "length_of", lambda src: None)
     return defaults
 
 
@@ -144,7 +144,8 @@ def test_add_a_part_of_a_long_clip(cfg, monkeypatch):
     assert broll.load(cfg)["dropped"] == []
 
 
-def test_add_a_file_needs_a_credit(cfg, tmp_path):
+def test_add_a_file_needs_a_credit(cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(broll, "length_of", lambda src: 20.0)
     f = tmp_path / "dvids.mp4"
     f.write_bytes(b"x")
     with pytest.raises(ClipperError, match="--credit"):
@@ -271,3 +272,105 @@ def test_dvids_without_a_key_is_skipped(cfg, monkeypatch):
     said = []
     assert broll.find(cfg, "x", ["dvids", "commons"], say=said.append) == 1
     assert any(s.startswith("dvids: no $DVIDS_API_KEY") for s in said)
+
+
+def test_agency_credits_are_refused(cfg):  # review of #230
+    for credit in ("Getty", "AP video", "Associated Press", "Reuters", "AFP", "Storyful"):
+        assert broll.refused(cand(credit=credit), cfg), credit
+    assert broll.refused(cand(credit="U.S. Army video by Spc. Example"), cfg) == ""
+
+
+def test_nc_and_nd_licences_are_never_kept(cfg):
+    cfg["broll"]["licences"] = ["pd", "cc0", "cc-by", "cc-by-sa"]
+    for lic in ("CC BY-NC 4.0", "CC BY-ND 4.0", "CC BY-NC-SA 3.0", "Attribution-NonCommercial-ShareAlike",
+                "Attribution-NoDerivatives 4.0"):
+        assert broll.licence_code(lic) == "other", lic
+        assert broll.refused(cand(licence=lic), cfg), lic
+    assert broll.licence_code("CC BY-SA 4.0") == "cc-by-sa"
+
+
+def test_entities_are_decoded_before_the_check(cfg):
+    assert broll._text("Footage &copy; 2020 <b>Some</b>&nbsp;Studio") == "Footage © 2020 Some Studio"
+    assert broll._text("Footage &#169; 2020") == "Footage © 2020"
+
+
+def test_the_whole_description_is_checked(cfg, monkeypatch):
+    long_desc = "x " * 3000 + "Copyright 2019 Some Studio"
+    monkeypatch.setattr(broll, "_get", lambda url, params=None, timeout=20: {"metadata": {
+        "title": "Film", "licenseurl": "http://creativecommons.org/licenses/publicdomain/",
+        "description": ["Part one.", long_desc]}, "files": [{"name": "a.mp4", "height": "480", "length": "60"}]})
+    (c,) = broll.prelinger("", 1, identifier="Film")
+    assert "copyright" in broll.refused(c, cfg).lower()
+
+
+def test_a_part_is_checked_again(cfg, monkeypatch):
+    monkeypatch.setitem(broll.FINDERS, "nasa", lambda q, n, cfg=None: [
+        cand(source="nasa", description="Music: Production Music", duration=120.0)])
+    broll.find(cfg, "x", ["nasa"], say=lambda s: None)
+    (cid,) = broll.load(cfg)["clips"]
+    cfg["broll"]["audio"] = True
+    with pytest.raises(ClipperError, match="music"):
+        broll.add(cfg, cid, 10.0, 20.0, say=lambda s: None)
+
+
+def test_adding_the_same_clip_again_keeps_it(cfg, monkeypatch):
+    c = cand("https://commons.wikimedia.org/wiki/File:A.webm")
+    monkeypatch.setattr(broll, "resolve", lambda url, cfg=None: dict(c))
+    broll.add(cfg, c["page"], tags=["storm"], say=lambda s: None)
+    (cid,) = broll.load(cfg)["clips"]
+    broll.set_status(cfg, [cid], "keep")
+    n = len(encoded)
+    e = broll.add(cfg, c["page"], tags=["rain"], say=lambda s: None)
+    assert len(encoded) == n and e["status"] == "kept" and e["tags"] == ["rain", "storm"]
+
+
+def test_unknown_length_is_never_downloaded_whole(cfg, monkeypatch):
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand(duration=None)])
+    said = []
+    assert broll.find(cfg, "x", ["commons"], say=said.append) == 0
+    assert any("length is unknown" in s for s in said) and not encoded
+    c = cand("https://commons.wikimedia.org/wiki/File:B.webm", duration=None)
+    monkeypatch.setattr(broll, "resolve", lambda url, cfg=None: dict(c))
+    with pytest.raises(ClipperError, match="length is unknown"):
+        broll.add(cfg, c["page"], say=lambda s: None)
+    with pytest.raises(ClipperError, match="length is unknown"):
+        broll.add(cfg, c["page"], 10.0, say=lambda s: None)
+    assert broll.add(cfg, c["page"], 10.0, 20.0, say=lambda s: None)["duration"] == 10
+    monkeypatch.setattr(broll, "length_of", lambda src: 60.0)  # probed: then whole is fine
+    c["key"] = c["page"] = "https://commons.wikimedia.org/wiki/File:C.webm"
+    assert broll.add(cfg, c["page"], say=lambda s: None)["status"] == "new"
+
+
+def test_a_long_clip_needs_a_bounded_part(cfg, monkeypatch):
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand("https://c/long", duration=600.0)])
+    broll.find(cfg, "x", ["commons"], say=lambda s: None)
+    (lid,) = broll.load(cfg)["clips"]
+    with pytest.raises(ClipperError, match="long"):
+        broll.add(cfg, lid, say=lambda s: None)
+    with pytest.raises(ClipperError, match="max_s"):
+        broll.add(cfg, lid, 60.0, say=lambda s: None)  # 540 s to the end
+    assert broll.add(cfg, lid, 500.0, say=lambda s: None)["duration"] == 100  # to the end, under max_s
+    with pytest.raises(ClipperError, match="inside"):
+        broll.add(cfg, lid, 590.0, 700.0, say=lambda s: None)
+    assert broll.load(cfg)["clips"][lid]["status"] == "long"
+
+
+def test_a_part_of_a_part_stays_inside_it(cfg, monkeypatch):
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand("https://c/long", duration=600.0)])
+    broll.find(cfg, "x", ["commons"], say=lambda s: None)
+    (lid,) = broll.load(cfg)["clips"]
+    part = broll.add(cfg, lid, 80.0, 105.0, say=lambda s: None)
+    with pytest.raises(ClipperError, match="inside"):
+        broll.add(cfg, part["id"], 5.0, 40.0, say=lambda s: None)
+    sub = broll.add(cfg, part["id"], 20.0, say=lambda s: None)  # to the part's end, not the film's
+    assert (sub["start"], sub["end"]) == (100.0, 105.0)
+
+
+def test_a_long_file_is_listed_long(cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(broll, "length_of", lambda src: 1200.0 if src.endswith("navy.mp4") else None)
+    f = tmp_path / "navy.mp4"
+    f.write_bytes(b"x")
+    e = broll.add(cfg, str(f), credit="U.S. Navy", say=lambda s: None)
+    assert e["status"] == "long" and not encoded
+    part = broll.add(cfg, e["id"], 60.0, 75.0, say=lambda s: None)
+    assert part["duration"] == 15 and encoded[-1] == (str(f.resolve()), 60.0, 75.0)
