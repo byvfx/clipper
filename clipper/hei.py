@@ -6,11 +6,16 @@ the video as `<mux-video src="https://stream.mux.com/<id>.m3u8">` (plain HLS, no
 `data-player-info` block: series, title, "Air Date: MM/DD/YYYY". Signed out, the same page
 says "You need to be a HEINetwork Member" and has no stream. So listing needs a member's
 cookies ([paths] hei_cookies: a Netscape cookies.txt or a browser extension's JSON export);
-the stream itself needs none, and its media playlist gives the duration.
+the stream itself needs none, and its media playlist gives the duration. About a quarter of
+the streams (seasons 12-14, some specials and extras; 2026-11-11) are Mux signed playback: the
+src carries `?token=<JWT>` that expires in about two days, so `fresh_m3u8` fetches the page
+again for a new one before a download. Never print a token: `scrub` one out of any message.
 """
 from __future__ import annotations
 
+import base64
 import html
+import json
 import re
 import time
 from pathlib import Path
@@ -133,6 +138,39 @@ def list_items(cookies: Path, pace_s: float = 1.0, sections: tuple[str, ...] = S
     for it in items.values():
         it["duration_s"] = round(duration_s(s, it["m3u8"]), 1) if s else it.get("duration_s", 0.0)
     return sorted(items.values(), key=lambda it: (it["date"] or "", it["id"]), reverse=True)
+
+
+TOKEN = re.compile(r"token=([\w.-]+)")
+
+
+def token_expiry(m3u8: str) -> float | None:
+    """When a signed stream url's token expires (epoch seconds); None for a public one."""
+    m = TOKEN.search(m3u8)
+    if not m:
+        return None
+    try:
+        payload = m[1].split(".")[1]
+        return float(json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))["exp"])
+    except (IndexError, ValueError, KeyError):
+        return 0.0  # unreadable: treat as expired
+
+
+def fresh_m3u8(cookies: Path, it: dict, margin_s: float = 3600, now: float | None = None) -> str:
+    """The item's stream url, its page fetched again for a new token when the one in the
+    catalog expires within margin_s (a download of a long special takes a while)."""
+    exp = token_expiry(it["m3u8"])
+    if exp is None or exp > (time.time() if now is None else now) + margin_s:
+        return it["m3u8"]
+    r = session(cookies).get(it["url"], timeout=60)
+    r.raise_for_status()
+    got = parse_item(r.text, it["url"])
+    if not got:
+        raise ClipperError(f"{it['id']}: no stream on its page (signed out? export the HEI cookies again)")
+    return got["m3u8"]
+
+
+def scrub(s: str) -> str:
+    return TOKEN.sub("token=...", s)
 
 
 def is_url(url: str) -> bool:

@@ -232,10 +232,11 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
         if not kept:
             fmt, referer = ((cfg["archive"]["kick_format"], "https://kick.com/") if it["source"] == "kick"
                             else (cfg["archive"]["hei_audio_format"], hei.SITE + "/"))
+            m3u8 = hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it) if it["source"] == "hei" else it["m3u8"]
             r = ytdl.run("--referer", referer, "-f", fmt, "--hls-use-mpegts",
-                         "--no-part", "-N", "4", "-o", str(src), it["m3u8"])
+                         "--no-part", "-N", "4", "-o", str(src), m3u8)
             if r.returncode or not src.exists():
-                raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
+                raise RuntimeError(hei.scrub(f"yt-dlp: {ytdl.last_error(r)}"))
         wav = transcribe.extract_audio(idir)
         if not kept:
             src.unlink()
@@ -344,12 +345,12 @@ def keep_video(cfg: dict, idir: Path, it: dict) -> Path:
             "-N", "4", "--write-subs", "--sub-langs", "all,-live_chat",
             "-o", str(idir / "download.%(ext)s"), "-o", f"subtitle:{idir / 'captions'}.%(ext)s"]
     if it["source"] == "hei":
-        r = ytdl.run("--referer", hei.SITE + "/", *args, it["m3u8"])
+        r = ytdl.run("--referer", hei.SITE + "/", *args, hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it))
     else:
         r, _ = ytdl.run_retrying(cfg, *args, it["url"], retry_on=ytdl.AGE)
     out = idir / "download.mp4"
     if r.returncode or not out.is_file():
-        raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
+        raise RuntimeError(hei.scrub(f"yt-dlp: {ytdl.last_error(r)}"))
     out.replace(idir / "source.mp4")
     for leftover in idir.glob("download.*"):
         leftover.unlink(missing_ok=True)

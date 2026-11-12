@@ -38,8 +38,12 @@ working yet, issue #44).
 ## HEI Network (On Cinema)
 
 heinetwork.tv, On Cinema's own site, has the whole show for members: every season, the Oscar
-specials, Decker, the podcast and the extras (about 90 hours). `archive add` lists it with a
-member's cookies; the videos are plain HLS from Mux (no DRM) and need no cookies to fetch.
+specials, Decker, the podcast and the extras (352 videos, 102 hours on 2026-11-11). `archive add`
+lists it with a member's cookies; the videos are plain HLS from Mux (no DRM). Most need no
+cookies to fetch, but about a quarter (seasons 12-14, some specials and extras) are signed links
+whose token runs out in about two days: `video` and `transcribe` fetch such an item's page again
+for a fresh one, so keep the cookies file signed in while they run. Tokens never appear in
+messages or error files.
 
 ```bash
 clipper archive add oncinema https://www.heinetwork.tv           # ~350 pages at 1 s apart, ~10 min

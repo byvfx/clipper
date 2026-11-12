@@ -163,3 +163,34 @@ def test_save_posts_writes_csv_and_json(defaults, tmp_path, monkeypatch, capsys)
     assert [p["Account Name"] for p in data["posts"]] == ["@timheidecker", "@greggturkington", "@timheidecker"]
     assert (d / "posts.csv").is_file()
     assert "@timheidecker 2" in capsys.readouterr().out
+
+
+def jwt(exp: float) -> str:
+    import base64
+
+    body = base64.urlsafe_b64encode(json.dumps({"exp": exp}).encode()).decode().rstrip("=")
+    return f"eyJhbGciOiJSUzI1NiJ9.{body}.sig"
+
+
+def test_signed_streams_get_a_fresh_token_only_when_theirs_runs_out(monkeypatch):
+    public = {"id": "hei-a", "url": "https://www.heinetwork.tv/more/a/", "m3u8": M3U8}
+    assert hei.token_expiry(M3U8) is None
+    assert hei.fresh_m3u8(None, public) == M3U8  # no token: never refetched
+    signed = dict(public, m3u8=f"{M3U8}?token={jwt(2_000_000)}")
+    assert hei.token_expiry(signed["m3u8"]) == 2_000_000
+    assert hei.fresh_m3u8(None, signed, now=1_000_000) == signed["m3u8"]  # still good
+
+    new = f"{M3U8}?token={jwt(3_000_000)}"
+
+    class Session:
+        def get(self, url, timeout):
+            class R:
+                text = item_page("More", "A", "01/02/2020", new.replace("&", "&amp;"))
+
+                def raise_for_status(self):
+                    pass
+            return R()
+
+    monkeypatch.setattr(hei, "session", lambda cookies: Session())
+    assert hei.fresh_m3u8(None, signed, now=1_999_000) == new  # within the margin: refetched
+    assert hei.scrub(f"ERROR: 403 on {new}") == f"ERROR: 403 on {M3U8}?token=..."
