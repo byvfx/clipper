@@ -95,17 +95,20 @@ def list_youtube(url: str) -> list[dict]:
     tabs = [url] if url.endswith(("/videos", "/streams")) else [f"{url}/videos", f"{url}/streams"]
     items = []
     for tab in tabs:
-        r = ytdl.run("--flat-playlist", "-J", tab)
+        # approximate_date: YouTube's "3 years ago" as a day, so a catalog is dated before transcribing
+        r = ytdl.run("--flat-playlist", "--extractor-args", "youtubetab:approximate_date", "-J", tab)
         if r.returncode and len(tabs) > 1 and "does not have" in r.stderr:
             continue  # e.g. no streams tab
         if r.returncode:
             raise ClipperError(f"yt-dlp {tab}: {ytdl.last_error(r)}")
         data = json.loads(r.stdout)
         for e in data.get("entries") or []:
+            ts = e.get("timestamp") or e.get("release_timestamp")
             items.append({"id": f"yt-{e['id']}", "source": "youtube",
                           "url": f"https://www.youtube.com/watch?v={e['id']}",
                           "title": e.get("title") or "", "duration_s": float(e.get("duration") or 0),
-                          "channel": data.get("channel") or "", "kind": tab.rsplit("/", 1)[1]})
+                          "channel": data.get("channel") or "", "kind": tab.rsplit("/", 1)[1],
+                          "date": datetime.fromtimestamp(ts, UTC).date().isoformat() if ts else None})
     return items
 
 

@@ -208,3 +208,11 @@ def test_cookies_command_defaults_and_overrides(monkeypatch, tmp_path):
     cfg["youtube"]["cookies_from_browser"] = ""
     with pytest.raises(ClipperError, match="no browser profile"):
         cli.cmd_cookies(cfg, ap.parse_args(["cookies", "export"]))
+
+
+def test_a_google_com_export_is_not_a_youtube_sign_in():
+    # an export from a google.com page carries the same SID names, but yt-dlp on YouTube is signed out
+    text = ytdl.netscape_text([cookie("SID", domain=".google.com"), cookie("__Secure-3PSID", domain="google.com")])
+    assert ytdl.session_names(ytdl.read_netscape(text)) == []
+    text = ytdl.netscape_text([cookie("SID", domain="youtube.com"), cookie("SID", domain=".m.youtube.com")])
+    assert ytdl.session_names(ytdl.read_netscape(text)) == ["SID"]

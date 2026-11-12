@@ -2,7 +2,7 @@
 receipts and supercuts), kept apart from the streams folder so nothing in them is uploaded:
 
 ```bash
-clipper archive add jer https://www.youtube.com/@TheQuartering   # list long-form videos
+clipper archive add jer https://www.youtube.com/@TheQuartering   # list long-form videos, with approximate dates
 clipper archive transcribe jer --limit 100 --dry-run              # hours and estimated cost
 clipper archive transcribe jer --limit 100                        # WhisperX on Modal, 8 at once; log in archive/jer/transcribe.log
 clipper archive transcribe jer --diarize                          # speaker turns too (~+80% GPU), named against voices/jer.json
@@ -69,7 +69,8 @@ so that yt-dlp can't read them. Set it up once, as the Windows user that runs `c
    `BROWSER[:PROFILE]`; a profile folder's full path works too, written out: yt-dlp doesn't expand
    `~` or `%APPDATA%` in it).
 
-`clipper doctor` reads the profile's cookie database (no network) and fails when it has no YouTube
+`clipper doctor` reads the profile's cookie database (no network; youtube.com's cookies only, since
+google.com's carry the same names) and fails when it has no YouTube
 sign-in. Don't browse with the profile. If YouTube signs it out, open it, sign in again and close
 it; the pre-show DM says the same.
 

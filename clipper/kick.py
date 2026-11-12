@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import jsonstate
 from .errors import ClipperError
 
 API = "https://kick.com/api/v2"
@@ -69,7 +70,12 @@ def _get(url: str, ua: str, limiter: RateLimiter | None = None) -> Any:
             limiter.wait()
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
-                data = json.load(r)
+                body = r.read()
+            try:
+                data = json.loads(body)
+            except ValueError:  # Cloudflare's challenge page, a maintenance page
+                raise ClipperError(f"Kick sent a web page, not data, for {url} (a Cloudflare check?): "
+                                   f"{body[:80]!r}") from None
             if limiter:
                 limiter.ok()
             return data
@@ -149,18 +155,34 @@ def list_videos(channel: str, cfg: dict, limiter: RateLimiter | None = None) -> 
     return out
 
 
+SKIPPED = re.compile(r"Skipping fragment", re.I)
+
+
 def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
+    """The VOD as source.ts. yt-dlp skips a segment Kick no longer has and carries on; that is
+    kept (a VOD can lose segments for good, and a gap beats no video), but counted: printed and
+    stored as meta.json's skipped_fragments, since every clip over the gap jumps there."""
     out = stream_dir / "source.ts"
     if out.exists() and not (stream_dir / "source.ts.ytdl").exists():
         return out
     k = cfg["kick"]
-    subprocess.run(
+    proc = subprocess.Popen(
         [sys.executable, "-m", "yt_dlp", "--referer", "https://kick.com/",
          "-f", f"best[height<={k['max_height']}]", "-N", str(k["download_fragments"]),
          "--hls-use-mpegts", "--no-part", "--newline", "--progress-delta", "30",
          "-o", str(out), meta["source"]],
-        check=True,
+        stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
     )
+    skipped = 0
+    for line in proc.stderr:  # passed through as it comes; progress is on stdout
+        sys.stderr.write(line)
+        skipped += bool(SKIPPED.search(line))
+    if proc.wait():
+        raise subprocess.CalledProcessError(proc.returncode, proc.args)
+    if skipped:
+        print(f"{stream_dir.name}: warning: {skipped} video segments were missing on Kick; "
+              f"the source has gaps there")
+        jsonstate.merge(stream_dir / "meta.json", {"skipped_fragments": skipped}, ["skipped_fragments"])
     return out
 
 

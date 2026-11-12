@@ -27,6 +27,10 @@ clipper fetch <kick vod url>
 clipper run <stream id>
 ```
 
+`fetch` keeps going past a video segment Kick no longer has (a gap beats no video) but says how
+many it skipped and stores the count as `skipped_fragments` in the stream's `meta.json`: clips
+over a gap jump there.
+
 Each stage skips what's done; `clipper run <id> --from cut` redoes from a stage on
 ([Pipeline](Pipeline)). Review the items in the [war room](War-room) or on the Discord cards
 ([Review](Review)); `clipper serve` schedules approved ones and uploads every `[youtube]
