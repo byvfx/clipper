@@ -16,6 +16,8 @@ youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sig
 youtube_quota = "logs/youtube_quota.json"      # YouTube Data API units spent per Pacific day
 youtube_cookies = "secrets/youtube_cookies.txt"  # optional Netscape cookies.txt for yt-dlp: age-restricted
                                                # archive items and receipts, pre-shows stopped by YouTube's bot check
+hei_cookies = "secrets/hei_cookies.txt"        # a heinetwork.tv member's cookies (Netscape or a browser extension's JSON
+                                               # export): `clipper archive add <subject> https://www.heinetwork.tv` lists with them
 tiktok_client = "secrets/tiktok_client.json"   # {"client_key": ..., "client_secret": ...}
 tiktok_token = "secrets/tiktok_token.json"     # written by clipper tiktok --sign-in
 x_client = "secrets/x_client.json"             # {"client_id": ...} (+ "client_secret" for a Web App)
@@ -805,6 +807,12 @@ ask_max_queries = 8            # searches the model may write per question
 ask_per_query = 25             # best-ranked windows kept per search
 ask_candidates = 80            # pooled windows the model reads (~25k tokens)
 kick_format = "worst"          # a Kick VOD (`clipper story`): its HLS variants carry video too, so the smallest
+hei_pace_s = 1.0               # heinetwork.tv: seconds between page fetches while listing (~350 pages)
+hei_audio_format = "ba/worst"  # heinetwork.tv's HLS has an audio rendition: transcribe fetches only that
+# `clipper archive video`: keep each YouTube or heinetwork.tv item's video (source.mp4) and captions.
+video_format = "bv*+ba/b"      # yt-dlp format: the best there is (HEI: 1080p at ~3 Mbps)
+video_parallel = 2             # downloads at once
+video_gb_per_hour = 1.4        # for the size estimate only (HEI 1080p; YouTube is often less)
 
 [receipts]
 # `clipper receipts <stream>`: old clips of the archive subject for the night's stories (#48),

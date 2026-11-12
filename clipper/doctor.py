@@ -544,6 +544,27 @@ def check_youtube_cookies_file(cfg: dict, now: float | None = None) -> None:
         ok("keys", f"YouTube cookies {f.name} signed in, exported {hours:.0f} h ago")
 
 
+def check_hei_cookies(cfg: dict, now: float | None = None) -> None:
+    """[paths] hei_cookies, when there is one (`clipper archive add` of heinetwork.tv): it still
+    holds a live member sign-in. No file: nothing to check, the source is optional."""
+    from . import hei, ytdl
+
+    f = cfg["paths"]["hei_cookies"]
+    if not f.is_file():
+        return
+    hint = wiki.page("Archives", "hei-network-on-cinema")
+    try:
+        names = [c.name for c in ytdl.live(ytdl.read_cookies(f), now)]
+    except (OSError, ValueError, KeyError) as e:
+        fail("keys", f"HEI cookies {f.name} unreadable: {e}", hint)
+        return
+    if any(n.startswith(hei.SIGNED_IN) for n in names):
+        ok("keys", f"HEI cookies {f.name} signed in")
+    else:
+        warn("keys", f"HEI cookies {f.name} hold no live heinetwork.tv sign-in",
+             "sign in at heinetwork.tv (Remember me) and export the cookies again; " + hint)
+
+
 def check_youtube_cookies(cfg: dict) -> None:
     """[youtube] cookies_from_browser, when set: the profile is there and still signed in to
     YouTube (its cookie database on disk, no network). Unset: the cookies file instead."""
@@ -1190,6 +1211,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     check_keys(cfg, role)
     if role not in ("nas", "control"):
         check_youtube_cookies(cfg)  # archive fetches; a control station doesn't run them
+        check_hei_cookies(cfg)
     if role in ("all", "gpu", "claude"):
         check_narrate(cfg)
     if role in ("all", "serve"):

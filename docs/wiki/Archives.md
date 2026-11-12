@@ -35,6 +35,50 @@ It needs the Modal backend set up ([Transcribe on Modal](Transcribe-on-Modal)). 
 downloaded on this machine and uploaded; Odysee is meant to be fetched in the cloud (not
 working yet, issue #44).
 
+## HEI Network (On Cinema)
+
+heinetwork.tv, On Cinema's own site, has the whole show for members: every season, the Oscar
+specials, Decker, the podcast and the extras (about 90 hours). `archive add` lists it with a
+member's cookies; the videos are plain HLS from Mux (no DRM) and need no cookies to fetch.
+
+```bash
+clipper archive add oncinema https://www.heinetwork.tv           # ~350 pages at 1 s apart, ~10 min
+clipper archive add oncinema https://www.youtube.com/@adultswim --match 'on cinema|decker'
+clipper archive add oncinema https://www.youtube.com/@HEINetwork https://www.youtube.com/@timheidecker
+clipper archive video oncinema --dry-run                         # hours and roughly how many GB
+clipper archive video oncinema                                   # source.mp4 + captions per item
+clipper archive transcribe oncinema --diarize --dry-run          # Tim and Gregg apart; the cost first
+clipper archive posts oncinema <sheet link>                      # every post, as posts.json
+```
+
+The cookies: sign in at heinetwork.tv with *Remember me* ticked, export the site's cookies with a
+browser extension (Netscape cookies.txt or Cookie-Editor's JSON) to `[paths] hei_cookies`
+(`secrets/hei_cookies.txt`). `clipper doctor` warns when the file holds no live sign-in, and a
+listing that meets a members-only page stops and says to export them again. Rerun `add` each week
+for the new episodes: items already in the catalog are kept as they are.
+
+Items are `hei-<section>-<slug>` (`hei-oc-s16-hamnet-and-ella-mccay`, `hei-oscar-...`), with the
+series, the title and the air date the site shows. Never upload them: the archive is for
+research and for cutting short clips, never whole episodes.
+
+### Keeping videos
+
+`clipper archive video <subject>` keeps each YouTube or HEI item's best video as `source.mp4` in
+its folder, with the caption tracks as `captions.<lang>.vtt` ([archive] `video_format`,
+`video_parallel`). A download is written under another name and renamed when complete, so an
+interrupted one is simply fetched again; a failure leaves `video_error.txt` and the log is
+`<subject>/video.log`. Once an HEI item's video is kept, `transcribe` takes the audio from it
+instead of fetching the stream again. No model cost; the space is about 1.4 GB an hour at 1080p.
+
+### Posts
+
+`clipper archive posts <subject> <Google Sheet link>` saves a public sheet of posts as
+`posts.csv` (as exported) and `posts.json` (one row per post, keyed by the sheet's header). For
+On Cinema that is the fans' complete post archive linked from the On Cinema Wiki's X page: every
+tweet and Bluesky post by Tim, Gregg and the show since 2011, with the episodes marked between
+them. Tim's X account has been private since it was hacked in December 2024, so the X API can't
+read it; the sheet is the record. Rerun to refresh.
+
 ## Age-restricted videos and YouTube cookies
 
 `clipper archive transcribe` downloads anonymously; a video

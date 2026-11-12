@@ -36,8 +36,11 @@ checked (network, rate limit) keeps its last result. Items not checked within
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
+import re
 import subprocess
 import threading
 import time
@@ -47,7 +50,7 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate, speakers, transcribe, ytdl
+from . import hei, jsonstate, speakers, transcribe, ytdl
 from .errors import ClipperError
 from .modalmon import head_record, tracked
 
@@ -143,16 +146,30 @@ def list_odysee(url: str, limit: int | None = None, pace=None) -> list[dict]:
         page += 1
 
 
-def add(cfg: dict, subject: str, urls: list[str]) -> None:
+def list_source(cfg: dict, url: str) -> list[dict]:
+    if hei.is_url(url):
+        return hei.list_items(cfg["paths"]["hei_cookies"], cfg["archive"]["hei_pace_s"])
+    if "odysee.com" in url or url.startswith("lbry://"):
+        return list_odysee(url)
+    return list_youtube(url)
+
+
+def add(cfg: dict, subject: str, urls: list[str], match: str | None = None) -> None:
+    """match: keep only items whose title matches this regex (case-insensitive), for a big
+    channel with a few of the subject's videos in it (Adult Swim's On Cinema)."""
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
     min_s = cfg["archive"]["min_duration_s"]
+    pattern = re.compile(match, re.I) if match else None
     for url in urls:
-        found = list_odysee(url) if "odysee.com" in url or url.startswith("lbry://") else list_youtube(url)
+        found = list_source(cfg, url)
+        if pattern:
+            found = [it for it in found if pattern.search(it["title"])]
         keep = [it for it in found if not 0 < it["duration_s"] < min_s]
         new = [it for it in keep if it["id"] not in cat]
         cat.update({it["id"]: it for it in new})
-        print(f"{url}: {len(found)} found, {len(found) - len(keep)} under {min_s} s skipped, "
+        matching = f" matching {match!r}" if match else ""
+        print(f"{url}: {len(found)} found{matching}, {len(found) - len(keep)} under {min_s} s skipped, "
               f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
     save_catalog(d, cat)
     print(f"{subject}: {len(cat)} items, {sum(i['duration_s'] for i in cat.values()) / 3600:.0f} h")
@@ -206,16 +223,22 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
         data = audio[0].read_bytes()
         out, cost = call(worker.transcribe, data, audio[0].suffix, settings)
         audio[0].unlink()
-    elif it["source"] == "kick":
-        # Kick's HLS variants carry video and audio together, so there is no audio-only format:
-        # the smallest variant, its audio as flac (as a stream's goes to Modal)
-        src = idir / "source.ts"
-        r = ytdl.run("--referer", "https://kick.com/", "-f", cfg["archive"]["kick_format"], "--hls-use-mpegts",
-                     "--no-part", "-N", "4", "-o", str(src), it["m3u8"])
-        if r.returncode or not src.exists():
-            raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
+    elif it["source"] in ("kick", "hei"):
+        # The video `archive video` kept, else the stream's smallest download: Kick's HLS
+        # variants carry video and audio together (no audio-only format), HEI's has an audio
+        # rendition. Its audio goes to Modal as flac, as a stream's does.
+        kept = kept_video(idir)
+        src = kept or idir / "source.ts"
+        if not kept:
+            fmt, referer = ((cfg["archive"]["kick_format"], "https://kick.com/") if it["source"] == "kick"
+                            else (cfg["archive"]["hei_audio_format"], hei.SITE + "/"))
+            r = ytdl.run("--referer", referer, "-f", fmt, "--hls-use-mpegts",
+                         "--no-part", "-N", "4", "-o", str(src), it["m3u8"])
+            if r.returncode or not src.exists():
+                raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
         wav = transcribe.extract_audio(idir)
-        src.unlink()
+        if not kept:
+            src.unlink()
         enc = idir / "audio.flac"
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(wav), "-c:a", "flac",
                         str(enc)], check=True)
@@ -300,6 +323,119 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
                 break
     log.info("%s: %d transcribed (%d signed in), %d failed, ~$%.2f",
              subject, done, signed_in, failed, spent)
+
+
+# ---------- keeping videos ----------
+
+VIDEO_SOURCES = ("youtube", "hei")
+
+
+def kept_video(idir: Path) -> Path | None:
+    """The video `archive video` kept for an item, if any (written under another name and
+    renamed when complete, so this is never a partial download)."""
+    p = idir / "source.mp4"
+    return p if p.is_file() else None
+
+
+def keep_video(cfg: dict, idir: Path, it: dict) -> Path:
+    """An item's best video as source.mp4 in idir, its caption tracks as captions.<lang>.<ext>."""
+    idir.mkdir(parents=True, exist_ok=True)
+    args = ["-f", cfg["archive"]["video_format"], "--merge-output-format", "mp4", "--no-playlist",
+            "-N", "4", "--write-subs", "--sub-langs", "all,-live_chat",
+            "-o", str(idir / "download.%(ext)s"), "-o", f"subtitle:{idir / 'captions'}.%(ext)s"]
+    if it["source"] == "hei":
+        r = ytdl.run("--referer", hei.SITE + "/", *args, it["m3u8"])
+    else:
+        r, _ = ytdl.run_retrying(cfg, *args, it["url"], retry_on=ytdl.AGE)
+    out = idir / "download.mp4"
+    if r.returncode or not out.is_file():
+        raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
+    out.replace(idir / "source.mp4")
+    for leftover in idir.glob("download.*"):
+        leftover.unlink(missing_ok=True)
+    (idir / "video_error.txt").unlink(missing_ok=True)
+    return idir / "source.mp4"
+
+
+def videos_todo(d: Path, cat: dict[str, dict], ids: list[str] | None = None) -> list[dict]:
+    """Catalog items whose video can be kept and isn't yet, minus dead links (catalog order)."""
+    dead = {i for i, lk in load_links(d).items() if lk["status"] == "dead"}
+    return [it for it in cat.values()
+            if it["source"] in VIDEO_SOURCES and not kept_video(d / it["id"]) and it["id"] not in dead
+            and (ids is None or it["id"] in ids)]
+
+
+def run_videos(cfg: dict, subject: str, ids: list[str] | None, limit: int | None, oldest: bool,
+               parallel: int, dry_run: bool) -> None:
+    d = subject_dir(cfg, subject)
+    cat = load_catalog(d)
+    if not cat:
+        raise ClipperError(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
+    todo = videos_todo(d, cat, ids)
+    if oldest:
+        todo.reverse()
+    todo = todo[:limit] if limit else todo
+    hours = sum(it["duration_s"] for it in todo) / 3600
+    print(f"{subject}: {len(todo)} videos to keep, {hours:.1f} h, "
+          f"~{hours * cfg['archive']['video_gb_per_hour']:.0f} GB, {parallel} at once (no model cost)")
+    if dry_run or not todo:
+        return
+    fh = logging.FileHandler(d / "video.log", encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"))
+    log.addHandler(fh)
+    done = failed = 0
+    try:
+        with ThreadPoolExecutor(parallel) as pool:
+            jobs = {pool.submit(keep_video, cfg, d / it["id"], it): it for it in todo}
+            for job in as_completed(jobs):
+                it = jobs[job]
+                try:
+                    size = job.result().stat().st_size
+                    done += 1
+                    log.info("[%d/%d] %s %r  %.2f GB", done + failed, len(todo), it["id"], it["title"][:50],
+                             size / 1e9)
+                except Exception as e:  # noqa: BLE001
+                    failed += 1
+                    (d / it["id"] / "video_error.txt").write_text(f"{type(e).__name__}: {e}", encoding="utf-8")
+                    log.warning("[%d/%d] %s failed: %s", done + failed, len(todo), it["id"], str(e)[:200])
+        log.info("%s: %d videos kept, %d failed", subject, done, failed)
+    finally:
+        log.removeHandler(fh)
+        fh.close()
+
+
+# ---------- posts ----------
+
+def sheet_csv_url(url: str) -> str:
+    """A Google Sheet's CSV export url (the tab in the link's gid, else the first tab)."""
+    m = re.search(r"/spreadsheets/d/([\w-]+)", url)
+    if not m:
+        raise ClipperError(f"{url}: not a Google Sheets link")
+    gid = re.search(r"[#&?]gid=(\d+)", url)
+    return f"https://docs.google.com/spreadsheets/d/{m[1]}/export?format=csv" + (f"&gid={gid[1]}" if gid else "")
+
+
+def save_posts(cfg: dict, subject: str, url: str) -> None:
+    """A public sheet of the subject's posts (On Cinema's: every tweet and Bluesky post by Tim,
+    Gregg and the show, kept by the fans) as posts.csv as exported and posts.json, one row per
+    post keyed by the sheet's header. Rerun to refresh: the sheet is kept up to date."""
+    r = requests.get(sheet_csv_url(url), timeout=120)
+    r.raise_for_status()
+    text = r.content.decode("utf-8-sig")
+    rows = list(csv.DictReader(io.StringIO(text)))
+    if not rows:
+        raise ClipperError(f"{url}: no rows (is the sheet shared publicly?)")
+    d = subject_dir(cfg, subject)
+    d.mkdir(parents=True, exist_ok=True)
+    jsonstate.write_text(d / "posts.csv", text)
+    jsonstate.write(d / "posts.json", {"source": url, "fetched_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                                       "posts": rows}, indent=1)
+    first = next(iter(rows[0]))
+    by = {}
+    for row in rows:
+        by[row[first]] = by.get(row[first], 0) + 1
+    top = ", ".join(f"{k or '(blank)'} {n}" for k, n in sorted(by.items(), key=lambda kv: -kv[1])[:6])
+    print(f"{subject}: {len(rows)} posts saved to {d / 'posts.json'} ({top})")
 
 
 def status(cfg: dict, subject: str | None) -> None:
