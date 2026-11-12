@@ -37,6 +37,11 @@ AIR = re.compile(r"Air Date:\s*(\d\d)/(\d\d)/(\d{4})")
 SHORT = {"on-cinema-at-the-cinema": "oc", "oscar-specials": "oscar"}
 
 
+def site_cookies(cookies: list) -> list:
+    """Only heinetwork.tv's: every WordPress site names its sign-in cookie the same way."""
+    return [c for c in cookies if c.domain.lstrip(".") == "heinetwork.tv" or c.domain.endswith(".heinetwork.tv")]
+
+
 def session(cookies: Path) -> requests.Session:
     """A requests session holding the member cookies in `cookies`."""
     from . import ytdl
@@ -45,7 +50,7 @@ def session(cookies: Path) -> requests.Session:
         raise ClipperError(f"no HEI cookies at {cookies}: sign in to heinetwork.tv and export them there")
     s = requests.Session()
     s.headers["User-Agent"] = "Mozilla/5.0 (clipper archive)"
-    for c in ytdl.live(ytdl.read_cookies(cookies)):
+    for c in site_cookies(ytdl.live(ytdl.read_cookies(cookies))):
         s.cookies.set(c.name, c.value, domain=c.domain, path=c.path)
     if not any(n.startswith(SIGNED_IN) for n in s.cookies.keys()):
         raise ClipperError(f"{cookies.name} holds no live heinetwork.tv sign-in: export the cookies again")

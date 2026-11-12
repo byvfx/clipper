@@ -84,6 +84,10 @@ def test_cookies_without_a_sign_in_are_refused(tmp_path):
     f.write_text("# Netscape HTTP Cookie File\n.heinetwork.tv\tTRUE\t/\tTRUE\t0\twordpress_logged_in_abc\tv\n",
                  encoding="utf-8")
     assert "wordpress_logged_in_abc" in hei.session(f).cookies.keys()
+    f.write_text("# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\twordpress_logged_in_abc\tv\n",
+                 encoding="utf-8")
+    with pytest.raises(ClipperError, match="no live heinetwork.tv sign-in"):  # another WordPress site's
+        hei.session(f)
     with pytest.raises(ClipperError, match="no HEI cookies"):
         hei.session(tmp_path / "missing.txt")
 
@@ -109,6 +113,20 @@ def test_videos_todo_skips_kept_dead_and_unkeepable(tmp_path):
     assert [it["id"] for it in archive.videos_todo(tmp_path, cat, ["yt-c"])] == ["yt-c"]
 
 
+def test_videos_newest_first_by_date_after_a_refresh(defaults, tmp_path, monkeypatch, capsys):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    d = tmp_path / "archive" / "oc"
+    # a refresh appends the new episode after the older ones
+    archive.save_catalog(d, {i: {"id": i, "source": "hei", "title": i, "duration_s": 60.0, "date": day}
+                             for i, day in [("hei-old", "2025-12-03"), ("hei-older", "2025-11-19"),
+                                            ("hei-new", "2026-11-11")]})
+    kept = []
+    monkeypatch.setattr(archive, "keep_video", lambda cfg, idir, it: kept.append(it["id"]) or 1 / 0)
+    archive.run_videos(defaults, "oc", None, 1, False, 1, False)
+    archive.run_videos(defaults, "oc", None, 1, True, 1, False)
+    assert kept == ["hei-new", "hei-older"]
+
+
 def test_keep_video_renames_only_a_complete_download(defaults, tmp_path, monkeypatch):
     calls = []
 
@@ -127,6 +145,7 @@ def test_keep_video_renames_only_a_complete_download(defaults, tmp_path, monkeyp
     assert got == idir / "source.mp4" and got.read_bytes() == b"video"
     assert not list(idir.glob("download.*"))
     assert calls[0][-1] == M3U8 and "--referer" in calls[0]
+    assert "--abort-on-unavailable-fragments" in calls[0] and "--remux-video" in calls[0]
 
     class Failed:
         returncode, stderr = 1, "ERROR: boom"

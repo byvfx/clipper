@@ -554,7 +554,7 @@ def check_hei_cookies(cfg: dict, now: float | None = None) -> None:
         return
     hint = wiki.page("Archives", "hei-network-on-cinema")
     try:
-        names = [c.name for c in ytdl.live(ytdl.read_cookies(f), now)]
+        names = [c.name for c in hei.site_cookies(ytdl.live(ytdl.read_cookies(f), now))]
     except (OSError, ValueError, KeyError) as e:
         fail("keys", f"HEI cookies {f.name} unreadable: {e}", hint)
         return

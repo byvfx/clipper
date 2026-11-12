@@ -233,7 +233,9 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
             fmt, referer = ((cfg["archive"]["kick_format"], "https://kick.com/") if it["source"] == "kick"
                             else (cfg["archive"]["hei_audio_format"], hei.SITE + "/"))
             m3u8 = hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it) if it["source"] == "hei" else it["m3u8"]
-            r = ytdl.run("--referer", referer, "-f", fmt, "--hls-use-mpegts",
+            # a missing HEI segment fails the item (retried next run) rather than leaving a gap
+            whole = ["--abort-on-unavailable-fragments"] if it["source"] == "hei" else []
+            r = ytdl.run("--referer", referer, "-f", fmt, "--hls-use-mpegts", *whole,
                          "--no-part", "-N", "4", "-o", str(src), m3u8)
             if r.returncode or not src.exists():
                 raise RuntimeError(hei.scrub(f"yt-dlp: {ytdl.last_error(r)}"))
@@ -341,8 +343,9 @@ def kept_video(idir: Path) -> Path | None:
 def keep_video(cfg: dict, idir: Path, it: dict) -> Path:
     """An item's best video as source.mp4 in idir, its caption tracks as captions.<lang>.<ext>."""
     idir.mkdir(parents=True, exist_ok=True)
-    args = ["-f", cfg["archive"]["video_format"], "--merge-output-format", "mp4", "--no-playlist",
-            "-N", "4", "--write-subs", "--sub-langs", "all,-live_chat",
+    # merged or single-file, always an mp4; a missing segment fails it (fetched again next run)
+    args = ["-f", cfg["archive"]["video_format"], "--merge-output-format", "mp4", "--remux-video", "mp4",
+            "--abort-on-unavailable-fragments", "--no-playlist", "-N", "4", "--write-subs", "--sub-langs", "all,-live_chat",
             "-o", str(idir / "download.%(ext)s"), "-o", f"subtitle:{idir / 'captions'}.%(ext)s"]
     if it["source"] == "hei":
         r = ytdl.run("--referer", hei.SITE + "/", *args, hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it))
@@ -372,7 +375,8 @@ def run_videos(cfg: dict, subject: str, ids: list[str] | None, limit: int | None
     cat = load_catalog(d)
     if not cat:
         raise ClipperError(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
-    todo = videos_todo(d, cat, ids)
+    # newest first by date, not catalog order: a refresh appends new episodes at the end
+    todo = sorted(videos_todo(d, cat, ids), key=lambda it: it.get("date") or "", reverse=True)
     if oldest:
         todo.reverse()
     todo = todo[:limit] if limit else todo
@@ -397,6 +401,7 @@ def run_videos(cfg: dict, subject: str, ids: list[str] | None, limit: int | None
                              size / 1e9)
                 except Exception as e:  # noqa: BLE001
                     failed += 1
+                    (d / it["id"]).mkdir(parents=True, exist_ok=True)
                     (d / it["id"] / "video_error.txt").write_text(f"{type(e).__name__}: {e}", encoding="utf-8")
                     log.warning("[%d/%d] %s failed: %s", done + failed, len(todo), it["id"], str(e)[:200])
         log.info("%s: %d videos kept, %d failed", subject, done, failed)
