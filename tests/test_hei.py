@@ -233,3 +233,24 @@ def test_a_page_instead_of_csv_keeps_the_saved_posts(defaults, tmp_path, monkeyp
     with pytest.raises(ClipperError, match="not CSV"):
         archive.save_posts(defaults, "oncinema", "https://docs.google.com/spreadsheets/d/x/edit")
     assert not (tmp_path / "archive" / "oncinema" / "posts.json").exists()
+
+
+def test_relabel_names_items_from_the_subjects_own_voices(defaults, tmp_path, capsys):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    defaults["paths"]["voices"] = tmp_path / "voices"
+    d = tmp_path / "archive" / "oc"
+    for item, emb in [("hei-a", [1.0, 0.0]), ("hei-b", [0.99, 0.05])]:
+        (d / item).mkdir(parents=True)
+        (d / item / "diarization.json").write_text(json.dumps(
+            {"model": "m", "turns": [[0.0, 120.0, "SPEAKER_00"]], "embeddings": {"SPEAKER_00": emb}}),
+            encoding="utf-8")
+    (tmp_path / "voices").mkdir()
+    (tmp_path / "voices" / "oc.json").write_text(json.dumps({"model": "m", "voices": {"Gregg": [[1.0, 0.0]]}}),
+                                                  encoding="utf-8")
+    (tmp_path / "voices" / "kino.json").write_text(json.dumps({"model": "m", "voices": {"Andy": [[1.0, 0.0]]}}),
+                                                    encoding="utf-8")
+    archive.relabel(defaults, "oc")
+    assert "Gregg" in capsys.readouterr().out
+    assert json.loads((d / "hei-b" / "speakers.json").read_text(encoding="utf-8"))["speakers"]["SPEAKER_00"]["name"] == "Gregg"
+    assert archive.is_item(defaults, d / "hei-a") and not archive.is_item(defaults, tmp_path / "streams" / "x")
+    assert archive.item_cfg(defaults, d / "hei-a")["show"]["key"] == "oc"

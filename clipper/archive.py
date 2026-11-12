@@ -86,6 +86,16 @@ def item_dir(d: Path, it: dict) -> Path:
     return Path(it["dir"]) if it.get("dir") else d / it["id"]
 
 
+def item_cfg(cfg: dict, idir: Path) -> dict:
+    """An item's config for `speakers`: named against its subject's own voices
+    (voices/<subject>.json), as a stream is against its show's, never the base show's."""
+    return {**cfg, "show": {**cfg["show"], "key": idir.parent.name}}
+
+
+def is_item(cfg: dict, d: Path) -> bool:
+    return d.resolve().parent.parent == Path(cfg["paths"]["archive"]).resolve()
+
+
 def load_links(d: Path) -> dict[str, dict]:
     p = d / "links.json"
     return jsonstate.read(p, {})
@@ -256,9 +266,8 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
     (idir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     transcribe.write(idir, tc, out["segments"], out["dur"], t0, {"modal": cost})
     if out.get("diarization"):
-        # named against this subject's own voices (voices/<subject>.json), like a show's
         transcribe.write_diarization(idir, out["diarization"], cost)
-        speakers.apply(idir, {**cfg, "show": {**cfg["show"], "key": idir.parent.name}})
+        speakers.apply(idir, item_cfg(cfg, idir))
     (idir / "error.txt").unlink(missing_ok=True)
     return {**cost, "signed_in": signed_in}
 
@@ -408,6 +417,31 @@ def run_videos(cfg: dict, subject: str, ids: list[str] | None, limit: int | None
     finally:
         log.removeHandler(fh)
         fh.close()
+
+
+# ---------- speakers ----------
+
+def relabel(cfg: dict, subject: str) -> None:
+    """Name every diarized item's speakers again against the subject's enrolled voices (after
+    `clipper speakers <item folder> --name SPEAKER_00=Name --enroll`), and say who talks how much."""
+    d = subject_dir(cfg, subject)
+    items = sorted(p.parent for p in d.glob("*/diarization.json"))
+    if not items:
+        raise ClipperError(f"no diarized items in {subject}: clipper archive transcribe {subject} --diarize")
+    talk: dict[str, float] = {}
+    seen: dict[str, int] = {}
+    unnamed = 0.0
+    for idir in items:
+        for e in speakers.apply(idir, item_cfg(cfg, idir)).values():
+            if name := e.get("name"):
+                talk[name] = talk.get(name, 0.0) + e["talk_s"]
+                seen[name] = seen.get(name, 0) + 1
+            else:
+                unnamed += e["talk_s"]
+    print(f"{subject}: {len(items)} items named again")
+    for name, s in sorted(talk.items(), key=lambda kv: -kv[1]):
+        print(f"  {name:<28} {s / 3600:6.1f} h in {seen[name]} items")
+    print(f"  {'(not matched)':<28} {unnamed / 3600:6.1f} h")
 
 
 # ---------- posts ----------

@@ -65,6 +65,22 @@ Items are `hei-<section>-<slug>` (`hei-oc-s16-hamnet-and-ella-mccay`, `hei-oscar
 series, the title and the air date the site shows. Never upload them: the archive is for
 research and for cutting short clips, never whole episodes.
 
+### Naming the speakers
+
+`transcribe --diarize` splits each item into SPEAKER_00, SPEAKER_01, ... and names them against
+the subject's own enrolled voices (`[paths] voices`/`<subject>.json`, never a show's). To teach it a
+voice, name a speaker in one item where they talk a lot and keep the voice:
+
+```bash
+clipper speakers <archive>/oncinema/hei-oc-s16-hamnet-and-ella-mccay              # who talks, their longest lines
+clipper speakers <archive>/oncinema/hei-oc-s16-hamnet-and-ella-mccay --name SPEAKER_00=Tim --enroll
+clipper archive speakers oncinema                                             # every item named again; hours per name
+```
+
+`clipper speakers` takes an archive item's folder as well as a stream; it uses the item's subject
+voices, so enrolling there never touches a show's. Two or three samples from different years
+help a voice that changed (`[speakers] max_refs` keeps the last few).
+
 ### Keeping videos
 
 `clipper archive video <subject>` keeps each YouTube or HEI item's best video as `source.mp4` in

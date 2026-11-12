@@ -198,6 +198,8 @@ def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
                            args.parallel or ac["video_parallel"], args.dry_run)
     elif args.action == "posts":
         archive.save_posts(cfg, args.subject, args.url)
+    elif args.action == "speakers":
+        archive.relabel(cfg, args.subject)
     elif args.action == "transcribe":
         ac = cfg["archive"]
         ac["diarize"] = ac["diarize"] or args.diarize
@@ -385,6 +387,10 @@ def cmd_speakers(cfg: dict, args: argparse.Namespace) -> None:
 
     sdir = stream_dir(cfg, args.stream)
     scfg = config.for_stream(cfg, sdir)
+    from . import archive
+
+    if archive.is_item(cfg, sdir):  # an archive item: its subject's voices, never the base show's
+        scfg = archive.item_cfg(scfg, sdir)
     if args.diarize:
         transcribe.diarize(sdir, scfg["transcribe"], cfg["paths"]["modal_runs"])
     elif not (sdir / "diarization.json").exists():
@@ -1452,6 +1458,8 @@ def add_extras(sub) -> None:
     r.add_argument("--oldest", action="store_true", help="oldest first (default newest first)")
     r.add_argument("--parallel", type=int, help="downloads at once (default [archive] video_parallel)")
     r.add_argument("--dry-run", action="store_true", help="say how many hours and roughly how many GB")
+    r = rsub.add_parser("speakers", help="name every item's speakers again from the enrolled voices; talk per name")
+    add_subject(r)
     r = rsub.add_parser("posts", help="save a public Google Sheet of the subject's posts (posts.json)")
     add_subject(r)
     r.add_argument("url", help="the sheet's link")
