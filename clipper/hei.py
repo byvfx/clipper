@@ -141,7 +141,14 @@ def list_items(cookies: Path, pace_s: float = 1.0, sections: tuple[str, ...] = S
             raise ClipperError(f"{path} is members only and the cookies aren't signed in: export them again")
         todo += [c for c in children(page, path) if c not in seen]
     for it in items.values():
-        it["duration_s"] = round(duration_s(s, it["m3u8"]), 1) if s else it.get("duration_s", 0.0)
+        if s is None:
+            it.setdefault("duration_s", 0.0)
+            continue
+        try:
+            it["duration_s"] = round(duration_s(s, it["m3u8"]), 1)
+        except requests.RequestException as e:  # one stream's hiccup doesn't lose the listing
+            it["duration_s"] = 0.0
+            print(f"{it['id']}: no duration ({scrub(str(e))[:120]})")
     return sorted(items.values(), key=lambda it: (it["date"] or "", it["id"]), reverse=True)
 
 

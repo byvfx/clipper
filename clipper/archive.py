@@ -167,7 +167,8 @@ def add(cfg: dict, subject: str, urls: list[str], match: str | None = None) -> N
             found = [it for it in found if pattern.search(it["title"])]
         keep = [it for it in found if not 0 < it["duration_s"] < min_s]
         new = [it for it in keep if it["id"] not in cat]
-        cat.update({it["id"]: it for it in new})
+        # ahead of what was there: a source lists newest first, so the catalog stays newest first
+        cat = {**{it["id"]: it for it in new}, **cat}
         matching = f" matching {match!r}" if match else ""
         print(f"{url}: {len(found)} found{matching}, {len(found) - len(keep)} under {min_s} s skipped, "
               f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
@@ -375,8 +376,7 @@ def run_videos(cfg: dict, subject: str, ids: list[str] | None, limit: int | None
     cat = load_catalog(d)
     if not cat:
         raise ClipperError(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
-    # newest first by date, not catalog order: a refresh appends new episodes at the end
-    todo = sorted(videos_todo(d, cat, ids), key=lambda it: it.get("date") or "", reverse=True)
+    todo = videos_todo(d, cat, ids)  # catalog order: newest first (`add` puts new items ahead)
     if oldest:
         todo.reverse()
     todo = todo[:limit] if limit else todo
@@ -428,6 +428,9 @@ def save_posts(cfg: dict, subject: str, url: str) -> None:
     r = requests.get(sheet_csv_url(url), timeout=120)
     r.raise_for_status()
     text = r.content.decode("utf-8-sig")
+    if "csv" not in r.headers.get("content-type", "") or text.lstrip().startswith("<"):
+        # a sign-in page or Drive's interstitial: keep the posts saved last time
+        raise ClipperError(f"{url}: Google sent a page, not CSV (is the sheet still shared publicly?)")
     rows = list(csv.DictReader(io.StringIO(text)))
     if not rows:
         raise ClipperError(f"{url}: no rows (is the sheet shared publicly?)")

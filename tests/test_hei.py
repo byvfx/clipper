@@ -113,18 +113,21 @@ def test_videos_todo_skips_kept_dead_and_unkeepable(tmp_path):
     assert [it["id"] for it in archive.videos_todo(tmp_path, cat, ["yt-c"])] == ["yt-c"]
 
 
-def test_videos_newest_first_by_date_after_a_refresh(defaults, tmp_path, monkeypatch, capsys):
+def test_a_refresh_puts_new_items_first(defaults, tmp_path, monkeypatch):
     defaults["paths"]["archive"] = tmp_path / "archive"
+    listed = [[{"id": "yt-b", "source": "youtube", "title": "b", "duration_s": 600.0},
+               {"id": "yt-a", "source": "youtube", "title": "a", "duration_s": 600.0}]]
+    monkeypatch.setattr(archive, "list_youtube", lambda url: listed[-1])
+    archive.add(defaults, "oc", ["https://www.youtube.com/@x"])
+    listed.append([{"id": "yt-c", "source": "youtube", "title": "c", "duration_s": 600.0}] + listed[0])
+    archive.add(defaults, "oc", ["https://www.youtube.com/@x"])
     d = tmp_path / "archive" / "oc"
-    # a refresh appends the new episode after the older ones
-    archive.save_catalog(d, {i: {"id": i, "source": "hei", "title": i, "duration_s": 60.0, "date": day}
-                             for i, day in [("hei-old", "2025-12-03"), ("hei-older", "2025-11-19"),
-                                            ("hei-new", "2026-11-11")]})
+    assert list(archive.load_catalog(d)) == ["yt-c", "yt-b", "yt-a"]
     kept = []
     monkeypatch.setattr(archive, "keep_video", lambda cfg, idir, it: kept.append(it["id"]) or 1 / 0)
     archive.run_videos(defaults, "oc", None, 1, False, 1, False)
     archive.run_videos(defaults, "oc", None, 1, True, 1, False)
-    assert kept == ["hei-new", "hei-older"]
+    assert kept == ["yt-c", "yt-a"]
 
 
 def test_keep_video_renames_only_a_complete_download(defaults, tmp_path, monkeypatch):
@@ -171,6 +174,7 @@ def test_save_posts_writes_csv_and_json(defaults, tmp_path, monkeypatch, capsys)
 
     class Resp:
         content = csv_text.encode("utf-8")
+        headers = {"content-type": "text/csv"}
 
         def raise_for_status(self):
             pass
@@ -213,3 +217,19 @@ def test_signed_streams_get_a_fresh_token_only_when_theirs_runs_out(monkeypatch)
     monkeypatch.setattr(hei, "session", lambda cookies: Session())
     assert hei.fresh_m3u8(None, signed, now=1_999_000) == new  # within the margin: refetched
     assert hei.scrub(f"ERROR: 403 on {new}") == f"ERROR: 403 on {M3U8}?token=..."
+
+
+def test_a_page_instead_of_csv_keeps_the_saved_posts(defaults, tmp_path, monkeypatch):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+
+    class Resp:
+        content = b"<!DOCTYPE html><html>Sign in</html>"
+        headers = {"content-type": "text/html; charset=utf-8"}
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(archive.requests, "get", lambda url, timeout: Resp())
+    with pytest.raises(ClipperError, match="not CSV"):
+        archive.save_posts(defaults, "oncinema", "https://docs.google.com/spreadsheets/d/x/edit")
+    assert not (tmp_path / "archive" / "oncinema" / "posts.json").exists()
