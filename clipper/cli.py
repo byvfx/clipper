@@ -277,6 +277,21 @@ def cmd_cast(cfg: dict, args: argparse.Namespace) -> None:
     return None
 
 
+def cmd_broll(cfg: dict, args: argparse.Namespace) -> None:
+    from . import broll
+
+    a = args.action
+    if a == "list":
+        return broll.show_list(cfg, args.tag or "", args.source or "", args.status or "", args.json)
+    if a in ("keep", "drop"):
+        return broll.set_status(cfg, args.ids, a)
+    if a == "find":
+        print(f"{broll.find(cfg, args.query, args.source or list(cfg['broll']['sources']), args.n)} clip(s) added")
+    elif a == "add":
+        broll.add(cfg, args.target, args.start, args.end, args.tag or [], args.credit or "", args.licence)
+    return None
+
+
 def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
     from . import news
 
@@ -997,7 +1012,7 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'status', 'checkup', 'audit', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'cast', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
+    ('Extras', ['weekly', 'cast', 'broll', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'cookies', 'codereview']),
 ]
@@ -1648,6 +1663,34 @@ def add_extras(sub) -> None:
     r.add_argument("--alias", action="append", help="another name (repeatable; replaces the list)")
     r.add_argument("--channel", action="append", metavar="URL", help="https://www.youtube.com/@name or "
                                                                      "https://kick.com/name (repeatable; replaces the list)")
+
+    p = sub.add_parser("broll", help="free b-roll from public-domain archives (NASA, Prelinger films, "
+                                     "Wikimedia Commons), with each clip's credit and licence (#229)")
+    bsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_broll)
+    r = bsub.add_parser("find", help="search the sources; new clips tagged with the search ([broll] per_source each)")
+    r.add_argument("query", help='what to look for, e.g. "hurricane from orbit"')
+    r.add_argument("--source", action="append", choices=["nasa", "prelinger", "commons"],
+                   help="only these (repeatable; default [broll] sources)")
+    r.add_argument("-n", type=int, help="most new clips from each source (default [broll] per_source)")
+    r = bsub.add_parser("add", help="one clip: a source page's address, a library id (a part of a long one) "
+                                    "or a video file")
+    r.add_argument("target", metavar="URL|ID|FILE",
+                   help="images.nasa.gov/details/..., archive.org/details/..., a Commons File: page, "
+                        "an id from `clipper broll list`, or a file (with --credit)")
+    r.add_argument("--from", dest="start", type=time_arg, metavar="TIME", help="the part starts here (0:01:20)")
+    r.add_argument("--to", dest="end", type=time_arg, metavar="TIME", help="...and ends here (default: the end)")
+    r.add_argument("--tag", action="append", help="a tag (repeatable)")
+    r.add_argument("--credit", help="a file: who made it, as a description will credit it")
+    r.add_argument("--licence", default="public domain", help="a file: its licence (default: public domain)")
+    r = bsub.add_parser("list", help="the library, newest first")
+    r.add_argument("--tag", help="only clips with a tag containing this")
+    r.add_argument("--source", choices=["nasa", "prelinger", "commons", "file"], help="only clips from this source")
+    r.add_argument("--status", choices=["new", "kept", "long"], help="only clips in this state")
+    r.add_argument("--json", action="store_true", help="as JSON, with each file's path (for Resolve)")
+    for act, what in (("keep", "keep these new clips"), ("drop", "delete these clips; their sources aren't found again")):
+        r = bsub.add_parser(act, help=what)
+        r.add_argument("ids", nargs="+", metavar="ID", help="the clips' ids (clipper broll list)")
 
     p = sub.add_parser("people", help="one record per person: names, channels, archive subject, cast folder "
                                       "(story and investigate look people up here)")

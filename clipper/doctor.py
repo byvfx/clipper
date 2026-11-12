@@ -233,7 +233,8 @@ def check_ffmpeg(cfg: dict, role: str) -> None:
     if role in ("nas", "control"):
         return  # nothing encodes there
     codecs = {cfg["cut"]["clip_codec"], cfg["shorts"]["codec"] or cfg["cut"]["clip_codec"],
-              cfg["review"]["preview_codec"] or cfg["cut"]["clip_codec"]}
+              cfg["review"]["preview_codec"] or cfg["cut"]["clip_codec"],
+              cfg["broll"]["codec"] or cfg["cut"]["clip_codec"]}
     for codec in sorted(c for c in codecs if c and c != "copy"):
         works, err = encoder_works(codec)
         if works:
@@ -967,6 +968,24 @@ def check_news(cfg: dict, offline: bool) -> None:
            + (", Google News" if nc["google_news"] else ""))
 
 
+def check_broll(cfg: dict) -> None:
+    """#229: the b-roll library's settings (its sources need no key)."""
+    from . import broll
+
+    bc = cfg["broll"]
+    bad = [s for s in bc["sources"] if s not in broll.SOURCES]
+    if bad:
+        fail("broll", f"[broll] sources: unknown {', '.join(bad)}", f"use some of {', '.join(broll.SOURCES)}")
+    bad = [c for c in bc["licences"] if c not in broll.LICENCES]
+    if bad:
+        fail("broll", f"[broll] licences: unknown {', '.join(bad)}", f"use some of {', '.join(broll.LICENCES)}")
+    if not cfg["paths"]["broll"]:
+        return
+    lib = broll.load(cfg)
+    n = {s: sum(e["status"] == s for e in lib["clips"].values()) for s in broll.STATUSES}
+    ok("broll", f"{cfg['paths']['broll']}: {n['kept']} kept, {n['new']} new, {n['long']} long")
+
+
 def check_cast_serve(cfg: dict) -> None:
     """serve's daily `cast auto` and the war room's Cast window check faces with OpenCV."""
     import importlib.util
@@ -1192,6 +1211,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_youtube_cookies(cfg)  # archive fetches; a control station doesn't run them
     if role in ("all", "gpu", "claude"):
         check_narrate(cfg)
+        check_broll(cfg)
     if role in ("all", "serve"):
         check_tailnet(cfg, offline)
     if role == "serve":

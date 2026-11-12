@@ -221,6 +221,10 @@ live clips #81, blind items #111, investigate anyone #138, agent exploration #15
 a small `clipper mcp`; #13 may fold into it), Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
+- **B-roll library #229 (11-12, step 1 of 4):** `clipper broll find|add|list|keep|drop` (wiki B-roll):
+  NASA, Prelinger and Commons, no keys; public domain / CC0 only, no sound by default (NASA music).
+  Next: DVIDS (free key, `DVIDS_API_KEY`) and the National Archives (key by email from NARA), then
+  `[story] broll` in story cuts, then a war room window. The library is `[paths] broll` on the share.
 - **Usability review (11-10, issues only, nothing built):** `clipper status` takes a minute from the laptop
   and buries what needs the user #199; a first run without Kitsu #200 (against "Kitsu-optional is not a goal"
   above: a try-it route, not a second record; close it if unwanted); war room stale data #201, double sends /
