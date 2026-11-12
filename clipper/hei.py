@@ -94,6 +94,8 @@ def children(page: str, path: str) -> list[str]:
     out = []
     for href in HREF.findall(page):
         p = urlparse(urljoin(SITE, href))
+        if "/feed" in p.path:  # WordPress's RSS, not a page
+            continue
         if p.netloc.endswith("heinetwork.tv") and p.path.startswith(path) and p.path.rstrip("/") != path.rstrip("/"):
             child = p.path if p.path.endswith("/") else p.path + "/"
             if child not in out:
@@ -124,6 +126,9 @@ def list_items(cookies: Path, pace_s: float = 1.0, sections: tuple[str, ...] = S
             return get(path)
         time.sleep(pace_s)
         r = s.get(SITE + path, timeout=60)
+        if r.status_code == 404:  # a dead link on the site: nothing below it
+            print(f"{path}: not found, skipped")
+            return ""
         r.raise_for_status()
         return r.text
 

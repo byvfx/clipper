@@ -35,7 +35,7 @@ SITE = {
     "/on-cinema-at-the-cinema/season-16/wicked-for-good/": item_page(
         "On Cinema at the Cinema / Season 16", "1608 &#8216;Wicked: For Good&#8217;", "11/19/2025",
         "https://stream.mux.com/ZzZzZzZzZzZzZzZzZzZzZz012.m3u8"),
-    "/more/": index_page("https://www.heinetwork.tv/more/vfa-acquisition-announcement/",
+    "/more/": index_page("https://www.heinetwork.tv/more/feed/", "https://www.heinetwork.tv/more/vfa-acquisition-announcement/",
                          "https://www.heinetwork.tv/more/introducing-hei-points/"),
     "/more/vfa-acquisition-announcement/": item_page("", "VFA Acquisition Announcement", "04/30/2021"),
     "/more/introducing-hei-points/": "<html><body>An article, no video</body></html>",
