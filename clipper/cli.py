@@ -87,6 +87,9 @@ def cmd_fetch(cfg: dict, args: argparse.Namespace) -> None:
     meta = kick.resolve(args.url, cfg)
     d = cfg["paths"]["streams"] / meta["stream_id"]
     d.mkdir(parents=True, exist_ok=True)
+    # a rerun (for the chat, say) keeps what the first download found: its video isn't fetched again
+    if "skipped_fragments" in (old := jsonstate.read(d / "meta.json", {})):
+        meta["skipped_fragments"] = old["skipped_fragments"]
     jsonstate.write(d / "meta.json", meta)
     print(f"{meta['stream_id']}: {meta['title']} ({meta['duration_s'] / 3600:.2f} h)")
     if not args.no_chat:

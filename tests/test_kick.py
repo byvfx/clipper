@@ -33,6 +33,7 @@ def test_fetch_video_counts_skipped_segments(defaults, tmp_path, monkeypatch, ca
                       "WARNING: something else\n"])
     monkeypatch.setattr(kick.subprocess, "Popen", fake)
     kick.fetch_video(tmp_path, {"source": "https://example.invalid/master.m3u8"}, defaults)
+    assert "--logtostderr" in fake.args  # yt-dlp's skip lines are on stdout otherwise
     assert "2 video segments were missing" in capsys.readouterr().out
     meta = json.loads((tmp_path / "meta.json").read_text(encoding="utf-8"))
     assert meta == {"stream_id": "kick-1", "skipped_fragments": 2}
@@ -62,3 +63,19 @@ def test_a_web_page_instead_of_json_is_a_clear_error(monkeypatch):
                         lambda req, timeout: Page(b"<!DOCTYPE html><title>Just a moment...</title>"))
     with pytest.raises(ClipperError, match="web page, not data"):
         kick._get("https://kick.com/api/v2/channels/x", "ua")
+
+
+def test_a_second_fetch_keeps_the_gap_count(defaults, tmp_path, monkeypatch):
+    import argparse
+
+    from clipper import cli
+
+    defaults["paths"]["streams"] = tmp_path
+    d = tmp_path / "kick-1"
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"stream_id": "kick-1", "skipped_fragments": 3}), encoding="utf-8")
+    monkeypatch.setattr(kick, "resolve", lambda url, cfg: {"stream_id": "kick-1", "title": "t", "duration_s": 3600})
+    monkeypatch.setattr(kick, "fetch_chat", lambda *a: None)
+    monkeypatch.setattr(kick, "fetch_video", lambda *a: None)  # source.ts already there: nothing found again
+    cli.cmd_fetch(defaults, argparse.Namespace(url="u", no_chat=False, no_video=False))
+    assert json.loads((d / "meta.json").read_text(encoding="utf-8"))["skipped_fragments"] == 3

@@ -170,11 +170,12 @@ def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
         [sys.executable, "-m", "yt_dlp", "--referer", "https://kick.com/",
          "-f", f"best[height<={k['max_height']}]", "-N", str(k["download_fragments"]),
          "--hls-use-mpegts", "--no-part", "--newline", "--progress-delta", "30",
+         "--logtostderr",  # its "Skipping fragment" lines go to stdout otherwise
          "-o", str(out), meta["source"]],
         stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
     )
     skipped = 0
-    for line in proc.stderr:  # passed through as it comes; progress is on stdout
+    for line in proc.stderr:  # everything yt-dlp says (--logtostderr), passed through as it comes
         sys.stderr.write(line)
         skipped += bool(SKIPPED.search(line))
     if proc.wait():
