@@ -979,6 +979,9 @@ def check_broll(cfg: dict) -> None:
     bad = [c for c in bc["licences"] if c not in broll.LICENCES]
     if bad:
         fail("broll", f"[broll] licences: unknown {', '.join(bad)}", f"use some of {', '.join(broll.LICENCES)}")
+    if "dvids" in bc["sources"] and not broll.dvids_key(cfg):
+        warn("broll", f"no $DVIDS_API_KEY or {cfg['paths']['dvids_key']}: DVIDS is skipped",
+             "optional: register at dvidshub.net (API keys under your account), public key on the first line")
     if not cfg["paths"]["broll"]:
         return
     lib = broll.load(cfg)

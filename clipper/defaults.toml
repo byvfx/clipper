@@ -22,6 +22,7 @@ x_client = "secrets/x_client.json"             # {"client_id": ...} (+ "client_s
 x_token = "secrets/x_token.json"               # written by clipper x --sign-in
 warroom_token = "secrets/warroom_token.txt"    # made by clipper warroom --tailnet on, if [warroom] token is ""
 brave_key = "secrets/brave_secret.txt"        # Brave Search API key for cast image search, if not $BRAVE_API_KEY
+dvids_key = "secrets/dvids_secret.txt"        # DVIDS API keys for clipper broll (public key first), if not $DVIDS_API_KEY
 openai_key = "secrets/openai_secret.txt"      # model provider keys, each if its env var isn't set
 gemini_key = "secrets/gemini_secret.txt"      # ($OPENAI_API_KEY, $GEMINI_API_KEY, $OPENROUTER_API_KEY)
 openrouter_key = "secrets/openrouter_secret.txt"
@@ -173,9 +174,11 @@ max_refs = 10              # group averages kept per known face (newest win)
 
 [broll]
 # `clipper broll` (#229): free b-roll in [paths] broll, each clip's source, credit and licence
-# in broll.json. Sources need no key: nasa (NASA Image and Video Library), prelinger (the
-# Internet Archive's Prelinger films), commons (Wikimedia Commons video).
-sources = ["nasa", "prelinger", "commons"]   # what a find searches
+# in broll.json. Sources: nasa (NASA Image and Video Library), dvids (the armed forces' video;
+# a free key, $DVIDS_API_KEY or [paths] dvids_key), prelinger (the Internet Archive's Prelinger
+# films), commons (Wikimedia Commons video). A source whose key is missing is skipped.
+sources = ["nasa", "dvids", "prelinger", "commons"]   # what a find searches
+dvids_category = "B-Roll"  # DVIDS searches only this category (footage without narration); "" = any
 per_source = 4             # most new clips one find adds from each source
 max_s = 180                # longer ones are listed as "long", not downloaded: add <id> --from/--to takes a part
 max_height = 1080          # clips are scaled down to this, never up

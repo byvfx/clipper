@@ -5,15 +5,20 @@ keeps where it came from, its credit line and its licence.
 
 ## Sources
 
-No keys needed:
-
 - `nasa`: the NASA Image and Video Library (images.nasa.gov): space, Earth from orbit, storms,
-  archive film.
+  archive film. No key.
+- `dvids`: the Defense Visual Information Distribution Service (dvidshub.net), the armed forces'
+  own video: aircraft, ships, training, disaster relief. Only its B-Roll category is searched
+  (footage without narration; `[broll] dvids_category`, `""` for all of it). It needs a free key:
+  register at dvidshub.net and copy the API keys from your account into
+  `secrets/dvids_secret.txt` (`[paths] dvids_key`), the public key on the first line and the
+  private one on the second, or set `DVIDS_API_KEY` to the public key. Only the public key is
+  used, and it is never written to `broll.json` or printed. Without a key, DVIDS is skipped.
 - `prelinger`: the Internet Archive's Prelinger films: ads, industrial and educational films
-  from the 1930s to the 1970s.
-- `commons`: Wikimedia Commons video, a lot of it government footage already.
+  from the 1930s to the 1970s. No key.
+- `commons`: Wikimedia Commons video, a lot of it government footage already. No key.
 
-DVIDS (military) and the National Archives need API keys and come later (#229).
+The National Archives needs a key from NARA and comes later (#229).
 
 ## Commands
 
@@ -23,8 +28,8 @@ DVIDS (military) and the National Archives need API keys and come later (#229).
 - `clipper broll list [--tag storm] [--status new|kept|long] [--json]`: the library, newest
   first. `--json` adds each file's path, which you can import into Resolve.
 - `clipper broll add <address|id|file> [--from 0:01:20 --to 0:01:45] [--tag X]`: one clip, from
-  an images.nasa.gov/details, archive.org/details or Commons `File:` page. With a library id it
-  takes a part of that clip. A video file you downloaded yourself (from DVIDS, say) needs
+  an images.nasa.gov/details, dvidshub.net/video, archive.org/details or Commons `File:` page.
+  With a library id it takes a part of that clip. A video file you downloaded yourself needs
   `--credit "U.S. Navy video by ..."`.
 - `clipper broll keep|drop <id> ...`: a dropped clip's file is deleted, and the next find
   doesn't bring its source back.
@@ -56,6 +61,7 @@ isn't a source. Nor is C-SPAN, whose own camera footage is copyrighted.
 
 ## Settings
 
-`[broll]` in `clipper/defaults.toml`: `sources`, `per_source`, `max_s`, `max_height`,
-`licences`, `audio`, `codec` (empty uses `[cut] clip_codec`), `crf`, `timeout_s`.
-`clipper doctor` checks the source and licence names and counts the library.
+`[broll]` in `clipper/defaults.toml`: `sources`, `dvids_category`, `per_source`, `max_s`,
+`max_height`, `licences`, `audio`, `codec` (empty uses `[cut] clip_codec`), `crf`, `timeout_s`.
+`clipper doctor` checks the source and licence names, warns when DVIDS has no key, and counts
+the library.

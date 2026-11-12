@@ -2,13 +2,15 @@
 from archives whose footage is free to use: work of the US government has no copyright
 (17 U.S.C. 105), and the Internet Archive and Wikimedia Commons say each item's licence.
 
-    clipper broll find "<query>" [--source nasa|prelinger|commons] [-n N]
+    clipper broll find "<query>" [--source nasa|dvids|prelinger|commons] [-n N]
     clipper broll add <url|id|file> [--from TIME] [--to TIME] [--tag X] [--credit TEXT]
     clipper broll list [--tag X] [--source X] [--status new|kept|long] [--json]
     clipper broll keep|drop <id> ...
 
-Sources: nasa (the NASA Image and Video Library), prelinger (the Internet Archive's Prelinger
-films: ads, industrial and educational films), commons (Wikimedia Commons video). A clip is
+Sources: nasa (the NASA Image and Video Library), dvids (the Defense Visual Information
+Distribution Service: the armed forces' own video, its public key from $DVIDS_API_KEY or the
+first line of [paths] dvids_key), prelinger (the Internet Archive's Prelinger films: ads,
+industrial and educational films), commons (Wikimedia Commons video). A clip is
 kept only when its licence is one of [broll] licences (public domain and CC0 at first) and
 nothing in its description names an outside copyright holder; anything else is skipped with
 the reason. Clips up to [broll] max_s are downloaded whole, re-encoded to at most [broll]
@@ -27,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 from datetime import UTC, datetime
@@ -37,7 +40,7 @@ from . import jsonstate
 from .errors import ClipperError
 
 INDEX = "broll.json"
-SOURCES = ("nasa", "prelinger", "commons")
+SOURCES = ("nasa", "dvids", "prelinger", "commons")
 STATUSES = ("new", "kept", "long")
 LICENCES = ("pd", "cc0", "cc-by", "cc-by-sa")
 UA = "clipper-broll/1.0 (b-roll library; https://github.com/byvfx/clipper)"  # Wikimedia asks for one
@@ -129,6 +132,18 @@ def seconds(text: str | float | None) -> float | None:
         return None
 
 
+def dvids_key(cfg: dict | None = None) -> str:
+    """$DVIDS_API_KEY, else the first line of [paths] dvids_key (the public key; the second line,
+    the private key, isn't needed to read); "" if neither."""
+    if k := os.environ.get("DVIDS_API_KEY", "").strip():
+        return k
+    path = (cfg or {}).get("paths", {}).get("dvids_key")
+    try:
+        return Path(path).read_text(encoding="utf-8").splitlines()[0].strip() if path else ""
+    except (OSError, IndexError):
+        return ""
+
+
 def _get(url: str, params: dict | None = None, timeout: int = 20):
     import requests
 
@@ -153,7 +168,7 @@ def _text(html: str) -> str:
 # --- description, duration}; nothing is downloaded
 
 
-def nasa(query: str, n: int, nasa_id: str = "") -> list[dict]:
+def nasa(query: str, n: int, cfg: dict | None = None, nasa_id: str = "") -> list[dict]:
     """The NASA Image and Video Library (images-api.nasa.gov, no key). NASA's own work is public
     domain; an item whose description names another owner is refused by `refused`."""
     params = {"nasa_id": nasa_id} if nasa_id else {"q": query, "media_type": "video", "page_size": max(n * 3, 10)}
@@ -192,7 +207,7 @@ def _nasa_media(c: dict) -> None:
             pass
 
 
-def prelinger(query: str, n: int, identifier: str = "") -> list[dict]:
+def prelinger(query: str, n: int, cfg: dict | None = None, identifier: str = "") -> list[dict]:
     """The Internet Archive's Prelinger collection (advancedsearch, no key). Most items say
     public domain in licenseurl; one that says nothing is refused."""
     if identifier:
@@ -229,7 +244,7 @@ def _one(v) -> str:
     return str(v[0] if isinstance(v, list) and v else v or "")
 
 
-def commons(query: str, n: int, title: str = "") -> list[dict]:
+def commons(query: str, n: int, cfg: dict | None = None, title: str = "") -> list[dict]:
     """Wikimedia Commons video files, licence and author from each file's metadata."""
     params = {"action": "query", "format": "json", "prop": "imageinfo", "iiprop": "url|extmetadata|mime|size"}
     if title:
@@ -253,22 +268,82 @@ def commons(query: str, n: int, title: str = "") -> list[dict]:
     return out
 
 
-FINDERS = {"nasa": nasa, "prelinger": prelinger, "commons": commons}
+def dvids(query: str, n: int, cfg: dict | None = None, asset: str = "") -> list[dict]:
+    """DVIDS (api.dvidshub.net): the armed forces' video, public domain as work of the US
+    government. A search is of [broll] dvids_category (B-Roll: footage without narration)
+    unless that's ""; the files come from each item's asset record (`_dvids_media`)."""
+    key = dvids_key(cfg)
+    if not key:
+        raise ClipperError("no $DVIDS_API_KEY or [paths] dvids_key file (wiki B-roll)")
+    if asset:
+        items = [_get("https://api.dvidshub.net/asset", {"api_key": key, "id": asset}).get("results") or {}]
+    else:
+        params = {"api_key": key, "type": "video", "q": query, "max_results": min(max(n * 3, 10), 50)}
+        if cat := ((cfg or {}).get("broll") or {}).get("dvids_category"):
+            params["category"] = cat
+        items = _get("https://api.dvidshub.net/search", params).get("results") or []
+    out = []
+    for d in items:
+        if d.get("type") != "video" or not d.get("id"):
+            continue
+        credit = d.get("credit")
+        if isinstance(credit, list):  # the asset record: [{name, rank, ...}]
+            credit = ", ".join(" ".join(x for x in (c.get("rank"), c.get("name")) if x) for c in credit)
+        who = ", ".join(x for x in (credit, d.get("unit_name")) if x) or "DVIDS"
+        page = d.get("url") or f"https://www.dvidshub.net/video/{d['id'].split(':')[-1]}"
+        out.append({"key": page, "source": "dvids", "title": d.get("title", ""), "page": page,
+                    "asset": d["id"], "url": "", "files": d.get("files"), "date": (d.get("date") or "")[:10],
+                    "credit": f"{who} ({d['branch']}), via DVIDS" if d.get("branch") else f"{who}, via DVIDS",
+                    "licence": "public domain (DVIDS)",
+                    "description": (d.get("description") or d.get("short_description") or "")[:2000],
+                    "duration": seconds(d.get("duration"))})
+    return out
 
 
-def resolve(url: str) -> dict:
+def _dvids_media(c: dict, cfg: dict) -> None:
+    """The smallest mp4 at least [broll] max_height tall, else the tallest (DVIDS keeps each
+    video from 4K down to 144p). The file addresses carry no key."""
+    files = c.get("files")
+    if not files:
+        files = (dvids("", 1, cfg, asset=c["asset"]) or [{}])[0].get("files") or []
+    mp4 = [f for f in files if f.get("type") == "video/mp4" and f.get("src")]
+    if not mp4:
+        raise ClipperError(f"{c['page']}: no mp4")
+    tall = [f for f in mp4 if int(f.get("height") or 0) >= cfg["broll"]["max_height"]]
+    pick = (min(tall, key=lambda f: int(f.get("size") or 0)) if tall
+            else max(mp4, key=lambda f: int(f.get("height") or 0)))
+    c["url"] = pick["src"]
+
+
+def media(c: dict, cfg: dict) -> None:
+    """A candidate's media address and length, where its search didn't give them."""
+    if c.get("url"):
+        return
+    if c["source"] == "nasa":
+        _nasa_media(c)
+    elif c["source"] == "dvids":
+        _dvids_media(c, cfg)
+
+
+FINDERS = {"nasa": nasa, "dvids": dvids, "prelinger": prelinger, "commons": commons}
+
+
+def resolve(url: str, cfg: dict | None = None) -> dict:
     """A source page's address -> its candidate (for `add`)."""
     p = urlparse(url)
     host, path = (p.hostname or "").lower(), unquote(p.path)
     found: list[dict] = []
     if host.endswith("nasa.gov") and "/details/" in path:
         found = nasa("", 1, nasa_id=path.split("/details/", 1)[1].strip("/"))
+    elif host.endswith("dvidshub.net") and (m := re.search(r"/video/(\d+)", path)):
+        found = dvids("", 1, cfg, asset=f"video:{m.group(1)}")
     elif host.endswith("archive.org") and "/details/" in path:
         found = prelinger("", 1, identifier=path.split("/details/", 1)[1].split("/")[0])
     elif host.endswith("wikimedia.org") and "/wiki/" in path:
         found = commons("", 1, title=path.split("/wiki/", 1)[1])
     else:
-        raise ClipperError(f"{url}: an images.nasa.gov/details, archive.org/details or commons.wikimedia.org/wiki "
+        raise ClipperError(f"{url}: an images.nasa.gov/details, dvidshub.net/video, archive.org/details or "
+                           "commons.wikimedia.org/wiki "
                            "address (or a local file with --credit)")
     if not found:
         raise ClipperError(f"{url}: no video there")
@@ -336,8 +411,7 @@ def _tag(cfg: dict, cid: str, tags: list[str]) -> None:
 
 def take(cfg: dict, c: dict, tags: list[str], start=None, end=None, say=print) -> dict:
     """Download one candidate (or a part of it) into the library as a new clip."""
-    if c["source"] == "nasa" and not c.get("url"):
-        _nasa_media(c)
+    media(c, cfg)
     cid = clip_id(c["source"], c["key"], start, end)
     d = root(cfg)
     d.mkdir(parents=True, exist_ok=True)
@@ -362,7 +436,7 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
     added = 0
     for src in sources:
         try:
-            cands = FINDERS[src](query, n)
+            cands = FINDERS[src](query, n, cfg)
         except ClipperError as e:
             say(f"{src}: {e}")
             continue
@@ -383,8 +457,7 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
                 say(f"  skip {c['title'][:60]!r}: {why}")
                 continue
             try:
-                if src == "nasa":
-                    _nasa_media(c)
+                media(c, cfg)  # a long one keeps its address too, for add --from/--to
                 if (c.get("duration") or 0) > bc["max_s"]:
                     _save(cfg, _entry(c, cid, "long", [query]))
                     say(f"  {cid}: {c['title'][:70]} ({c['duration'] / 60:.0f} min, long: "
@@ -424,14 +497,13 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
         if why := refused(c, cfg):
             raise ClipperError(f"{p.name}: {why}")
     elif target.startswith(("http://", "https://")):
-        c = resolve(target)
+        c = resolve(target, cfg)
         if why := refused(c, cfg):
             raise ClipperError(f"{c['title'][:60]!r}: {why}")
         if c["key"] in lib["dropped"]:
             with jsonstate.update(_index(cfg), {}) as idx:  # added by hand: no longer dropped
                 idx["dropped"] = [k for k in idx.get("dropped", []) if k != c["key"]]
-        if c["source"] == "nasa":
-            _nasa_media(c)
+        media(c, cfg)
         if start is None and end is None and (c.get("duration") or 0) > cfg["broll"]["max_s"]:
             e = _entry(c, clip_id(c["source"], c["key"]), "long", tags)
             _save(cfg, e)

@@ -76,7 +76,7 @@ def test_clip_id_is_stable_and_per_range():
 
 def test_find_adds_skips_and_lists_long(cfg, monkeypatch):
     found = [cand("https://c/1"), cand("https://c/2", licence="CC BY-NC"), cand("https://c/3", duration=900.0)]
-    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n: [dict(c) for c in found])
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [dict(c) for c in found])
     said = []
     assert broll.find(cfg, "hurricane", ["commons"], say=said.append) == 2
     lib = broll.load(cfg)
@@ -92,18 +92,18 @@ def test_find_adds_skips_and_lists_long(cfg, monkeypatch):
 
 
 def test_a_failing_source_doesnt_stop_the_others(cfg, monkeypatch):
-    def down(q, n):
+    def down(q, n, cfg=None):
         raise ClipperError("archive.org: HTTP 503")
 
     monkeypatch.setitem(broll.FINDERS, "prelinger", down)
-    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n: [cand()])
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand()])
     said = []
     assert broll.find(cfg, "x", ["prelinger", "commons"], say=said.append) == 1
     assert "prelinger: archive.org: HTTP 503" in said
 
 
 def test_drop_remembers_the_source(cfg, monkeypatch):
-    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n: [cand()])
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand()])
     broll.find(cfg, "x", ["commons"], say=lambda s: None)
     (cid,) = broll.load(cfg)["clips"]
     with pytest.raises(ClipperError, match="no clip"):
@@ -115,7 +115,7 @@ def test_drop_remembers_the_source(cfg, monkeypatch):
 
 
 def test_keep_and_long(cfg, monkeypatch):
-    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n: [cand(), cand("https://c/long", duration=600.0)])
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand(), cand("https://c/long", duration=600.0)])
     broll.find(cfg, "x", ["commons"], say=lambda s: None)
     lib = broll.load(cfg)["clips"]
     short = next(i for i, e in lib.items() if e["status"] == "new")
@@ -127,7 +127,7 @@ def test_keep_and_long(cfg, monkeypatch):
 
 
 def test_add_a_part_of_a_long_clip(cfg, monkeypatch):
-    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n: [cand("https://c/long", duration=600.0)])
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand("https://c/long", duration=600.0)])
     broll.find(cfg, "parade", ["commons"], say=lambda s: None)
     (lid,) = broll.load(cfg)["clips"]
     e = broll.add(cfg, lid, 80.0, 105.0, ["march"], say=lambda s: None)
@@ -161,7 +161,7 @@ def test_add_refuses_an_unknown_address(cfg):
 
 
 def test_list_filters_and_json(cfg, monkeypatch, capsys):
-    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n: [cand()])
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand()])
     broll.find(cfg, "hurricane", ["commons"], say=lambda s: None)
     capsys.readouterr()
     broll.show_list(cfg, as_json=True)
@@ -204,6 +204,70 @@ def test_sources_parse_their_apis(monkeypatch):
 
 
 def test_index_is_jsonstate(cfg, monkeypatch):
-    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n: [cand()])
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand()])
     broll.find(cfg, "x", ["commons"], say=lambda s: None)
     assert jsonstate.load(cfg["paths"]["broll"] / broll.INDEX)["clips"]
+
+
+def test_dvids_key_env_then_first_line(tmp_path, monkeypatch):
+    monkeypatch.delenv("DVIDS_API_KEY", raising=False)
+    f = tmp_path / "dvids_secret.txt"
+    cfg = {"paths": {"dvids_key": f}}
+    assert broll.dvids_key(cfg) == ""
+    f.write_text("key-public\r\nprivate\n", encoding="utf-8")
+    assert broll.dvids_key(cfg) == "key-public"
+    monkeypatch.setenv("DVIDS_API_KEY", "key-env")
+    assert broll.dvids_key(cfg) == "key-env"
+
+
+DVIDS_FILES = [{"src": "https://cf/v.mp4", "type": "video/mp4", "height": 2160, "size": 45},
+               {"src": "https://cf/v-1080-9000k.mp4", "type": "video/mp4", "height": 1080, "size": 34},
+               {"src": "https://cf/v-1080-6000k.mp4", "type": "video/mp4", "height": 1080, "size": 22},
+               {"src": "https://cf/v-720.mp4", "type": "video/mp4", "height": 720, "size": 11}]
+
+
+def test_dvids_search_asset_and_file_pick(cfg, monkeypatch):
+    monkeypatch.setenv("DVIDS_API_KEY", "key-secret")
+    calls = []
+
+    def get(url, params=None, timeout=20):
+        calls.append((url, dict(params or {})))
+        if url.endswith("/search"):
+            return {"results": [{"id": "video:1029172", "type": "video", "title": "Preflight checks",
+                                 "credit": "SPC Leonardo A Martinez Tovar", "unit_name": "25th Infantry Division",
+                                 "branch": "Army", "duration": 38, "date": "2026-11-08T06:00:00Z",
+                                 "url": "https://www.dvidshub.net/video/1029172/preflight",
+                                 "hls_url": "https://api.dvidshub.net/hls/video/1029172.m3u8?api_key=key-secret"},
+                                {"id": "image:1", "type": "image"}]}
+        return {"results": {"id": "video:1029172", "type": "video", "title": "Preflight checks", "files": DVIDS_FILES,
+                            "credit": [{"name": "Leonardo A Martinez Tovar", "rank": "Spc."}], "branch": "Army",
+                            "url": "https://www.dvidshub.net/video/1029172/preflight", "duration": 38}}
+
+    monkeypatch.setattr(broll, "_get", get)
+    (c,) = broll.dvids("helicopter", 2, cfg)
+    assert calls[0][1]["category"] == "B-Roll" and c["duration"] == 38
+    assert c["credit"] == "SPC Leonardo A Martinez Tovar, 25th Infantry Division (Army), via DVIDS"
+    broll.media(c, cfg)
+    assert c["url"] == "https://cf/v-1080-6000k.mp4"  # the smallest that's 1080 tall
+    assert calls[-1][1]["id"] == "video:1029172"
+    cfg["broll"]["max_height"] = 4320
+    c2 = broll.resolve("https://www.dvidshub.net/video/1029172/preflight", cfg)
+    assert c2["credit"] == "Spc. Leonardo A Martinez Tovar (Army), via DVIDS"
+    broll.media(c2, cfg)
+    assert c2["url"] == "https://cf/v.mp4"  # none that tall: the tallest
+    cfg["broll"]["max_height"] = 1080
+    monkeypatch.setattr(broll, "dvids", lambda q, n, cfg=None, asset="": [
+        {**c, "url": ""}] if not asset else [{"files": DVIDS_FILES}])
+    monkeypatch.setitem(broll.FINDERS, "dvids", broll.dvids)
+    broll.find(cfg, "helicopter", ["dvids"], say=lambda s: None)
+    text = (cfg["paths"]["broll"] / broll.INDEX).read_text(encoding="utf-8")
+    assert "key-secret" not in text and "api_key" not in text
+
+
+def test_dvids_without_a_key_is_skipped(cfg, monkeypatch):
+    monkeypatch.delenv("DVIDS_API_KEY", raising=False)
+    cfg["paths"]["dvids_key"] = cfg["paths"]["broll"] / "missing.txt"
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [cand()])
+    said = []
+    assert broll.find(cfg, "x", ["dvids", "commons"], say=said.append) == 1
+    assert any(s.startswith("dvids: no $DVIDS_API_KEY") for s in said)
