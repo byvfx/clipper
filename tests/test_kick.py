@@ -1,24 +1,26 @@
 """Kick: a VOD download's missing segments are counted, and a web page where the API's JSON
 should be is a clear error. Offline: yt-dlp and Kick are stand-ins."""
+import argparse
 import io
 import json
 import subprocess
 
 import pytest
 
-from clipper import kick
+from clipper import cli, kick
 from clipper.errors import ClipperError
 
 
 class FakeYtdlp:
-    """subprocess.Popen as yt-dlp: these stderr lines, then this exit code."""
+    """subprocess.Popen as yt-dlp: these output lines (stdout and stderr together), then this
+    exit code."""
 
     def __init__(self, lines, code=0):
         self.lines, self.code = lines, code
 
     def __call__(self, args, **kw):
-        self.args = args
-        self.stderr = io.StringIO("".join(self.lines))
+        self.args, self.kw = args, kw
+        self.stdout = io.StringIO("".join(self.lines))
         self.returncode = self.code
         return self
 
@@ -28,21 +30,31 @@ class FakeYtdlp:
 
 def test_fetch_video_counts_skipped_segments(defaults, tmp_path, monkeypatch, capsys):
     (tmp_path / "meta.json").write_text(json.dumps({"stream_id": "kick-1"}), encoding="utf-8")
-    fake = FakeYtdlp(["WARNING: [download] fragment not found; Skipping fragment 12 ...\n",
-                      "WARNING: [download] fragment not found; Skipping fragment 13 ...\n",
+    # yt-dlp's to_screen: on stdout, so the two streams are read together
+    fake = FakeYtdlp(["[download] fragment not found; Skipping fragment 12 ...\n",
+                      "[download] fragment not found; Skipping fragment 13 ...\n",
                       "WARNING: something else\n"])
     monkeypatch.setattr(kick.subprocess, "Popen", fake)
     kick.fetch_video(tmp_path, {"source": "https://example.invalid/master.m3u8"}, defaults)
-    assert "--logtostderr" in fake.args  # yt-dlp's skip lines are on stdout otherwise
+    assert fake.kw["stderr"] == subprocess.STDOUT
+    assert "--logtostderr" not in fake.args  # the Python API's only: the command line refuses it
     assert "2 video segments were missing" in capsys.readouterr().out
     meta = json.loads((tmp_path / "meta.json").read_text(encoding="utf-8"))
     assert meta == {"stream_id": "kick-1", "skipped_fragments": 2}
 
 
-def test_fetch_video_without_gaps_leaves_meta_alone(defaults, tmp_path, monkeypatch):
+def test_fetch_video_without_gaps_or_meta_writes_none(defaults, tmp_path, monkeypatch):
     monkeypatch.setattr(kick.subprocess, "Popen", FakeYtdlp(["[download] 100%\n"]))
     kick.fetch_video(tmp_path, {"source": "u"}, defaults)
     assert not (tmp_path / "meta.json").exists()
+
+
+def test_a_clean_download_clears_an_old_gap_count(defaults, tmp_path, monkeypatch):
+    (tmp_path / "meta.json").write_text(json.dumps({"stream_id": "kick-1", "skipped_fragments": 3}),
+                                        encoding="utf-8")
+    monkeypatch.setattr(kick.subprocess, "Popen", FakeYtdlp(["[download] 100%\n"]))
+    kick.fetch_video(tmp_path, {"source": "u"}, defaults)
+    assert json.loads((tmp_path / "meta.json").read_text(encoding="utf-8")) == {"stream_id": "kick-1"}
 
 
 def test_fetch_video_failure_still_raises(defaults, tmp_path, monkeypatch):
@@ -65,17 +77,18 @@ def test_a_web_page_instead_of_json_is_a_clear_error(monkeypatch):
         kick._get("https://kick.com/api/v2/channels/x", "ua")
 
 
-def test_a_second_fetch_keeps_the_gap_count(defaults, tmp_path, monkeypatch):
-    import argparse
-
-    from clipper import cli
-
+def test_a_second_fetch_keeps_the_gap_count_while_the_video_stays(defaults, tmp_path, monkeypatch):
     defaults["paths"]["streams"] = tmp_path
     d = tmp_path / "kick-1"
     d.mkdir()
     (d / "meta.json").write_text(json.dumps({"stream_id": "kick-1", "skipped_fragments": 3}), encoding="utf-8")
+    (d / "source.ts").write_bytes(b"ts")
     monkeypatch.setattr(kick, "resolve", lambda url, cfg: {"stream_id": "kick-1", "title": "t", "duration_s": 3600})
     monkeypatch.setattr(kick, "fetch_chat", lambda *a: None)
-    monkeypatch.setattr(kick, "fetch_video", lambda *a: None)  # source.ts already there: nothing found again
-    cli.cmd_fetch(defaults, argparse.Namespace(url="u", no_chat=False, no_video=False))
+    monkeypatch.setattr(kick, "fetch_video", lambda *a: None)  # source.ts is there: not fetched again
+    args = argparse.Namespace(url="u", no_chat=False, no_video=False)
+    cli.cmd_fetch(defaults, args)
     assert json.loads((d / "meta.json").read_text(encoding="utf-8"))["skipped_fragments"] == 3
+    (d / "source.ts").unlink()  # gone: downloaded again and counted afresh
+    cli.cmd_fetch(defaults, args)
+    assert "skipped_fragments" not in json.loads((d / "meta.json").read_text(encoding="utf-8"))

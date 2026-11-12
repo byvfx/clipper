@@ -170,20 +170,23 @@ def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
         [sys.executable, "-m", "yt_dlp", "--referer", "https://kick.com/",
          "-f", f"best[height<={k['max_height']}]", "-N", str(k["download_fragments"]),
          "--hls-use-mpegts", "--no-part", "--newline", "--progress-delta", "30",
-         "--logtostderr",  # its "Skipping fragment" lines go to stdout otherwise
          "-o", str(out), meta["source"]],
-        stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+        # "Skipping fragment" is on stdout (to_screen), its reason on stderr: both, read here.
+        # (--logtostderr is only the Python API's, the command line refuses it.)
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
     )
     skipped = 0
-    for line in proc.stderr:  # everything yt-dlp says (--logtostderr), passed through as it comes
-        sys.stderr.write(line)
+    for line in proc.stdout:  # passed through as it comes
+        sys.stdout.write(line)
         skipped += bool(SKIPPED.search(line))
     if proc.wait():
         raise subprocess.CalledProcessError(proc.returncode, proc.args)
     if skipped:
         print(f"{stream_dir.name}: warning: {skipped} video segments were missing on Kick; "
               f"the source has gaps there")
-        jsonstate.merge(stream_dir / "meta.json", {"skipped_fragments": skipped}, ["skipped_fragments"])
+    if skipped or (stream_dir / "meta.json").exists():  # this download's count; none clears an old one
+        jsonstate.merge(stream_dir / "meta.json", {"skipped_fragments": skipped} if skipped else {},
+                        ["skipped_fragments"])
     return out
 
 
