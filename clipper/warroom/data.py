@@ -195,12 +195,18 @@ def all_retakes(cfg: dict) -> list[dict]:
 def retakes(cfg: dict, limit: int = 12) -> list[dict]:
     return all_retakes(cfg)[:limit]
 
-def retake_cost(hs: list[dict], month: str) -> dict:
+def _month(at: str, tz) -> str:
+    try:
+        return datetime.fromisoformat(at).astimezone(tz).strftime("%Y-%m")
+    except (TypeError, ValueError):
+        return ""
+
+def retake_cost(hs: list[dict], month: str, tz=UTC) -> dict:
     """#203: what a retake costs (the mean of the last 50 that recorded one, None before any
     did) and this month's retakes, for the Retakes panel and the bulk note's warning."""
     costs = [h["cost_usd"] for h in hs if isinstance(h.get("cost_usd"), int | float)]
     recent = costs[:50]
-    mine = [h for h in hs if h["at"][:7] == month]
+    mine = [h for h in hs if _month(h["at"], tz) == month]  # tz: [schedule] timezone, as the page shows
     return {"avg_usd": round(sum(recent) / len(recent), 4) if recent else None,
             "month_n": len(mine),
             "month_usd": round(sum(h["cost_usd"] for h in mine
@@ -337,7 +343,7 @@ def overview(cfg: dict) -> dict:
                 "uploaded": sum(e.get("status") == "uploaded" for e in sched.get("entries", []))},
             "streams": infos[:20],
             "items": rows, "schedule": entries, "schedule_generated_at": sched.get("generated_at"),
-            "retakes": hs[:12], "retake_cost": {**retake_cost(hs, datetime.now(UTC).strftime("%Y-%m")),
+            "retakes": hs[:12], "retake_cost": {**retake_cost(hs, now.strftime("%Y-%m"), tz),
                                                 "auto": bool(cfg["retake"]["auto"])},
             "health": health(cfg), "stages": worker.STAGES,
             "uploads": upload_status(cfg, sched)}

@@ -310,12 +310,18 @@ def test_retake_cost():
           {"at": "2026-11-01T09:00:00+00:00"}, {"at": "2026-10-30T10:00:00+00:00", "cost_usd": 0.02}]
     assert retake_cost(hs, "2026-11") == {"avg_usd": 0.02, "month_n": 3, "month_usd": 0.04}
     assert retake_cost([], "2026-11") == {"avg_usd": None, "month_n": 0, "month_usd": 0}
+    # the month is the show's: 2026-12-01 03:00 UTC is still November in Los Angeles
+    from zoneinfo import ZoneInfo
+    late = [{"at": "2026-12-01T03:00:00+00:00", "cost_usd": 0.01}, {"at": "", "cost_usd": 0.01}]
+    assert retake_cost(late, "2026-11", ZoneInfo("America/Los_Angeles"))["month_n"] == 1
+    assert retake_cost(late, "2026-11")["month_n"] == 0
 
 
 def test_cast_find_estimate(tmp_path, defaults):
     """#203: a Find's label cost before it runs, from past cast label calls in the costs log."""
     import json
 
+    from clipper import costs
     from clipper.warroom.cast import find_estimate
 
     log = tmp_path / "costs.jsonl"
@@ -324,6 +330,8 @@ def test_cast_find_estimate(tmp_path, defaults):
     log.write_text("\n".join(json.dumps(r) for r in (
         {"kind": "llm", "stage": "cast grab", "usd": 0.0003}, {"kind": "llm", "stage": "score", "usd": 0.5},
         {"kind": "llm", "stage": "cast auto", "usd": 0.0005}, {"kind": "modal", "stage": "cast", "usd": 9})) + "\n")
+    assert find_estimate(cfg)["label_usd"] is None   # cached for a while: the log grows all the time
+    costs._AVG.clear()
     est = find_estimate(cfg)
     assert est["per_source"] == defaults["cast"]["per_source"] and est["label_usd"] == pytest.approx(0.0004)
     cfg["cast"] = {**defaults["cast"], "label_model": ""}

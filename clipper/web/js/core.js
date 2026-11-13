@@ -25,7 +25,7 @@ function retakeOk(n) {
   return confirm(`This starts ${n} retake${n > 1 ? "s" : ""} (a model call each)${a != null ? `, about ${usd(a * n)}` : ""}. Go?`);
 }
 function toast(msg, err, undoId) { const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = msg;
-  t.setAttribute("role", err ? "alert" : "status");
+  $("#announce").textContent = msg;  // a live region that is always there, so screen readers say it
   if (undoId) { const b = document.createElement("button"); b.className = "btn"; b.textContent = "Undo"; b.onclick = () => { t.remove(); undo(undoId); }; t.appendChild(b); }
   document.querySelectorAll(".toast").forEach(o => o.remove());
   document.body.appendChild(t); setTimeout(() => t.remove(), undoId ? 10000 : err ? 7000 : 3500); }
@@ -45,7 +45,7 @@ function tick() {
   // #201: the clock ticks whatever the last poll did; this says how old the numbers are
   const age = STATE ? Math.max(0, (Date.now() - new Date(STATE.generated_at)) / 1000) : null, u = $("#updated");
   const was = age === null ? "" : age < 90 ? `${Math.round(age)} s ago` : ago(STATE.generated_at);
-  u.textContent = DOWN ? `serve isn't answering${was ? " · data from " + was : ""}` : age === null ? "no data yet" : `updated ${was}`;
+  u.textContent = DOWN ? `${DOWN.signedOut ? "signed out: open the ?key= link again" : "serve isn't answering"}${was ? " · data from " + was : ""}` : age === null ? "no data yet" : `updated ${was}`;
   u.title = DOWN ? `${DOWN.msg}\nTrying again every 15 s.` : "How old the numbers on this page are";
   u.className = "updated " + (DOWN || age > 120 ? "bad" : age === null || age > 45 ? "mid" : "");
 }
@@ -57,7 +57,7 @@ let DOWN = null;  // {msg} while the overview isn't coming back
 const FIRST = ["#streams", "#retakes", "#health", "#grid", "#schedule"];
 function waiting(msg) {
   if (STATE) return;
-  for (const s of FIRST) $(s).innerHTML = `<div class="empty">${msg ? `Can't reach serve: ${esc(msg)}.<br>Trying again every 15 s.` : "Loading…"}</div>`;
+  for (const s of FIRST) $(s).innerHTML = `<div class="empty">${msg ? `Can't load: ${esc(msg)}.<br>Trying again every 15 s.` : "Loading…"}</div>`;
 }
 waiting();
 let MUTATED = 0;  // bumped when an action's answer changes STATE.items here
@@ -69,7 +69,7 @@ async function refresh() {
   REFRESHING++;
   try {
     const asked = MUTATED, s = await api("/api/overview");
-    if (DOWN) { DOWN = null; toast("serve is answering again"); }
+    if (DOWN) { if (!DOWN.signedOut) toast("serve is answering again"); DOWN = null; }
     // #202: answers aren't ordered, and one asked for before an action landed would undo it for a
     // moment; the refresh each action starts afterwards brings the real state
     if (asked !== MUTATED || STATE && new Date(s.generated_at) < new Date(STATE.generated_at)) return;
@@ -77,7 +77,7 @@ async function refresh() {
   }
   catch (e) {
     if (!DOWN) toast("Refresh failed: " + e.message, true);
-    DOWN = { msg: e.message }; waiting(e.message); tick();
+    DOWN = { msg: e.message, signedOut: e.message.startsWith("signed out") }; waiting(e.message); tick();
   }
   finally { REFRESHING--; }
 }

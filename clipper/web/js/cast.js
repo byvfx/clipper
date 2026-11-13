@@ -76,7 +76,7 @@ function renderCast() {
 }
 function findCost(est) {  // #203: " (labels: up to $0.002 a source)" before a Find is pressed
   if (!est || !est.per_source) return "";
-  if (est.label_usd === 0) return " (no labels: free)";
+  if (est.label_usd === 0) return " (no label calls)";
   return est.label_usd == null ? ` (a label call for each new photo, up to ${est.per_source} a source)`
     : ` (labels: up to ${usd(est.label_usd * est.per_source)} a source)`;
 }

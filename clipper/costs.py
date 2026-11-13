@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -70,26 +71,24 @@ def read(path: Path) -> list[dict]:
 
 
 _AVG: dict = {}
+AVG_TTL_S = 600
 
 
 def avg_call_usd(path: Path | None, stage_prefix: str, last: int = 50) -> float | None:
     """The mean $ of the last `last` model calls whose stage starts with stage_prefix (e.g.
     "cast" for the cast labeller), None before any; for an estimate shown before a paid
-    action (#203). Cached until the log changes."""
+    action (#203). Cached for AVG_TTL_S: the log grows with every model call, and an estimate
+    doesn't need the last minute's (the cast window polls every 2.5 s while a find runs)."""
     if not path:
-        return None
-    try:
-        st = Path(path).stat()
-    except OSError:
         return None
     key = (str(path), stage_prefix, last)
     hit = _AVG.get(key)
-    if hit and hit[0] == (st.st_mtime_ns, st.st_size):
+    if hit and time.monotonic() - hit[0] < AVG_TTL_S:
         return hit[1]
     usd = [r["usd"] for r in read(Path(path)) if r.get("kind") == "llm"
            and str(r.get("stage", "")).startswith(stage_prefix) and isinstance(r.get("usd"), int | float)][-last:]
     val = sum(usd) / len(usd) if usd else None
-    _AVG[key] = ((st.st_mtime_ns, st.st_size), val)
+    _AVG[key] = (time.monotonic(), val)
     return val
 
 
