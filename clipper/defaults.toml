@@ -1104,17 +1104,18 @@ sync_key_env = "SYNC_API_KEY"  # env var with the sync.so key; else [paths] sync
 
 [codereview]
 # `clipper codereview`: a second reviewer for a branch, in one model call: the code diff
-# against main plus the changed files in full, back as a list of correctness bugs. The
-# `review` workflow (.github/workflows/review.yml) runs it on every PR and posts the review
-# on the PR and on the issues it links. Not a pipeline stage, so doctor doesn't ask for its
-# key: `reviewer` is spelled so doctor's model checks and `clipper costs` estimates skip it.
+# against main plus the changed files in full, back as a list of correctness bugs. Run by
+# hand since 2026-11-13 (the `review` workflow that ran it on every PR is gone: too slow);
+# with --pr it posts the review on the PR and on the issues it links. Not a pipeline stage,
+# so doctor doesn't ask for its key: `reviewer` is spelled so doctor's model checks and `clipper costs` estimates skip it.
 # reviewer: picked 2026-11-09 from 13 models on PR #191 (wiki Developing): about $0.90 and
 # 25 min for 9 files at high effort, real bugs and no false ones
 reviewer = "openrouter:x-ai/grok-4.7"
 effort = "high"                # none | low | medium | high: full strength, the cost is small
-copilot_wait_s = 600           # the switch: with --pr, a commit Copilot reviewed is skipped; its
-                               # out-of-credits notice, or no review in this long, runs `reviewer`
-                               # (not requested on the PR: 60 s at most). 0 = always `reviewer`
+copilot_wait_s = 0             # 0 = always `reviewer` (by hand, you asked for it). Over 0, with
+                               # --pr, a commit Copilot reviewed is skipped; its out-of-credits
+                               # notice, or no review in this long, runs `reviewer` (not requested
+                               # on the PR: 60 s at most). The removed workflow used 600
 prompt_version = "v2"          # clipper/prompts/codereview_<v>.md (v2: one reply, no plan in place of a review)
 paths = ["clipper/", "tests/", "deploy/", ".github/", "pyproject.toml"]  # what counts as code
 max_chars = 600000             # diff plus whole files sent; files past it go as diff only
