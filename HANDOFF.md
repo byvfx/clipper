@@ -105,16 +105,15 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   reports, out of the package; serve and the bot are compose-only, the Windows task scripts stay for a GPU
   worker only. Merge policy (11-10): a code PR merges once CI is green on both OSes and the review of its
   head commit is in and each finding is fixed or answered, then delete the branch; green CI alone isn't
-  enough. Copilot is the default reviewer (user, 11-10): the repo ruleset "Copilot reviews new PRs" requests
-  it when a PR opens, not on later pushes. The switch (`[codereview] copilot_wait_s`): a commit Copilot
-  reviewed gets a note and no Grok review; its out-of-credits notice, or no request or review, runs Grok on
-  its own, so later pushes go to Grok. Grok's review is the `clipper codereview` comment (#196: Grok 4.7 on
-  OpenRouter, ~$0.80 and ~25 min on a big PR, the `review` workflow, wiki Developing#code-review-on-prs),
-  copied to the PR's linked issues; check each finding against the code. It runs only when a PR touches
-  `clipper/`, `tests/`, `deploy/`, `.github/` or `pyproject.toml`: any other PR (the wiki, `uv.lock` alone,
+  enough. Reviews since 11-13 (user; Grok's `review` workflow removed, ~25 min a PR was too slow): Claude
+  runs the `code-review` skill locally before the first push and fixes what it finds, then Copilot reviews
+  when the PR opens (repo ruleset "Copilot reviews new PRs", not on later pushes: Claude reviews those, or
+  `gh pr edit N --add-reviewer @copilot`). Wiki Developing#code-review-on-prs. `clipper codereview` (Grok on
+  OpenRouter, ~$1) stays for a by-hand second opinion. Code means a PR touching `clipper/`, `tests/`,
+  `deploy/`, `.github/` or `pyproject.toml`: any other PR (the wiki, `uv.lock` alone,
   `clipper.example.toml`, `streamers.json`) has CI but no review, and a notes-only one (e.g. HANDOFF and the
   log) has neither since 11-10 (`check.yml` paths); both merge on the user's word, the first once CI is green.
-  A fork's PR gets no Grok review either (the workflow skips it): read the diff by hand, then the user's word.
+  A fork's PR: read the diff by hand, then the user's word. The repo secret `OPENROUTER_API_KEY` is unused now.
 
 ## State now (2026-11-08)
 - **Hub on the NAS** since 2026-11-05 (wiki NAS-hub): compose project `clipper-hub` in `~/clipper-hub`, containers
@@ -264,7 +263,7 @@ messages: GitHub closes the issue on "fix".
   `streams/.audit/weekly-<date>.json`; on the 1st a read-only `claude -p` reads the saved weeks, traces repeat
   problems and leaves `deep-<YYYY-MM>.md`. The claude container runs both after the checkup (`audit.sh`), so it
   needs `bash deploy/claude/deploy.sh` once. `[audit] backup_folder` is empty until #204: the digest says so
-  weekly. Dependabot opens grouped weekly PRs (ruff ignored; no Grok review, no secrets). Its security
+  weekly. Dependabot opens grouped weekly PRs (ruff ignored; no review, no secrets). Its security
   alerts are a separate repo switch, off as of 11-10.
 - **News watcher #110:** off since 2026-11-03 at the user's word (`[news] check_minutes = 0`, no terms); only
   `[news] watch` / `[shows.<key>.news] watch` terms are watched, `auto_watch = true` brings back the

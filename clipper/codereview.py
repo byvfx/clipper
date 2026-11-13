@@ -5,7 +5,9 @@ The branch's code diff against the base (origin/main) and the changed files in f
 the answer is a Markdown list of correctness bugs. One call, no tool loop: the model reads
 what it is sent and nothing else.
 
-With --pr (the `review` workflow, on every PR) the review goes on the PR as one comment,
+Run by hand (the `review` workflow that ran it on every PR was removed 2026-11-13: PRs now
+get a local Claude review before the push and Copilot's on GitHub, wiki Developing).
+With --pr the review goes on the PR as one comment,
 edited in place on each push, and on every issue the PR links (GitHub's closing references
 in this repo, or #N in its title or body): one comment per issue and PR, edited the same way.
 A push that leaves the PR's own code changes as they were (a docs-only push, or a merge of
