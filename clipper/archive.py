@@ -22,6 +22,9 @@ Sources:
         media itself (WhisperX.transcribe_url), so nothing passes through this machine.
     Kick VODs (a `clipper story` item, #84, with its HLS `m3u8`): the smallest variant
         ([archive] kick_format) is downloaded here, its audio sent as flac.
+    Instagram (clipper/instagram.py): a reel or video post by its link, or a profile's videos,
+        listed signed in with [paths] instagram_cookies. Each is downloaded here by yt-dlp and
+        uploaded as it is; the floor is [archive] instagram_min_duration_s, since reels are short.
 Items shorter than [archive] min_duration_s are skipped. Catalog order is newest first.
 `transcribe` logs progress and failures to <subject>/transcribe.log as well as the console,
 and a failed item leaves <subject>/<id>/error.txt until a rerun succeeds.
@@ -47,7 +50,7 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate, speakers, transcribe, ytdl
+from . import instagram, jsonstate, speakers, transcribe, ytdl
 from .errors import ClipperError
 from .modalmon import head_record, tracked
 
@@ -143,19 +146,42 @@ def list_odysee(url: str, limit: int | None = None, pace=None) -> list[dict]:
         page += 1
 
 
+def list_source(cfg: dict, url: str) -> tuple[list[dict], int, str]:
+    """A source url's items, the shortest one kept (seconds) and a note for the count line."""
+    ac = cfg["archive"]
+    if "odysee.com" in url or url.startswith("lbry://"):
+        return list_odysee(url), ac["min_duration_s"], ""
+    if "instagram.com" in url:
+        # reels are short by nature: the Shorts floor would skip most of a profile
+        found, other = instagram.list_url(cfg, url)
+        return found, ac["instagram_min_duration_s"], f", {other} photo or carousel posts passed over" if other else ""
+    return list_youtube(url), ac["min_duration_s"], ""
+
+
 def add(cfg: dict, subject: str, urls: list[str]) -> None:
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
-    min_s = cfg["archive"]["min_duration_s"]
+    failed = []
     for url in urls:
-        found = list_odysee(url) if "odysee.com" in url or url.startswith("lbry://") else list_youtube(url)
+        if f"ig-{instagram.shortcode(url)}" in cat:  # a reel link costs a page read: not twice
+            continue
+        try:
+            found, min_s, note = list_source(cfg, url)
+        except ClipperError as e:  # one bad link must not lose the rest of a long list
+            if len(urls) == 1:
+                raise
+            failed.append(url)
+            print(f"{url}: {e}")
+            continue
         keep = [it for it in found if not 0 < it["duration_s"] < min_s]
         new = [it for it in keep if it["id"] not in cat]
         cat.update({it["id"]: it for it in new})
-        print(f"{url}: {len(found)} found, {len(found) - len(keep)} under {min_s} s skipped, "
-              f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
+        print(f"{url}: {len(found)} found{note}, {len(found) - len(keep)} under {min_s} s skipped, "
+              f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.1f} h)")
     save_catalog(d, cat)
     print(f"{subject}: {len(cat)} items, {sum(i['duration_s'] for i in cat.values()) / 3600:.0f} h")
+    if failed:
+        raise ClipperError(f"{len(failed)} of {len(urls)} urls failed (the rest are saved): run it again for those")
 
 
 # ---------- transcribing ----------
@@ -188,10 +214,14 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
             rec.update(cost, audio_s=round(out["dur"], 1))
         return out, cost
 
-    if it["source"] == "youtube":
-        args = ["-f", cfg["archive"]["youtube_format"], "--write-info-json", "--no-playlist",
-                "-o", str(idir / "audio.%(ext)s"), it["url"]]
-        r, signed_in = ytdl.run_retrying(cfg, *args, retry_on=retry_on)  # see ytdl's docstring
+    if it["source"] in ("youtube", "instagram"):
+        insta = it["source"] == "instagram"
+        args = ["-f", cfg["archive"]["instagram_format" if insta else "youtube_format"], "--write-info-json",
+                "--no-playlist", "-o", str(idir / "audio.%(ext)s"), it["url"]]
+        if insta:  # anonymous first; signed in (instagram_cookies) only when Instagram asks for a login
+            r, signed_in = ytdl.run_instagram(cfg, *args)
+        else:
+            r, signed_in = ytdl.run_retrying(cfg, *args, retry_on=retry_on)  # see ytdl's docstring
         audio = [p for p in idir.glob("audio.*") if p.suffix not in (".json", ".part")]
         if r.returncode or not audio:
             raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
@@ -199,7 +229,9 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
         info = jsonstate.load(info_path)
         info_path.unlink()
         ts = info.get("timestamp") or info.get("release_timestamp")
-        meta.update(title=info.get("title") or it["title"], description=info.get("description") or "",
+        # a reel has no title of its own (yt-dlp's is "Video by <name>"): the caption's first line
+        title = (it["title"] or instagram.title_of(info.get("description") or "")) if insta else ""
+        meta.update(title=title or info.get("title") or it["title"], description=info.get("description") or "",
                     channel=info.get("channel") or info.get("uploader") or it.get("channel") or "",
                     duration_s=float(info.get("duration") or it["duration_s"]),
                     date=datetime.fromtimestamp(ts, UTC).date().isoformat() if ts else None)
@@ -225,6 +257,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
     else:
         media = odysee("get", {"uri": it["url"]})["streaming_url"]
         out, cost = call(worker.transcribe_url, media, settings)
+    meta["duration_s"] = meta.get("duration_s") or round(out["dur"], 1)  # Instagram gives no length up front
     meta["transcribed_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     (idir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     transcribe.write(idir, tc, out["segments"], out["dur"], t0, {"modal": cost})
@@ -386,6 +419,10 @@ def check_links(cfg: dict, subject: str, ids: list[str] | None, everything: bool
         cutoff = datetime.now(UTC) - timedelta(days=ac["link_recheck_days"])
         todo = [it for it in cat.values() if everything or it["id"] not in links
                 or datetime.fromisoformat(links[it["id"]]["checked_at"]) < cutoff]
+    # only YouTube and Odysee can be asked without downloading; the rest keep no link status
+    if skipped := [it for it in todo if it["source"] not in ("youtube", "odysee")]:
+        print(f"{subject}: {len(skipped)} items have no link check ({', '.join(sorted({it['source'] for it in skipped}))})")
+        todo = [it for it in todo if it["source"] in ("youtube", "odysee")]
     todo = todo[:limit] if limit else todo
     print(f"{subject}: checking {len(todo)} links")
     counts = {"alive": 0, "restricted": 0, "dead": 0, "unknown": 0}

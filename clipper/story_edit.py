@@ -306,7 +306,7 @@ def fetch(cfg: dict, p: dict, dst: Path) -> str:
     if dst.exists():
         return seen.read_text(encoding="utf-8").strip() if seen.exists() else ""
     fmt = {"youtube": cfg["receipts"]["format"], "kick": cfg["story"]["kick_format"],
-           "odysee": cfg["story"]["odysee_format"]}.get(p["source"])
+           "odysee": cfg["story"]["odysee_format"], "instagram": cfg["story"]["instagram_format"]}.get(p["source"])
     if not fmt:
         raise ClipperError(f"{p['id']}: can't download from {p['source']} ({p['url']})")
     tmp = dst.with_name(dst.stem + ".dl.mp4")
@@ -318,8 +318,11 @@ def fetch(cfg: dict, p: dict, dst: Path) -> str:
     url = p["url"]
     if p["source"] == "odysee" and url.startswith("lbry://"):
         url = p["page"]
-    retry = ytdl.AGE + ytdl.BOT if cfg["story"]["youtube_bot_retry"] else ytdl.AGE
-    res, _ = ytdl.run_retrying(cfg, *args, url, retry_on=retry)
+    if p["source"] == "instagram":
+        res, _ = ytdl.run_instagram(cfg, *args, url)
+    else:
+        retry = ytdl.AGE + ytdl.BOT if cfg["story"]["youtube_bot_retry"] else ytdl.AGE
+        res, _ = ytdl.run_retrying(cfg, *args, url, retry_on=retry)
     if res.returncode or not tmp.exists():
         raise ClipperError(f"{p['id']} yt-dlp: {ytdl.last_error(res)}")
     tmp.replace(dst)

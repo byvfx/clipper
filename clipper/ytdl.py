@@ -48,6 +48,29 @@ def run_retrying(cfg: dict, *args: str, retry_on: tuple[str, ...]) -> tuple[subp
     return r, False
 
 
+# yt-dlp's Instagram errors that a sign-in gets past: the page asked for a login, or came back
+# empty as it does for anonymous clients ("... Use --cookies ... to provide account credentials")
+IG_LOGIN = ("login required", "empty media response", "use --cookies")
+
+
+def run_instagram(cfg: dict, *args: str) -> tuple[subprocess.CompletedProcess, bool]:
+    """yt-dlp on an Instagram reel: anonymously, then once more with a private copy of
+    [paths] instagram_cookies when Instagram asked for a login. Returns the result and
+    whether it went signed in. The browser profile of [youtube] cookies_from_browser is
+    YouTube's spare account, not used here."""
+    r = run(*args)
+    if r.returncode and any(s in r.stderr.lower() for s in IG_LOGIN):
+        cookies = instagram_cookies_file(cfg)
+        if cookies.is_file():
+            with tempfile.TemporaryDirectory(prefix="clipper-cookies-") as scratch:
+                private = Path(scratch) / "cookies.txt"
+                if netscape_cookies(cookies, private) != private:  # already Netscape: copied as it is
+                    shutil.copyfile(cookies, private)
+                log.info("Instagram: login asked for, retrying signed in (%s)", cookies.name)
+                return run("--cookies", str(private), *args), True
+    return r, False
+
+
 def browser(cfg: dict) -> str:
     """[youtube] cookies_from_browser: a yt-dlp browser spec ("firefox:clipper") whose cookies
     are read live on each signed-in run, so a session the browser rotates is never stale
@@ -187,12 +210,24 @@ def export_browser_cookies(spec: str, out: Path) -> int:
 EXPORT_GLOB = "www.youtube.com_*.json"  # Cookie-Editor's own name for a JSON export
 
 
+IG_EXPORT_GLOB = "www.instagram.com_*.json"
+
+
+def newest(p: Path, glob: str) -> Path:
+    """p, or a newer browser export saved beside it under the extension's own name."""
+    found = [f for f in p.parent.glob(glob) if f.is_file()] + ([p] if p.is_file() else [])
+    return max(found, key=lambda f: f.stat().st_mtime) if found else p
+
+
 def cookies_file(cfg: dict) -> Path:
     """[paths] youtube_cookies, or a newer browser export saved beside it under the extension's
     own name (www.youtube.com_<date>.json), so a fresh export works without a rename (10-31)."""
-    p = cfg["paths"]["youtube_cookies"]
-    found = [f for f in p.parent.glob(EXPORT_GLOB) if f.is_file()] + ([p] if p.is_file() else [])
-    return max(found, key=lambda f: f.stat().st_mtime) if found else p
+    return newest(cfg["paths"]["youtube_cookies"], EXPORT_GLOB)
+
+
+def instagram_cookies_file(cfg: dict) -> Path:
+    """[paths] instagram_cookies, or a newer export beside it (www.instagram.com_<date>.json)."""
+    return newest(cfg["paths"]["instagram_cookies"], IG_EXPORT_GLOB)
 
 
 def last_error(r: subprocess.CompletedProcess) -> str:

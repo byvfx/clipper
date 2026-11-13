@@ -544,6 +544,28 @@ def check_youtube_cookies_file(cfg: dict, now: float | None = None) -> None:
         ok("keys", f"YouTube cookies {f.name} signed in, exported {hours:.0f} h ago")
 
 
+def check_instagram_cookies(cfg: dict, now: float | None = None) -> None:
+    """[paths] instagram_cookies, when there is one: it still holds an Instagram sign-in (no
+    network). Only commands run by hand read it (`archive add` of a profile, a reel Instagram
+    wants a login for), so a stale one is a warning."""
+    from . import ytdl
+
+    f = ytdl.instagram_cookies_file(cfg)
+    if not f.is_file():
+        return  # optional: reels by their link, anonymously
+    hint = wiki.page("Archives", "instagram")
+    try:
+        cookies = ytdl.live(ytdl.read_cookies(f), now)
+    except (OSError, ValueError, KeyError) as e:
+        warn("keys", f"Instagram cookies {f.name} unreadable: {e}", hint)
+        return
+    if any(c.name == "sessionid" and c.domain.lstrip(".").endswith("instagram.com") for c in cookies):
+        ok("keys", f"Instagram cookies {f.name} hold a sign-in")
+    else:
+        warn("keys", f"Instagram cookies {f.name} hold no live sign-in: a profile can't be listed",
+             "export instagram.com's cookies again from the signed-in browser; " + hint)
+
+
 def check_youtube_cookies(cfg: dict) -> None:
     """[youtube] cookies_from_browser, when set: the profile is there and still signed in to
     YouTube (its cookie database on disk, no network). Unset: the cookies file instead."""
@@ -1190,6 +1212,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     check_keys(cfg, role)
     if role not in ("nas", "control"):
         check_youtube_cookies(cfg)  # archive fetches; a control station doesn't run them
+        check_instagram_cookies(cfg)
     if role in ("all", "gpu", "claude"):
         check_narrate(cfg)
     if role in ("all", "serve"):

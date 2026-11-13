@@ -1436,7 +1436,7 @@ def add_extras(sub) -> None:
     p.set_defaults(fn=cmd_archive)
     r = rsub.add_parser("add", help="list a channel's long-form videos into a subject's catalog")
     r.add_argument("subject", help="a short name for the person, e.g. jane: their folder is paths.archive/<subject>")
-    r.add_argument("url", nargs="+", help="YouTube channel/tab or Odysee channel url")
+    r.add_argument("url", nargs="+", help="YouTube channel/tab, Odysee channel, or Instagram profile or reel url")
     r = rsub.add_parser("transcribe", help="transcribe catalog items not done yet, on Modal")
     add_subject(r)
     r.add_argument("--limit", type=int, help="at most this many items")
@@ -1538,7 +1538,7 @@ def add_extras(sub) -> None:
     r.add_argument("--person", action="append", default=[], help="someone the brief doesn't name, by name or "
                    "nickname in streamers.json or [story] people (repeatable)")
     r.add_argument("--url", action="append", default=[], help="a video to transcribe whatever triage says "
-                   "(YouTube, Kick VOD, Odysee; repeatable)")
+                   "(YouTube, Kick VOD, Odysee, Instagram reel; repeatable)")
     limits(r)
     r = rsub.add_parser("run", help="the steps not done yet (swarm, triage, ingest, find, dossier)")
     add_slug(r)

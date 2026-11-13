@@ -13,7 +13,8 @@ the brief names (by name, nickname, alias or id, from [`clipper people`](People)
 adds one) seed the swarm with their YouTube, Kick and Odysee channels. Triage
 (Haiku) picks the videos worth transcribing within `--max-videos` / `--max-hours`, the people's own
 uploads first, and prints the Modal estimate; our own recorded streams are linked, not transcribed
-again. Ingest transcribes on Modal (YouTube audio, Kick VOD audio, Odysee) into the archive subject
+again. Ingest transcribes on Modal (YouTube audio, Kick VOD audio, Odysee, and Instagram reels
+given by their links: [Archives](Archives#instagram)) into the archive subject
 `story-<slug>` and indexes it. Find (Haiku) searches that index and any archive subject the swarm
 found something in, picks the moments (event, reaction, context) and keeps only quotes that are in
 the transcript, in its own wording. The dossier (Sonnet) is a summary, a timeline marked shown /

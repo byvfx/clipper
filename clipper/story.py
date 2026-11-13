@@ -51,19 +51,20 @@ import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import archive, jsonstate, swarm, ytdl
+from . import archive, instagram, jsonstate, swarm, ytdl
 from .archive import item_dir, load_catalog, save_catalog
 from .errors import ClipperError
 from .llm import Budget, OverBudget, estimate
 
 STEPS = ["swarm", "triage", "ingest", "find", "dossier"]
 ROLES = ["event", "reaction", "context"]
-VIDEO = ("yt:", "kick:", "od:")
+VIDEO = ("yt:", "kick:", "od:", "ig:")
 SEED_KINDS = {"youtube": "youtube_channel", "kick": "kick_videos", "odysee": "odysee_channel"}
 # a web search gives the site as a video's "channel" (Brave: "YouTube", 11-04): not one
 PLATFORMS = {"", "youtube", "kick", "odysee", "rumble", "twitch"}
 COLD_START_S = 600   # a Modal container's start before its first item (logged 11-03: 10-11 min on L4)
 UNKNOWN_S = 3600   # a video whose length the listing didn't give counts as an hour against --max-hours
+UNKNOWN_REEL_S = 90   # ...an Instagram reel as a minute and a half: a reel given by its link has no length yet
 
 TRIAGE_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["picks"],
@@ -274,7 +275,14 @@ def as_item(f: dict) -> dict | None:
         return {**base, "id": f["id"], "source": "kick", "url": f["url"], "m3u8": f["m3u8"]}
     if k.startswith("od:") and f.get("lbry"):
         return {**base, "id": f"od-{k[3:]}", "source": "odysee", "url": f["lbry"], "page": f["url"]}
+    if k.startswith("ig:"):
+        return {**base, "id": f"ig-{k[3:]}", "source": "instagram", "url": instagram.post_url(k[3:])}
     return None
+
+
+def length_s(it: dict) -> float:
+    """An item's length for the limits and the estimate: its own, or a guess by source."""
+    return it["duration_s"] or (UNKNOWN_REEL_S if it.get("source") == "instagram" else UNKNOWN_S)
 
 
 def given_item(cfg: dict, url: str) -> dict:
@@ -283,7 +291,7 @@ def given_item(cfg: dict, url: str) -> dict:
 
     f = {"url": url, "why": "given by hand"}
     k = swarm.finding_key(f)
-    if k.startswith("yt:"):
+    if k.startswith(("yt:", "ig:")):  # a reel's title, length and date come with its download
         return as_item({**f, "key": k})
     if m := re.match(r"https?://(?:www\.)?kick\.com/([^/]+)/videos/([0-9a-f-]{36})", url):
         it = next((v for v in kick.list_videos(m.group(1).lower(), cfg) if v["url"].endswith(m.group(2))), None)
@@ -300,7 +308,7 @@ def given_item(cfg: dict, url: str) -> dict:
                 "page": url, "title": v.get("title") or "", "channel": "", "via": f["why"],
                 "duration_s": float((v.get("video") or {}).get("duration") or 0),
                 "date": datetime.fromtimestamp(int(v.get("release_time") or c["timestamp"]), UTC).date().isoformat()}
-    raise ClipperError(f"{url}: not a YouTube, Kick or Odysee video url")
+    raise ClipperError(f"{url}: not a YouTube, Kick, Odysee or Instagram video url")
 
 
 def candidates(cfg: dict, findings: list[dict], have: dict[str, dict]) -> tuple[list[dict], list[dict]]:
@@ -336,7 +344,7 @@ def fit(picked: list[dict], max_videos: int, max_hours: float) -> tuple[list[dic
     """The picks, in order, that fit the limits; and the ones that didn't."""
     keep, left, hours = [], [], 0.0
     for it in picked:
-        h = (it["duration_s"] or UNKNOWN_S) / 3600
+        h = length_s(it) / 3600
         if len(keep) < max_videos and hours + h <= max_hours:
             keep.append(it)
             hours += h
@@ -393,7 +401,7 @@ def triage(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict
             "over_limits": [it["id"] for it in left]}
     jsonstate.write(d / "triage.json", data)
     todo = [it for it in cat.values() if not (item_dir(d, it) / "words.jsonl").exists()]
-    hours = sum((it["duration_s"] or UNKNOWN_S) for it in todo) / 3600
+    hours = sum(length_s(it) for it in todo) / 3600
     print(f"triage: {len(cands)} videos found, {len(keep)} picked, {len(ours)} of our own streams linked"
           + (f", {len(left)} over the limits" if left else ""))
     for it in ours + keep:

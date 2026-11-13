@@ -322,6 +322,8 @@ def finding_key(r: dict) -> str:
         return f"kick:{m.group(1)}"
     if m := re.search(r"odysee\.com/.*[:#]([0-9a-f]{40})", u):
         return f"od:{m.group(1)}"
+    if m := re.search(r"instagram\.com/(?:[\w.]+/)?(?:reels?|p|tv)/([\w-]+)", u):
+        return f"ig:{m.group(1)}"
     p = urlsplit(u)
     if not p.netloc:  # not a url (e.g. "kick-135553454 s08", one of our segments)
         return u.strip() or f"title:{(r.get('title') or '').lower()}"

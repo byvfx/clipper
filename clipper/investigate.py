@@ -193,6 +193,8 @@ def signature(ic: dict, tp: Path) -> str:
     """The cache key of an item's facts: prompt, model, chunking and the transcript itself."""
     st = tp.stat()
     sig = f"{ic['prompt_version']}|{ic['facts_model']}|{ic['chunk_s']}|{st.st_size}|{st.st_mtime_ns}"
+    if ic["speaker"]:  # appended only when set, so facts read before the key existed stay current
+        sig += f"|{ic['speaker']}"
     return hashlib.sha1(sig.encode()).hexdigest()[:16]
 
 
@@ -263,6 +265,16 @@ def read_words(idir: Path) -> list[dict]:
     return [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()] if p.exists() else []
 
 
+def spoken_by(segs: list[dict], words: list[dict], name: str) -> list[dict]:
+    """The segments with only the words `name` says (words.jsonl's speaker, from `clipper
+    speakers`); a segment with none of theirs is dropped."""
+    said: dict[int, list[str]] = defaultdict(list)
+    for w in words:
+        if w.get("speaker") == name and w.get("seg") is not None:
+            said[w["seg"]].append(w["word"])
+    return [{**s, "text": " ".join(said[i])} for i, s in enumerate(segs) if i in said]
+
+
 def item_facts(cfg: dict, subject: str, it: dict, claude, system: str, budget: Budget) -> dict:
     from .archive_index import windows
     from .timefmt import clock
@@ -272,7 +284,10 @@ def item_facts(cfg: dict, subject: str, it: dict, claude, system: str, budget: B
     tp = idir / "transcript.json"
     sig = signature(ic, tp)
     segs = jsonstate.load(tp).get("segments") or []
-    ws = Words(read_words(idir))
+    words = read_words(idir)
+    ws = Words(words)
+    if ic["speaker"]:  # a subject who films other people: read only what they say themselves
+        segs = spoken_by(segs, words, ic["speaker"])
     chunks = windows(segs, ic["chunk_s"])
     kept, dropped, refused = [], 0, 0
     for k, (start, text) in enumerate(chunks):

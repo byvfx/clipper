@@ -153,3 +153,15 @@ def test_doctor_checks_the_hubs_cookies_file(tmp_path, monkeypatch):
     f.write_text(ytdl.netscape_text([ytdl.Row(".youtube.com", "/", True, None, "PREF", "x")]), encoding="utf-8")
     doctor.check_youtube_cookies(cfg)
     assert last() == "FAIL YouTube cookies youtube_cookies.txt hold no live sign-in"
+
+    # Instagram's file is optional and read only by hand-run commands: a stale one warns
+    g = tmp_path / "instagram_cookies.txt"
+    cfg = {"paths": {"instagram_cookies": g}}
+    doctor.check_instagram_cookies(cfg)
+    assert last() == ""
+    g.write_text(ytdl.netscape_text([ytdl.Row(".instagram.com", "/", True, None, "sessionid", "x")]), encoding="utf-8")
+    doctor.check_instagram_cookies(cfg)
+    assert last() == "OK Instagram cookies instagram_cookies.txt hold a sign-in"
+    g.write_text(ytdl.netscape_text([ytdl.Row(".instagram.com", "/", True, 1_000, "sessionid", "x")]), encoding="utf-8")
+    doctor.check_instagram_cookies(cfg)
+    assert last() == "WARN Instagram cookies instagram_cookies.txt hold no live sign-in: a profile can't be listed"

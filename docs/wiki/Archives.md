@@ -35,6 +35,39 @@ It needs the Modal backend set up ([Transcribe on Modal](Transcribe-on-Modal)). 
 downloaded on this machine and uploaded; Odysee is meant to be fetched in the cloud (not
 working yet, issue #44).
 
+## Instagram
+
+Someone whose videos are on Instagram is an archive subject too:
+
+```bash
+clipper archive add someone https://www.instagram.com/reel/<code>/ ...   # reels and video posts, by their links
+clipper archive add someone https://www.instagram.com/<name>/            # every video on a profile (signed in)
+clipper archive transcribe someone --dry-run                             # then as any subject: transcribe, index, investigate
+```
+
+A reel (or a video post, `/p/<code>/`) is one item, `ig-<code>`, titled with the first line of
+its caption. yt-dlp reads it anonymously first and, only when Instagram asks for a login, once
+more with your cookies. Reels are short, so the floor is `[archive] instagram_min_duration_s`
+(5 s) rather than `min_duration_s`, which is there to skip Shorts. Photos and carousels are
+passed over: only a post that is one video is an item. Instagram has no link check, so
+`archive check` leaves these items out. [`clipper story`](Story-dossiers) takes a reel link in
+`--url` and `story add` as well, and can cut a section of one into a story's video.
+
+A whole profile can only be listed signed in (Instagram turns anonymous clients away, and
+yt-dlp's profile listing is broken). Export instagram.com's cookies from a browser signed in
+to your account to `[paths] instagram_cookies` (`secrets/instagram_cookies.txt`), with the same
+extension as for YouTube below, Netscape or JSON; a JSON export left beside it under the
+extension's own name (`www.instagram.com_<date>.json`) is used without renaming when it is
+newer. The listing asks what instagram.com's own profile page asks (the profile, then its posts,
+33 at a time), waits `[archive] instagram_pace_s` between pages and stops at
+`instagram_max_items`. It only reads: it never follows, likes or posts.
+
+The account is yours and Instagram can restrict one it thinks is automated. So nothing here
+runs on a schedule: a profile is listed when you run `archive add`, once, and again only to
+pick up new posts. If the listing is refused, open instagram.com in that browser, clear
+whatever it asks you to confirm, and export the cookies again. `clipper doctor` warns when the
+file holds no live sign-in.
+
 ## Age-restricted videos and YouTube cookies
 
 `clipper archive transcribe` downloads anonymously; a video
