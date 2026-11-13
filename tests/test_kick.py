@@ -93,6 +93,24 @@ def test_a_fresh_download_ignores_an_old_tally(defaults, tmp_path, monkeypatch):
     assert not (tmp_path / "meta.json").exists()
 
 
+def test_a_failed_fresh_download_drops_an_old_tally_before_the_retry(defaults, tmp_path, monkeypatch):
+    (tmp_path / "meta.json").write_text(json.dumps({"stream_id": "kick-1"}), encoding="utf-8")
+    (tmp_path / "source.ts.skipped").write_text("5", encoding="utf-8")  # an earlier attempt's
+    fail = FakeYtdlp(["ERROR: connection reset\n"], code=1)
+
+    def starts_then_fails(args, **kw):  # yt-dlp creates its resume point, then drops, no skips
+        (tmp_path / "source.ts.ytdl").write_text("{}", encoding="utf-8")
+        return fail(args, **kw)
+
+    monkeypatch.setattr(kick.subprocess, "Popen", starts_then_fails)
+    with pytest.raises(subprocess.CalledProcessError):
+        kick.fetch_video(tmp_path, {"source": "u"}, defaults)
+    assert not (tmp_path / "source.ts.skipped").exists()
+    monkeypatch.setattr(kick.subprocess, "Popen", FakeYtdlp(["Skipping fragment 9\n", "[download] 100%\n"]))
+    kick.fetch_video(tmp_path, {"source": "u"}, defaults)  # resumes from .ytdl: its own skip only
+    assert json.loads((tmp_path / "meta.json").read_text(encoding="utf-8"))["skipped_fragments"] == 1
+
+
 def test_yt_dlp_is_killed_when_passing_its_output_through_fails(defaults, tmp_path, monkeypatch):
     fake = FakeYtdlp(["Skipping fragment 1\n", "[download] 5%\n"])
     fake.killed = False  # still running until killed

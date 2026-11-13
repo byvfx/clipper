@@ -169,6 +169,8 @@ def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
     if out.exists() and not resuming:
         return out
     tally = stream_dir / "source.ts.skipped"
+    if not resuming:  # a fresh start: an old run's tally isn't this download's, nor a retry's of it
+        tally.unlink(missing_ok=True)
     skipped = _earlier_skips(tally) if resuming else 0
     k = cfg["kick"]
     proc = subprocess.Popen(
