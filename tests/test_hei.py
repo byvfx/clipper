@@ -289,3 +289,100 @@ def test_yt_date_from_upload_date_or_timestamp():
 def test_children_skip_the_feed_but_not_a_feedback_page():
     page = index_page("https://www.heinetwork.tv/more/feed/", "https://www.heinetwork.tv/more/feedback/")
     assert hei.children(page, "/more/") == ["/more/feedback/"]
+
+
+def test_a_bad_match_is_a_clear_error(defaults, tmp_path):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    with pytest.raises(ClipperError, match="valid regular expression"):
+        archive.add(defaults, "oncinema", ["https://www.youtube.com/@adultswim"], match="[")
+
+
+def test_a_refresh_fills_a_failed_duration_and_drops_a_short_one(defaults, tmp_path, monkeypatch):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    defaults["archive"]["min_duration_s"] = 60
+    first = [{"id": "hei-ep", "source": "hei", "title": "ep", "duration_s": 0.0, "date": "2020-01-02"},
+             {"id": "hei-bumper", "source": "hei", "title": "bumper", "duration_s": 0.0, "date": "2020-01-01"},
+             {"id": "hei-done", "source": "hei", "title": "done", "duration_s": 0.0, "date": "2019-01-01"},
+             {"id": "hei-kept", "source": "hei", "title": "kept", "duration_s": 0.0, "date": "2018-01-01"}]
+    monkeypatch.setattr(archive, "list_source", lambda cfg, url: first)  # every probe failed
+    archive.add(defaults, "oc", ["https://www.heinetwork.tv"])
+    d = tmp_path / "archive" / "oc"
+    assert len(archive.load_catalog(d)) == 4
+    (d / "hei-done").mkdir()
+    (d / "hei-done" / "words.jsonl").write_text("", encoding="utf-8")  # already transcribed: kept
+    (d / "hei-kept").mkdir()
+    (d / "hei-kept" / "source.mp4").write_bytes(b"v")  # its video already kept: kept too
+    again = [dict(first[0], duration_s=3600.0), dict(first[1], duration_s=12.0), dict(first[2], duration_s=30.0),
+             dict(first[3], duration_s=40.0)]
+    monkeypatch.setattr(archive, "list_source", lambda cfg, url: again)
+    archive.add(defaults, "oc", ["https://www.heinetwork.tv"])
+    cat = archive.load_catalog(d)
+    assert sorted(cat) == ["hei-done", "hei-ep", "hei-kept"]
+    assert cat["hei-ep"]["duration_s"] == 3600.0 and cat["hei-done"]["duration_s"] == 30.0
+
+
+def test_speakers_counts_items_not_speaker_labels(defaults, tmp_path, capsys):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    defaults["paths"]["voices"] = tmp_path / "voices"
+    d = tmp_path / "archive" / "oc" / "hei-a"
+    d.mkdir(parents=True)
+    d.joinpath("diarization.json").write_text(json.dumps(  # pyannote split one voice in two
+        {"model": "m", "turns": [[0.0, 60.0, "SPEAKER_00"], [60.0, 120.0, "SPEAKER_01"]],
+         "embeddings": {"SPEAKER_00": [1.0, 0.0], "SPEAKER_01": [0.99, 0.05]}}), encoding="utf-8")
+    (tmp_path / "voices").mkdir()
+    (tmp_path / "voices" / "oc.json").write_text(json.dumps({"model": "m", "voices": {"Gregg": [[1.0, 0.0]]}}),
+                                                  encoding="utf-8")
+    archive.relabel(defaults, "oc")
+    assert "in 1 items" in capsys.readouterr().out
+
+
+def test_a_failed_hei_download_is_never_taken_as_done(defaults, tmp_path, monkeypatch):
+    idir = tmp_path / "hei-ep"
+    idir.mkdir()
+    (idir / "source.ts").write_bytes(b"half")  # an earlier run that died on a segment
+    (idir / "source.ts.ytdl").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(archive.transcribe, "modal_settings", lambda tc, diarize: {})
+    monkeypatch.setattr(archive.transcribe, "modal_worker", lambda tc, gpu: None)
+    monkeypatch.setattr(archive.hei, "fresh_m3u8", lambda cookies, it: "https://stream.example/x.m3u8")
+    seen = []
+
+    class Failed:
+        returncode, stdout, stderr = 1, "", "ERROR: fragment 7 not found"
+
+    def run(*args):
+        seen.append((idir / "source.ts").exists())
+        (idir / "source.ts").write_bytes(b"part")  # --no-part: written in place, then it fails
+        return Failed()
+
+    monkeypatch.setattr(archive.ytdl, "run", run)
+    it = {"id": "hei-ep", "source": "hei", "title": "ep", "duration_s": 3600.0, "m3u8": "x"}
+    with pytest.raises(RuntimeError, match="yt-dlp"):
+        archive.transcribe_item(defaults, idir, it, "L4")
+    assert seen == [False]  # yt-dlp never saw the old partial (it would call it downloaded)
+    assert not (idir / "source.ts").exists() and not (idir / "source.ts.ytdl").exists()
+
+
+def test_a_transcript_fills_the_catalogs_missing_length(defaults, tmp_path, monkeypatch):
+    d = tmp_path / "oc"
+    archive.save_catalog(d, {"hei-ep": {"id": "hei-ep", "source": "hei", "title": "ep", "duration_s": 0.0}})
+    monkeypatch.setattr(archive, "transcribe_item",
+                        lambda cfg, idir, it, gpu, retry_on: {"est_usd": 0.1, "signed_in": False, "duration_s": 3600.0})
+    archive._transcribe_all(defaults, d, "oc", list(archive.load_catalog(d).values()), "L4", 1)
+    assert archive.load_catalog(d)["hei-ep"]["duration_s"] == 3600.0
+
+
+def test_add_keeps_what_a_transcribe_wrote_during_the_listing(defaults, tmp_path, monkeypatch):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    d = tmp_path / "archive" / "oc"
+    archive.save_catalog(d, {"hei-old": {"id": "hei-old", "source": "hei", "title": "o", "duration_s": 0.0,
+                                         "date": "2020-01-01"}})
+
+    def slow_listing(cfg, url):  # meanwhile a transcribe learns hei-old's length
+        with archive.jsonstate.update(d / "catalog.json", {}, indent=1) as cat:
+            cat["hei-old"]["duration_s"] = 3600.0
+        return [{"id": "hei-new", "source": "hei", "title": "n", "duration_s": 600.0, "date": "2025-01-01"}]
+
+    monkeypatch.setattr(archive, "list_source", slow_listing)
+    archive.add(defaults, "oc", ["https://www.heinetwork.tv"])
+    cat = archive.load_catalog(d)
+    assert list(cat) == ["hei-new", "hei-old"] and cat["hei-old"]["duration_s"] == 3600.0

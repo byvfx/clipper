@@ -77,7 +77,10 @@ def save_json(d: Path, name: str, data: dict) -> None:
 
 
 def save_catalog(d: Path, cat: dict[str, dict]) -> None:
-    save_json(d, "catalog.json", cat)
+    """Under the catalog's lock, which add and a running transcribe take too."""
+    d.mkdir(parents=True, exist_ok=True)
+    with jsonstate.locked(d / "catalog.json"):
+        jsonstate.write(d / "catalog.json", cat, indent=1)
 
 
 def item_dir(d: Path, it: dict) -> Path:
@@ -179,25 +182,49 @@ def add(cfg: dict, subject: str, urls: list[str], match: str | None = None) -> N
     """match: keep only items whose title matches this regex (case-insensitive), for a big
     channel with a few of the subject's videos in it (Adult Swim's On Cinema)."""
     d = subject_dir(cfg, subject)
-    cat = load_catalog(d)
     min_s = cfg["archive"]["min_duration_s"]
-    pattern = re.compile(match, re.I) if match else None
+    try:
+        pattern = re.compile(match, re.I) if match else None
+    except re.error as e:
+        raise ClipperError(f"--match {match!r} isn't a valid regular expression: {e}") from None
+    listings = []  # listed first (minutes for HEI), then merged into the catalog as it is by then
     for url in urls:
         found = list_source(cfg, url)
-        if pattern:
-            found = [it for it in found if pattern.search(it["title"])]
-        keep = [it for it in found if not 0 < it["duration_s"] < min_s]
-        new = [it for it in keep if it["id"] not in cat]
-        for it in keep:  # kept as they are, but an item listed before dates were kept gets one
-            if it["id"] in cat and it.get("date") and not cat[it["id"]].get("date"):
-                cat[it["id"]]["date"] = it["date"]
-        # ahead of what was there: a source lists newest first, so one source stays newest first
-        cat = {**{it["id"]: it for it in new}, **cat}
-        matching = f" matching {match!r}" if match else ""
-        print(f"{url}: {len(found)} found{matching}, {len(found) - len(keep)} under {min_s} s skipped, "
-              f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
-    save_catalog(d, newest_first(cat))
+        listings.append((url, [it for it in found if pattern.search(it["title"])] if pattern else found))
+    d.mkdir(parents=True, exist_ok=True)
+    # under the lock a running transcribe takes to fill in a length, so neither loses the other's
+    with jsonstate.update(d / "catalog.json", {}, indent=1) as saved:
+        cat = dict(saved)
+        for url, found in listings:
+            cat = _merge_listing(d, cat, found, min_s)
+            new = [it for it in found if it["id"] in cat and cat[it["id"]] is it]
+            skipped = sum(1 for it in found if 0 < it["duration_s"] < min_s)
+            matching = f" matching {match!r}" if match else ""
+            print(f"{url}: {len(found)} found{matching}, {skipped} under {min_s} s skipped, "
+                  f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
+        saved.clear()
+        saved.update(newest_first(cat))
     print(f"{subject}: {len(cat)} items, {sum(i['duration_s'] for i in cat.values()) / 3600:.0f} h")
+
+
+def _merge_listing(d: Path, cat: dict[str, dict], found: list[dict], min_s: float) -> dict[str, dict]:
+    """One source's listing into the catalog: its new items ahead of what was there (a source
+    lists newest first, so one source stays newest first); an old item is kept as it is, but
+    gains what an earlier listing lacked (a date, a length whose probe failed)."""
+    new = [it for it in found if not 0 < it["duration_s"] < min_s and it["id"] not in cat]
+    for it in found:
+        old = cat.get(it["id"])
+        if old is None:
+            continue
+        if it.get("date") and not old.get("date"):
+            old["date"] = it["date"]
+        if it["duration_s"] and not old.get("duration_s"):
+            idir = item_dir(d, old)
+            if it["duration_s"] < min_s and not (idir / "words.jsonl").exists() and not kept_video(idir):
+                del cat[it["id"]]  # too short after all, and nothing made of it yet
+            else:
+                old["duration_s"] = it["duration_s"]
+    return {**{it["id"]: it for it in new}, **cat}
 
 
 def newest_first(cat: dict[str, dict]) -> dict[str, dict]:
@@ -268,9 +295,13 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
             m3u8 = hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it) if it["source"] == "hei" else it["m3u8"]
             # a missing HEI segment fails the item (retried next run) rather than leaving a gap
             whole = ["--abort-on-unavailable-fragments"] if it["source"] == "hei" else []
+            # source.ts is only ever this run's: with --no-part a failed run leaves it partial, and
+            # yt-dlp would take that as already downloaded
+            _drop_partial(src)
             r = ytdl.run("--referer", referer, "-f", fmt, "--hls-use-mpegts", *whole,
                          "--no-part", "-N", "4", "-o", str(src), m3u8)
             if r.returncode or not src.exists():
+                _drop_partial(src)
                 raise RuntimeError(hei.scrub(f"yt-dlp: {ytdl.last_error(r)}"))
         wav = transcribe.extract_audio(idir)
         if not kept:
@@ -284,6 +315,8 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
     else:
         media = odysee("get", {"uri": it["url"]})["streaming_url"]
         out, cost = call(worker.transcribe_url, media, settings)
+    if not meta.get("duration_s"):  # the listing's probe failed: the audio says how long it is
+        meta["duration_s"] = round(float(out["dur"]), 1)
     meta["transcribed_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     (idir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     transcribe.write(idir, tc, out["segments"], out["dur"], t0, {"modal": cost})
@@ -291,7 +324,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
         transcribe.write_diarization(idir, out["diarization"], cost)
         speakers.apply(idir, item_cfg(cfg, idir))
     (idir / "error.txt").unlink(missing_ok=True)
-    return {**cost, "signed_in": signed_in}
+    return {**cost, "signed_in": signed_in, "duration_s": meta["duration_s"]}
 
 
 def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu: str,
@@ -339,6 +372,10 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
                 continue
             try:
                 res = job.result()
+                if not it.get("duration_s") and res.get("duration_s"):  # status and estimates read it
+                    with jsonstate.update(d / "catalog.json", {}, indent=1) as cat:
+                        if it["id"] in cat:
+                            cat[it["id"]]["duration_s"] = res["duration_s"]
                 spent += res["est_usd"]
                 signed_in += res["signed_in"]
                 done += 1
@@ -363,6 +400,12 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
 # ---------- keeping videos ----------
 
 VIDEO_SOURCES = ("youtube", "hei")
+
+
+def _drop_partial(src: Path) -> None:
+    """A download's file and yt-dlp's resume note for it, left by a run that failed."""
+    src.unlink(missing_ok=True)
+    src.with_name(src.name + ".ytdl").unlink(missing_ok=True)
 
 
 def kept_video(idir: Path) -> Path | None:
@@ -453,18 +496,18 @@ def relabel(cfg: dict, subject: str) -> None:
     if not items:
         raise ClipperError(f"no diarized items in {subject}: clipper archive transcribe {subject} --diarize")
     talk: dict[str, float] = {}
-    seen: dict[str, int] = {}
+    seen: dict[str, set] = {}  # the items each name speaks in (one item can split a voice in two)
     unnamed = 0.0
     for idir in items:
         for e in speakers.apply(idir, item_cfg(cfg, idir)).values():
             if name := e.get("name"):
                 talk[name] = talk.get(name, 0.0) + e["talk_s"]
-                seen[name] = seen.get(name, 0) + 1
+                seen.setdefault(name, set()).add(idir.name)
             else:
                 unnamed += e["talk_s"]
     print(f"{subject}: {len(items)} items named again")
     for name, s in sorted(talk.items(), key=lambda kv: -kv[1]):
-        print(f"  {name:<28} {s / 3600:6.1f} h in {seen[name]} items")
+        print(f"  {name:<28} {s / 3600:6.1f} h in {len(seen[name])} items")
     print(f"  {'(not matched)':<28} {unnamed / 3600:6.1f} h")
 
 
