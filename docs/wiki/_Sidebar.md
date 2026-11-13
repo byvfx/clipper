@@ -36,11 +36,13 @@
 - [Faces](Faces)
 - [Covers](Covers)
 - [Cast library](Cast-library)
+- [B-roll](B-roll)
 - [Weekly issue](Weekly-issue)
 - [X posts](X-posts)
 - [TikTok](TikTok)
 - [News watcher](News-watcher)
 - [Character pieces](Character-pieces)
+- [Documentaries](Documentaries)
 
 **Research**
 - [Archives](Archives)

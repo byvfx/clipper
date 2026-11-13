@@ -45,7 +45,7 @@ async function showInvestigations(subject, lead, run) {
   const win = ++INVWIN;
   d.dataset.kind = "inv"; d.classList.remove("cover"); d.classList.add("facesw");
   if (!d.open) {
-    d.innerHTML = `<div class="m-head"><b>Investigations</b><button class="x" data-close>×</button></div><div class="tbody">Loading…</div>`;
+    d.innerHTML = `<div class="m-head"><b>Investigations</b><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div><div class="tbody">Loading…</div>`;
     d.showModal();
   }
   try {
@@ -56,7 +56,7 @@ async function showInvestigations(subject, lead, run) {
     if (win !== INVWIN || !d.open || d.dataset.kind !== "inv") return;
     INV = { subject: r.subject, run: r.run, lead };
     const opts = r.subjects.map(s => `<option value="${esc(s.subject)}"${s.subject === r.subject ? " selected" : ""}>${esc(s.subject)}${s.about ? " · " + esc(s.about) : ""} · ${esc(s.made_at.slice(0, 10))} · ${s.kept} leads</option>`).join("");
-    d.innerHTML = `<div class="m-head"><b>Investigations</b>${r.subjects.length ? `<select id="invSubject" title="Research only, never uploaded: leads.md">${opts}</select>` : ""}<button class="x" data-close>×</button></div>
+    d.innerHTML = `<div class="m-head"><b>Investigations</b>${r.subjects.length ? `<select id="invSubject" title="Research only, never uploaded: leads.md">${opts}</select>` : ""}<button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
       <div class="md">${r.missing_run ? `<p class="old">That run of ${esc(r.subject)}'s leads isn't on file any more. <button class="btn" data-invnow>Open the current one</button></p>`
         : r.markdown ? (r.run !== r.current ? `<p class="old">An earlier run of these leads (the link's). <button class="btn" data-invnow>Open the current one</button></p>` : "") + mdRender(r.markdown)
         : `<div class="empty">No investigations yet: clipper investigate run &lt;subject&gt;.</div>`}</div>`;

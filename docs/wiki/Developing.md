@@ -71,62 +71,50 @@ notes no test reads: the root `*.md` files, `LICENSE`, `docs/log/`, `docs/archiv
 `docs/wiki/` still runs them, since a test checks the links and the sidebar, and so does one to
 `studio/research_notes/streamers.json`, which a test reads. The ruff rules are the defaults plus
 the few selected in `pyproject.toml` (`[tool.ruff.lint]`). Try risky changes on a short test stream
-first. Before merging a PR that changes code, wait for the review below (Copilot's, or Grok's when
-Copilot reviewed nothing) and handle each finding. A PR outside that review's paths, such as
-a wiki page or `uv.lock` alone, gets no review comment: don't wait for one.
+first. Before merging a PR that changes code, wait for the reviews below and handle each
+finding. A PR outside those paths, such as a wiki page or `uv.lock` alone, needs no review.
 
 ## Code review on PRs
 
-Copilot goes first, and Grok takes over when Copilot's credits run out. On every PR that changes
-code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`) the `review` workflow
-(`.github/workflows/review.yml`) checks what Copilot did with the PR's latest commit:
+A PR that changes code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`) gets two
+reviews (since 2026-11-13):
 
-| Copilot | What happens |
-|---|---|
-| Reviewed the commit (and you didn't dismiss it) | No Grok review, no cost; a one-line note replaces any older Grok findings |
-| Posted "unable to review ... insufficient remaining quota" | Grok reviews, right away |
-| Is a requested reviewer but has said nothing | Grok reviews after `[codereview] copilot_wait_s` (600 s) |
-| Isn't a requested reviewer | Grok reviews after a minute at most |
-| GitHub won't say | Grok reviews |
+1. **Claude, locally, before the first push.** Claude Code runs its `code-review` skill on the
+   branch against main and fixes what it finds before the PR opens. It is part of the Claude
+   Code session, so it costs nothing extra and takes a few minutes.
+2. **Copilot, on GitHub.** A repository rule (Settings, Rules, "Copilot reviews new PRs")
+   requests it when the PR opens.
 
-A repository rule (Settings, Rules, "Copilot reviews new PRs") requests Copilot when a PR opens.
-It doesn't review later pushes on its own, so those go to Grok unless you ask with
-`gh pr edit N --add-reviewer @copilot`. To run Grok on every PR even when Copilot reviewed, set
-`CLIPPER_CODEREVIEW_COPILOT_WAIT_S: 0` in the workflow's env.
+Copilot doesn't review later pushes on its own, so Claude reviews what each later push adds;
+for a big one, ask Copilot again with `gh pr edit N --add-reviewer @copilot`. Merge once
+Copilot's review is in, each finding is fixed or answered, and CI is green on both systems.
 
-The Grok review is `clipper codereview`. It sends the diff against main and the changed files in full to
+Until 2026-11-13 a `review` workflow ran Grok (below) on every commit Copilot hadn't reviewed.
+It found real bugs but took about 25 minutes a PR, so it was removed; a branch made before then
+still carries the workflow until it merges main.
+
+### `clipper codereview`, by hand
+
+A second opinion from another model when you want one. It sends the diff against main and the changed files in full to
 `[codereview] reviewer` in one model call at high effort: Grok 4.7 through OpenRouter, about $1
 and 25 minutes for a PR that changes 9 files. It posts the correctness bugs it finds as one
-comment on the PR, and the same review on every issue the PR links (`Closes #70`, or `#70` in the PR's title or body). Each comment is edited in
-place on later pushes, never added again. A push that leaves the PR's own code changes as they were
-(a docs-only push, or merging main into the branch) isn't reviewed again: the comment carries a
+comment on the PR, and the same review on every issue the PR links (`Closes #70`, or `#70` in the PR's title or body). Running it again on a
+later push edits each comment in place, never adds another. A rerun that finds the PR's own code changes as they were
+(a docs-only push, or merging main into the branch) doesn't review again: the comment carries a
 digest of the PR's added and removed lines (a binary file's new contents, a file's mode), without
 the context and positions a merge moves. Such
 a push still copies the review to a linked issue that doesn't have it yet (a failed post, a
 `Closes #N` added later), and a push that reverts all the PR's code changes replaces the findings
-with a note that none stand. A notes-only PR, a draft or a
-fork's PR gets no review. A failed review (no key, the model down, an answer with neither findings nor "No correctness
+with a note that none stand. Nothing runs it on its own, and it doesn't
+skip Copilot-reviewed commits unless `[codereview] copilot_wait_s` is over 0. A failed review (no key, the model down, an answer with neither findings nor "No correctness
 bugs found", a 30-minute timeout, a dropped
-connection or a gateway's 408/502/504, never retried since each try may be paid for) says so in the comment, keeps the last good review below
-it, and never fails the PR's checks. The review is printed in the workflow's log before it is
-posted, so a failed post loses nothing.
+connection or a gateway's 408/502/504, never retried since each try may be paid for) says so in the comment and keeps the last good review below
+it. The review is printed before it is posted, so a failed post loses nothing.
 
-It needs the repo secret `OPENROUTER_API_KEY`, set once from the laptop (set 2026-11-10), in Git Bash:
-
-```bash
-gh secret set OPENROUTER_API_KEY --repo byvfx/clipper < //192.168.0.155/docker/clipper/secrets/openrouter_secret.txt
-```
-
-or in PowerShell, which has no `<`:
-
-```powershell
-Get-Content \\192.168.0.155\docker\clipper\secrets\openrouter_secret.txt -Raw | gh secret set OPENROUTER_API_KEY --repo byvfx/clipper
-```
-
-To try another model, set `CLIPPER_CODEREVIEW_REVIEWER` in the workflow's env (e.g.
-`openrouter:openai/gpt-5.6-sol-pro`). Run it locally before pushing with `clipper codereview`
-(prints the review, nothing posted) or `clipper codereview --dry-run` (what would be sent and its
-cost). Treat it as a second opinion: check each finding against the code.
+It needs `OPENROUTER_API_KEY` in the environment. `clipper codereview` prints the review and posts
+nothing; `clipper codereview --dry-run` shows what would be sent and its cost; `--pr N` posts it
+(with `GITHUB_TOKEN` set). To try another model, set `CLIPPER_CODEREVIEW_REVIEWER` (e.g.
+`openrouter:openai/gpt-5.6-sol-pro`). Check each finding against the code.
 
 Why Grok: on 2026-11-09, 13 models reviewed the same commit of PR #191 (about 88k tokens in).
 The real findings were minor ones (loudness measured before the pauses were cut, a raw

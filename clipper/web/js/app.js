@@ -55,7 +55,7 @@ const KEYS = [
 ];
 function showKeys() {
   const k = $("#keys");
-  k.innerHTML = `<div class="m-head"><b>Keyboard shortcuts</b><button class="x" onclick="this.closest('dialog').close()">×</button></div>
+  k.innerHTML = `<div class="m-head"><b>Keyboard shortcuts</b><button class="x" aria-label="Close" title="Close (Esc)" onclick="this.closest('dialog').close()">×</button></div>
     <div class="k-body">${KEYS.map(([h, rows]) => `<h4>${h}</h4>` + rows.map(([a, b]) =>
       `<span>${a.split(" ").map(x => `<kbd>${esc(x)}</kbd>`).join(" ")}</span><span>${esc(b)}</span>`).join("")).join("")}
     <span></span><span style="color:var(--faint);font-size:12px;margin-top:8px">Off while you type in a box (Esc leaves the box).</span></div>`;
@@ -87,7 +87,7 @@ function keyAct(key, ref) {
   else if (key === "r") { const n = ask(`Reject ${i.short}? Say why (kept as a scoring example):`, true); if (n) act(ref, "reject", { text: n }); }
   else if (key === "c") {
     if (OPEN) { $("#fChanges").focus(); return; }
-    const n = ask("What should change? clipper will re-cut / re-thumbnail it from this note:", true); if (n) act(ref, "changes", { text: n });
+    const n = ask(`What should change? clipper will re-cut / re-thumbnail it from this note${retakeCost()}:`, true); if (n) act(ref, "changes", { text: n });
   } else if (key === "h") act(ref, "hold", { on: !i.hold });
   else if (key === "p") { if (OPEN !== ref) openModal(ref); $("#fPin").scrollIntoView({ block: "center" }); $("#fPin").focus(); }
 }
@@ -305,15 +305,20 @@ DESKTOP.addEventListener("change", applyLayout);
 addEventListener("resize", () => { if (DESKTOP.matches !== document.body.classList.contains("layout")) applyLayout(); });
 applyLayout();
 
-// Everything that polls the server: [refresh, every ms]. Each runs now, then on its timer.
-const POLL = [[refresh, 15000], [refreshLive, 60000], [refreshCloud, 60000], [refreshCosts, 300000],
+// Everything that polls the server: [refresh, every ms]. Each runs now, then whenever it falls due.
+const POLL = [[pollRefresh, 15000], [refreshLive, 60000], [refreshCloud, 60000], [refreshCosts, 300000],
               [refreshUsage, 300000], [refreshStats, 900000]];
 loadHash();
 // #201: a tab in the background doesn't poll; coming back runs whatever fell due while it was away.
+// One check a second rather than a timer each, so a catch-up poll moves the next one along with it
+// (with fixed timers the tick after a catch-up came too soon and was skipped: Grok on #211).
 const POLLED = new Map();
-function poll(fn, every) {
-  if (document.hidden || Date.now() - (POLLED.get(fn) || 0) < every - 1000) return;
-  POLLED.set(fn, Date.now()); fn();
+function pollDue() {
+  if (document.hidden) return;
+  for (const [fn, every] of POLL) {
+    if (Date.now() - (POLLED.get(fn) || 0) < every) continue;
+    POLLED.set(fn, Date.now()); fn();
+  }
 }
-for (const [fn, every] of POLL) { poll(fn, every); setInterval(() => poll(fn, every), every); }
-document.addEventListener("visibilitychange", () => { for (const [fn, every] of POLL) poll(fn, every); });
+pollDue(); setInterval(pollDue, 1000);
+document.addEventListener("visibilitychange", pollDue);

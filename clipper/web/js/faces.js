@@ -17,7 +17,7 @@ async function showFaces(stream) {
   const win = ++FACEWIN, filter = FC?.stream === stream ? FC.filter : "all";
   FP = null; FC = null;
   d.dataset.kind = "faces"; d.classList.remove("cover"); d.classList.add("facesw");
-  d.innerHTML = `<div class="m-head"><b>Faces</b><span style="color:var(--faint);font-size:12px">${esc(stream)}</span><button class="x" data-close>×</button></div><div class="tbody">Loading…</div>`;
+  d.innerHTML = `<div class="m-head"><b>Faces</b><span style="color:var(--faint);font-size:12px">${esc(stream)}</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div><div class="tbody">Loading…</div>`;
   if (!d.open) d.showModal();
   let data;
   try { data = await api("/api/faces?stream=" + encodeURIComponent(stream)); }
@@ -33,7 +33,7 @@ function groupWho(g) {
 function renderFaces() {
   const { data, filter } = FC, d = $("#tool");
   const shown = data.groups.filter(g => filter === "all" || (filter === "named") === !!g.name);
-  d.innerHTML = `<div class="m-head"><b>Faces</b><span style="color:var(--faint);font-size:12px">${esc(data.stream)}${data.scanned ? ` · ${data.faces} faces in ${data.frames} keyframes` : ""}</span><button class="x" data-close>×</button></div>
+  d.innerHTML = `<div class="m-head"><b>Faces</b><span style="color:var(--faint);font-size:12px">${esc(data.stream)}${data.scanned ? ` · ${data.faces} faces in ${data.frames} keyframes` : ""}</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
     <div class="tbody">
       <div class="fknown"><span class="f">Known faces (every show)</span>${knownChips(data.known)}</div>
       ${!data.scanned ? `<div class="empty">Not scanned yet: <code>clipper faces ${esc(data.stream)}</code> (about 8 min on a quiet NAS). The box tool in an item window works without it.</div>` : `
@@ -94,7 +94,7 @@ function pickFace(ref) {
 }
 function renderPick() {
   const { box: b, found: f } = FP;
-  $("#tool").innerHTML = `<div class="m-head"><b>Who's this?</b><span style="color:var(--faint);font-size:12px">${esc(FP.ref)} · ${mmss(FP.t)}</span><button class="x" data-close>×</button></div>
+  $("#tool").innerHTML = `<div class="m-head"><b>Who's this?</b><span style="color:var(--faint);font-size:12px">${esc(FP.ref)} · ${mmss(FP.t)}</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
     <div class="cv"><div>
       <div class="boxwrap fpwrap" id="fpWrap"><img src="${FP.frame}" alt="" draggable="false">${b ? `<div class="box" style="left:${b.x * 100}%;top:${b.y * 100}%;width:${b.width * 100}%;height:${b.height * 100}%"></div>` : ""}</div>
       <div class="f" style="font-size:11px;color:var(--faint);margin-top:6px">Drag a box round one face, forehead to chin. Clippa finds it in the full-size frame.</div>

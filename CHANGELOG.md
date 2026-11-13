@@ -8,6 +8,9 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-13: the `review` workflow (Grok on every commit Copilot hadn't reviewed) is gone: too slow at ~25 min
+  a PR. Code PRs now get a local Claude Code review before the first push and Copilot's when the PR opens;
+  `clipper codereview` stays for a by-hand second opinion (wiki Developing).
 - 11-10: `clipper audit`: a weekly digest of how the week went (no model), saved each week, and a monthly
   read-only deep audit that traces what keeps coming back (wiki Audit). Dependabot opens grouped weekly
   update PRs.

@@ -105,16 +105,15 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   reports, out of the package; serve and the bot are compose-only, the Windows task scripts stay for a GPU
   worker only. Merge policy (11-10): a code PR merges once CI is green on both OSes and the review of its
   head commit is in and each finding is fixed or answered, then delete the branch; green CI alone isn't
-  enough. Copilot is the default reviewer (user, 11-10): the repo ruleset "Copilot reviews new PRs" requests
-  it when a PR opens, not on later pushes. The switch (`[codereview] copilot_wait_s`): a commit Copilot
-  reviewed gets a note and no Grok review; its out-of-credits notice, or no request or review, runs Grok on
-  its own, so later pushes go to Grok. Grok's review is the `clipper codereview` comment (#196: Grok 4.7 on
-  OpenRouter, ~$0.80 and ~25 min on a big PR, the `review` workflow, wiki Developing#code-review-on-prs),
-  copied to the PR's linked issues; check each finding against the code. It runs only when a PR touches
-  `clipper/`, `tests/`, `deploy/`, `.github/` or `pyproject.toml`: any other PR (the wiki, `uv.lock` alone,
+  enough. Reviews since 11-13 (user; Grok's `review` workflow removed, ~25 min a PR was too slow): Claude
+  runs the `code-review` skill locally before the first push and fixes what it finds, then Copilot reviews
+  when the PR opens (repo ruleset "Copilot reviews new PRs", not on later pushes: Claude reviews those, or
+  `gh pr edit N --add-reviewer @copilot`). Wiki Developing#code-review-on-prs. `clipper codereview` (Grok on
+  OpenRouter, ~$1) stays for a by-hand second opinion. Code means a PR touching `clipper/`, `tests/`,
+  `deploy/`, `.github/` or `pyproject.toml`: any other PR (the wiki, `uv.lock` alone,
   `clipper.example.toml`, `streamers.json`) has CI but no review, and a notes-only one (e.g. HANDOFF and the
   log) has neither since 11-10 (`check.yml` paths); both merge on the user's word, the first once CI is green.
-  A fork's PR gets no Grok review either (the workflow skips it): read the diff by hand, then the user's word.
+  A fork's PR: read the diff by hand, then the user's word. The repo secret `OPENROUTER_API_KEY` is unused now.
 
 ## State now (2026-11-08)
 - **Hub on the NAS** since 2026-11-05 (wiki NAS-hub): compose project `clipper-hub` in `~/clipper-hub`, containers
@@ -142,6 +141,15 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   8 h, Channel 404 `segment = 6`; slots a day: 9 Shorts (09/11/13/15/16/18/19/20/21), 6 segments
   (08/10/12/14/17/22), compilation 23:00 for big-story nights only (`docs/big-story.toml` into the stream's
   config.toml). If good items keep going stale while streams overlap, try `stale_days = 4`.
+- **Chud overnight test (11-12 to 11-20, user):** chud's segment budget is 0 since 11-10 (the user stopped
+  recording him and gave his slots to Kino and Don), which left 71 approved segments out. All 71 are pinned in Kitsu hourly
+  23:00-07:00, Fri 11-13 00:00 through Fri 11-20 07:00 (9 a night, no compilations); the hub uploads them 48 h
+  ahead. For it, in `clipper.toml`: `[schedule] max_per_day` 24 (was 15), `[youtube] max_per_24h` 26 (was 15),
+  `[shows.chud.youtube] captions = false` (quota: captions are 400 units, ~7 extra a day fit). **After 11-20**
+  (the scheduled task `chud-overnight-wrapup` does this Fri 11-20 09:00 and reports; it stops if a pin isn't
+  uploaded; the pin list is `backups/chud_overnight_pins_2026-11-12.json`): put both caps back to 15 unless the user keeps them, remove the chud youtube table, set
+  `captions_error = "deferred"` on those 71 schedule.json entries (back it up) so the hourly backfill adds the
+  captions from spare quota, restart serve. Backup: `backups/clipper.toml.before_chud_overnight_2026-11-12`.
 - **Archive:** Jer (The Quartering) 11,571 items / 2,732 h transcribed on Modal, FTS index built, `archive ask`
   works; link checks built but not yet run against the real services. #44 Jerry Banfield, #45 Papa Meat and
   #47 Ben Avery wait on the desktop install and permissions.
@@ -210,7 +218,13 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 and self-checks #185
+**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (this week, small: #204, #206, #228,
+#201, #203, #205, #199; start with #206+#201+#203 as one war room PR, then #204), `p2-dated` (#192 after 11-16,
+#41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
+Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
+`parked` (the rest). `gh issue list --label p1-now` is the queue. 11-13: #13 folded into #158, #200 closed (its
+setup/doctor bug moved to #78), #70 narrowed to punch-ins/emphasis (tighten built).
+Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: (NAS hub #14 and self-checks #185
 closed 11-09; checkup's turn-on steps are under Checkup below),
 Posts blind items #36 (the rest of the YouTube Posts roadmap #30 closed 11-09), Instagram Reels #39, cast library #41, lore-order playlists #43,
 archive fun #63, transcript-framed edits #66 (#67-#71; 11-09 the user wasn't sure #67 is needed, so #70's tighten
@@ -221,6 +235,20 @@ live clips #81, blind items #111, investigate anyone #138, agent exploration #15
 a small `clipper mcp`; #13 may fold into it), Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
+- **Documentaries (11-13, PR #233):** `clipper doc
+  new|voice|build|master|leak|kit` (wiki Documentaries; `clipper/doc.py`, `doc_resolve.py`), the reusable form
+  of the first mini-documentary's one-off Resolve scripts. A piece is `[paths] documentaries/<slug>/` on the
+  share (plan.toml, banned.txt, media), never the repo. Tried: take processing, word timing, the take
+  split and mastering on real files; `build`, the render and `master` against live Resolve 21.2 with a
+  synthetic piece (`C:\clipper-doc-test` on the laptop and the Resolve project `clipper-doc-test`, both
+  safe to delete). Not tried: `voice` against ElevenLabs, `leak` on Modal. On the first real piece, listen
+  to every take and watch the first built timeline. `[story] lufs = -14` is new: a story cut before it is
+  rendered again, and its cover picked again, on its next cut.
+- **B-roll library #229 (11-12, steps 1-2 of 4, PR #230):** `clipper broll find|add|list|keep|drop`
+  (wiki B-roll): NASA, DVIDS (the B-Roll category; keys in `secrets/dvids_secret.txt`, public key first,
+  added by the user 11-12), Prelinger and Commons; public domain / CC0 only, no sound by default (NASA
+  music). Next: the National Archives (key by email from NARA), `[story] broll` in story cuts, then a war
+  room window. The library is `[paths] broll` on the share.
 - **Usability review (11-10, issues only, nothing built):** `clipper status` takes a minute from the laptop
   and buries what needs the user #199; a first run without Kitsu #200 (against "Kitsu-optional is not a goal"
   above: a try-it route, not a second record; close it if unwanted); war room stale data #201, double sends /
@@ -259,7 +287,7 @@ messages: GitHub closes the issue on "fix".
   `streams/.audit/weekly-<date>.json`; on the 1st a read-only `claude -p` reads the saved weeks, traces repeat
   problems and leaves `deep-<YYYY-MM>.md`. The claude container runs both after the checkup (`audit.sh`), so it
   needs `bash deploy/claude/deploy.sh` once. `[audit] backup_folder` is empty until #204: the digest says so
-  weekly. Dependabot opens grouped weekly PRs (ruff ignored; no Grok review, no secrets). Its security
+  weekly. Dependabot opens grouped weekly PRs (ruff ignored; no review, no secrets). Its security
   alerts are a separate repo switch, off as of 11-10.
 - **News watcher #110:** off since 2026-11-03 at the user's word (`[news] check_minutes = 0`, no terms); only
   `[news] watch` / `[shows.<key>.news] watch` terms are watched, `auto_watch = true` brings back the

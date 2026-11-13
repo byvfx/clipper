@@ -9,7 +9,7 @@ async function showNews(days) {
   const d = $("#tool");
   const win = ++NEWSWIN;
   d.dataset.kind = "news"; d.classList.remove("cover"); d.classList.add("facesw");
-  if (!NS || !d.open) d.innerHTML = `<div class="m-head"><b>News</b><button class="x" data-close>×</button></div><div class="tbody">Loading…</div>`;
+  if (!NS || !d.open) d.innerHTML = `<div class="m-head"><b>News</b><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div><div class="tbody">Loading…</div>`;
   if (!d.open) d.showModal();
   days = days ?? NS?.days ?? 3;
   try {
@@ -36,7 +36,7 @@ function renderNews() {
     </div>`;
   const bad = data.feeds.filter(f => f.error);
   const live = data.stories.filter(s => !s.dismissed), off = data.stories.filter(s => s.dismissed);
-  $("#tool").innerHTML = `<div class="m-head"><b>News</b><span style="color:var(--faint);font-size:12px">${!data.watching.length ? "nothing to watch: no terms in [news] watch, so nothing is fetched (search by hand still works)" : `watching ${esc(data.watching.slice(0, 8).join(", "))}${data.watching.length > 8 ? ` +${data.watching.length - 8}` : ""}`} · ${data.check_minutes ? `checked every ${data.check_minutes} min` : "the bot's check is off ([news] check_minutes)"} · ${data.feeds.length} sources${bad.length ? ` · <span style="color:var(--red)" title="${esc(bad.map(f => f.name + ": " + f.error).join("\n"))}">${bad.length} failing</span>` : ""}</span><button class="x" data-close>×</button></div>
+  $("#tool").innerHTML = `<div class="m-head"><b>News</b><span style="color:var(--faint);font-size:12px">${!data.watching.length ? "nothing to watch: no terms in [news] watch, so nothing is fetched (search by hand still works)" : `watching ${esc(data.watching.slice(0, 8).join(", "))}${data.watching.length > 8 ? ` +${data.watching.length - 8}` : ""}`} · ${data.check_minutes ? `checked every ${data.check_minutes} min` : "the bot's check is off ([news] check_minutes)"} · ${data.feeds.length} sources${bad.length ? ` · <span style="color:var(--red)" title="${esc(bad.map(f => f.name + ": " + f.error).join("\n"))}">${bad.length} failing</span>` : ""}</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
     <div class="news">
       <div class="nbar"><input class="search" id="newsQ" placeholder="Search Google News (e.g. a name)" value="${esc(q || "")}"><button class="btn" id="newsGo">Search</button>
         <span class="by">stories from the last</span><select id="newsDays">${[1, 3, 7, 30].map(n => `<option value="${n}"${n == NS.days ? " selected" : ""}>${n} day${n > 1 ? "s" : ""}</option>`).join("")}</select></div>

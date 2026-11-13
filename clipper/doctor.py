@@ -233,7 +233,8 @@ def check_ffmpeg(cfg: dict, role: str) -> None:
     if role in ("nas", "control"):
         return  # nothing encodes there
     codecs = {cfg["cut"]["clip_codec"], cfg["shorts"]["codec"] or cfg["cut"]["clip_codec"],
-              cfg["review"]["preview_codec"] or cfg["cut"]["clip_codec"]}
+              cfg["review"]["preview_codec"] or cfg["cut"]["clip_codec"],
+              cfg["broll"]["codec"] or cfg["cut"]["clip_codec"]}
     for codec in sorted(c for c in codecs if c and c != "copy"):
         works, err = encoder_works(codec)
         if works:
@@ -542,6 +543,27 @@ def check_youtube_cookies_file(cfg: dict, now: float | None = None) -> None:
              "deploy\\cookies\\cookies-task.ps1 -Status; " + hint)
     else:
         ok("keys", f"YouTube cookies {f.name} signed in, exported {hours:.0f} h ago")
+
+
+def check_hei_cookies(cfg: dict, now: float | None = None) -> None:
+    """[paths] hei_cookies, when there is one (`clipper archive add` of heinetwork.tv): it still
+    holds a live member sign-in. No file: nothing to check, the source is optional."""
+    from . import hei, ytdl
+
+    f = cfg["paths"]["hei_cookies"]
+    if not f.is_file():
+        return
+    hint = wiki.page("Archives", "hei-network-on-cinema")
+    try:
+        names = [c.name for c in hei.site_cookies(ytdl.live(ytdl.read_cookies(f), now))]
+    except (OSError, ValueError, KeyError) as e:
+        fail("keys", f"HEI cookies {f.name} unreadable: {e}", hint)
+        return
+    if any(n.startswith(hei.SIGNED_IN) for n in names):
+        ok("keys", f"HEI cookies {f.name} signed in")
+    else:
+        warn("keys", f"HEI cookies {f.name} hold no live heinetwork.tv sign-in",
+             "sign in at heinetwork.tv (Remember me) and export the cookies again; " + hint)
 
 
 def check_youtube_cookies(cfg: dict) -> None:
@@ -967,6 +989,49 @@ def check_news(cfg: dict, offline: bool) -> None:
            + (", Google News" if nc["google_news"] else ""))
 
 
+def check_broll(cfg: dict) -> None:
+    """#229: the b-roll library's settings (its sources need no key)."""
+    from . import broll
+
+    bc = cfg["broll"]
+    bad = [s for s in bc["sources"] if s not in broll.SOURCES]
+    if bad:
+        fail("broll", f"[broll] sources: unknown {', '.join(bad)}", f"use some of {', '.join(broll.SOURCES)}")
+    bad = [c for c in bc["licences"] if c not in broll.LICENCES]
+    if bad:
+        fail("broll", f"[broll] licences: unknown {', '.join(bad)}", f"use some of {', '.join(broll.LICENCES)}")
+    if "dvids" in bc["sources"] and not broll.dvids_key(cfg):
+        warn("broll", f"no $DVIDS_API_KEY or {cfg['paths']['dvids_key']}: DVIDS is skipped",
+             "optional: register at dvidshub.net (API keys under your account), public key on the first line")
+    if not cfg["paths"]["broll"]:
+        return
+    lib = broll.load(cfg)
+    n = {s: sum(e["status"] == s for e in lib["clips"].values()) for s in broll.STATUSES}
+    ok("broll", f"{cfg['paths']['broll']}: {n['kept']} kept, {n['new']} new, {n['long']} long")
+
+
+def check_doc(cfg: dict) -> None:
+    """`clipper doc`, once a piece exists: Resolve's scripting module and the local Whisper."""
+    import importlib.util
+
+    from .doc import PLAN
+    from .doc_resolve import api_paths
+
+    root = cfg["paths"]["documentaries"]
+    pieces = sorted(p.parent.name for p in root.glob(f"*/{PLAN}")) if root.is_dir() else []
+    if not pieces:
+        return
+    api, _ = api_paths(cfg["doc"])
+    if (Path(api) / "Modules").is_dir():
+        ok("doc", f"{len(pieces)} piece(s) in {root}; Resolve's scripting module found")
+    else:
+        warn("doc", f"Resolve's scripting module isn't at {api}: `clipper doc build` and `master` can't reach Resolve "
+             "here", wiki.page("Documentaries", "resolve"))
+    if not importlib.util.find_spec("faster_whisper"):
+        warn("doc", "faster-whisper isn't installed: `clipper doc voice` can't time a take's words",
+             "uv sync --extra gpu, or uv pip install faster-whisper")
+
+
 def check_cast_serve(cfg: dict) -> None:
     """serve's daily `cast auto` and the war room's Cast window check faces with OpenCV."""
     import importlib.util
@@ -1190,8 +1255,11 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     check_keys(cfg, role)
     if role not in ("nas", "control"):
         check_youtube_cookies(cfg)  # archive fetches; a control station doesn't run them
+        check_hei_cookies(cfg)
     if role in ("all", "gpu", "claude"):
         check_narrate(cfg)
+        check_broll(cfg)
+        check_doc(cfg)
     if role in ("all", "serve"):
         check_tailnet(cfg, offline)
     if role == "serve":

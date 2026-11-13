@@ -36,8 +36,11 @@ checked (network, rate limit) keeps its last result. Items not checked within
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
+import re
 import subprocess
 import threading
 import time
@@ -47,7 +50,7 @@ from pathlib import Path
 
 import requests
 
-from . import jsonstate, speakers, transcribe, ytdl
+from . import hei, jsonstate, speakers, transcribe, ytdl
 from .errors import ClipperError
 from .modalmon import head_record, tracked
 
@@ -83,6 +86,16 @@ def item_dir(d: Path, it: dict) -> Path:
     return Path(it["dir"]) if it.get("dir") else d / it["id"]
 
 
+def item_cfg(cfg: dict, idir: Path) -> dict:
+    """An item's config for `speakers`: named against its subject's own voices
+    (voices/<subject>.json), as a stream is against its show's, never the base show's."""
+    return {**cfg, "show": {**cfg["show"], "key": idir.parent.name}}
+
+
+def is_item(cfg: dict, d: Path) -> bool:
+    return d.resolve().parent.parent == Path(cfg["paths"]["archive"]).resolve()
+
+
 def load_links(d: Path) -> dict[str, dict]:
     p = d / "links.json"
     return jsonstate.read(p, {})
@@ -95,21 +108,29 @@ def list_youtube(url: str) -> list[dict]:
     tabs = [url] if url.endswith(("/videos", "/streams")) else [f"{url}/videos", f"{url}/streams"]
     items = []
     for tab in tabs:
-        # approximate_date: YouTube's "3 years ago" as a day, so a catalog is dated before transcribing
-        r = ytdl.run("--flat-playlist", "--extractor-args", "youtubetab:approximate_date", "-J", tab)
+        # approximate_date: "3 years ago" as a date, enough to order a catalog of several sources
+        r = ytdl.run("--flat-playlist", "-J", "--extractor-args", "youtubetab:approximate_date", tab)
         if r.returncode and len(tabs) > 1 and "does not have" in r.stderr:
             continue  # e.g. no streams tab
         if r.returncode:
             raise ClipperError(f"yt-dlp {tab}: {ytdl.last_error(r)}")
         data = json.loads(r.stdout)
         for e in data.get("entries") or []:
-            ts = e.get("timestamp") or e.get("release_timestamp")
             items.append({"id": f"yt-{e['id']}", "source": "youtube",
                           "url": f"https://www.youtube.com/watch?v={e['id']}",
                           "title": e.get("title") or "", "duration_s": float(e.get("duration") or 0),
                           "channel": data.get("channel") or "", "kind": tab.rsplit("/", 1)[1],
-                          "date": datetime.fromtimestamp(ts, UTC).date().isoformat() if ts else None})
+                          "date": yt_date(e)})
     return items
+
+
+def yt_date(e: dict) -> str | None:
+    """A flat listing entry's day: upload_date if given, else the approximate timestamp."""
+    if d := e.get("upload_date"):
+        return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+    if ts := e.get("timestamp") or e.get("release_timestamp"):
+        return datetime.fromtimestamp(int(ts), UTC).date().isoformat()
+    return None
 
 
 def odysee(method: str, params: dict) -> dict:
@@ -146,19 +167,45 @@ def list_odysee(url: str, limit: int | None = None, pace=None) -> list[dict]:
         page += 1
 
 
-def add(cfg: dict, subject: str, urls: list[str]) -> None:
+def list_source(cfg: dict, url: str) -> list[dict]:
+    if hei.is_url(url):
+        return hei.list_items(cfg["paths"]["hei_cookies"], cfg["archive"]["hei_pace_s"])
+    if "odysee.com" in url or url.startswith("lbry://"):
+        return list_odysee(url)
+    return list_youtube(url)
+
+
+def add(cfg: dict, subject: str, urls: list[str], match: str | None = None) -> None:
+    """match: keep only items whose title matches this regex (case-insensitive), for a big
+    channel with a few of the subject's videos in it (Adult Swim's On Cinema)."""
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
     min_s = cfg["archive"]["min_duration_s"]
+    pattern = re.compile(match, re.I) if match else None
     for url in urls:
-        found = list_odysee(url) if "odysee.com" in url or url.startswith("lbry://") else list_youtube(url)
+        found = list_source(cfg, url)
+        if pattern:
+            found = [it for it in found if pattern.search(it["title"])]
         keep = [it for it in found if not 0 < it["duration_s"] < min_s]
         new = [it for it in keep if it["id"] not in cat]
-        cat.update({it["id"]: it for it in new})
-        print(f"{url}: {len(found)} found, {len(found) - len(keep)} under {min_s} s skipped, "
+        for it in keep:  # kept as they are, but an item listed before dates were kept gets one
+            if it["id"] in cat and it.get("date") and not cat[it["id"]].get("date"):
+                cat[it["id"]]["date"] = it["date"]
+        # ahead of what was there: a source lists newest first, so one source stays newest first
+        cat = {**{it["id"]: it for it in new}, **cat}
+        matching = f" matching {match!r}" if match else ""
+        print(f"{url}: {len(found)} found{matching}, {len(found) - len(keep)} under {min_s} s skipped, "
               f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
-    save_catalog(d, cat)
+    save_catalog(d, newest_first(cat))
     print(f"{subject}: {len(cat)} items, {sum(i['duration_s'] for i in cat.values()) / 3600:.0f} h")
+
+
+def newest_first(cat: dict[str, dict]) -> dict[str, dict]:
+    """The catalog by date, newest first, when every item has one: several sources then
+    interleave, and video/transcribe --limit/--oldest follow the date. Otherwise as it is."""
+    if not all(it.get("date") for it in cat.values()):
+        return cat
+    return dict(sorted(cat.items(), key=lambda kv: kv[1]["date"], reverse=True))
 
 
 # ---------- transcribing ----------
@@ -209,16 +256,25 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
         data = audio[0].read_bytes()
         out, cost = call(worker.transcribe, data, audio[0].suffix, settings)
         audio[0].unlink()
-    elif it["source"] == "kick":
-        # Kick's HLS variants carry video and audio together, so there is no audio-only format:
-        # the smallest variant, its audio as flac (as a stream's goes to Modal)
-        src = idir / "source.ts"
-        r = ytdl.run("--referer", "https://kick.com/", "-f", cfg["archive"]["kick_format"], "--hls-use-mpegts",
-                     "--no-part", "-N", "4", "-o", str(src), it["m3u8"])
-        if r.returncode or not src.exists():
-            raise RuntimeError(f"yt-dlp: {ytdl.last_error(r)}")
+    elif it["source"] in ("kick", "hei"):
+        # The video `archive video` kept, else the stream's smallest download: Kick's HLS
+        # variants carry video and audio together (no audio-only format), HEI's has an audio
+        # rendition. Its audio goes to Modal as flac, as a stream's does.
+        kept = kept_video(idir)
+        src = kept or idir / "source.ts"
+        if not kept:
+            fmt, referer = ((cfg["archive"]["kick_format"], "https://kick.com/") if it["source"] == "kick"
+                            else (cfg["archive"]["hei_audio_format"], hei.SITE + "/"))
+            m3u8 = hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it) if it["source"] == "hei" else it["m3u8"]
+            # a missing HEI segment fails the item (retried next run) rather than leaving a gap
+            whole = ["--abort-on-unavailable-fragments"] if it["source"] == "hei" else []
+            r = ytdl.run("--referer", referer, "-f", fmt, "--hls-use-mpegts", *whole,
+                         "--no-part", "-N", "4", "-o", str(src), m3u8)
+            if r.returncode or not src.exists():
+                raise RuntimeError(hei.scrub(f"yt-dlp: {ytdl.last_error(r)}"))
         wav = transcribe.extract_audio(idir)
-        src.unlink()
+        if not kept:
+            src.unlink()
         enc = idir / "audio.flac"
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(wav), "-c:a", "flac",
                         str(enc)], check=True)
@@ -232,9 +288,8 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
     (idir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     transcribe.write(idir, tc, out["segments"], out["dur"], t0, {"modal": cost})
     if out.get("diarization"):
-        # named against this subject's own voices (voices/<subject>.json), like a show's
         transcribe.write_diarization(idir, out["diarization"], cost)
-        speakers.apply(idir, {**cfg, "show": {**cfg["show"], "key": idir.parent.name}})
+        speakers.apply(idir, item_cfg(cfg, idir))
     (idir / "error.txt").unlink(missing_ok=True)
     return {**cost, "signed_in": signed_in}
 
@@ -303,6 +358,151 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
                 break
     log.info("%s: %d transcribed (%d signed in), %d failed, ~$%.2f",
              subject, done, signed_in, failed, spent)
+
+
+# ---------- keeping videos ----------
+
+VIDEO_SOURCES = ("youtube", "hei")
+
+
+def kept_video(idir: Path) -> Path | None:
+    """The video `archive video` kept for an item, if any (written under another name and
+    renamed when complete, so this is never a partial download)."""
+    p = idir / "source.mp4"
+    return p if p.is_file() else None
+
+
+def keep_video(cfg: dict, idir: Path, it: dict) -> Path:
+    """An item's best video as source.mp4 in idir, its caption tracks as captions.<lang>.<ext>
+    (yt-dlp puts the language in each subtitle's name). Only the tracks someone made: YouTube's
+    automatic ones come in every language it translates to, and `transcribe` makes our own."""
+    idir.mkdir(parents=True, exist_ok=True)
+    # merged or single-file, always an mp4; a missing segment fails it (fetched again next run)
+    args = ["-f", cfg["archive"]["video_format"], "--merge-output-format", "mp4", "--remux-video", "mp4",
+            "--abort-on-unavailable-fragments", "--no-playlist", "-N", "4", "--write-subs", "--sub-langs", "all,-live_chat",
+            "-o", str(idir / "download.%(ext)s"), "-o", f"subtitle:{idir / 'captions'}.%(ext)s"]
+    if it["source"] == "hei":
+        r = ytdl.run("--referer", hei.SITE + "/", *args, hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it))
+    else:
+        r, _ = ytdl.run_retrying(cfg, *args, it["url"], retry_on=ytdl.AGE)
+    out = idir / "download.mp4"
+    if r.returncode or not out.is_file():
+        raise RuntimeError(hei.scrub(f"yt-dlp: {ytdl.last_error(r)}"))
+    out.replace(idir / "source.mp4")
+    for leftover in idir.glob("download.*"):
+        leftover.unlink(missing_ok=True)
+    (idir / "video_error.txt").unlink(missing_ok=True)
+    return idir / "source.mp4"
+
+
+def videos_todo(d: Path, cat: dict[str, dict], ids: list[str] | None = None) -> list[dict]:
+    """Catalog items whose video can be kept and isn't yet, minus dead links (catalog order)."""
+    dead = {i for i, lk in load_links(d).items() if lk["status"] == "dead"}
+    return [it for it in cat.values()
+            if it["source"] in VIDEO_SOURCES and not kept_video(d / it["id"]) and it["id"] not in dead
+            and (ids is None or it["id"] in ids)]
+
+
+def run_videos(cfg: dict, subject: str, ids: list[str] | None, limit: int | None, oldest: bool,
+               parallel: int, dry_run: bool) -> None:
+    d = subject_dir(cfg, subject)
+    cat = load_catalog(d)
+    if not cat:
+        raise ClipperError(f"no catalog for {subject!r}: clipper archive add {subject} <url>")
+    todo = videos_todo(d, cat, ids)  # catalog order: newest first (`add` puts new items ahead)
+    if oldest:
+        todo.reverse()
+    todo = todo[:limit] if limit else todo
+    hours = sum(it["duration_s"] for it in todo) / 3600
+    print(f"{subject}: {len(todo)} videos to keep, {hours:.1f} h, "
+          f"~{hours * cfg['archive']['video_gb_per_hour']:.0f} GB, {parallel} at once (no model cost)")
+    if dry_run or not todo:
+        return
+    fh = logging.FileHandler(d / "video.log", encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"))
+    log.addHandler(fh)
+    done = failed = 0
+    try:
+        with ThreadPoolExecutor(parallel) as pool:
+            jobs = {pool.submit(keep_video, cfg, d / it["id"], it): it for it in todo}
+            for job in as_completed(jobs):
+                it = jobs[job]
+                try:
+                    size = job.result().stat().st_size
+                    done += 1
+                    log.info("[%d/%d] %s %r  %.2f GB", done + failed, len(todo), it["id"], it["title"][:50],
+                             size / 1e9)
+                except Exception as e:  # noqa: BLE001
+                    failed += 1
+                    (d / it["id"]).mkdir(parents=True, exist_ok=True)
+                    (d / it["id"] / "video_error.txt").write_text(f"{type(e).__name__}: {e}", encoding="utf-8")
+                    log.warning("[%d/%d] %s failed: %s", done + failed, len(todo), it["id"], str(e)[:200])
+        log.info("%s: %d videos kept, %d failed", subject, done, failed)
+    finally:
+        log.removeHandler(fh)
+        fh.close()
+
+
+# ---------- speakers ----------
+
+def relabel(cfg: dict, subject: str) -> None:
+    """Name every diarized item's speakers again against the subject's enrolled voices (after
+    `clipper speakers <item folder> --name SPEAKER_00=Name --enroll`), and say who talks how much."""
+    d = subject_dir(cfg, subject)
+    items = sorted(p.parent for p in d.glob("*/diarization.json"))
+    if not items:
+        raise ClipperError(f"no diarized items in {subject}: clipper archive transcribe {subject} --diarize")
+    talk: dict[str, float] = {}
+    seen: dict[str, int] = {}
+    unnamed = 0.0
+    for idir in items:
+        for e in speakers.apply(idir, item_cfg(cfg, idir)).values():
+            if name := e.get("name"):
+                talk[name] = talk.get(name, 0.0) + e["talk_s"]
+                seen[name] = seen.get(name, 0) + 1
+            else:
+                unnamed += e["talk_s"]
+    print(f"{subject}: {len(items)} items named again")
+    for name, s in sorted(talk.items(), key=lambda kv: -kv[1]):
+        print(f"  {name:<28} {s / 3600:6.1f} h in {seen[name]} items")
+    print(f"  {'(not matched)':<28} {unnamed / 3600:6.1f} h")
+
+
+# ---------- posts ----------
+
+def sheet_csv_url(url: str) -> str:
+    """A Google Sheet's CSV export url (the tab in the link's gid, else the first tab)."""
+    m = re.search(r"/spreadsheets/d/([\w-]+)", url)
+    if not m:
+        raise ClipperError(f"{url}: not a Google Sheets link")
+    gid = re.search(r"[#&?]gid=(\d+)", url)
+    return f"https://docs.google.com/spreadsheets/d/{m[1]}/export?format=csv" + (f"&gid={gid[1]}" if gid else "")
+
+
+def save_posts(cfg: dict, subject: str, url: str) -> None:
+    """A public sheet of the subject's posts (On Cinema's: every tweet and Bluesky post by Tim,
+    Gregg and the show, kept by the fans) as posts.csv as exported and posts.json, one row per
+    post keyed by the sheet's header. Rerun to refresh: the sheet is kept up to date."""
+    r = requests.get(sheet_csv_url(url), timeout=120)
+    r.raise_for_status()
+    text = r.content.decode("utf-8-sig")
+    if "csv" not in r.headers.get("content-type", "") or text.lstrip().startswith("<"):
+        # a sign-in page or Drive's interstitial: keep the posts saved last time
+        raise ClipperError(f"{url}: Google sent a page, not CSV (is the sheet still shared publicly?)")
+    rows = list(csv.DictReader(io.StringIO(text)))
+    if not rows:
+        raise ClipperError(f"{url}: no rows (is the sheet shared publicly?)")
+    d = subject_dir(cfg, subject)
+    d.mkdir(parents=True, exist_ok=True)
+    jsonstate.write_text(d / "posts.csv", text)
+    jsonstate.write(d / "posts.json", {"source": url, "fetched_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                                       "posts": rows}, indent=1)
+    first = next(iter(rows[0]))
+    by = {}
+    for row in rows:
+        by[row[first]] = by.get(row[first], 0) + 1
+    top = ", ".join(f"{k or '(blank)'} {n}" for k, n in sorted(by.items(), key=lambda kv: -kv[1])[:6])
+    print(f"{subject}: {len(rows)} posts saved to {d / 'posts.json'} ({top})")
 
 
 def status(cfg: dict, subject: str | None) -> None:
