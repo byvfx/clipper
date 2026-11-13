@@ -175,6 +175,8 @@ def test_a_take_is_bought_again_only_when_its_words_or_voice_change(plan, dc):
     assert doc.take_keys(t, nc, {**dc, "vo_filter": ""})[1] != done        # the compressor: processed again, not bought
     assert doc.take_keys(t, {**nc, "voice_id": "v2"}, dc)[0] != raw
     assert doc.take_keys({**t, "text": t["text"] + " More."}, nc, dc)[0] != raw
+    one, two = (doc.take_files(Path("p"), t, nc, {**dc, "words_model": m}) for m in ("small.en", "medium.en"))
+    assert one[:2] == two[:2] and one[2] != two[2] and one[2].name.endswith(".small.en.words.json")
 
 
 DUR = {"reel_a": 120.0, "reel_b": 90.0, "cue1": 60.0, "cue2": 30.0, "card_open": 20.0, "tone": 30.0}
@@ -273,6 +275,15 @@ def test_score_crosses_over_at_the_section_and_levels_follow_the_dialogue(plan, 
     assert one["gain"] == 0.0 and two["gain"] == -22.0
     pieces = [r for r in b["audio"] if r["track"] == doc.A_CLIP]
     assert [x for x in seen if x[0] == "reel_b"] == [("reel_b", 40.0, 12.0)] * 2 and pieces[0]["gain"] == pieces[1]["gain"]
+    # three cues, the last two a second apart: the first stops where the third starts on its track
+    three = {**plan, "music": [{**plan["music"][0], "at": None}, {**plan["music"][1], "at": None, "at_s": 10.0, "tail": False},
+                               {**plan["music"][1], "at": None, "at_s": 11.0, "tail": False}]}
+    c = {**b, "audio": []}
+    doc.add_score(c, three, DUR, dc)
+    by_track = {}
+    for r in c["audio"]:
+        by_track.setdefault(r["track"], []).append((r["record"], r["record"] + r["end"] - r["start"]))
+    assert all(x[1] <= y[0] for rows in by_track.values() for x, y in zip(rows, rows[1:])) and len(by_track[doc.A_SCORE]) == 2
     with pytest.raises(ClipperError, match="nothing follows that section"):
         doc.add_score({**b, "sections": b["sections"][:1]}, plan, DUR, dc)
 
@@ -302,6 +313,24 @@ to = 25
     b = doc.layout(plan, vo, DUR, dc, {})
     (only,) = [r for r in b["audio"] if r["track"] == doc.A_UNDER]
     assert only["clip"].startswith("in_b") and only["record"] >= 150
+
+
+def test_a_fade_is_never_placed_before_the_start(dc):
+    plan = doc.parse_plan('''
+[[seq]]
+clip = "a"
+reel = "reel_a"
+from = 5
+to = 5.2
+[[seq]]
+clip = "b"
+reel = "reel_b"
+from = 20
+to = 25
+''')
+    plan["fps"] = 30
+    b = doc.layout(plan, {}, DUR, dc, {})
+    assert all(r["record"] >= 0 for r in b["audio"]) and [x["kind"] for x in b["blend"]] == ["out"]
 
 
 def test_plan_settings_that_cant_work_are_refused(defaults, tmp_path):

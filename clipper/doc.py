@@ -368,7 +368,8 @@ def take_keys(t: dict, nc: dict, dc: dict) -> tuple[str, str]:
 
 def take_files(d: Path, t: dict, nc: dict, dc: dict) -> tuple[Path, Path, Path]:
     raw, done = take_keys(t, nc, dc)
-    return d / "vo" / "raw" / f"{raw}.wav", d / "vo" / f"vo_{done}.wav", d / "vo" / f"vo_{done}.words.json"
+    return (d / "vo" / "raw" / f"{raw}.wav", d / "vo" / f"vo_{done}.wav",
+            d / "vo" / f"vo_{done}.{re.sub(r'[^A-Za-z0-9.-]+', '-', dc['words_model'])}.words.json")
 
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
@@ -422,7 +423,7 @@ def hear(wav: Path, model: str) -> list[list]:
     raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(wav), "-ar", "16000", "-ac", "1", "-f", "f32le", "-"],
                          check=True, capture_output=True).stdout
     segs, _ = whisper(model).transcribe(np.frombuffer(raw, np.float32), word_timestamps=True)
-    return [[w.word.strip(), round(w.start, 2), round(w.end, 2)] for s in segs for w in s.words]
+    return [[w.word.strip(), round(w.start, 2), round(w.end, 2)] for s in segs for w in s.words or []]
 
 
 def wav_length(path: Path) -> float:
@@ -544,7 +545,8 @@ def layout(plan: dict, vo: dict[int, dict], dur: dict[str, float], dc: dict, lab
         b = {"name": f"{kind}_{name}_{key_of(reel, stamps.get(reel), round(start, 3), length)[:8]}", "reel": reel,
              "start": round(start, 4),
              "dur": length, "kind": "out" if kind in ("out", "xo") else "in", "record": record}
-        blend.append(b)
+        if record >= 0:                     # a fade in before a very short first clip has nowhere to go
+            blend.append(b)
 
     for pos, (n, e) in enumerate(flat):
         while sec is None or sec < n:      # sections before this entry start at its frame
@@ -676,6 +678,8 @@ def add_score(b: dict, plan: dict, dur: dict[str, float], dc: dict) -> None:
         a = starts[k]
         last = k + 1 == len(starts)
         end = total if last else min(total, starts[k + 1] + xf)
+        if k + 2 < len(starts):             # the cue after next is on this track
+            end = min(end, starts[k + 2])
         a = next((q1 for q0, q1 in b["quiet"] if q0 <= a < q1), a)     # starting in a silent stretch: after it
         cut = next((q0 for q0, _ in b["quiet"] if a < q0 < end), None)
         end = cut if cut is not None else end
