@@ -50,7 +50,7 @@ def test_with_a_token_any_host_with_the_key(serve):
 
 
 def test_routes_are_tables():
-    assert "/api/items" in warroom.GET_API and "/api/action" in warroom.POST_API
+    assert "/api/overview" in warroom.GET_API and "/api/action" in warroom.POST_API
     assert set(warroom.POST_API) >= {"/api/undo", "/api/bulk", "/api/replan", "/api/retake"}
 
 
@@ -349,3 +349,33 @@ def test_page_scripts_parse():
     for p in sorted((warroom.WEB / "js").glob("*.js")):
         r = subprocess.run([node, "--check", str(p)], capture_output=True, text=True)
         assert r.returncode == 0, f"{p.name}: {r.stderr[-500:]}"
+
+
+def test_log_tail_filters_and_blanks_secrets(tmp_path, defaults, monkeypatch):
+    from clipper.warroom import logview
+    log = tmp_path / "serve.log"
+    log.write_text("".join(f"2026-11-13 10:00:{k:02d} INFO    clipper.serve: job {k} ok\n" for k in range(50))
+                   + "2026-11-13 10:01:00 WARNING clipper.warroom: kick-1: KeyError: 'x'\n"
+                   + "2026-11-13 10:01:01 INFO    clipper.serve: thumbs exit 2\n"
+                   + "2026-11-13 10:01:02 INFO    clipper.serve: called with sk-ant-0123456789abcdef\n", encoding="utf-8")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-0123456789abcdef")
+    cfg = {**defaults, "paths": {**defaults["paths"], "serve_log": log}}
+    r = logview.log_tail(cfg, "serve", "5")
+    assert len(r["lines"]) == 5 and r["lines"][-1].endswith("called with •••")
+    assert not any("sk-ant" in x for x in r["lines"])
+    bad = logview.log_tail(cfg, "serve", "100", bad="1")["lines"]
+    assert [x.split(": ", 1)[1] for x in bad] == ["kick-1: KeyError: 'x'", "thumbs exit 2"]
+    assert len(logview.log_tail(cfg, "serve", "100", grep="KeyError kick-1")["lines"]) == 1   # every word, any case
+    assert logview.log_tail(cfg, "nope", "x")["which"] == "serve"   # unknown names and counts: the defaults
+    none = logview.log_tail({**cfg, "paths": {**cfg["paths"], "bot_log": tmp_path}}, "bot")
+    assert none["lines"] == [] and "console only" in none["note"]
+    assert "No bot log" in logview.log_tail({**cfg, "paths": {**cfg["paths"], "bot_log": tmp_path / "bot.log"}}, "bot")["note"]
+
+
+def test_log_tail_reads_only_the_end_of_a_big_file(tmp_path, monkeypatch):
+    from clipper.warroom import logview
+    monkeypatch.setattr(logview, "TAIL_BYTES", 100)
+    p = tmp_path / "x.log"
+    p.write_text("".join(f"line {k:04d}\n" for k in range(1000)), encoding="utf-8")
+    got = logview.tail(p, 1000)
+    assert got[-1] == "line 0999" and 0 < len(got) <= 10 and all(x.startswith("line ") and len(x) == 9 for x in got)

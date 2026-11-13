@@ -26,11 +26,15 @@ It works from the keyboard:
 | <kbd>O</kbd> | pop the video out into its own window |
 | <kbd>B</kbd> | Who's this? (a face on the paused video) |
 
-The search box looks through every stream's titles, descriptions, topics and hashtags, and
-what is said in each video (its captions). Status, date and show filters combine with it, and
-the view is in the page's URL, so it can be bookmarked.
+<kbd>Tab</kbd> reaches the card titles, schedule slots and live chips too; <kbd>Enter</kbd> or
+<kbd>Space</kbd> opens them. The card buttons name their key on hover.
 
-Tick items (shift-click for a range, or "Select shown") to approve, reject, hold, release,
+The search box looks through every stream's titles, descriptions, topics and hashtags, and
+what is said in each video (its captions). Status, date and show filters combine with it. The
+queue is newest stream first; the order menu sorts by score, length or kind instead. The view,
+order included, is in the page's URL, so it can be bookmarked.
+
+Tick items (shift-click for a range, "⇕ Fill the gaps" on a phone, or "Select shown") to approve, reject, hold, release,
 pin, reopen or send the same retake note to all of them, or to find and replace in their
 titles, descriptions, hashtags, tags or playlists: the dry run lists every line that would
 change before anything is written. A selection survives a change of tab or filter, but bulk
@@ -153,6 +157,14 @@ Raise `stream_budget` to send more of a stream.
 
 Above it, the upload panel shows uploads in the last 24 h against the cap, the last automatic
 run and its errors, and what goes next. Uploaded slots show views and a YouTube link.
+
+## The log
+
+**Log** on the Health panel shows the end of the serve or bot log (`[paths] serve_log`,
+`bot_log`), with a word filter and an "errors and warnings" switch. An error toast that says
+"details in the serve log" has a Log button that opens it filtered to errors. Values of secret
+environment variables and the page's key are blanked before the lines leave serve. A log set
+to `""` (console only) says to use `docker compose logs` instead.
 
 ## Modal, costs and analytics
 

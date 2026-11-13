@@ -91,6 +91,14 @@ function keyAct(key, ref) {
   } else if (key === "h") act(ref, "hold", { on: !i.hold });
   else if (key === "p") { if (OPEN !== ref) openModal(ref); $("#fPin").scrollIntoView({ block: "center" }); $("#fPin").focus(); }
 }
+// #206: the clickable titles, slots and live chips (role="button") answer Enter and Space like a
+// button. Caught first, so Enter doesn't also open the selected card and Space doesn't play the video.
+document.addEventListener("keydown", e => {
+  const t = e.target;
+  if ((e.key === "Enter" || e.key === " ") && t.matches?.('[role="button"][tabindex]') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault(); e.stopImmediatePropagation(); t.click();
+  }
+}, true);
 document.addEventListener("keydown", e => {
   if (e.ctrlKey || e.metaKey || e.altKey || !STATE) return;
   const tg = e.target;

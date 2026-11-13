@@ -5,7 +5,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const KIND = { pick: "Clip", short: "Short", segment: "Segment", compilation: "Comp" };
 const DEC = { pending: "waiting", changes_requested: "changes", approved: "approved", rejected: "rejected" };
 let STATE = null, TAB = "waiting", SHOW = "", KINDF = "", Q = "", BUSY = new Set(), OPEN = null;
-let ST = "", FROM = "", TO = "", THITS = {}, THQ = "", PICK = new Set(), LASTPICK = null;
+let ST = "", FROM = "", TO = "", SORT = "", THITS = {}, THQ = "", PICK = new Set(), LASTPICK = null;
 let VISIBLE = [], SEL = null, SEL_AT = 0;  // the queue in display order; the keyboard's item
 const PHONE = matchMedia("(max-width: 700px)");
 
@@ -27,6 +27,7 @@ function retakeOk(n) {
 function toast(msg, err, undoId) { const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = msg;
   $("#announce").textContent = msg;  // a live region that is always there, so screen readers say it
   if (undoId) { const b = document.createElement("button"); b.className = "btn"; b.textContent = "Undo"; b.onclick = () => { t.remove(); undo(undoId); }; t.appendChild(b); }
+  else if (err && /serve log/.test(msg)) { const b = document.createElement("button"); b.className = "btn"; b.textContent = "Log"; b.onclick = () => { t.remove(); showLog({ which: "serve", q: "", bad: true }); }; t.appendChild(b); }
   document.querySelectorAll(".toast").forEach(o => o.remove());
   document.body.appendChild(t); setTimeout(() => t.remove(), undoId ? 10000 : err ? 7000 : 3500); }
 async function api(path, body) {
@@ -103,7 +104,7 @@ function renderLive() {
   $("#lives").innerHTML = LIVE.map((l, n) => {
     const rec = l.live ? recording(l) : null;
     const tip = l.live ? `${l.title || ""}\nlive ${since(l.since)} · ${rec ? "recording " + rec.id : "NOT recording"}` : `${l.channel}: offline, click for the channel`;
-    return `<span class="live ${l.live ? "on" : ""}" data-live="${n}" title="${esc(tip)}"><span class="dot"></span>${esc(l.show_name)}${l.live
+    return `<span class="live ${l.live ? "on" : ""}" data-live="${n}" role="button" tabindex="0" title="${esc(tip)}"><span class="dot"></span>${esc(l.show_name)}${l.live
       ? ` · LIVE${l.viewers != null ? " · " + l.viewers.toLocaleString() : ""}${l.since ? " · " + since(l.since) : ""} <span class="rec ${rec ? "" : "off"}">${rec ? "● REC" : "○ no rec"}</span>` : ""}${LIVEMENU === n ? liveMenu(l, rec) : ""}</span>`;
   }).join("");
 }
@@ -169,7 +170,7 @@ function renderStreams() {
       <div class="top"><span class="tag">${esc(x.show_name || x.channel)}</span><b style="font-size:12px">${esc(x.started_at.slice(0, 10))}</b>
         <span style="margin-left:auto;font-size:11px;color:${x.run_status === "failed" ? "var(--red)" : x.run_status === "running" ? "var(--accent)" : "var(--faint)"}">${esc(status)}</span></div>
       <div class="t">${esc(x.title)}</div>
-      <div class="stages">${STATE.stages.map(g => `<div class="stage ${esc(x.stages[g] || "")}" title="${g}: ${x.stages[g] || "not yet"}"></div>`).join("")}</div>
+      <div class="stages" role="img" aria-label="${esc(STATE.stages.map(g => `${g} ${x.stages[g] || "not yet"}`).join(", "))}">${STATE.stages.map(g => `<div class="stage ${esc(x.stages[g] || "")}" title="${g}: ${x.stages[g] || "not yet"}"></div>`).join("")}</div>
       <div class="meta"><span>${esc(x.id)}</span>${x.faces ? `<button class="lnk" data-faces="${esc(x.id)}" title="Name this stream's face groups">👤 faces</button>` : ""}<span>${x.duration_s ? (x.duration_s / 3600).toFixed(1) + " h" : ""}</span></div></div>`;
   }).join("") || `<div class="empty">No streams yet</div>`;
 }
@@ -242,7 +243,7 @@ function searchTranscripts() {
 }
 function saveHash() {
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries({ tab: TAB === "waiting" ? "" : TAB, show: SHOW, kind: KINDF, q: Q, st: ST, from: FROM, to: TO })) if (v) p.set(k, v);
+  for (const [k, v] of Object.entries({ tab: TAB === "waiting" ? "" : TAB, show: SHOW, kind: KINDF, q: Q, st: ST, from: FROM, to: TO, sort: SORT })) if (v) p.set(k, v);
   const was = new URLSearchParams(location.hash.slice(1));  // an investigation link (investigate.js) stays
   for (const k of ["inv", "run", "lead"]) if (was.get(k)) p.set(k, was.get(k));
   const h = p.toString();
@@ -252,6 +253,7 @@ function loadHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   TAB = TABS[p.get("tab")] ? p.get("tab") : "waiting"; SHOW = p.get("show") || ""; KINDF = p.get("kind") || "";
   Q = p.get("q") || ""; ST = p.get("st") || ""; FROM = p.get("from") || ""; TO = p.get("to") || "";
+  SORT = SORTS[p.get("sort")] ? p.get("sort") : "";
   if (Q) searchTranscripts();
 }
 window.addEventListener("hashchange", () => { loadHash(); if (STATE) renderQueue(); });
@@ -260,6 +262,14 @@ const URLQ = new URLSearchParams(location.search);
 if (URLQ.has("key")) { URLQ.delete("key"); history.replaceState(null, "", location.pathname + (URLQ.toString() ? "?" + URLQ : "") + location.hash); }
 const TABS = { waiting: i => i.decision === "pending", changes: i => i.decision === "changes_requested",
   approved: i => i.decision === "approved" && !i.uploaded, live: i => i.uploaded, rejected: i => i.decision === "rejected", all: () => true };
+// #206: the queue's order. Newest stream first is the default; ties keep the ref order.
+const newest = (a, b) => (b.date || "").localeCompare(a.date || "") || a.ref.localeCompare(b.ref);
+const num = x => { const n = parseFloat(x); return isNaN(n) ? -Infinity : n; };
+const SORTS = { "": ["Newest stream", newest], old: ["Oldest stream", (a, b) => -newest(a, b)],
+  score: ["Score, high first", (a, b) => num(b.score) - num(a.score) || newest(a, b)],
+  long: ["Longest", (a, b) => (b.duration_s || 0) - (a.duration_s || 0) || newest(a, b)],
+  short: ["Shortest", (a, b) => (a.duration_s || Infinity) - (b.duration_s || Infinity) || newest(a, b)],  // no length: last
+  kind: ["Kind", (a, b) => Object.keys(KIND).indexOf(a.kind) - Object.keys(KIND).indexOf(b.kind) || newest(a, b)] };
 const TAB_LABEL = { waiting: "Waiting", changes: "Changes", approved: "Approved", live: "Uploaded", rejected: "Rejected", all: "All" };
 
 function renderQueue() {
@@ -277,12 +287,13 @@ function renderQueue() {
     + `<span class="sep"></span><select id="showSel"><option value="">All shows</option>${shows.map(s => `<option value="${s.key}" ${SHOW === s.key ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>
        <select id="kindSel"><option value="">All kinds</option>${Object.entries(KIND).map(([k, v]) => `<option value="${k}" ${KINDF === k ? "selected" : ""}>${v}s</option>`).join("")}</select>
        <select id="stSel"><option value="">Any status</option>${Object.keys(STATUS).map(k => `<option value="${k}" ${ST === k ? "selected" : ""}>${STATUS_LABEL[k]}</option>`).join("")}</select>
+       <select id="sortSel" aria-label="Sort the queue" title="Order">${Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}" ${SORT === k ? "selected" : ""}>${l}</option>`).join("")}</select>
        <input type="date" class="date" id="fromD" value="${esc(FROM)}" title="Streams from this day">
        <input type="date" class="date" id="toD" value="${esc(TO)}" title="...to this day">
        <button class="btn" id="pickAll" title="Select every item shown, for a bulk action">☑ Select shown</button>
        <button class="btn" id="undoBtn" title="The last 20 war room actions, to undo">↶ Undo…</button>
        <input class="search" id="q" aria-label="Search the queue" placeholder="Search titles, descriptions, transcripts…" value="${esc(Q)}">`;
-  const items = base.filter(TABS[TAB]).sort((a, b) => (b.date || "").localeCompare(a.date || "") || a.ref.localeCompare(b.ref));
+  const items = base.filter(TABS[TAB]).sort(SORTS[SORT][1]);
   VISIBLE = items.map(i => i.ref);
   if (SEL && !VISIBLE.includes(SEL)) SEL = VISIBLE[Math.min(SEL_AT, VISIBLE.length - 1)] || null;  // acted on: the next one
   SEL_AT = SEL ? VISIBLE.indexOf(SEL) : 0;
@@ -304,7 +315,7 @@ function card(i) {
       <span class="state ${esc(i.decision)}">${esc(DEC[i.decision] || i.decision)}${i.hold ? " · held" : ""}</span>
       <span class="dur">${mmss(i.duration_s)}</span>${i.video_url ? `<button class="pop" data-pop="${esc(i.ref)}" title="Open the video in its own window">⧉</button>` : ""}</div>
     <div class="body">
-      <div class="title" data-open="${esc(i.ref)}">${esc(i.title)}</div>
+      <div class="title" data-open="${esc(i.ref)}" role="button" tabindex="0">${esc(i.title)}</div>
       <div class="sub"><span>${esc(i.show_name)}</span><span>${esc(i.date)}</span><span>${esc(i.short.split("/")[1])}</span>${i.score ? `<span>★ ${esc(i.score)}</span>` : ""}${sched ? `<span>${sched}</span>` : ""}${i.issues?.length ? `<span class="issues" title="${esc(i.issues.map(x => x.msg).join("\n"))}">⚠ ${i.issues.length}</span>` : ""}</div>
       ${i.hook ? `<div class="hook">${esc(i.hook)}</div>` : ""}
       ${hit ? `<div class="hit" title="Said in the video">🗨 ${esc(hit)}</div>` : ""}
@@ -312,8 +323,8 @@ function card(i) {
     </div>
     <div class="acts">
       <label class="pickl" title="Select (shift-click: a range)"><input type="checkbox" aria-label="Select" data-pick="${esc(i.ref)}" ${PICK.has(i.ref) ? "checked" : ""}></label>
-      ${i.decision !== "approved" ? `<button class="btn good" data-act="approve" data-ref="${esc(i.ref)}">✓ Approve</button>` : `<button class="btn" data-act="reopen" data-ref="${esc(i.ref)}">↺ Reopen</button>`}
-      <button class="btn warn" data-act="changes" data-ref="${esc(i.ref)}">✎ Changes</button>
+      ${i.decision !== "approved" ? `<button class="btn good" data-act="approve" data-ref="${esc(i.ref)}" title="Approve (A)">✓ Approve</button>` : `<button class="btn" data-act="reopen" data-ref="${esc(i.ref)}" title="Reopen (U)">↺ Reopen</button>`}
+      <button class="btn warn" data-act="changes" data-ref="${esc(i.ref)}" title="A retake note (C)">✎ Changes</button>
       <button class="btn bad" data-act="reject" data-ref="${esc(i.ref)}" title="Reject (R)" aria-label="Reject">✕</button>
     </div></div>`;
 }
@@ -329,7 +340,7 @@ function renderSchedule() {
   if (SHOWFREE) for (const f of STATE.free_slots || []) (free[dayKey(f.at)] ??= []).push(f);
   // Over budget or stale too (the scheduler won't place those, a pin will), newest stream first.
   const uns = STATE.items.filter(i => i.decision === "approved" && !i.scheduled && !i.uploaded)
-    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || a.ref.localeCompare(b.ref));
+    .sort(newest);
   const segs = uns.some(i => i.kind === "segment" && !i.hold);
   $("#schedTools").innerHTML = `<label title="Show the open slots to drop items on"><input type="checkbox" id="showFree" ${SHOWFREE ? "checked" : ""}> Open slots</label>
     <span class="unpin" data-unpin>⇣ drop here to unpin</span>
@@ -348,7 +359,7 @@ function renderSchedule() {
       ${rows.map(({ e, f }) => f ? `<div class="slot free" data-dslot="${esc(f.at)}" data-dkind="${esc(f.kind)}">
         <span class="tm">${new Date(f.at).toLocaleTimeString([], { timeZone: tz, hour: "2-digit", minute: "2-digit" })}</span>
         <span class="bar ${esc(f.kind)}"></span><span><div class="tt">open ${esc(f.kind)} slot</div></span></div>`
-      : `<div class="slot" data-open="${esc(e.key)}" ${e.status !== "uploaded" ? `draggable="true" data-dref="${esc(e.key)}" data-dkind="${esc(e.kind)}" data-dat="${esc(e.publish_at)}"` : ""}>
+      : `<div class="slot" data-open="${esc(e.key)}" role="button" tabindex="0" ${e.status !== "uploaded" ? `draggable="true" data-dref="${esc(e.key)}" data-dkind="${esc(e.kind)}" data-dat="${esc(e.publish_at)}"` : ""}>
         <span class="tm">${new Date(e.publish_at).toLocaleTimeString([], { timeZone: tz, hour: "2-digit", minute: "2-digit" })}</span>
         <span class="bar ${esc(e.kind)}"></span>
         <span><div class="tt">${esc(e.title)}</div><div class="ss">${esc(e.show_name || "")} · ${e.kind}${e.status === "uploaded" ? ` · <span class="up">uploaded</span>${e.views != null ? ` · ${Number(e.views).toLocaleString()} views` : ""}${e.url ? ` · <a href="${esc(e.url)}" target="_blank" rel="noopener">YouTube</a>` : ""}` : e.source === "pinned" ? " · pinned" : ""}</div></span></div>`).join("")
