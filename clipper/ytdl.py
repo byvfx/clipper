@@ -98,7 +98,7 @@ def _browser_cookies(spec: str) -> list:
                                            container=m["container"])
     except Exception as e:  # a missing profile, a locked or unreadable database
         raise ClipperError(f"[youtube] cookies_from_browser {spec!r}: {e}") from e
-    return [c for c in jar if c.domain == "youtube.com" or c.domain.endswith(".youtube.com")]
+    return youtube_only(jar)
 
 
 def live(cookies: list, now: float | None = None) -> list:
@@ -107,9 +107,14 @@ def live(cookies: list, now: float | None = None) -> list:
     return [c for c in cookies if c.expires is None or c.expires > now]
 
 
+def youtube_only(cookies: list) -> list:
+    """youtube.com's cookies: google.com's carry the same SID names but don't sign yt-dlp in."""
+    return [c for c in cookies if c.domain.lstrip(".") == "youtube.com" or c.domain.endswith(".youtube.com")]
+
+
 def session_names(cookies: list, now: float | None = None) -> list[str]:
-    """The sign-in cookies (names only) among `cookies` that haven't expired. [] = signed out."""
-    return sorted({c.name for c in live(cookies, now) if c.name in SESSION})
+    """The YouTube sign-in cookies (names only) among `cookies` that haven't expired. [] = signed out."""
+    return sorted({c.name for c in live(youtube_only(cookies), now) if c.name in SESSION})
 
 
 def browser_session(spec: str) -> list[str]:

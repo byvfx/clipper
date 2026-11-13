@@ -151,6 +151,7 @@ def fetch(cfg: dict, url: str, key: str, window: dict | None = None) -> Path:
     src = d / "source.mp4"
     if not src.exists():
         r, _ = ytdl.run_retrying(cfg, "--no-playlist", "-f", pc["format"], "--merge-output-format", "mp4",
+                         "--remux-video", "mp4",  # the format's last fallback can be a single webm
                          "-o", str(d / "source.%(ext)s"), v["webpage_url"], retry_on=ytdl.BOT)
         if r.returncode or not src.exists():
             raise RuntimeError(f"yt-dlp download: {ytdl.last_error(r)}")

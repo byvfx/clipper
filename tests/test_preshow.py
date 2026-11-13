@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from clipper import preshow
@@ -64,3 +65,28 @@ def test_dated_entries_below_a_grabbed_preshow_still_count(monkeypatch):
     monkeypatch.setattr(preshow, "feed", lambda channel, ua: listing)
     monkeypatch.setattr(preshow, "grabbed", lambda cfg, vid: vid == "got")
     assert [x["video_id"] for _, x in preshow.new_entries({})] == ["missed"]
+
+
+def test_fetch_asks_for_an_mp4_even_from_a_single_file_format(defaults, tmp_path, monkeypatch):
+    # the format's last fallback (b) can be one webm: remuxed, it still lands as source.mp4
+    from clipper import preshow
+
+    defaults["paths"]["streams"] = tmp_path
+    defaults["show"]["channel"] = "kino"
+    monkeypatch.setattr(preshow, "for_show", lambda cfg, key: defaults)
+    calls = []
+
+    def run_retrying(cfg, *args, retry_on):
+        calls.append(args)
+
+        class R:
+            returncode, stderr = 0, ""
+            stdout = json.dumps({"id": "abcdefghijk", "webpage_url": "https://www.youtube.com/watch?v=abcdefghijk",
+                                 "timestamp": 1762819200, "duration": 60, "title": "t"})
+        if "-o" in args:
+            (tmp_path / "yt-abcdefghijk" / "source.mp4").write_bytes(b"v")
+        return R(), False
+
+    monkeypatch.setattr(preshow.ytdl, "run_retrying", run_retrying)
+    preshow.fetch(defaults, "https://www.youtube.com/watch?v=abcdefghijk", "kino")
+    assert "--remux-video" in calls[1] and calls[1][calls[1].index("--remux-video") + 1] == "mp4"

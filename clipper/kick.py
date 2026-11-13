@@ -10,6 +10,7 @@ ms; older URLs carry the video uuid. Both are matched against the list.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -22,6 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import jsonstate
 from .errors import ClipperError
 
 API = "https://kick.com/api/v2"
@@ -63,16 +65,22 @@ THROTTLED_MAX_S = 900  # one request throttled this long is a blocked IP
 def _get(url: str, ua: str, limiter: RateLimiter | None = None) -> Any:
     req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept": "application/json"})
     errors = 0
+    page = None  # the last web page Kick sent where its JSON should be
     t0 = time.monotonic()
     while True:
         if limiter:
             limiter.wait()
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
-                data = json.load(r)
-            if limiter:
-                limiter.ok()
-            return data
+                body = r.read()
+            try:
+                data = json.loads(body)
+            except ValueError:  # Cloudflare's challenge page, a maintenance page: often brief, so retried
+                page = body[:80]
+            else:
+                if limiter:
+                    limiter.ok()
+                return data
         except urllib.error.HTTPError as e:
             if e.code == 429:
                 # Kick sends Retry-After: 0, so pause at least a second.
@@ -90,6 +98,8 @@ def _get(url: str, ua: str, limiter: RateLimiter | None = None) -> Any:
             pass
         errors += 1
         if errors >= PAGE_RETRIES:
+            if page is not None:
+                raise ClipperError(f"Kick sent a web page, not data, for {url} (a Cloudflare check?): {page!r}")
             raise ClipperError(f"giving up on {url} after {errors} errors")
         time.sleep(min(2 ** errors, 60))
 
@@ -149,19 +159,77 @@ def list_videos(channel: str, cfg: dict, limiter: RateLimiter | None = None) -> 
     return out
 
 
+SKIPPED = re.compile(r"Skipping fragment", re.I)
+
+
 def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
+    """The VOD as source.ts. yt-dlp skips a segment Kick no longer has and carries on; that is
+    kept (a VOD can lose segments for good, and a gap beats no video), but counted: printed and
+    stored as meta.json's skipped_fragments, since every clip over the gap jumps there. A failed
+    run leaves its count in source.ts.skipped: the retry resumes from source.ts.ytdl and doesn't
+    print those segments again."""
     out = stream_dir / "source.ts"
-    if out.exists() and not (stream_dir / "source.ts.ytdl").exists():
+    resuming = (stream_dir / "source.ts.ytdl").exists()
+    if out.exists() and not resuming:
         return out
+    tally = stream_dir / "source.ts.skipped"
+    if not resuming:  # a fresh start: an old run's tally isn't this download's, nor a retry's of it
+        tally.unlink(missing_ok=True)
+    skipped = _earlier_skips(tally)
     k = cfg["kick"]
-    subprocess.run(
+    proc = subprocess.Popen(
         [sys.executable, "-m", "yt_dlp", "--referer", "https://kick.com/",
          "-f", f"best[height<={k['max_height']}]", "-N", str(k["download_fragments"]),
          "--hls-use-mpegts", "--no-part", "--newline", "--progress-delta", "30",
          "-o", str(out), meta["source"]],
-        check=True,
+        # "Skipping fragment" is on stdout (to_screen), its reason on stderr: both, read here.
+        # (--logtostderr is only the Python API's, the command line refuses it.)
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},  # what's read above, whatever the locale
     )
+    ok = False
+    try:
+        for line in proc.stdout:  # passed through as it comes
+            skipped += bool(SKIPPED.search(line))
+            _echo(line)
+        ok = proc.wait() == 0
+    finally:
+        if proc.poll() is None:  # stopped above (a closed pipe, Ctrl-C): never leave it writing source.ts
+            proc.kill()
+            proc.wait()
+        if not ok and skipped:
+            try:
+                tally.write_text(str(skipped), encoding="utf-8")
+            except OSError as e:  # the share gone too: say so, but keep the download's own error
+                print(f"{stream_dir.name}: couldn't keep the skip count ({skipped}): {e}", file=sys.stderr)
+    if not ok:
+        raise subprocess.CalledProcessError(proc.returncode, proc.args)
+    tally.unlink(missing_ok=True)
+    if skipped:
+        print(f"{stream_dir.name}: warning: {skipped} video segments were missing on Kick; "
+              f"the source has gaps there")
+    if skipped or (stream_dir / "meta.json").exists():  # this download's count; none clears an old one
+        jsonstate.merge(stream_dir / "meta.json", {"skipped_fragments": skipped} if skipped else {},
+                        ["skipped_fragments"])
     return out
+
+
+def _echo(line: str) -> None:
+    """A yt-dlp line on our stdout; a character its encoding lacks (cp1252 when redirected on
+    Windows) is replaced rather than stopping the download."""
+    try:
+        sys.stdout.write(line)
+    except UnicodeEncodeError:
+        enc = sys.stdout.encoding or "ascii"
+        sys.stdout.write(line.encode(enc, "replace").decode(enc))
+
+
+def _earlier_skips(tally: Path) -> int:
+    """The segments a failed run of this download skipped (0 if none, or unreadable)."""
+    try:
+        return int(tally.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return 0
 
 
 def _page_chunk(channel_id: int, start: float, end: float, ua: str,
