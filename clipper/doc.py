@@ -827,6 +827,24 @@ def as_wav(d: Path, src: Path) -> Path:
     return dst
 
 
+def still_movies(d: Path, b: dict, media: dict[str, Path]) -> None:
+    """Each still the build uses as a movie long enough for its longest use: Resolve gives a
+    still its own default length on a timeline, whatever range it is asked for (tried on 21.2)."""
+    need: dict[str, int] = {}
+    for r in (r for k in ("sync", "v1", "v2", "v3") for r in b[k]):
+        if media[r["clip"]].suffix.lower() in STILLS:
+            need[r["clip"]] = max(need.get(r["clip"], 0), r["end"])
+    for name, frames in need.items():
+        src = media[name]
+        secs = frames // b["fps"] + 2
+        dst = d / "work" / "stills" / f"{src.stem}_{key_of(stamp(src))[:8]}_{secs}.mov"
+        if not dst.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            _run(["ffmpeg", "-v", "error", "-y", "-loop", "1", "-i", str(src), "-t", str(secs), "-r", str(b["fps"]),
+                  "-c:v", "qtrle", "-pix_fmt", "argb", str(dst)])
+        media[name] = dst
+
+
 # ---------- build ----------
 
 def build(cfg: dict, slug: str, dry_run: bool = False) -> dict:
@@ -850,6 +868,7 @@ def build(cfg: dict, slug: str, dry_run: bool = False) -> dict:
         f = take_files(d, t, nc, dc)[1]
         media[f.stem] = f
     make_blends(d, b, media)
+    still_movies(d, b, media)
     if plan["room_tone"]:
         media["roomtone_bed"] = make_tone(d, media[plan["room_tone"]["file"]], b["total"] / b["fps"])
     set_levels(b, lambda clip, s, n: loudness(media[clip], s, n), dc)

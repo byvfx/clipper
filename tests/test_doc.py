@@ -298,6 +298,23 @@ def test_a_changed_file_is_measured_and_converted_again(tmp_path, monkeypatch):
     assert len(seen) == 2 and doc.as_wav(tmp_path, f) != one
 
 
+def test_a_still_becomes_a_movie_as_long_as_its_longest_use(tmp_path, monkeypatch):
+    png, mp4 = tmp_path / "label.png", tmp_path / "reel.mp4"
+    png.write_bytes(b"png")
+    mp4.write_bytes(b"mp4")
+    made = []
+    monkeypatch.setattr(doc, "_run", lambda cmd: made.append(cmd) or Path(cmd[-1]).write_bytes(b"mov"))
+    b = {"fps": 30, "sync": [], "v1": [{"clip": "reel", "start": 0, "end": 900}], "v3": [],
+         "v2": [{"clip": "label", "start": 0, "end": 60}, {"clip": "label", "start": 0, "end": 150}]}
+    media = {"label": png, "reel": mp4}
+    doc.still_movies(tmp_path, b, media)
+    assert media["reel"] == mp4 and media["label"].suffix == ".mov" and media["label"].name.endswith("_7.mov")
+    assert made[0][made[0].index("-t") + 1] == "7" and len(made) == 1
+    media["label"] = png
+    doc.still_movies(tmp_path, b, media)
+    assert len(made) == 1          # kept
+
+
 def test_master_gain_and_loudness_parsing():
     g, filt = doc.master_filter(-20.3, -14.0, -1.0)
     assert g == 6.3 and filt.startswith("volume=6.3dB,alimiter=limit=0.8128")

@@ -89,6 +89,9 @@ Each entry is one of four kinds:
 A cue is checked against the line's own words when the plan is read, so a cue that isn't
 there fails before anything is bought. A mistake is reported with its line in `plan.toml`.
 
+A still image (a label, a headline) is turned into a short movie in `work/stills/` for the
+build, because Resolve gives a still its own length on a timeline whatever it is asked for.
+
 A reel gets a label on the second video track when `overlays/label_<reel>` exists, or when
 `[labels]` names another overlay for it.
 
