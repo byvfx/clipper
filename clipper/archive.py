@@ -181,16 +181,27 @@ def add(cfg: dict, subject: str, urls: list[str], match: str | None = None) -> N
     d = subject_dir(cfg, subject)
     cat = load_catalog(d)
     min_s = cfg["archive"]["min_duration_s"]
-    pattern = re.compile(match, re.I) if match else None
+    try:
+        pattern = re.compile(match, re.I) if match else None
+    except re.error as e:
+        raise ClipperError(f"--match {match!r} isn't a valid regular expression: {e}") from None
     for url in urls:
         found = list_source(cfg, url)
         if pattern:
             found = [it for it in found if pattern.search(it["title"])]
         keep = [it for it in found if not 0 < it["duration_s"] < min_s]
         new = [it for it in keep if it["id"] not in cat]
-        for it in keep:  # kept as they are, but an item listed before dates were kept gets one
-            if it["id"] in cat and it.get("date") and not cat[it["id"]].get("date"):
-                cat[it["id"]]["date"] = it["date"]
+        for it in found:  # kept as they are, but what an earlier listing lacked is filled in
+            old = cat.get(it["id"])
+            if old is None:
+                continue
+            if it.get("date") and not old.get("date"):
+                old["date"] = it["date"]
+            if it["duration_s"] and not old.get("duration_s"):  # its probe failed that time
+                if it["duration_s"] < min_s and not (d / it["id"] / "words.jsonl").exists():
+                    del cat[it["id"]]  # too short after all, and nothing made of it yet
+                else:
+                    old["duration_s"] = it["duration_s"]
         # ahead of what was there: a source lists newest first, so one source stays newest first
         cat = {**{it["id"]: it for it in new}, **cat}
         matching = f" matching {match!r}" if match else ""
@@ -268,9 +279,13 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
             m3u8 = hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it) if it["source"] == "hei" else it["m3u8"]
             # a missing HEI segment fails the item (retried next run) rather than leaving a gap
             whole = ["--abort-on-unavailable-fragments"] if it["source"] == "hei" else []
+            # source.ts is only ever this run's: with --no-part a failed run leaves it partial, and
+            # yt-dlp would take that as already downloaded
+            _drop_partial(src)
             r = ytdl.run("--referer", referer, "-f", fmt, "--hls-use-mpegts", *whole,
                          "--no-part", "-N", "4", "-o", str(src), m3u8)
             if r.returncode or not src.exists():
+                _drop_partial(src)
                 raise RuntimeError(hei.scrub(f"yt-dlp: {ytdl.last_error(r)}"))
         wav = transcribe.extract_audio(idir)
         if not kept:
@@ -284,6 +299,8 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
     else:
         media = odysee("get", {"uri": it["url"]})["streaming_url"]
         out, cost = call(worker.transcribe_url, media, settings)
+    if not meta.get("duration_s"):  # the listing's probe failed: the audio says how long it is
+        meta["duration_s"] = round(float(out["dur"]), 1)
     meta["transcribed_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     (idir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     transcribe.write(idir, tc, out["segments"], out["dur"], t0, {"modal": cost})
@@ -365,6 +382,12 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
 VIDEO_SOURCES = ("youtube", "hei")
 
 
+def _drop_partial(src: Path) -> None:
+    """A download's file and yt-dlp's resume note for it, left by a run that failed."""
+    src.unlink(missing_ok=True)
+    src.with_name(src.name + ".ytdl").unlink(missing_ok=True)
+
+
 def kept_video(idir: Path) -> Path | None:
     """The video `archive video` kept for an item, if any (written under another name and
     renamed when complete, so this is never a partial download)."""
@@ -381,6 +404,8 @@ def keep_video(cfg: dict, idir: Path, it: dict) -> Path:
     args = ["-f", cfg["archive"]["video_format"], "--merge-output-format", "mp4", "--remux-video", "mp4",
             "--abort-on-unavailable-fragments", "--no-playlist", "-N", "4", "--write-subs", "--sub-langs", "all,-live_chat",
             "-o", str(idir / "download.%(ext)s"), "-o", f"subtitle:{idir / 'captions'}.%(ext)s"]
+    for leftover in idir.glob("download.*"):  # a failed run's, never taken as already downloaded
+        leftover.unlink(missing_ok=True)
     if it["source"] == "hei":
         r = ytdl.run("--referer", hei.SITE + "/", *args, hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it))
     else:
@@ -453,18 +478,18 @@ def relabel(cfg: dict, subject: str) -> None:
     if not items:
         raise ClipperError(f"no diarized items in {subject}: clipper archive transcribe {subject} --diarize")
     talk: dict[str, float] = {}
-    seen: dict[str, int] = {}
+    seen: dict[str, set] = {}  # the items each name speaks in (one item can split a voice in two)
     unnamed = 0.0
     for idir in items:
         for e in speakers.apply(idir, item_cfg(cfg, idir)).values():
             if name := e.get("name"):
                 talk[name] = talk.get(name, 0.0) + e["talk_s"]
-                seen[name] = seen.get(name, 0) + 1
+                seen.setdefault(name, set()).add(idir.name)
             else:
                 unnamed += e["talk_s"]
     print(f"{subject}: {len(items)} items named again")
     for name, s in sorted(talk.items(), key=lambda kv: -kv[1]):
-        print(f"  {name:<28} {s / 3600:6.1f} h in {seen[name]} items")
+        print(f"  {name:<28} {s / 3600:6.1f} h in {len(seen[name])} items")
     print(f"  {'(not matched)':<28} {unnamed / 3600:6.1f} h")
 
 

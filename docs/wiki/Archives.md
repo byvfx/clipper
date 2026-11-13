@@ -59,8 +59,9 @@ The cookies: sign in at heinetwork.tv with *Remember me* ticked, export the site
 browser extension (Netscape cookies.txt or Cookie-Editor's JSON) to `[paths] hei_cookies`
 (`secrets/hei_cookies.txt`). `clipper doctor` warns when the file holds no live sign-in, and a
 listing that meets a members-only page stops and says to export them again. Rerun `add` each week
-for the new episodes: items already in the catalog are kept as they are (an old one only gains
-its date). A catalog whose items all have dates is kept newest first across its sources, so
+for the new episodes: items already in the catalog are kept as they are, but gain a date or a
+length the first listing lacked (a stream's length probe can fail; one that turns out shorter
+than `min_duration_s` is dropped unless it's already transcribed). A catalog whose items all have dates is kept newest first across its sources, so
 `video` and `transcribe` with `--limit` or `--oldest` follow the air date; YouTube's dates are
 approximate ("3 years ago").
 
