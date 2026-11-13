@@ -254,3 +254,38 @@ def test_relabel_names_items_from_the_subjects_own_voices(defaults, tmp_path, ca
     assert json.loads((d / "hei-b" / "speakers.json").read_text(encoding="utf-8"))["speakers"]["SPEAKER_00"]["name"] == "Gregg"
     assert archive.is_item(defaults, d / "hei-a") and not archive.is_item(defaults, tmp_path / "streams" / "x")
     assert archive.item_cfg(defaults, d / "hei-a")["show"]["key"] == "oc"
+
+
+def test_add_orders_several_sources_by_date(defaults, tmp_path, monkeypatch):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    hei_items = [{"id": "hei-new", "source": "hei", "title": "a", "duration_s": 600.0, "date": "2025-12-03"},
+                 {"id": "hei-old", "source": "hei", "title": "b", "duration_s": 600.0, "date": "2013-05-01"}]
+    yt = [{"id": "yt-mid", "source": "youtube", "title": "c", "duration_s": 600.0, "date": "2024-01-01"}]
+    monkeypatch.setattr(archive, "list_source", lambda cfg, url: hei_items if "hei" in url else yt)
+    archive.add(defaults, "oc", ["https://www.heinetwork.tv", "https://www.youtube.com/@x"])
+    assert list(archive.load_catalog(tmp_path / "archive" / "oc")) == ["hei-new", "yt-mid", "hei-old"]
+
+
+def test_add_fills_a_missing_date_then_sorts(defaults, tmp_path, monkeypatch):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    listed = [{"id": "yt-a", "source": "youtube", "title": "a", "duration_s": 600.0, "date": None},
+              {"id": "hei-b", "source": "hei", "title": "b", "duration_s": 600.0, "date": "2020-01-01"}]
+    monkeypatch.setattr(archive, "list_source", lambda cfg, url: listed)
+    archive.add(defaults, "oc", ["u"])
+    d = tmp_path / "archive" / "oc"
+    assert list(archive.load_catalog(d)) == ["yt-a", "hei-b"]  # one undated: the order as listed
+    listed[0] = dict(listed[0], date="2010-01-01", title="renamed")
+    archive.add(defaults, "oc", ["u"])
+    cat = archive.load_catalog(d)
+    assert list(cat) == ["hei-b", "yt-a"] and cat["yt-a"]["title"] == "a"
+
+
+def test_yt_date_from_upload_date_or_timestamp():
+    assert archive.yt_date({"upload_date": "20240131"}) == "2024-01-31"
+    assert archive.yt_date({"timestamp": 1704067200}) == "2024-01-01"
+    assert archive.yt_date({}) is None
+
+
+def test_children_skip_the_feed_but_not_a_feedback_page():
+    page = index_page("https://www.heinetwork.tv/more/feed/", "https://www.heinetwork.tv/more/feedback/")
+    assert hei.children(page, "/more/") == ["/more/feedback/"]

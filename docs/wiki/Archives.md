@@ -59,7 +59,10 @@ The cookies: sign in at heinetwork.tv with *Remember me* ticked, export the site
 browser extension (Netscape cookies.txt or Cookie-Editor's JSON) to `[paths] hei_cookies`
 (`secrets/hei_cookies.txt`). `clipper doctor` warns when the file holds no live sign-in, and a
 listing that meets a members-only page stops and says to export them again. Rerun `add` each week
-for the new episodes: items already in the catalog are kept as they are.
+for the new episodes: items already in the catalog are kept as they are (an old one only gains
+its date). A catalog whose items all have dates is kept newest first across its sources, so
+`video` and `transcribe` with `--limit` or `--oldest` follow the air date; YouTube's dates are
+approximate ("3 years ago").
 
 Items are `hei-<section>-<slug>` (`hei-oc-s16-hamnet-and-ella-mccay`, `hei-oscar-...`), with the
 series, the title and the air date the site shows. Never upload them: the archive is for

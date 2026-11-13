@@ -108,7 +108,8 @@ def list_youtube(url: str) -> list[dict]:
     tabs = [url] if url.endswith(("/videos", "/streams")) else [f"{url}/videos", f"{url}/streams"]
     items = []
     for tab in tabs:
-        r = ytdl.run("--flat-playlist", "-J", tab)
+        # approximate_date: "3 years ago" as a date, enough to order a catalog of several sources
+        r = ytdl.run("--flat-playlist", "-J", "--extractor-args", "youtubetab:approximate_date", tab)
         if r.returncode and len(tabs) > 1 and "does not have" in r.stderr:
             continue  # e.g. no streams tab
         if r.returncode:
@@ -118,8 +119,18 @@ def list_youtube(url: str) -> list[dict]:
             items.append({"id": f"yt-{e['id']}", "source": "youtube",
                           "url": f"https://www.youtube.com/watch?v={e['id']}",
                           "title": e.get("title") or "", "duration_s": float(e.get("duration") or 0),
-                          "channel": data.get("channel") or "", "kind": tab.rsplit("/", 1)[1]})
+                          "channel": data.get("channel") or "", "kind": tab.rsplit("/", 1)[1],
+                          "date": yt_date(e)})
     return items
+
+
+def yt_date(e: dict) -> str | None:
+    """A flat listing entry's day: upload_date if given, else the approximate timestamp."""
+    if d := e.get("upload_date"):
+        return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+    if ts := e.get("timestamp") or e.get("release_timestamp"):
+        return datetime.fromtimestamp(int(ts), UTC).date().isoformat()
+    return None
 
 
 def odysee(method: str, params: dict) -> dict:
@@ -177,13 +188,24 @@ def add(cfg: dict, subject: str, urls: list[str], match: str | None = None) -> N
             found = [it for it in found if pattern.search(it["title"])]
         keep = [it for it in found if not 0 < it["duration_s"] < min_s]
         new = [it for it in keep if it["id"] not in cat]
-        # ahead of what was there: a source lists newest first, so the catalog stays newest first
+        for it in keep:  # kept as they are, but an item listed before dates were kept gets one
+            if it["id"] in cat and it.get("date") and not cat[it["id"]].get("date"):
+                cat[it["id"]]["date"] = it["date"]
+        # ahead of what was there: a source lists newest first, so one source stays newest first
         cat = {**{it["id"]: it for it in new}, **cat}
         matching = f" matching {match!r}" if match else ""
         print(f"{url}: {len(found)} found{matching}, {len(found) - len(keep)} under {min_s} s skipped, "
               f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
-    save_catalog(d, cat)
+    save_catalog(d, newest_first(cat))
     print(f"{subject}: {len(cat)} items, {sum(i['duration_s'] for i in cat.values()) / 3600:.0f} h")
+
+
+def newest_first(cat: dict[str, dict]) -> dict[str, dict]:
+    """The catalog by date, newest first, when every item has one: several sources then
+    interleave, and video/transcribe --limit/--oldest follow the date. Otherwise as it is."""
+    if not all(it.get("date") for it in cat.values()):
+        return cat
+    return dict(sorted(cat.items(), key=lambda kv: kv[1]["date"], reverse=True))
 
 
 # ---------- transcribing ----------
@@ -351,7 +373,9 @@ def kept_video(idir: Path) -> Path | None:
 
 
 def keep_video(cfg: dict, idir: Path, it: dict) -> Path:
-    """An item's best video as source.mp4 in idir, its caption tracks as captions.<lang>.<ext>."""
+    """An item's best video as source.mp4 in idir, its caption tracks as captions.<lang>.<ext>
+    (yt-dlp puts the language in each subtitle's name). Only the tracks someone made: YouTube's
+    automatic ones come in every language it translates to, and `transcribe` makes our own."""
     idir.mkdir(parents=True, exist_ok=True)
     # merged or single-file, always an mp4; a missing segment fails it (fetched again next run)
     args = ["-f", cfg["archive"]["video_format"], "--merge-output-format", "mp4", "--remux-video", "mp4",

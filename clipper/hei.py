@@ -94,7 +94,7 @@ def children(page: str, path: str) -> list[str]:
     out = []
     for href in HREF.findall(page):
         p = urlparse(urljoin(SITE, href))
-        if "/feed" in p.path:  # WordPress's RSS, not a page
+        if "feed" in p.path.split("/"):  # WordPress's RSS (/more/feed/), not a page; /feedback/ is one
             continue
         if p.netloc.endswith("heinetwork.tv") and p.path.startswith(path) and p.path.rstrip("/") != path.rstrip("/"):
             child = p.path if p.path.endswith("/") else p.path + "/"
