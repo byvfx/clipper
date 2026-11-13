@@ -188,11 +188,13 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 ## Waiting on the user
 - `secrets/youtube_cookies.netscape.txt` on the share is unused since PR #195 and can be deleted.
 - Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/`).
-  Worktrees and branches were cleaned up 11-10 (everything merged is gone). Left for the user's word:
-  `.claude/worktrees/story` (branch `investigate-swarm`, merged, but it holds an ignored 64 MB
-  `story-dsp-credit-score-590.mp4`), `C:\clipper-jevlab` (`jev-lab`: 8 commits not on main, pushed), the local
-  branch `jev-gate` (1 commit, never pushed: the only copy), and on GitHub `story-dig`,
-  `claude/clipper-investigate-command-mtl790` and three `ccr-*` (one unmerged commit each).
+- Branches and worktrees were cleaned up again 11-13: everything merged is gone, plus the old `ccr-*` and
+  `claude/clipper-investigate-command-*` branches and the swarm worktree, all at the user's word. Kept on
+  purpose: `story-dig` and `jev-lab` (`C:\clipper-jevlab`; it holds `jev-gate`'s commit), both pushed and
+  unmerged. `.claude/worktrees/instagram` (`archive/instagram-source`) holds **uncommitted** Instagram-source
+  work (`clipper/instagram.py`, its test, 12 files changed): the only copy, so commit or push it before
+  anything else. `.claude/worktrees/elated-snyder-52f189` is clean (detached on main) and can go once no
+  session uses it.
 - The DSP story video is in Kitsu for review (Kino Casino / "2026-11-04 story-dsp-credit-score-590", 3:14).
 - TikTok drafts to post by hand: the 10/25 batch (kick-133940023 v04_t04, v05_t05, v07_t14, v08_t18) would
   need `--resend` once there is room.
