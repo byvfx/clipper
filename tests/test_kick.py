@@ -134,10 +134,35 @@ def test_a_web_page_instead_of_json_is_a_clear_error(monkeypatch):
         def __exit__(self, *a):
             return False
 
+    monkeypatch.setattr(kick.time, "sleep", lambda s: None)
     monkeypatch.setattr(kick.urllib.request, "urlopen",
                         lambda req, timeout: Page(b"<!DOCTYPE html><title>Just a moment...</title>"))
     with pytest.raises(ClipperError, match="web page, not data"):
         kick._get("https://kick.com/api/v2/channels/x", "ua")
+
+    # a brief check (one page, then the data) is retried through
+    bodies = iter([b"<!DOCTYPE html>", b'{"ok": 1}'])
+    monkeypatch.setattr(kick.urllib.request, "urlopen", lambda req, timeout: Page(next(bodies)))
+    assert kick._get("https://kick.com/api/v2/channels/x", "ua") == {"ok": 1}
+
+
+def test_a_line_the_console_cant_encode_doesnt_stop_the_download(monkeypatch):
+    out = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", newline="\n")
+    monkeypatch.setattr(kick.sys, "stdout", out)
+    kick._echo("[download] Destination: \U0001f37f.ts\n")
+    out.flush()
+    assert out.buffer.getvalue() == b"[download] Destination: ?.ts\n"
+
+
+def test_an_unwritable_tally_keeps_the_downloads_own_error(defaults, tmp_path, monkeypatch):
+    monkeypatch.setattr(kick.subprocess, "Popen", FakeYtdlp(["Skipping fragment 3\n", "ERROR: x\n"], code=1))
+
+    def gone(*a, **k):
+        raise OSError("share unreachable")
+
+    monkeypatch.setattr(kick.Path, "write_text", gone)
+    with pytest.raises(subprocess.CalledProcessError):
+        kick.fetch_video(tmp_path, {"source": "u"}, defaults)
 
 
 def test_a_second_fetch_keeps_the_gap_count_while_the_video_stays(defaults, tmp_path, monkeypatch):
