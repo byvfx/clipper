@@ -482,9 +482,11 @@ def test_a_long_clip_that_now_fits_is_taken_whole(cfg, monkeypatch):
 
 
 def test_a_noncommercial_clause_wins_over_public_domain(cfg):
-    for lic in ("public domain, non-commercial use only", "Public domain (no derivatives)", "PD, NC", "PD, non commercial"):
+    for lic in ("public domain, non-commercial use only", "Public domain (no derivatives)", "PD, non commercial",
+                "CC BY NC 4.0", "cc-nd"):
         assert broll.licence_code(lic) == "other", lic
     assert broll.licence_code("Public domain") == "pd"
+    assert broll.licence_code("public domain (ND National Guard)") == "pd"  # a bare NC/ND isn't a licence term
 
 
 def test_n_zero_is_refused(cfg, monkeypatch):
@@ -492,3 +494,23 @@ def test_n_zero_is_refused(cfg, monkeypatch):
     with pytest.raises(ClipperError, match="at least 1"):
         broll.find(cfg, "x", ["commons"], 0, say=lambda s: None)
     assert not encoded
+
+
+def test_a_long_entry_of_unknown_length_never_fits(cfg):
+    assert not broll._fits({"duration": None}, 180) and broll._fits({"duration": 100.0}, 180)
+    jsonstate.write(broll._index(cfg), {"clips": {"commons-x": {**cand("https://c/x", duration=None), "id": "commons-x",
+                                                               "status": "long", "file": "", "tags": []}}})
+    with pytest.raises(ClipperError, match="long"):
+        broll.add(cfg, "commons-x", say=lambda s: None)
+    assert not encoded
+
+
+def test_find_keeps_a_long_entrys_tags(cfg, monkeypatch):
+    found = [cand("https://c/l", duration=200.0)]
+    monkeypatch.setitem(broll.FINDERS, "commons", lambda q, n, cfg=None: [dict(c) for c in found])
+    broll.find(cfg, "storm", ["commons"], say=lambda s: None)
+    cfg["broll"]["max_s"] = 200  # fits the stored length, but the source now says longer
+    found[0]["duration"] = 230.0
+    broll.find(cfg, "rain", ["commons"], say=lambda s: None)
+    (e,) = broll.load(cfg)["clips"].values()
+    assert e["status"] == "long" and e["tags"] == ["rain", "storm"]

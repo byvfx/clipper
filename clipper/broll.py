@@ -85,7 +85,7 @@ def licence_code(text: str) -> str:
     t = (text or "").lower().replace("_", " ")
     if not t:
         return "other"
-    if re.search(r"-nc\b|\bnc\b|non[- ]?commercial|-nd\b|\bnd\b|no[- ]?deriv", t):
+    if re.search(r"\b(by|cc)[- ]n[cd]\b|-n[cd]\b|non[- ]?commercial|no[- ]?deriv", t):
         return "other"  # noncommercial or no-derivatives, whatever else it says: not for a monetized channel
     if "publicdomain/zero" in t or re.search(r"\bcc0\b|cc zero", t):
         return "cc0"
@@ -472,7 +472,7 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
             continue
         lib = load(cfg)
         have = {e["key"] for e in lib["clips"].values() if e.get("start") is None
-                and not (e["status"] == "long" and (e.get("duration") or 0) <= bc["max_s"])}  # now fits: taken
+                and not (e["status"] == "long" and _fits(e, bc["max_s"]))}  # now fits: taken
         new = skipped = 0
         for c in cands:
             if new >= n:
@@ -497,7 +497,8 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
                         "--from/--to takes a part)")
                     continue
                 if c["duration"] > bc["max_s"]:
-                    _save(cfg, _entry(c, cid, "long", [query]))
+                    old = lib["clips"].get(cid) or {}
+                    _save(cfg, _entry(c, cid, "long", [*old.get("tags", []), query]))
                     say(f"  {cid}: {c['title'][:70]} ({c['duration'] / 60:.0f} min, long: "
                         f"clipper broll add {cid} --from 0:01:20 --to 0:01:45)")
                 else:
@@ -521,11 +522,11 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
     undrop = ""
     if target in lib["clips"]:
         base = lib["clips"][target]
-        if start is None and end is None and base["status"] == "long" and (base.get("duration") or 0) <= max_s:
+        if start is None and end is None and base["status"] == "long" and _fits(base, max_s):
             c = dict(base)  # listed long before [broll] max_s went up: now it fits, taken whole
             if why := refused(c, cfg):
                 raise ClipperError(f"{target}: {why}")
-            return take(cfg, c, [*base.get("tags", []), *tags], say=say)
+            return take(cfg, c, tags, say=say)  # take keeps the entry's own tags
         if start is None and end is None:
             raise ClipperError(f"{target} is {'long' if base['status'] == 'long' else 'already in the library'}: "
                                "--from/--to take a part of it")
@@ -565,6 +566,11 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
     e = take(cfg, c, tags, start, end, say=say)
     _undrop(cfg, undrop)
     return e
+
+
+def _fits(e: dict, max_s: float) -> bool:
+    """A long entry whose known length is now within max_s (an unknown one never is)."""
+    return e.get("duration") is not None and e["duration"] <= max_s
 
 
 def _undrop(cfg: dict, key: str) -> None:
