@@ -141,6 +141,15 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   8 h, Channel 404 `segment = 6`; slots a day: 9 Shorts (09/11/13/15/16/18/19/20/21), 6 segments
   (08/10/12/14/17/22), compilation 23:00 for big-story nights only (`docs/big-story.toml` into the stream's
   config.toml). If good items keep going stale while streams overlap, try `stale_days = 4`.
+- **Chud overnight test (11-12 to 11-20, user):** chud's segment budget is 0 since 11-10 (the user stopped
+  recording him and gave his slots to Kino and Don), which left 71 approved segments out. All 71 are pinned in Kitsu hourly
+  23:00-07:00, Fri 11-13 00:00 through Fri 11-20 07:00 (9 a night, no compilations); the hub uploads them 48 h
+  ahead. For it, in `clipper.toml`: `[schedule] max_per_day` 24 (was 15), `[youtube] max_per_24h` 26 (was 15),
+  `[shows.chud.youtube] captions = false` (quota: captions are 400 units, ~7 extra a day fit). **After 11-20**
+  (the scheduled task `chud-overnight-wrapup` does this Fri 11-20 09:00 and reports; it stops if a pin isn't
+  uploaded; the pin list is `backups/chud_overnight_pins_2026-11-12.json`): put both caps back to 15 unless the user keeps them, remove the chud youtube table, set
+  `captions_error = "deferred"` on those 71 schedule.json entries (back it up) so the hourly backfill adds the
+  captions from spare quota, restart serve. Backup: `backups/clipper.toml.before_chud_overnight_2026-11-12`.
 - **Archive:** Jer (The Quartering) 11,571 items / 2,732 h transcribed on Modal, FTS index built, `archive ask`
   works; link checks built but not yet run against the real services. #44 Jerry Banfield, #45 Papa Meat and
   #47 Ben Avery wait on the desktop install and permissions.
