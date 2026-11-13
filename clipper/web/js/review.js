@@ -37,7 +37,7 @@ async function showUndo() {
   const d = $("#tool"); d.dataset.kind = "undo";
   let list = [];
   try { list = (await api("/api/undo")).actions; } catch (e) { return toast(e.message, true); }
-  d.innerHTML = `<div class="m-head"><b>Recent war room actions</b><span class="sp" style="color:var(--faint);font-size:12px">the last 20, newest first</span><button class="x" data-close>×</button></div>
+  d.innerHTML = `<div class="m-head"><b>Recent war room actions</b><span class="sp" style="color:var(--faint);font-size:12px">the last 20, newest first</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
     <div class="tbody"><div class="undo-list">${list.map(a => `<span class="f">${esc(ago(a.at))}</span>
       <span class="${a.undone ? "gone" : ""}">${esc(a.label)}${a.uploaded ? ` <span style="color:var(--amber)" title="An upload can't be undone: change it in YouTube Studio">· ${a.uploaded} on YouTube</span>` : ""}</span>
       ${a.undone ? `<span class="f">undone</span>` : `<button class="btn" data-undo="${esc(a.id)}">Undo</button>`}`).join("")
@@ -83,7 +83,10 @@ async function bulk(action) {
     const t = ask(`Publish at for ${n} items: YYYY-MM-DD HH:MM, or a date (each gets that day's first slot, so give times to spread them); empty unpins`, false);
     if (t === null) return; extra.text = t;
   }
-  if (action === "changes") { const t = ask(`What should change, for all ${n}? clipper re-cuts each from this note:`, true); if (!t) return; extra.text = t; }
+  if (action === "changes") {
+    const t = ask(`What should change, for all ${n}? clipper re-cuts each from this note:`, true);
+    if (!t || !retakeOk(n)) return; extra.text = t;
+  }
   if (action === "reject") { const t = ask(`Why reject all ${n}? (kept as a scoring example)`, true); if (!t) return; extra.text = t; }
   if (!["changes", "pin", "reject"].includes(action) && !confirm(`${action[0].toUpperCase() + action.slice(1)} ${n} item${n > 1 ? "s" : ""}?`)) return;
   refs.forEach(r => BUSY.add(r)); renderQueue();
@@ -110,7 +113,7 @@ function repBody(dry) {
 function showReplace() {
   REP_REFS = picked();  // fixed while the window is open: a refresh can't change what Apply touches
   const d = $("#tool"), n = REP_REFS.length; d.dataset.kind = "replace";
-  d.innerHTML = `<div class="m-head"><b>Find and replace</b><span style="color:var(--faint);font-size:12px">in ${n} selected item${n > 1 ? "s" : ""}, through Kitsu</span><button class="x" data-close>×</button></div>
+  d.innerHTML = `<div class="m-head"><b>Find and replace</b><span style="color:var(--faint);font-size:12px">in ${n} selected item${n > 1 ? "s" : ""}, through Kitsu</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
     <div class="tbody">
       <input class="search" id="rFind" placeholder="Find">
       <input class="search" id="rRepl" placeholder="Replace with (empty deletes it)">
@@ -174,7 +177,7 @@ document.addEventListener("click", e => {
   if (t.dataset.tab) { TAB = t.dataset.tab; SEL = null; renderQueue(); return; }
   if (t.dataset.act) {
     const ref = t.dataset.ref, a = t.dataset.act;
-    if (a === "changes") { const n = ask("What should change? clipper will re-cut / re-thumbnail it from this note:", true); if (n) act(ref, "changes", { text: n }); }
+    if (a === "changes") { const n = ask(`What should change? clipper will re-cut / re-thumbnail it from this note${retakeCost()}:`, true); if (n) act(ref, "changes", { text: n }); }
     else if (a === "reject") { const n = ask("Why reject it? (kept as a scoring example)", true); if (n) act(ref, "reject", { text: n }); }
     else if (a === "approve" && OPEN === ref) keyAct("a", ref);  // in the item window: then the next item
     else act(ref, a);
@@ -230,7 +233,7 @@ function openModal(ref) {
   m.innerHTML = `
     <div class="m-head"><span class="kind ${esc(i.kind)}">${esc(KIND[i.kind] || i.kind)}</span><b>${esc(i.short)}</b><span class="tag">${esc(i.show_name)}</span>
       <span id="mState" class="state ${esc(i.decision)}" style="position:static"></span>
-      <button class="x" onclick="closeModal()">×</button></div>
+      <button class="x" aria-label="Close" title="Close (Esc)" onclick="closeModal()">×</button></div>
     <div class="m-body">
       <div class="player">
         ${!i.video_url ? `<div class="empty">No preview file</div>` : PHONE.matches
@@ -252,15 +255,15 @@ function openModal(ref) {
       </div>
       <div class="form">
         <div class="row" id="mActs"></div>
-        <label>Ask for changes (Clippa does the retake)</label>
+        <label for="fChanges">Ask for changes (Clippa does the retake${STATE.retake_cost?.auto && STATE.retake_cost.avg_usd != null ? `, about ${usd(STATE.retake_cost.avg_usd)}` : ""})</label>
         <textarea id="fChanges" placeholder="e.g. start 5 s earlier · the thumbnail shows the back of his head · use the cams layout"></textarea>
         <div class="row"><button class="btn warn" id="bChanges">✎ Send retake note</button><button class="btn bad" id="bReject">✕ Reject with this as the reason</button></div>
-        <label>YouTube title</label><input id="fTitle" maxlength="100" data-check="title"><div class="warn-line" id="w_title"></div>
-        <label>Description</label><textarea id="fDesc" style="min-height:120px" data-check="description"></textarea><div class="warn-line" id="w_description"></div>
-        <label>Hashtags</label><input id="fTags" data-check="hashtags"><div class="warn-line" id="w_hashtags"></div>
+        <label for="fTitle">YouTube title</label><input id="fTitle" maxlength="100" data-check="title"><div class="warn-line" id="w_title"></div>
+        <label for="fDesc">Description</label><textarea id="fDesc" style="min-height:120px" data-check="description"></textarea><div class="warn-line" id="w_description"></div>
+        <label for="fTags">Hashtags</label><input id="fTags" data-check="hashtags"><div class="warn-line" id="w_hashtags"></div>
         <div class="row"><button class="btn" id="bSave">Save title / description / hashtags</button></div>
-        ${i.kind !== "short" ? `<label>Thumbnail words</label><input id="fThumb" maxlength="40" data-check="thumb_text"><div class="warn-line" id="w_thumb_text"></div><div class="row"><button class="btn" id="bThumb">Re-render thumbnail</button></div>` : ""}
-        <label>Pin release time</label><input id="fPin" type="datetime-local">
+        ${i.kind !== "short" ? `<label for="fThumb">Thumbnail words</label><input id="fThumb" maxlength="40" data-check="thumb_text"><div class="warn-line" id="w_thumb_text"></div><div class="row"><button class="btn" id="bThumb">Re-render thumbnail</button></div>` : ""}
+        <label for="fPin">Pin release time</label><input id="fPin" type="datetime-local">
         <div class="hint" id="pinHint"></div>
         <div class="row"><button class="btn" id="bPin">Pin</button><button class="btn" id="bUnpin">Unpin</button>${i.kind !== "compilation" ? `<button class="btn" data-nextslot="${esc(ref)}" title="Pin to the next open slot its kind may take (a preview first)">⇥ Next open slot</button>` : ""}</div>
       </div>

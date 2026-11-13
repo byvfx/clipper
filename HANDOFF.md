@@ -222,7 +222,13 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 and self-checks #185
+**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (this week, small: #204, #206, #228,
+#201, #203, #205, #199; start with #206+#201+#203 as one war room PR, then #204), `p2-dated` (#192 after 11-16,
+#41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
+Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
+`parked` (the rest). `gh issue list --label p1-now` is the queue. 11-13: #13 folded into #158, #200 closed (its
+setup/doctor bug moved to #78), #70 narrowed to punch-ins/emphasis (tighten built).
+Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: (NAS hub #14 and self-checks #185
 closed 11-09; checkup's turn-on steps are under Checkup below),
 Posts blind items #36 (the rest of the YouTube Posts roadmap #30 closed 11-09), Instagram Reels #39, cast library #41, lore-order playlists #43,
 archive fun #63, transcript-framed edits #66 (#67-#71; 11-09 the user wasn't sure #67 is needed, so #70's tighten
@@ -233,6 +239,15 @@ live clips #81, blind items #111, investigate anyone #138, agent exploration #15
 a small `clipper mcp`; #13 may fold into it), Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
+- **Documentaries (11-13, PR #233):** `clipper doc
+  new|voice|build|master|leak|kit` (wiki Documentaries; `clipper/doc.py`, `doc_resolve.py`), the reusable form
+  of the first mini-documentary's one-off Resolve scripts. A piece is `[paths] documentaries/<slug>/` on the
+  share (plan.toml, banned.txt, media), never the repo. Tried: take processing, word timing, the take
+  split and mastering on real files; `build`, the render and `master` against live Resolve 21.2 with a
+  synthetic piece (`C:\clipper-doc-test` on the laptop and the Resolve project `clipper-doc-test`, both
+  safe to delete). Not tried: `voice` against ElevenLabs, `leak` on Modal. On the first real piece, listen
+  to every take and watch the first built timeline. `[story] lufs = -14` is new: a story cut before it is
+  rendered again, and its cover picked again, on its next cut.
 - **B-roll library #229 (11-12, steps 1-2 of 4, PR #230):** `clipper broll find|add|list|keep|drop`
   (wiki B-roll): NASA, DVIDS (the B-Roll category; keys in `secrets/dvids_secret.txt`, public key first,
   added by the user 11-12), Prelinger and Commons; public domain / CC0 only, no sound by default (NASA

@@ -16,6 +16,8 @@ youtube_token = "secrets/youtube_token.json"   # written by clipper upload --sig
 youtube_quota = "logs/youtube_quota.json"      # YouTube Data API units spent per Pacific day
 youtube_cookies = "secrets/youtube_cookies.txt"  # optional Netscape cookies.txt for yt-dlp: age-restricted
                                                # archive items and receipts, pre-shows stopped by YouTube's bot check
+hei_cookies = "secrets/hei_cookies.txt"        # a heinetwork.tv member's cookies (Netscape or a browser extension's JSON
+                                               # export): `clipper archive add <subject> https://www.heinetwork.tv` lists with them
 tiktok_client = "secrets/tiktok_client.json"   # {"client_key": ..., "client_secret": ...}
 tiktok_token = "secrets/tiktok_token.json"     # written by clipper tiktok --sign-in
 x_client = "secrets/x_client.json"             # {"client_id": ...} (+ "client_secret" for a Web App)
@@ -49,6 +51,7 @@ warroom_layouts = "logs/warroom_layouts.json"  # the war room's saved panel layo
 weekly = "weekly"                              # clipper weekly issues, one folder per week's Saturday
 broll = "broll"                                # clipper broll: the b-roll library (clips + broll.json)
 news = "news"                                  # clipper news: news.sqlite and context.json
+documentaries = "documentaries"                # clipper doc: one folder per piece (plan.toml, banned.txt, media)
 
 [modal]
 # `clipper modal` and the war room's Modal panel: containers, runs, failures, archive
@@ -823,6 +826,12 @@ ask_max_queries = 8            # searches the model may write per question
 ask_per_query = 25             # best-ranked windows kept per search
 ask_candidates = 80            # pooled windows the model reads (~25k tokens)
 kick_format = "worst"          # a Kick VOD (`clipper story`): its HLS variants carry video too, so the smallest
+hei_pace_s = 1.0               # heinetwork.tv: seconds between page fetches while listing (~350 pages)
+hei_audio_format = "ba/worst"  # heinetwork.tv's HLS has an audio rendition: transcribe fetches only that
+# `clipper archive video`: keep each YouTube or heinetwork.tv item's video (source.mp4) and captions.
+video_format = "bv*+ba/b"      # yt-dlp format: the best there is (HEI: 1080p at ~3 Mbps)
+video_parallel = 2             # downloads at once
+video_gb_per_hour = 1.4        # for the size estimate only (HEI 1080p; YouTube is often less)
 
 [receipts]
 # `clipper receipts <stream>`: old clips of the archive subject for the night's stories (#48),
@@ -964,6 +973,42 @@ narrate = true                 # false = the clips alone
 voice_id = ""                  # the narrator's voice (clipper narrate voices), not the [narrate] character's
 tts_settings = {}              # the narrator's voice_settings, e.g. { stability = 0.5, speed = 1.0 }
 read_wpm = 160                 # a silent card's reading pace
+lufs = -14.0                   # a story cut's loudness (YouTube plays at -14); [receipts] lufs stays the receipts' own.
+                               # A story cut before this setting, or at another loudness, is rendered again (and its cover picked again) on its next cut
+
+[doc]
+# `clipper doc`: a narrated mini-documentary from a hand-written plan ([paths] documentaries/
+# <slug>/plan.toml) -> narration (ElevenLabs, [narrate]'s key and tts_model) -> a timeline in
+# DaVinci Resolve -> a mastered render -> a leak check (Modal) -> a publish kit. Wiki: Documentaries.
+fps = 30                       # the timeline's frame rate, unless plan.toml sets fps
+voice_id = ""                  # the narrator, unless plan.toml sets voice_id (clipper narrate voices)
+tts_settings = {}              # the narrator's voice_settings, e.g. { stability = 0.5, style = 0.0, speed = 1.0 }
+vo_filter = "acompressor=threshold=-15dB:ratio=2:attack=20:release=200:knee=6:makeup=1"   # on every take: a light 2:1 compressor; "" = untouched
+max_pause_s = 0.55             # pauses inside a take are cut down to this (max_pause on a say line overrides it for its take)
+silence_db = -38.0             # what counts as a pause: quieter than this...
+silence_min_s = 0.3            # ...for at least this long
+words_model = "small.en"       # the local Whisper that times a take's words (CPU, free)
+pad_s = 0.3                    # air after a narration line before the next thing
+cue_lead_s = 0.1               # a shot cuts in this long before its cue words
+vo_lead_s = 0.1                # a line starts this long into its block...
+vo_after_clip_s = 0.27         # ...or this long, straight after a clip (its sound is still fading)
+tail_s = 1.0                   # a clip's sound fades out this long under the next line
+lead_in_s = 0.6                # and the next clip's sound fades in this long under a line's last words
+label_max_s = 19.5             # one label overlay runs at most this long before a new one starts
+crossfade_s = 2.0              # music cues cross over this long at a section change
+lufs = -14.0                   # the master's loudness (YouTube plays at -14)
+true_peak = -1.0               # the master's limiter ceiling (dBFS)
+dialogue_lufs = -16.0          # each clip of the subject and each narration take, by clip gain in the timeline
+peak_ceiling = -1.0            # a clip's gain is held back where its peak would pass this (dBFS)
+music_under = 16.0             # music sits this many LU under the dialogue
+tone_under = 38.0              # room tone, this many
+leak_fuzzy = 0.82              # how alike (0-1) heard letters and a banned term must be to count; 1 = the same letters only
+leak_gpu = ""                  # Modal GPU for the leak check's transcript; "" = [transcribe] modal_gpu
+disclosures = ["The narration is an AI voice."]   # the description's last lines, unless plan.toml sets disclosures
+render_format = "mp4"          # Resolve's render format and codec
+render_codec = "H264"
+resolve_api = ""               # Resolve's scripting folder; "" = $RESOLVE_SCRIPT_API, else where the installer puts it
+resolve_lib = ""               # its fusionscript library; "" = $RESOLVE_SCRIPT_LIB, else the installed one
 
 [signals]
 chat_lag_s = 6             # shift chat earlier: stream delay + typing time

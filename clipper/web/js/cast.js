@@ -13,7 +13,7 @@ async function showCast(person) {
   const win = ++CASTWIN;
   person = person ?? CS?.person ?? "";
   d.dataset.kind = "cast"; d.classList.remove("cover"); d.classList.add("facesw");
-  if (!CS || !d.open) d.innerHTML = `<div class="m-head"><b>Cast</b><button class="x" data-close>×</button></div><div class="tbody">Loading…</div>`;
+  if (!CS || !d.open) d.innerHTML = `<div class="m-head"><b>Cast</b><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div><div class="tbody">Loading…</div>`;
   if (!d.open) d.showModal();
   try {
     const data = await api("/api/cast" + (person ? "?person=" + encodeURIComponent(person) : ""));
@@ -51,7 +51,7 @@ function renderCast() {
       ${ph.page || ph.licence ? `<div class="by">${ph.page?.startsWith("http") ? `<a href="${esc(ph.page)}" target="_blank" rel="noopener">source</a>` : esc(ph.page || "")}${ph.licence ? ` · ${esc(ph.licence)}` : ""}${ph.author ? ` · ${esc(ph.author)}` : ""}</div>` : ""}
       <div class="ca">${ph.status === "new" ? `<button class="btn primary" data-ckeep="${ph.id}">Keep</button>` : `<span class="by">kept</span>`}<button class="btn" data-cdrop="${ph.id}">Drop</button></div></div>`;
   const fresh = p ? p.photos.filter(x => x.status === "new") : [], kept = p ? p.photos.filter(x => x.status === "kept") : [];
-  $("#tool").innerHTML = `<div class="m-head"><b>Cast</b><span style="color:var(--faint);font-size:12px">photos for covers and the weekly · ${min}+ each</span><button class="x" data-close>×</button></div>
+  $("#tool").innerHTML = `<div class="m-head"><b>Cast</b><span style="color:var(--faint);font-size:12px">photos for covers and the weekly · ${min}+ each</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
     <div class="cast"><div class="cpeople">${who}
         <div class="cnew"><input class="search" id="castNew" placeholder="Someone new"><button class="btn" id="castAdd">Add</button></div></div>
       <div class="cperson">${!p ? `<div class="empty">Pick someone on the left.</div>` : `
@@ -59,7 +59,7 @@ function renderCast() {
         <div class="cform"><label>Other names</label><input class="search" id="castAka" value="${esc(p.aliases.join(", "))}" placeholder="other names, comma between">
           <label>Channels</label><input class="search" id="castCh" value="${esc(p.channels.join(" "))}" placeholder="YouTube or Kick channel addresses, space between">
           <span></span><div><button class="btn" id="castSave">Save</button></div></div>
-        <div class="cfind"><span class="f">Find</span>
+        <div class="cfind"><span class="f" title="A small vision call labels each new photo">Find${findCost(data.estimate)}</span>
           <button class="btn" data-cfind="commons" title="Wikimedia Commons: freely licensed">Commons</button>
           <button class="btn" data-cfind="channels" title="Their channels: avatar and recent video thumbnails"${p.channels.length ? "" : " disabled"}>Channels</button>
           <button class="btn" data-cfind="search" title="${data.search ? "Brave image search (photo agencies skipped)" : "Needs a Brave key: $BRAVE_API_KEY or secrets/brave_secret.txt"}"${data.search ? "" : " disabled"}>Image search</button>
@@ -73,6 +73,12 @@ function renderCast() {
   for (const [id, v] of Object.entries(drafts)) { const el = $("#" + id); if (el) el.value = v; }
   if (at) { const el = $("#" + at[0]); if (el) { el.focus(); el.setSelectionRange(at[1], at[2]); } }
   if (job.running) castPoll();
+}
+function findCost(est) {  // #203: " (labels: up to $0.002 a source)" before a Find is pressed
+  if (!est || !est.per_source) return "";
+  if (est.label_usd === 0) return " (no label calls)";
+  return est.label_usd == null ? ` (a label call for each new photo, up to ${est.per_source} a source)`
+    : ` (labels: up to ${usd(est.label_usd * est.per_source)} a source)`;
 }
 async function castPost(path, body, msg) {
   const { win } = CS;
@@ -97,7 +103,10 @@ document.addEventListener("click", e => {
     return castPost("/api/cast/set", { person: name }, `Added ${name}`);
   }
   if (ds.ckeep) return castPost("/api/cast/mark", { ids: [ds.ckeep], status: "keep" });
-  if (ds.cdrop) return castPost("/api/cast/mark", { ids: [ds.cdrop], status: "drop" });
+  if (ds.cdrop) {  // #203: no undo for this one
+    if (!confirm(`Drop this photo of ${CS.person}? The file is deleted and its source is remembered, so no find brings it back. This can't be undone.`)) return;
+    return castPost("/api/cast/mark", { ids: [ds.cdrop], status: "drop" });
+  }
   if (t.id === "castSave") {
     const aliases = $("#castAka").value.split(",").map(s => s.trim()).filter(Boolean);
     const channels = $("#castCh").value.split(/\s+/).filter(Boolean);

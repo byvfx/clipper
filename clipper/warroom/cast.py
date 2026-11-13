@@ -25,7 +25,17 @@ def cast_get(cfg: dict, person: str) -> dict:
         p["single_url"] = f"/cast/{quote(p['single'])}" if p["single"] else ""
     out["job"] = {**{k: CAST_JOB[k] for k in ("running", "person", "what", "error", "added")},
                   "log": CAST_JOB["log"][-40:]}
+    out["estimate"] = find_estimate(cfg)
     return out
+
+def find_estimate(cfg: dict) -> dict:
+    """#203: what one Find can cost before it runs: a label call for each new photo, at most
+    [cast] per_source of them, at the mean of past cast label calls (None before any)."""
+    from .. import costs
+
+    cc = cfg["cast"]
+    per = costs.avg_call_usd(cfg["paths"].get("costs"), "cast") if cc["label_model"] else 0.0
+    return {"per_source": cc["per_source"], "label_usd": per}
 
 def cast_mark(cfg: dict, body: dict) -> dict:
     """{"person", "ids", "status": "keep" | "drop"}."""

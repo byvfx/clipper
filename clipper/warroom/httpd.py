@@ -140,6 +140,18 @@ POST_API = {
 
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "[::1]")
 
+# #206: the page without a key, or once its cookie has gone, instead of raw JSON.
+SIGNED_OUT = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Clippa War Room: signed out</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d10;color:#e6e9ee;
+font:16px/1.5 system-ui,sans-serif;padding:16px;box-sizing:border-box}main{max-width:30em}h1{font-size:20px}
+code{background:#171c22;padding:1px 5px;border-radius:4px}</style></head><body><main>
+<h1>The war room needs its key</h1>
+<p>This browser isn't signed in, or its sign-in has expired. Open the war room's link with
+<code>?key=</code> on the end once more (the operator has it: <code>clipper serve</code> prints it,
+and <code>[warroom] token</code> is the key). It keeps you signed in for a year.</p>
+</main></body></html>"""
+
 class Handler(BaseHTTPRequestHandler):
     """One request. make_handler gives each server a subclass with its config."""
     server_version = "clipper-warroom"
@@ -211,6 +223,15 @@ class Handler(BaseHTTPRequestHandler):
         if self.foreign_host():
             return self.send_json({"error": "open the war room as localhost"}, 403)
         if not self.authorized(qs):
+            if u.path in ("/", "/index.html", "/watch"):  # #206: a person, not the page's code
+                body = SIGNED_OUT.encode("utf-8")
+                self.send_response(401)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return None
             return self.send_json({"error": "add ?key=<[warroom] token>"}, 401)
         if (u.path.startswith(("/api/", "/media/", "/cast/"))) and self.cross_site():
             return self.send_json({"error": "cross-site request refused"}, 403)
