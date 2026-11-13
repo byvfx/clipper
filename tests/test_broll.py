@@ -514,3 +514,15 @@ def test_find_keeps_a_long_entrys_tags(cfg, monkeypatch):
     broll.find(cfg, "rain", ["commons"], say=lambda s: None)
     (e,) = broll.load(cfg)["clips"].values()
     assert e["status"] == "long" and e["tags"] == ["rain", "storm"]
+
+
+def test_copyright_free_is_the_whole_affirmative_phrase(cfg):  # Copilot's review of #235
+    for credit in ("Copyright Freepik", "This footage is not copyright-free", "not copyright free",
+                   "It isn't copyright free"):
+        assert broll.refused(cand(credit=credit), cfg), credit
+
+
+def test_licence_whitespace_runs(cfg):
+    for lic in ("CC BY  NC 4.0", "CC BY\tND 4.0", "Public domain; CC  ND", "non   commercial"):
+        assert broll.licence_code(lic) == "other", lic
+    assert broll.licence_code("  Public\tdomain ") == "pd"

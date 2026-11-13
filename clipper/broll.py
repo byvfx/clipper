@@ -51,7 +51,8 @@ VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".ts", ".mpg", ".mpeg", ".
 OWNED = re.compile(r"©|\(c\) ?\d{4}|\bcopyright(ed)?\b|all rights reserved|used (with|by) permission"
                    r"|\blicensed (from|by|to)\b|\bgetty\b|shutterstock|\bistock|\bpond5\b|storyful"
                    r"|associated press|\bap (photo|video|images?|footage)\b|\breuters\b|\bafp\b", re.I)
-NOT_OWNED = re.compile(r"(not subject to|no known|free of|without) (any )?copyright|\bno copyright|copyright[- ]free"
+NOT_OWNED = re.compile(r"(not subject to|no known|free of|without) (any )?copyright|\bno copyright"
+                       r"|(?<!not )(?<!n't )\bcopyright[- ]free\b"  # the whole word; "not copyright-free" stays owned
                        r"|copyright\W{0,3}(status\W{0,3})?(public domain|none|expired|not renewed)", re.I)
 MUSIC = re.compile(r"\bmusic\b", re.I)
 
@@ -82,7 +83,7 @@ def clip_id(source: str, key: str, start: float | None = None, end: float | None
 
 def licence_code(text: str) -> str:
     """A licence as the source states it -> pd | cc0 | cc-by | cc-by-sa | other."""
-    t = (text or "").lower().replace("_", " ")
+    t = re.sub(r"\s+", " ", (text or "").lower().replace("_", " ")).strip()  # "CC BY  NC", tabs
     if not t:
         return "other"
     if re.search(r"\b(by|cc)[- ]n[cd]\b|-n[cd]\b|non[- ]?commercial|no[- ]?deriv", t):
