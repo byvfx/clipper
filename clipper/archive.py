@@ -198,7 +198,8 @@ def add(cfg: dict, subject: str, urls: list[str], match: str | None = None) -> N
             if it.get("date") and not old.get("date"):
                 old["date"] = it["date"]
             if it["duration_s"] and not old.get("duration_s"):  # its probe failed that time
-                if it["duration_s"] < min_s and not (d / it["id"] / "words.jsonl").exists():
+                idir = item_dir(d, old)
+                if it["duration_s"] < min_s and not (idir / "words.jsonl").exists() and not kept_video(idir):
                     del cat[it["id"]]  # too short after all, and nothing made of it yet
                 else:
                     old["duration_s"] = it["duration_s"]
@@ -308,7 +309,7 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
         transcribe.write_diarization(idir, out["diarization"], cost)
         speakers.apply(idir, item_cfg(cfg, idir))
     (idir / "error.txt").unlink(missing_ok=True)
-    return {**cost, "signed_in": signed_in}
+    return {**cost, "signed_in": signed_in, "duration_s": meta["duration_s"]}
 
 
 def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu: str,
@@ -356,6 +357,10 @@ def _transcribe_all(cfg: dict, d: Path, subject: str, todo: list[dict], gpu: str
                 continue
             try:
                 res = job.result()
+                if not it.get("duration_s") and res.get("duration_s"):  # status and estimates read it
+                    with jsonstate.update(d / "catalog.json", {}, indent=1) as cat:
+                        if it["id"] in cat:
+                            cat[it["id"]]["duration_s"] = res["duration_s"]
                 spent += res["est_usd"]
                 signed_in += res["signed_in"]
                 done += 1
@@ -404,8 +409,6 @@ def keep_video(cfg: dict, idir: Path, it: dict) -> Path:
     args = ["-f", cfg["archive"]["video_format"], "--merge-output-format", "mp4", "--remux-video", "mp4",
             "--abort-on-unavailable-fragments", "--no-playlist", "-N", "4", "--write-subs", "--sub-langs", "all,-live_chat",
             "-o", str(idir / "download.%(ext)s"), "-o", f"subtitle:{idir / 'captions'}.%(ext)s"]
-    for leftover in idir.glob("download.*"):  # a failed run's, never taken as already downloaded
-        leftover.unlink(missing_ok=True)
     if it["source"] == "hei":
         r = ytdl.run("--referer", hei.SITE + "/", *args, hei.fresh_m3u8(cfg["paths"]["hei_cookies"], it))
     else:

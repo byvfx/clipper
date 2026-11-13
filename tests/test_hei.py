@@ -302,18 +302,22 @@ def test_a_refresh_fills_a_failed_duration_and_drops_a_short_one(defaults, tmp_p
     defaults["archive"]["min_duration_s"] = 60
     first = [{"id": "hei-ep", "source": "hei", "title": "ep", "duration_s": 0.0, "date": "2020-01-02"},
              {"id": "hei-bumper", "source": "hei", "title": "bumper", "duration_s": 0.0, "date": "2020-01-01"},
-             {"id": "hei-done", "source": "hei", "title": "done", "duration_s": 0.0, "date": "2019-01-01"}]
+             {"id": "hei-done", "source": "hei", "title": "done", "duration_s": 0.0, "date": "2019-01-01"},
+             {"id": "hei-kept", "source": "hei", "title": "kept", "duration_s": 0.0, "date": "2018-01-01"}]
     monkeypatch.setattr(archive, "list_source", lambda cfg, url: first)  # every probe failed
     archive.add(defaults, "oc", ["https://www.heinetwork.tv"])
     d = tmp_path / "archive" / "oc"
-    assert len(archive.load_catalog(d)) == 3
+    assert len(archive.load_catalog(d)) == 4
     (d / "hei-done").mkdir()
     (d / "hei-done" / "words.jsonl").write_text("", encoding="utf-8")  # already transcribed: kept
-    again = [dict(first[0], duration_s=3600.0), dict(first[1], duration_s=12.0), dict(first[2], duration_s=30.0)]
+    (d / "hei-kept").mkdir()
+    (d / "hei-kept" / "source.mp4").write_bytes(b"v")  # its video already kept: kept too
+    again = [dict(first[0], duration_s=3600.0), dict(first[1], duration_s=12.0), dict(first[2], duration_s=30.0),
+             dict(first[3], duration_s=40.0)]
     monkeypatch.setattr(archive, "list_source", lambda cfg, url: again)
     archive.add(defaults, "oc", ["https://www.heinetwork.tv"])
     cat = archive.load_catalog(d)
-    assert sorted(cat) == ["hei-done", "hei-ep"]
+    assert sorted(cat) == ["hei-done", "hei-ep", "hei-kept"]
     assert cat["hei-ep"]["duration_s"] == 3600.0 and cat["hei-done"]["duration_s"] == 30.0
 
 
@@ -356,3 +360,12 @@ def test_a_failed_hei_download_is_never_taken_as_done(defaults, tmp_path, monkey
         archive.transcribe_item(defaults, idir, it, "L4")
     assert seen == [False]  # yt-dlp never saw the old partial (it would call it downloaded)
     assert not (idir / "source.ts").exists() and not (idir / "source.ts.ytdl").exists()
+
+
+def test_a_transcript_fills_the_catalogs_missing_length(defaults, tmp_path, monkeypatch):
+    d = tmp_path / "oc"
+    archive.save_catalog(d, {"hei-ep": {"id": "hei-ep", "source": "hei", "title": "ep", "duration_s": 0.0}})
+    monkeypatch.setattr(archive, "transcribe_item",
+                        lambda cfg, idir, it, gpu, retry_on: {"est_usd": 0.1, "signed_in": False, "duration_s": 3600.0})
+    archive._transcribe_all(defaults, d, "oc", list(archive.load_catalog(d).values()), "L4", 1)
+    assert archive.load_catalog(d)["hei-ep"]["duration_s"] == 3600.0
