@@ -192,8 +192,8 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   `claude/clipper-investigate-command-*` branches and the swarm worktree, all at the user's word. Kept on
   purpose: `story-dig` and `jev-lab` (`C:\clipper-jevlab`; it holds `jev-gate`'s commit), both pushed and
   unmerged. `.claude/worktrees/instagram` (`archive/instagram-source`) holds **uncommitted** Instagram-source
-  work (`clipper/instagram.py`, its test, 12 files changed): the only copy, so commit or push it before
-  anything else. `.claude/worktrees/elated-snyder-52f189` is clean (detached on main) and can go once no
+  work (`clipper/instagram.py`, its test, 12 files changed): the only copy, so commit it (then push the
+  branch) before anything else. `.claude/worktrees/elated-snyder-52f189` is clean (detached on main) and can go once no
   session uses it.
 - The DSP story video is in Kitsu for review (Kino Casino / "2026-11-04 story-dsp-credit-score-590", 3:14).
 - TikTok drafts to post by hand: the 10/25 batch (kick-133940023 v04_t04, v05_t05, v07_t14, v08_t18) would
