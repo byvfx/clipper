@@ -334,6 +334,12 @@ def pause_cuts(silences: list[tuple[float, float]], total: float, keep: float, h
     return cuts
 
 
+def stamp(p: Path) -> list:
+    """What says a media file is still the same file: its path, size and time of change."""
+    st = p.stat()
+    return [str(p), st.st_size, st.st_mtime_ns]
+
+
 def key_of(*parts) -> str:
     return hashlib.sha1(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:12]
 
@@ -480,13 +486,31 @@ def narration(d: Path, plan: dict, nc: dict, dc: dict) -> dict[int, dict]:
 
 # ---------- the layout: the plan in frames ----------
 
+def kept(a: int, b: int, cuts: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """What is left of a..b once the cuts are out: they may overlap, nest, or reach outside it."""
+    out, at = [], a
+    for c0, c1 in sorted(cuts):
+        c0, c1 = max(c0, a), min(c1, b)
+        if c1 <= at:
+            continue
+        if c0 > at:
+            out.append((at, c0))
+        at = c1
+    if at < b:
+        out.append((at, b))
+    return out
+
+
 def _over(clip: str, f: int, n: int, track: int) -> dict:
     return {"clip": clip, "start": 0, "end": n, "record": f, "track": track, "type": VIDEO}
 
 
-def layout(plan: dict, vo: dict[int, dict], dur: dict[str, float], dc: dict, labels: dict[str, str]) -> dict:  # noqa: C901
+def layout(plan: dict, vo: dict[int, dict], dur: dict[str, float], dc: dict, labels: dict[str, str],  # noqa: C901
+           stamps: dict[str, list] | None = None) -> dict:
     """Every clip, shot, card, label and narration piece on its track at its frame. `vo` is
-    narration(); `dur` each reel's and sound's length in seconds; `labels` reel -> overlay."""
+    narration(); `dur` each reel's and sound's length in seconds; `labels` reel -> overlay;
+    `stamps` each reel's file (stamp()), so a fade cut from a reel is named for that file."""
+    stamps = stamps or {}
     fps = plan["fps"]
 
     def fr(s: float) -> int:
@@ -508,7 +532,8 @@ def layout(plan: dict, vo: dict[int, dict], dur: dict[str, float], dc: dict, lab
             v2.append(_over(key, at, n, V_LABELS))
 
     def under(kind: str, name: str, reel: str, start: float, length: float, record: int) -> None:
-        b = {"name": f"{kind}_{name}_{key_of(reel, round(start, 3), length)[:6]}", "reel": reel, "start": round(start, 4),
+        b = {"name": f"{kind}_{name}_{key_of(reel, stamps.get(reel), round(start, 3), length)[:8]}", "reel": reel,
+             "start": round(start, 4),
              "dur": length, "kind": "out" if kind in ("out", "xo") else "in", "record": record}
         blend.append(b)
 
@@ -545,8 +570,7 @@ def layout(plan: dict, vo: dict[int, dict], dur: dict[str, float], dc: dict, lab
             row = {"clip": e["reel"], "start": a, "end": b, "record": f, "track": V_PICTURE}
             if e["mute"]:                   # picture whole; the sound in pieces around what is cut
                 row["type"] = VIDEO
-                edges = [a, *(x for m0, m1 in e["mute"] for x in (max(a, fr(m0)), min(b, fr(m1)))), b]
-                pieces = [(edges[k], edges[k + 1]) for k in range(0, len(edges), 2) if edges[k + 1] > edges[k]]
+                pieces = kept(a, b, [(fr(m0), fr(m1)) for m0, m1 in e["mute"]])
                 for k, (p0, p1) in enumerate(pieces):
                     audio.append({"clip": e["reel"], "start": p0, "end": p1, "record": f + p0 - a, "track": A_CLIP,
                                   "type": AUDIO, "fade_in": 2 if k else 0, "fade_out": 2 if k + 1 < len(pieces) else 0})
@@ -637,6 +661,7 @@ def add_score(b: dict, plan: dict, dur: dict[str, float], dc: dict) -> None:
         a = starts[k]
         last = k + 1 == len(starts)
         end = total if last else min(total, starts[k + 1] + xf)
+        a = next((q1 for q0, q1 in b["quiet"] if q0 <= a < q1), a)     # starting in a silent stretch: after it
         cut = next((q0 for q0, _ in b["quiet"] if a < q0 < end), None)
         end = cut if cut is not None else end
         have = round(dur[m["file"]] * fps)
@@ -730,7 +755,7 @@ def lengths(d: Path, media: dict[str, Path], names: set[str]) -> dict[str, float
         if p.suffix.lower() in STILLS:
             out[name] = STILL_S
             continue
-        sig = [str(p), p.stat().st_size]
+        sig = stamp(p)
         if cache.get(name, {}).get("sig") != sig:
             cache[name] = {"sig": sig, "s": duration(p)}
         out[name] = cache[name]["s"]
@@ -769,7 +794,7 @@ def make_tone(d: Path, src: Path, seconds: float) -> Path:
     """One continuous room tone as long as the piece: the source looped with 1 s crossfades."""
     import numpy as np
 
-    dst = d / "work" / f"roomtone_bed_{key_of(str(src), src.stat().st_size)[:6]}_{int(seconds) + 30}.wav"
+    dst = d / "work" / f"roomtone_bed_{key_of(stamp(src))[:8]}_{int(seconds) + 30}.wav"
     if dst.exists():
         return dst
     raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(src), "-f", "s16le", "-ac", "2", "-ar", str(RATE), "-"],
@@ -795,7 +820,7 @@ def as_wav(d: Path, src: Path) -> Path:
     """A music cue as 48 kHz stereo WAV (Resolve reads mp3 lengths loosely)."""
     if src.suffix.lower() == ".wav":
         return src
-    dst = d / "work" / "music" / f"{src.stem}.wav"
+    dst = d / "work" / "music" / f"{src.stem}_{key_of(stamp(src))[:8]}.wav"
     if not dst.exists():
         dst.parent.mkdir(parents=True, exist_ok=True)
         _run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ar", str(RATE), "-ac", "2", "-c:a", "pcm_s24le", str(dst)])
@@ -819,7 +844,7 @@ def build(cfg: dict, slug: str, dry_run: bool = False) -> dict:
         media[m["file"]] = as_wav(d, media[m["file"]])
     dur = lengths(d, media, names)
     vo = narration(d, plan, nc, dc)
-    b = layout(plan, vo, dur, dc, labels)
+    b = layout(plan, vo, dur, dc, labels, {n: stamp(media[n]) for n in names})
     add_score(b, plan, dur, dc)
     for t in takes(plan):
         f = take_files(d, t, nc, dc)[1]
@@ -911,9 +936,9 @@ def read_banned(path: Path) -> tuple[list[str], set[str]]:
 
 
 def leaks(words: list[tuple], terms: list[str], allowed: set[str], fuzzy: float) -> list[dict]:
-    """Where a banned term is in (word, time) pairs: the same words, the same letters split or
-    joined another way, or (five letters and up) letters close enough that a transcript's
-    spelling of a name still counts. One hit a term and place, the closest wording there:
+    """Where a banned term is in (word, time) pairs: the same words (or their possessive), the same
+    letters split or joined another way, or (five letters and up) letters close enough that a
+    transcript's spelling of a name still counts. One hit a term and place, the closest wording there:
     {term, heard, t, exact}. Words inside a phrase banned.txt marks fine are never a hit."""
     toks = [(norm(w), w, t) for w, t in words if norm(w)]
     fine: set[int] = set()
@@ -926,12 +951,12 @@ def leaks(words: list[tuple], terms: list[str], allowed: set[str], fuzzy: float)
         tt = tokens(term)
         want = "".join(tt)
         for i in range(len(toks)):
-            for n in {max(1, len(tt) - 1), len(tt), len(tt) + 1}:
+            for n in range(1, len(tt) + 2):     # from one word (the term written as one) to one word more
                 win = toks[i:i + n]
                 if len(win) < n or set(range(i, i + n)) <= fine:
                     continue
                 got = "".join(x[0] for x in win)
-                exact = got == want or (n == len(tt) and got.startswith(want) and len(got) - len(want) <= 2)
+                exact = got == want or (got == want + "s" and bool(re.search(r"['\u2019]s\W*$", win[-1][1])))
                 ratio = SequenceMatcher(None, want, got, autojunk=False).ratio()
                 if exact or (len(want) >= 5 and ratio >= fuzzy):
                     found.append((not exact, -ratio, i, n, {"term": term, "heard": " ".join(x[1] for x in win),
@@ -1025,15 +1050,16 @@ def chapter_title(s: dict) -> str:
     return name.capitalize() if name.isupper() else name
 
 
-def chapters(sections: list[dict], fps: int, min_s: float = 10.0) -> list[tuple[float, str]]:
+def chapters(sections: list[dict], fps: int, total: int, min_s: float = 10.0) -> list[tuple[float, str]]:
     """YouTube chapters from the section markers: the first at 0:00, each at least min_s after
-    the one before (a closer one is left out), and none at all under three."""
+    the one before and before the end (`total` frames; a closer one is left out), and none at
+    all under three."""
     out: list[tuple[float, str]] = []
     for s in sections:
         if s["chapter"] is False:
             continue
         t = 0.0 if not out else s["frame"] / fps
-        if out and t - out[-1][0] < min_s:
+        if out and (t - out[-1][0] < min_s or total / fps - t < min_s):
             continue
         out.append((t, chapter_title(s)))
     return out if len(out) >= 3 else []
@@ -1044,7 +1070,7 @@ def kit_text(plan: dict, b: dict, disclosures: list[str]) -> str:
 
     credits = list(dict.fromkeys([*plan["credits"], *(m["credit"] for m in plan["music"] if m["credit"]),
                                   *([plan["room_tone"]["credit"]] if plan["room_tone"] and plan["room_tone"]["credit"] else [])]))
-    ch = chapters(b["sections"], b["fps"])
+    ch = chapters(b["sections"], b["fps"], b["total"])
     desc = [plan["description"], ""]
     if ch:
         desc += ["Chapters", *(f"{clock(t)} {title}" for t, title in ch), ""]

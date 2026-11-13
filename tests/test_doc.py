@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from clipper import doc, jsonstate, story_edit
@@ -239,7 +241,9 @@ def test_score_crosses_over_at_the_section_and_levels_follow_the_dialogue(plan, 
     doc.add_score(b, plan, DUR, dc)
     one, two = (r for r in b["audio"] if r.get("music"))
     lamp = b["sections"][1]["frame"]
-    assert (one["record"], one["track"], two["track"]) == (0, doc.A_SCORE, doc.A_SCORE + 1)
+    # the first cue starts under the silent opening card: it waits for the card to end
+    assert (one["record"], one["track"], two["track"]) == (60, doc.A_SCORE, doc.A_SCORE + 1)
+    assert not any(r["record"] < 60 for r in b["audio"] if r.get("music"))
     assert one["record"] + one["end"] - one["start"] == lamp + 60 and two["record"] == lamp   # a 2 s crossover
     assert two["end"] == 900 and two["record"] + two["end"] - two["start"] <= b["total"]      # tail: its own ending
     tone = [r for r in b["audio"] if r.get("tone")]
@@ -258,6 +262,42 @@ def test_score_crosses_over_at_the_section_and_levels_follow_the_dialogue(plan, 
     assert doc.gain(-60.0, -40.0, -16.0, -1.0) == 0.0
 
 
+def test_mutes_are_taken_out_as_one_union():
+    assert doc.kept(300, 420, [(330, 405), (360, 390)]) == [(300, 330), (405, 420)]      # nested
+    assert doc.kept(300, 420, [(100, 200), (410, 500)]) == [(300, 410)]                  # outside, and past the end
+    assert doc.kept(300, 420, [(250, 310), (305, 320)]) == [(320, 420)]                  # overlapping, from before
+    assert doc.kept(300, 420, [(0, 999)]) == [] and doc.kept(300, 420, []) == [(300, 420)]
+
+
+def test_a_fade_is_named_for_the_file_it_is_cut_from(plan, dc):
+    one = doc.layout(plan, narration_of(plan), DUR, dc, {}, {"reel_a": ["a.mp4", 10, 1], "reel_b": ["b.mp4", 20, 1]})
+    two = doc.layout(plan, narration_of(plan), DUR, dc, {}, {"reel_a": ["a.mp4", 10, 2], "reel_b": ["b.mp4", 20, 1]})
+    a1, a2 = ({x["name"] for x in b["blend"] if x["reel"] == "reel_a"} for b in (one, two))
+    b1, b2 = ({x["name"] for x in b["blend"] if x["reel"] == "reel_b"} for b in (one, two))
+    assert not a1 & a2 and b1 == b2      # reel_a's file changed, reel_b's didn't
+
+
+def test_a_changed_file_is_measured_and_converted_again(tmp_path, monkeypatch):
+    import os
+
+    from clipper import media as media_mod
+
+    f = tmp_path / "music" / "theme.mp3"
+    f.parent.mkdir()
+    f.write_bytes(b"1234")
+    seen = []
+    monkeypatch.setattr(media_mod, "duration", lambda p: seen.append(p) or 12.0)
+    assert doc.lengths(tmp_path, {"theme": f}, {"theme"}) == {"theme": 12.0}
+    doc.lengths(tmp_path, {"theme": f}, {"theme"})
+    assert len(seen) == 1                                   # probed once
+    monkeypatch.setattr(doc, "_run", lambda cmd: Path(cmd[-1]).write_bytes(b"wav"))
+    one = doc.as_wav(tmp_path, f)
+    f.write_bytes(b"abcd")                                  # replaced: the same size
+    os.utime(f, ns=(1, 1))
+    doc.lengths(tmp_path, {"theme": f}, {"theme"})
+    assert len(seen) == 2 and doc.as_wav(tmp_path, f) != one
+
+
 def test_master_gain_and_loudness_parsing():
     g, filt = doc.master_filter(-20.3, -14.0, -1.0)
     assert g == 6.3 and filt.startswith("volume=6.3dB,alimiter=limit=0.8128")
@@ -270,15 +310,19 @@ def test_chapters_come_from_the_sections():
     secs = [{"name": "COLD OPEN", "frame": 150, "chapter": True}, {"name": "1 WHAT YOU SEE", "frame": 1800, "chapter": True},
             {"name": "ASIDE", "frame": 1950, "chapter": True}, {"name": "note to self", "frame": 3000, "chapter": False},
             {"name": "2 Where it goes", "frame": 6000, "chapter": True}, {"name": "CLOSE", "frame": 9000, "chapter": "The end"}]
-    assert doc.chapters(secs, 30) == [(0.0, "Cold open"), (60.0, "What you see"), (200.0, "Where it goes"),
-                                      (300.0, "The end")]
-    assert doc.chapters(secs[:2], 30) == []   # YouTube wants three
+    assert doc.chapters(secs, 30, 12000) == [(0.0, "Cold open"), (60.0, "What you see"), (200.0, "Where it goes"),
+                                             (300.0, "The end")]
+    assert doc.chapters(secs[:2], 30, 12000) == []   # YouTube wants three
+    # the last would be five seconds long: left out; and then two aren't enough
+    assert [t for _, t in doc.chapters(secs, 30, 9150)] == ["Cold open", "What you see", "Where it goes"]
+    assert doc.chapters([secs[0], secs[1], secs[5]], 30, 9150) == []
 
 
 def test_kit_has_chapters_credits_and_disclosures(plan, dc):
     b = doc.layout(plan, narration_of(plan), DUR, dc, {})
     b["sections"] = [{"name": "OPEN", "frame": 0, "chapter": True}, {"name": "2 THE LAMP", "frame": 600, "chapter": True},
                      {"name": "CLOSE", "frame": 1200, "chapter": "What is left"}]
+    b["total"] = 1800
     text = doc.kit_text(plan, b, dc["disclosures"])
     assert "0:00 Open\n0:20 The lamp\n0:40 What is left" in text
     assert "Credits\nFootage: the keeper's own uploads\nMusic: made for this piece\nRoom tone: CC0" in text
@@ -300,6 +344,9 @@ def test_banned_file_and_leaks(tmp_path):
     assert ("Harbor House", "Harborhouse", True) in got          # joined
     assert ("Marlowe", "Marlow", False) in got
     assert ("Ann", "Ann's", True) in got                         # a possessive
+    assert doc.leaks([("Anna", 0), ("Annex", 1), ("Anns", 2)], ["Ann"], set(), 0.82) == []   # other words, not hers
+    joined = doc.leaks([("on", 0), ("HarborHouseRoad", 1.5)], ["Harbor House Road"], set(), 1.0)
+    assert [(h["heard"], h["exact"], h["t"]) for h in joined] == [("HarborHouseRoad", True, 1.5)]
     assert not any(h["term"] == "Ann" and "annual" in h["heard"] or "planning" in h["heard"] for h in hits)
     assert not any("Street" in h["heard"] for h in hits)         # marked fine in the file
     assert len([h for h in hits if h["term"] == "Marlowe"]) == 1
@@ -382,6 +429,9 @@ def test_kit_is_written_from_the_last_build(defaults, tmp_path):
 
 def test_a_storys_loudness_is_signed_only_when_it_differs():
     assert story_edit.loud(-16, -16) is None and story_edit.loud(-14.0, -16) == ["lufs", -14.0]
-    assert story_edit.loud_of([["a"], ["lufs", -14.0]], -16) == -14.0
-    assert story_edit.loud_of([["a"]], -16) == -16 and story_edit.loud_of(None, -16) == -16
+    part = {"id": "p01", "item": "yt-x", "start": 1.0, "end": 9.0, "channel": "C", "date": "2026-01-01", "title": "T"}
+    work = Path("work")
+    assert story_edit.part_file(work, part) == story_edit.part_file(work, part, None)      # as before the setting
+    assert story_edit.part_file(work, part, ["lufs", -14.0]) != story_edit.part_file(work, part)
+    assert story_edit.part_file(work, part, ["lufs", -14.0]) != story_edit.part_file(work, part, ["lufs", -12.0])
     assert story_edit.signature({}, [], lufs=["lufs", -14.0]) == [["lufs", -14.0]]

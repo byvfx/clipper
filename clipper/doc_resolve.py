@@ -68,6 +68,19 @@ def open_project(resolve, want: str = ""):
     return project
 
 
+def check_rate(project, fps: int) -> None:
+    """A new timeline takes the project's frame rate, and every frame of a build is counted at
+    the plan's: refuse before anything is placed when they differ."""
+    got = project.GetSetting("timelineFrameRate")
+    try:
+        same_rate = abs(float(got) - fps) < 0.01
+    except (TypeError, ValueError):
+        same_rate = False
+    if not same_rate:
+        raise ClipperError(f"the Resolve project's timeline frame rate is {got or 'unknown'}; the plan is built at "
+                           f"{fps} fps: set fps in plan.toml (or [doc] fps) to the project's, or use a {fps} fps project")
+
+
 def timelines(project) -> dict:
     return {t.GetName(): t for t in (project.GetTimelineByIndex(i) for i in range(1, project.GetTimelineCount() + 1))}
 
@@ -122,6 +135,7 @@ def build(resolve, b: dict, project_name: str = "") -> str:
     """A new timeline from a build; returns its name. Read back afterwards: every row must be
     on its track at its frame with its length."""
     project = open_project(resolve, project_name)
+    check_rate(project, b["fps"])
     pool = project.GetMediaPool()
     items = pool_items(pool, used_media(b))
     name = next_name(b["title"], timelines(project))
@@ -162,6 +176,9 @@ def build(resolve, b: dict, project_name: str = "") -> str:
           f"{unset} gains or fades Resolve refused; saved {saved}")
     if bad:
         raise ClipperError(f"{name}: {bad} rows aren't where the plan put them; look at the timeline before using it")
+    if unset:
+        raise ClipperError(f"{name}: Resolve refused {unset} gains or fades, so its mix isn't the plan's; delete the "
+                           "timeline and build again")
     return name
 
 

@@ -376,11 +376,6 @@ def loud(lufs: float, receipts: float) -> list | None:
     return ["lufs", lufs] if lufs != receipts else None
 
 
-def loud_of(sig: list | None, receipts: float) -> float:
-    """The loudness a signed cut was rendered at."""
-    return next((x[1] for x in sig or [] if isinstance(x, list) and x[:1] == ["lufs"]), receipts)
-
-
 def signature(data: dict, used: list[dict], seq: list[dict] | None = None, nc: dict | None = None,
               timing: list | None = None, lufs: list | None = None) -> list:
     sig = [[p["item"], p["start"], p["end"], p["channel"], p["date"], p["title"]] for p in used]
@@ -468,10 +463,11 @@ def read_words(text: str, at: float, dur: float, seg0: int) -> tuple[list[dict],
     return out, seg0 + len(sentences)
 
 
-def part_file(work: Path, p: dict) -> Path:
-    """A part's render, named by its bounds and its lower third's text: a changed channel,
-    date or title renders it again."""
-    h = hashlib.sha1(json.dumps([p["channel"], p["date"], p["title"]]).encode()).hexdigest()[:8]
+def part_file(work: Path, p: dict, lufs: list | None = None) -> Path:
+    """A part's render, named by its bounds, its lower third's text and (loud(): when the story
+    has a loudness of its own) its loudness: a changed channel, date, title or loudness renders
+    it again, and a part rendered at another loudness is never joined into this cut."""
+    h = hashlib.sha1(json.dumps([p["channel"], p["date"], p["title"], *(lufs or [])]).encode()).hexdigest()[:8]
     return work / f"{p['id']}_{p['item']}_{p['start']:.2f}-{p['end']:.2f}_{h}.mp4"
 
 
@@ -523,8 +519,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     retire(sdir, final.stem)
     old = jsonstate.read(final.with_suffix(".json"), {}) or {}
     same = final.exists() and old.get("signature") == sig and not force
-    # parts rendered at another loudness are rendered again (their files are named by their bounds alone)
-    redo = force or loud_of(old.get("signature"), was) != sc["lufs"]
+    lufs = loud(sc["lufs"], was)
     bleeps = jsonstate.read(work / "bleeps.json", {}) or {}   # by part render, kept or new
     if same:
         print(f"{final.name}: the edit is unchanged, video kept (--force re-cuts)")
@@ -554,8 +549,8 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                         if q["item"] == p["item"] and q["channel"].lower() in PLATFORMS | {"?"}:
                             q["channel"] = seen
                     jsonstate.write(sdir / "story.json", data)
-            dst = part_file(work, p)
-            if redo or not dst.exists():
+            dst = part_file(work, p, lufs)
+            if force or not dst.exists():
                 if p["ours"]:  # our own stream: its source video on the share, read from start
                     bleeps[dst.name] = clip(cfg, Path(p["dir"]), p, media.source_file(Path(p["dir"])), fonts,
                                             bug, bleeper, dst, label="", seek=True)
@@ -569,7 +564,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     # starts at each card, and at each part not set up by a card of its own
     starts, marks, words, seg0, t = [], [], [], 0, 0.0
     for n, x in enumerate(seq):
-        f = work / f"{x['card']}.mp4" if "card" in x else part_file(work, x["part"])
+        f = work / f"{x['card']}.mp4" if "card" in x else part_file(work, x["part"], lufs)
         dur = media.duration(f)
         if "card" in x:
             marks.append((x, t))
@@ -590,7 +585,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
            "source_share": "most", "standalone": True, "start_s": 0.0, "end_s": round(t, 3),
            "duration_s": round(t, 1), "file": final.name, "cut": True, "skip_reasons": [],
            "chapters": chapters_of([m for m, _ in marks], [at for _, at in marks], t),
-           "bleeps": sum(bleeps.get(part_file(work, p).name, 0) for p in used),
+           "bleeps": sum(bleeps.get(part_file(work, p, lufs).name, 0) for p in used),
            "signature": sig}
     write_sidecar(final, seg)
     jsonstate.write(sdir / "segments.json", {"stream_id": sdir.name, "story": slug, "gaps": [],

@@ -24,9 +24,11 @@ class Placed:
     def GetDuration(self):
         return self.n
 
+    refuse = False
+
     def SetProperty(self, key, value):
         self.props[key] = value
-        return True
+        return not self.refuse
 
     def SetFades(self, fades):
         self.fades = fades
@@ -105,9 +107,12 @@ class Pool:
 
 
 class Project:
-    def __init__(self, name="Piece", timelines=(), clips=(), drop=0):
-        self.name, self.tls, self.current = name, [Timeline(n) for n in timelines], None
+    def __init__(self, name="Piece", timelines=(), clips=(), drop=0, rate="30"):
+        self.name, self.tls, self.current, self.rate = name, [Timeline(n) for n in timelines], None, rate
         self.pool = Pool(self, clips, drop)
+
+    def GetSetting(self, key):
+        return {"timelineFrameRate": self.rate}[key]
 
     def GetName(self):
         return self.name
@@ -184,6 +189,21 @@ def test_a_build_resolve_only_half_places_is_an_error():
     b["media"]["reel_b"] = "//nas/p/reels/refused.mp4"
     with pytest.raises(ClipperError, match="didn't import: reel_b"):
         doc_resolve.build(Resolve(Project()), b)
+
+
+def test_a_project_at_another_frame_rate_is_refused_before_anything_is_placed():
+    for rate in ("24", "29.97", "", None):
+        project = Project(rate=rate)
+        with pytest.raises(ClipperError, match="timeline frame rate is .*; the plan is built at 30 fps"):
+            doc_resolve.build(Resolve(project), a_build())
+        assert project.tls == [] and project.pool.imported == []
+    doc_resolve.build(Resolve(Project(rate=30.0)), a_build())
+
+
+def test_a_refused_gain_fails_the_build(monkeypatch):
+    monkeypatch.setattr(Placed, "refuse", True)
+    with pytest.raises(ClipperError, match="Resolve refused 2 gains or fades"):
+        doc_resolve.build(Resolve(Project()), a_build())
 
 
 def test_source_frames_follow_the_reels_own_rate():

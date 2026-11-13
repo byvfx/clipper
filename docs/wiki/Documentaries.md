@@ -130,13 +130,17 @@ tone.
   `[doc] dialogue_lufs`, held back where its peak would pass `[doc] peak_ceiling`.
 - Music: each `[[music]]` cue runs from its section (`at`, plus `at_s` seconds) into a
   `[doc] crossfade_s` crossover with the next cue, on alternating tracks, `[doc] music_under`
-  LU under the dialogue. A cue stops at a silent stretch. `tail = true` places a cue so its
+  LU under the dialogue. A cue stops at a silent stretch, and one whose section opens on a
+  silent card starts after it. `tail = true` places a cue so its
   own ending lands on its last frame.
 - Room tone: the `[room_tone]` file looped with one-second crossfades for the whole piece,
   `[doc] tone_under` LU under the dialogue.
 
+The project's timeline frame rate must be the plan's (`fps` in `plan.toml`, else `[doc] fps`);
+a build into a project at another rate is refused before anything is placed.
+
 After building, every item is read back from Resolve; an item that isn't where the plan put
-it is an error.
+it, or a gain or fade Resolve refused, is an error.
 
 ### Resolve
 
@@ -164,8 +168,8 @@ cents, mostly the container's start; `--dry-run` prints the estimate) and fails 
 from `banned.txt` is heard, printing the time and the words. It also reads `kit.md`. A
 transcript is kept per file, so a second run on the same render costs nothing.
 
-`banned.txt` is one term per line; `#` starts a comment. A term matches the same words, the
-same letters split or joined differently, and, for terms of five letters or more, letters
+`banned.txt` is one term per line; `#` starts a comment. A term matches the same words (and
+their possessive: `Ann` also finds `Ann's`, not `Anna`), the same letters split or joined differently, and, for terms of five letters or more, letters
 close enough that a transcript's spelling of a name still counts (`[doc] leak_fuzzy`). Add the
 spellings you expect anyway. A line starting with `!` marks heard words that look like a
 term but are fine.
@@ -177,7 +181,7 @@ are yours to read.
 
 `clipper doc kit` writes `kit.md` from the plan and the last build: the title, the
 description with chapters (from the sections: the first at 0:00, each at least ten seconds
-after the one before, none when there are fewer than three), the credits (the plan's
+after the one before and before the end, none when there are fewer than three), the credits (the plan's
 `credits` and each `credit` on a music cue or the room tone), the disclosure lines
 (`[doc] disclosures`, or the plan's own `disclosures`), the pinned comment and a checklist.
 It fails when the text contains a banned term.
