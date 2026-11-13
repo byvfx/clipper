@@ -37,12 +37,21 @@ change before anything is written. A selection survives a change of tab or filte
 actions only touch what is on screen: the bar says how many picks are left out.
 
 "Updated N s ago" in the header is the age of the page's numbers: amber past 45 s, red past
-2 min, which means serve isn't answering. A tab in the background stops polling and catches
-up when you come back.
+2 min. When a refresh fails it says "serve isn't answering" there (hover for why), with one
+toast when it starts and one when serve is back; before the first answer the panels say
+Loading… or why they are empty. A tab in the background stops polling and catches up when
+you come back. A page whose sign-in has gone says so and asks for the `?key=` link again.
 
-Every action, single or bulk, can be undone from its toast for 10 s or from "Undo…" (the
-last 20). Undo goes through Kitsu too, and an item already on YouTube keeps its live text
-(change it in Studio).
+Decisions, hold, pin, title/description/hashtag edits, find and replace and thumbnail words
+can be undone from their toast for 10 s or from "Undo…" (the last 20). Undo goes through
+Kitsu too, and an item already on YouTube keeps its live text (change it in Studio). Not on
+the list: the cover editor, faces, cast, and a retake already started (undo puts the item's
+status back; the retake still runs).
+
+What costs money says so first. A retake note says what a retake costs (the average of the
+recent ones), a note sent to several items asks before it starts that many, and the Retakes
+panel shows each one's cost and this month's count and total. Cast's Find line says what its
+labels can cost.
 
 A button sends once: a double tap is one request, and Sync Kitsu and Replan stay greyed out
 until they finish. Closing an item's window, or moving on with J/K, a swipe or Approve, asks
@@ -109,8 +118,8 @@ photos/<Person>/`, for covers and the weekly. **Cast** in the header opens it.
   time in the background; the window shows its progress and fills in. Each photo is checked
   against the person's known face, so other people are left out, and labelled by a small model.
 - **New photos** come first, blue-edged; ⚠ is the labeller's doubt (a designed thumbnail with
-  text, a hidden face). Keep or Drop each; fix a label with its menu. A dropped photo is deleted
-  and its source never fetched again. Kept photos are what covers use: the cover model picks
+  text, a hidden face). Keep or Drop each; fix a label with its menu. Drop asks first: the photo is
+  deleted and its source never fetched again, with no undo. Kept photos are what covers use: the cover model picks
   the label that fits the headline (angry for a meltdown, laughing for a gloat), else neutral;
   a stream, Commons or channel photo before an image search one. The weekly draft does the
   same for people it pictures from a photo, and everyone with a kept photo joins the prompts'

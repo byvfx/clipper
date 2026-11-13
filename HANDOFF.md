@@ -218,7 +218,13 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: chat panel #13 (NAS hub #14 and self-checks #185
+**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (this week, small: #204, #206, #228,
+#201, #203, #205, #199; start with #206+#201+#203 as one war room PR, then #204), `p2-dated` (#192 after 11-16,
+#41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
+Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
+`parked` (the rest). `gh issue list --label p1-now` is the queue. 11-13: #13 folded into #158, #200 closed (its
+setup/doctor bug moved to #78), #70 narrowed to punch-ins/emphasis (tighten built).
+Tracked as GitHub issues (byvfx/clipper); roadmaps are issues only: (NAS hub #14 and self-checks #185
 closed 11-09; checkup's turn-on steps are under Checkup below),
 Posts blind items #36 (the rest of the YouTube Posts roadmap #30 closed 11-09), Instagram Reels #39, cast library #41, lore-order playlists #43,
 archive fun #63, transcript-framed edits #66 (#67-#71; 11-09 the user wasn't sure #67 is needed, so #70's tighten

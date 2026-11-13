@@ -13,8 +13,10 @@ lands in Kitsu whichever surface you make it on. Three surfaces; pick what fits 
   bot. Until then the bot answers "You're not on this bot's allowlist".
 - **Kitsu**: a login from the operator ([Kitsu](Kitsu)); the show is a production you are on.
 - **War room**: a link from the operator, `https://<name>.ts.net/?key=...` through their
-  tailnet or `http://<host>:8765` on the LAN; open it once and it keeps a cookie for a year
-  ([Phone access](Phone-access)). Your phone has to be on the same tailnet.
+  tailnet; open it once and it keeps a cookie for a year ([Phone access](Phone-access)). Your
+  phone has to be on the same tailnet. (The war room listens on localhost only unless the
+  operator sets `[warroom] host = "0.0.0.0"` and a token; only then is `http://<host>:8765/?key=...`
+  on the LAN an option.)
 
 ## The card (Discord)
 

@@ -13,13 +13,28 @@ function mmss(s) { if (s == null) return ""; s = Math.round(s); const h = Math.f
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; }
 function ago(iso) { if (!iso) return ""; const s = (Date.now() - new Date(iso)) / 1000;
   if (s < 90) return "just now"; if (s < 5400) return Math.round(s / 60) + " min ago"; if (s < 129600) return Math.round(s / 3600) + " h ago"; return Math.round(s / 86400) + " d ago"; }
+function usd(x) { return x == null ? "?" : x < 0.1 ? `$${(+x).toFixed(3)}` : `$${(+x).toFixed(2)}`; }
+// #203: before an action that makes model calls, what it should cost (from past ones) and a yes
+function retakeCost() {  // " (a retake, about $0.020)" when a note starts one here
+  const rc = STATE?.retake_cost;
+  return rc?.auto ? ` (starts a retake${rc.avg_usd != null ? `, about ${usd(rc.avg_usd)}` : ""})` : "";
+}
+function retakeOk(n) {
+  const rc = STATE?.retake_cost, a = rc?.avg_usd;
+  if (!rc?.auto) return true;  // [retake] auto off: nothing runs from here
+  return confirm(`This starts ${n} retake${n > 1 ? "s" : ""} (a model call each)${a != null ? `, about ${usd(a * n)}` : ""}. Go?`);
+}
 function toast(msg, err, undoId) { const t = document.createElement("div"); t.className = "toast" + (err ? " err" : ""); t.textContent = msg;
+  $("#announce").textContent = msg;  // a live region that is always there, so screen readers say it
   if (undoId) { const b = document.createElement("button"); b.className = "btn"; b.textContent = "Undo"; b.onclick = () => { t.remove(); undo(undoId); }; t.appendChild(b); }
   document.querySelectorAll(".toast").forEach(o => o.remove());
   document.body.appendChild(t); setTimeout(() => t.remove(), undoId ? 10000 : err ? 7000 : 3500); }
 async function api(path, body) {
-  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  // A read gives up after 2 min, so a hung one can't hold the timer's refresh (pollRefresh) for good.
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : { signal: AbortSignal.timeout(120000) });
   const j = await r.json().catch(() => ({ error: r.statusText }));
+  if (r.status === 401) throw new Error("signed out: open the war room's ?key= link again");  // #206: the cookie went
   if (!r.ok || j.error) throw new Error(j.error || r.statusText);
   return j;
 }
@@ -29,21 +44,42 @@ function tick() {
   $("#clock").textContent = new Date().toLocaleString([], { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" });
   // #201: the clock ticks whatever the last poll did; this says how old the numbers are
   const age = STATE ? Math.max(0, (Date.now() - new Date(STATE.generated_at)) / 1000) : null, u = $("#updated");
-  u.textContent = age === null ? "no data yet" : age < 90 ? `updated ${Math.round(age)} s ago` : `updated ${ago(STATE.generated_at)}`;
-  u.className = "updated " + (age > 120 ? "bad" : age === null || age > 45 ? "mid" : "");
+  const was = age === null ? "" : age < 90 ? `${Math.round(age)} s ago` : ago(STATE.generated_at);
+  u.textContent = DOWN ? `${DOWN.signedOut ? "signed out: open the ?key= link again" : "serve isn't answering"}${was ? " · data from " + was : ""}` : age === null ? "no data yet" : `updated ${was}`;
+  u.title = DOWN ? `${DOWN.msg}\nTrying again every 15 s.` : "How old the numbers on this page are";
+  u.className = "updated " + (DOWN || age > 120 ? "bad" : age === null || age > 45 ? "mid" : "");
 }
 setInterval(tick, 1000);
 
+// #201: a failed refresh says so once and in the header, not in a toast every 15 s; before the
+// first answer the panels say why they are empty.
+let DOWN = null;  // {msg} while the overview isn't coming back
+const FIRST = ["#streams", "#retakes", "#health", "#grid", "#schedule"];
+function waiting(msg) {
+  if (STATE) return;
+  for (const s of FIRST) $(s).innerHTML = `<div class="empty">${msg ? `Can't load: ${esc(msg)}.<br>Trying again every 15 s.` : "Loading…"}</div>`;
+}
+waiting();
 let MUTATED = 0;  // bumped when an action's answer changes STATE.items here
+let REFRESHING = 0;  // overviews asked for and not answered yet
+// The timer's refresh waits for one still on its way: a slow serve (a cold cache over the NAS
+// share takes a minute) got another request every 15 s on top. An action's refresh always goes.
+function pollRefresh() { if (!REFRESHING) refresh(); }
 async function refresh() {
+  REFRESHING++;
   try {
     const asked = MUTATED, s = await api("/api/overview");
+    if (DOWN) { if (!DOWN.signedOut) toast("serve is answering again"); DOWN = null; }
     // #202: answers aren't ordered, and one asked for before an action landed would undo it for a
     // moment; the refresh each action starts afterwards brings the real state
     if (asked !== MUTATED || STATE && new Date(s.generated_at) < new Date(STATE.generated_at)) return;
     STATE = s; render();
   }
-  catch (e) { toast("Refresh failed: " + e.message, true); }
+  catch (e) {
+    if (!DOWN) toast("Refresh failed: " + e.message, true);
+    DOWN = { msg: e.message, signedOut: e.message.startsWith("signed out") }; waiting(e.message); tick();
+  }
+  finally { REFRESHING--; }
 }
 // ---------- live shows ----------
 
@@ -139,10 +175,12 @@ function renderStreams() {
 }
 
 function renderRetakes() {
-  const r = STATE.retakes;
-  $("#retakeSub").textContent = STATE.health.retake_running ? "working…" : "";
+  const r = STATE.retakes, rc = STATE.retake_cost || {};
+  // #203: what retakes cost, each on its row and this month's in the title
+  $("#retakeSub").textContent = STATE.health.retake_running ? "working…"
+    : rc.month_n ? `${rc.month_n} this month · ${usd(rc.month_usd)}` : "";
   $("#retakes").innerHTML = r.map(h => `<div class="ev">
-      <div class="w">${esc(ago(h.at))} · ${esc(h.stream)}/${esc(h.key.split("_")[0])}</div>
+      <div class="w">${esc(ago(h.at))} · ${esc(h.stream)}/${esc(h.key.split("_")[0])}${h.cost_usd != null ? " · " + usd(h.cost_usd) : ""}</div>
       <q>${esc(h.comment)}</q>
       <div class="r-${esc(h.result)}">${h.result === "applied" ? "✓ " + esc(h.summary || h.applied.join("; "))
         : h.result === "unsupported" ? "⚠ " + esc(h.unsupported || "not applied") : h.result === "error" ? "✕ " + esc(h.error) : esc(h.result)}</div></div>`).join("")
@@ -243,7 +281,7 @@ function renderQueue() {
        <input type="date" class="date" id="toD" value="${esc(TO)}" title="...to this day">
        <button class="btn" id="pickAll" title="Select every item shown, for a bulk action">☑ Select shown</button>
        <button class="btn" id="undoBtn" title="The last 20 war room actions, to undo">↶ Undo…</button>
-       <input class="search" id="q" placeholder="Search titles, descriptions, transcripts…" value="${esc(Q)}">`;
+       <input class="search" id="q" aria-label="Search the queue" placeholder="Search titles, descriptions, transcripts…" value="${esc(Q)}">`;
   const items = base.filter(TABS[TAB]).sort((a, b) => (b.date || "").localeCompare(a.date || "") || a.ref.localeCompare(b.ref));
   VISIBLE = items.map(i => i.ref);
   if (SEL && !VISIBLE.includes(SEL)) SEL = VISIBLE[Math.min(SEL_AT, VISIBLE.length - 1)] || null;  // acted on: the next one
@@ -273,10 +311,10 @@ function card(i) {
       ${i.decision === "changes_requested" && i.comment ? `<div class="note">✎ ${esc(i.comment)}</div>` : ""}
     </div>
     <div class="acts">
-      <label class="pickl" title="Select (shift-click: a range)"><input type="checkbox" data-pick="${esc(i.ref)}" ${PICK.has(i.ref) ? "checked" : ""}></label>
+      <label class="pickl" title="Select (shift-click: a range)"><input type="checkbox" aria-label="Select" data-pick="${esc(i.ref)}" ${PICK.has(i.ref) ? "checked" : ""}></label>
       ${i.decision !== "approved" ? `<button class="btn good" data-act="approve" data-ref="${esc(i.ref)}">✓ Approve</button>` : `<button class="btn" data-act="reopen" data-ref="${esc(i.ref)}">↺ Reopen</button>`}
       <button class="btn warn" data-act="changes" data-ref="${esc(i.ref)}">✎ Changes</button>
-      <button class="btn bad" data-act="reject" data-ref="${esc(i.ref)}">✕</button>
+      <button class="btn bad" data-act="reject" data-ref="${esc(i.ref)}" title="Reject (R)" aria-label="Reject">✕</button>
     </div></div>`;
 }
 
