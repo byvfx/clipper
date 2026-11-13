@@ -178,7 +178,8 @@ def _show_name(cfg: dict, sdir: Path) -> str:
     except Exception:  # noqa: BLE001 - a bad config.toml: fall back to the base show
         return cfg["meta"]["show_name"]
 
-def retakes(cfg: dict, limit: int = 12) -> list[dict]:
+def all_retakes(cfg: dict) -> list[dict]:
+    """Every retake in every stream's retakes.json, newest first."""
     out = []
     for p in cfg["paths"]["streams"].glob("*/retakes.json"):
         for key, hs in jsonstate.read_or(p, {}).items():
@@ -187,8 +188,23 @@ def retakes(cfg: dict, limit: int = 12) -> list[dict]:
                             "result": h.get("result", ""), "applied": h.get("applied", []),
                             "summary": (h.get("plan") or {}).get("summary", ""),
                             "unsupported": (h.get("plan") or {}).get("unsupported") or "",
-                            "error": h.get("error", ""), "at": h.get("at", "")})
-    return sorted(out, key=lambda h: h["at"], reverse=True)[:limit]
+                            "error": h.get("error", ""), "at": h.get("at", ""),
+                            "cost_usd": h.get("cost_usd")})
+    return sorted(out, key=lambda h: h["at"], reverse=True)
+
+def retakes(cfg: dict, limit: int = 12) -> list[dict]:
+    return all_retakes(cfg)[:limit]
+
+def retake_cost(hs: list[dict], month: str) -> dict:
+    """#203: what a retake costs (the mean of the last 50 that recorded one, None before any
+    did) and this month's retakes, for the Retakes panel and the bulk note's warning."""
+    costs = [h["cost_usd"] for h in hs if isinstance(h.get("cost_usd"), int | float)]
+    recent = costs[:50]
+    mine = [h for h in hs if h["at"][:7] == month]
+    return {"avg_usd": round(sum(recent) / len(recent), 4) if recent else None,
+            "month_n": len(mine),
+            "month_usd": round(sum(h["cost_usd"] for h in mine
+                                   if isinstance(h.get("cost_usd"), int | float)), 4)}
 
 def health(cfg: dict) -> dict:
     """The services from their heartbeats (clipper/daemon.py), from any machine."""
@@ -311,6 +327,7 @@ def overview(cfg: dict) -> dict:
     free = [{"at": when.isoformat(), "kind": kind}
             for when, kind in schedule.slots({**sc, "horizon_days": 14}, tz, now.date())
             if when > now + timedelta(minutes=30) and when.isoformat()[:16] not in taken]
+    hs = all_retakes(cfg)
     return {"generated_at": now.isoformat(), "timezone": sc["timezone"],
             "free_slots": free, "rules": {"max_per_day": sc["max_per_day"], "min_gap_minutes": sc["min_gap_minutes"]},
             "shows": [{"key": k, "name": for_stream_show_name(cfg, k), "channels": s["channels"]}
@@ -320,7 +337,9 @@ def overview(cfg: dict) -> dict:
                 "uploaded": sum(e.get("status") == "uploaded" for e in sched.get("entries", []))},
             "streams": infos[:20],
             "items": rows, "schedule": entries, "schedule_generated_at": sched.get("generated_at"),
-            "retakes": retakes(cfg), "health": health(cfg), "stages": worker.STAGES,
+            "retakes": hs[:12], "retake_cost": {**retake_cost(hs, datetime.now(UTC).strftime("%Y-%m")),
+                                                "auto": bool(cfg["retake"]["auto"])},
+            "health": health(cfg), "stages": worker.STAGES,
             "uploads": upload_status(cfg, sched)}
 
 def analytics_status(cfg: dict, month: str = "") -> dict:

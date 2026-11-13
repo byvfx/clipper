@@ -69,6 +69,30 @@ def read(path: Path) -> list[dict]:
     return out
 
 
+_AVG: dict = {}
+
+
+def avg_call_usd(path: Path | None, stage_prefix: str, last: int = 50) -> float | None:
+    """The mean $ of the last `last` model calls whose stage starts with stage_prefix (e.g.
+    "cast" for the cast labeller), None before any; for an estimate shown before a paid
+    action (#203). Cached until the log changes."""
+    if not path:
+        return None
+    try:
+        st = Path(path).stat()
+    except OSError:
+        return None
+    key = (str(path), stage_prefix, last)
+    hit = _AVG.get(key)
+    if hit and hit[0] == (st.st_mtime_ns, st.st_size):
+        return hit[1]
+    usd = [r["usd"] for r in read(Path(path)) if r.get("kind") == "llm"
+           and str(r.get("stage", "")).startswith(stage_prefix) and isinstance(r.get("usd"), int | float)][-last:]
+    val = sum(usd) / len(usd) if usd else None
+    _AVG[key] = ((st.st_mtime_ns, st.st_size), val)
+    return val
+
+
 def entries(cfg: dict) -> list[dict]:
     """Every cost line, model calls and Modal runs alike: {ts, kind, stage, stream, model, usd, ...}."""
     from . import modalmon

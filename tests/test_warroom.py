@@ -284,3 +284,60 @@ def test_sync_all_starts_one_sync_for_two_requests(defaults, monkeypatch):
     warroom.sync_all(defaults)   # the same instant: still one thread
     time.sleep(0.6)
     assert len(calls) == 1 and warroom.SYNC["running"] is False and warroom.SYNC["last"]
+
+
+def test_signed_out_page_is_a_page(serve):
+    """#206: an expired cookie on the page itself is a sign-in hint, not raw JSON; the API
+    still answers JSON."""
+    port = serve("t0ken")
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    c.request("GET", "/", headers={"Host": "laptop.tail1234.ts.net"})
+    r = c.getresponse()
+    body = r.read().decode("utf-8")
+    assert r.status == 401 and r.getheader("Content-Type").startswith("text/html")
+    assert "?key=" in body and "t0ken" not in body
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    c.request("GET", "/api/overview", headers={"Host": "laptop.tail1234.ts.net"})
+    r = c.getresponse()
+    assert r.status == 401 and r.getheader("Content-Type").startswith("application/json")
+
+
+def test_retake_cost():
+    """#203: the mean of recent retakes that recorded a cost, and this month's."""
+    from clipper.warroom.data import retake_cost
+
+    hs = [{"at": "2026-11-12T10:00:00+00:00", "cost_usd": 0.03}, {"at": "2026-11-01T10:00:00+00:00", "cost_usd": 0.01},
+          {"at": "2026-11-01T09:00:00+00:00"}, {"at": "2026-10-30T10:00:00+00:00", "cost_usd": 0.02}]
+    assert retake_cost(hs, "2026-11") == {"avg_usd": 0.02, "month_n": 3, "month_usd": 0.04}
+    assert retake_cost([], "2026-11") == {"avg_usd": None, "month_n": 0, "month_usd": 0}
+
+
+def test_cast_find_estimate(tmp_path, defaults):
+    """#203: a Find's label cost before it runs, from past cast label calls in the costs log."""
+    import json
+
+    from clipper.warroom.cast import find_estimate
+
+    log = tmp_path / "costs.jsonl"
+    cfg = {**defaults, "paths": {**defaults["paths"], "costs": log}}
+    assert find_estimate(cfg)["label_usd"] is None   # no log yet
+    log.write_text("\n".join(json.dumps(r) for r in (
+        {"kind": "llm", "stage": "cast grab", "usd": 0.0003}, {"kind": "llm", "stage": "score", "usd": 0.5},
+        {"kind": "llm", "stage": "cast auto", "usd": 0.0005}, {"kind": "modal", "stage": "cast", "usd": 9})) + "\n")
+    est = find_estimate(cfg)
+    assert est["per_source"] == defaults["cast"]["per_source"] and est["label_usd"] == pytest.approx(0.0004)
+    cfg["cast"] = {**defaults["cast"], "label_model": ""}
+    assert find_estimate(cfg)["label_usd"] == 0.0
+
+
+def test_page_scripts_parse():
+    """#206: a syntax error in one script blanks the page; CI's runners have node."""
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("no node on PATH")
+    for p in sorted((warroom.WEB / "js").glob("*.js")):
+        r = subprocess.run([node, "--check", str(p)], capture_output=True, text=True)
+        assert r.returncode == 0, f"{p.name}: {r.stderr[-500:]}"

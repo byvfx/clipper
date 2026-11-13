@@ -98,7 +98,7 @@ let SLOTWIN = 0;  // which preview window is open: an answer for an older (or cl
 async function nextSlot(body, what) {
   const d = $("#tool"), win = ++SLOTWIN; d.dataset.kind = "slot"; d.classList.remove("cover", "facesw");
   const live = () => win === SLOTWIN && d.open && d.dataset.kind === "slot";
-  d.innerHTML = `<div class="m-head"><b>Next open slot</b><span class="sp" style="color:var(--faint);font-size:12px">${esc(what)}</span><button class="x" data-close>×</button></div>
+  d.innerHTML = `<div class="m-head"><b>Next open slot</b><span class="sp" style="color:var(--faint);font-size:12px">${esc(what)}</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
     <div class="tbody"><div class="rep-list" id="slList"><span class="f">Finding slots…</span></div>
       <div><button class="btn primary" id="slApply" disabled>Pin</button></div></div>`;
   if (!d.open) d.showModal();
@@ -149,7 +149,7 @@ let CV = null;  // {ref, info, changes, box: "face" | "inset_face"}
 async function showCover(ref) {
   const d = $("#tool");
   d.dataset.kind = "cover"; d.classList.add("cover");
-  d.innerHTML = `<div class="m-head"><b>Cover</b><span style="color:var(--faint);font-size:12px">${esc(ref)}</span><button class="x" data-close>×</button></div><div class="tbody">Loading the frames…</div>`;
+  d.innerHTML = `<div class="m-head"><b>Cover</b><span style="color:var(--faint);font-size:12px">${esc(ref)}</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div><div class="tbody">Loading the frames…</div>`;
   if (!d.open) d.showModal();
   let info;
   try { info = await api("/api/cover?ref=" + encodeURIComponent(ref)); } catch (e) { d.querySelector(".tbody").innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; return; }
@@ -169,7 +169,7 @@ function renderCover() {
     const opt = (val, text) => `<option value="${esc(val)}" ${val === v ? "selected" : ""}>${esc(text)}</option>`;
     return `<select id="${id}">${opt("", "(none: use the frame)")}${info.photos.map(p => opt(p, p) + (info.photo_labels?.[p] || []).map(l => opt(p + "|" + l, `${p} · ${l}`)).join("")).join("")}</select>`;
   };
-  $("#tool").innerHTML = `<div class="m-head"><b>Cover</b><span style="color:var(--faint);font-size:12px">${esc(CV.ref)} · ${esc(info.style)}</span><button class="x" data-close>×</button></div>
+  $("#tool").innerHTML = `<div class="m-head"><b>Cover</b><span style="color:var(--faint);font-size:12px">${esc(CV.ref)} · ${esc(info.style)}</span><button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
     <div class="cv"><div>
       <img class="shot" id="cvShot" src="${esc(CV.preview || info.cover_url)}" alt="cover">
       <div class="f" style="font-size:11px;color:var(--faint);margin-top:6px">${CV.preview ? "Preview (not saved)" : "Current cover"} · click a frame to use it${enq ? "; shift-click for the inset" : ""}</div>
