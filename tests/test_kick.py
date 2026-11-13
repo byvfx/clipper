@@ -27,6 +27,12 @@ class FakeYtdlp:
     def wait(self):
         return self.code
 
+    def poll(self):
+        return None if getattr(self, "killed", None) is False else self.code
+
+    def kill(self):
+        self.killed = True
+
 
 def test_fetch_video_counts_skipped_segments(defaults, tmp_path, monkeypatch, capsys):
     (tmp_path / "meta.json").write_text(json.dumps({"stream_id": "kick-1"}), encoding="utf-8")
@@ -61,6 +67,45 @@ def test_fetch_video_failure_still_raises(defaults, tmp_path, monkeypatch):
     monkeypatch.setattr(kick.subprocess, "Popen", FakeYtdlp(["ERROR: 403\n"], code=1))
     with pytest.raises(subprocess.CalledProcessError):
         kick.fetch_video(tmp_path, {"source": "u"}, defaults)
+
+
+def test_a_resumed_download_keeps_the_failed_runs_count(defaults, tmp_path, monkeypatch, capsys):
+    (tmp_path / "meta.json").write_text(json.dumps({"stream_id": "kick-1"}), encoding="utf-8")
+    (tmp_path / "source.ts").write_bytes(b"ts")
+    (tmp_path / "source.ts.ytdl").write_text("{}", encoding="utf-8")  # yt-dlp's resume point
+    monkeypatch.setattr(kick.subprocess, "Popen", FakeYtdlp(
+        ["Skipping fragment 12\n", "Skipping fragment 13\n", "ERROR: connection reset\n"], code=1))
+    with pytest.raises(subprocess.CalledProcessError):
+        kick.fetch_video(tmp_path, {"source": "u"}, defaults)
+    assert (tmp_path / "source.ts.skipped").read_text(encoding="utf-8") == "2"
+    # the retry resumes after them, so doesn't print them again
+    monkeypatch.setattr(kick.subprocess, "Popen", FakeYtdlp(["Skipping fragment 40\n", "[download] 100%\n"]))
+    kick.fetch_video(tmp_path, {"source": "u"}, defaults)
+    assert json.loads((tmp_path / "meta.json").read_text(encoding="utf-8"))["skipped_fragments"] == 3
+    assert not (tmp_path / "source.ts.skipped").exists()
+
+
+def test_a_fresh_download_ignores_an_old_tally(defaults, tmp_path, monkeypatch):
+    (tmp_path / "source.ts.skipped").write_text("5", encoding="utf-8")  # no .ytdl: not a resume
+    monkeypatch.setattr(kick.subprocess, "Popen", FakeYtdlp(["[download] 100%\n"]))
+    kick.fetch_video(tmp_path, {"source": "u"}, defaults)
+    assert not (tmp_path / "source.ts.skipped").exists()
+    assert not (tmp_path / "meta.json").exists()
+
+
+def test_yt_dlp_is_killed_when_passing_its_output_through_fails(defaults, tmp_path, monkeypatch):
+    fake = FakeYtdlp(["Skipping fragment 1\n", "[download] 5%\n"])
+    fake.killed = False  # still running until killed
+    monkeypatch.setattr(kick.subprocess, "Popen", fake)
+
+    def broken(line):
+        raise BrokenPipeError
+
+    monkeypatch.setattr(kick.sys.stdout, "write", broken)
+    with pytest.raises(BrokenPipeError):
+        kick.fetch_video(tmp_path, {"source": "u"}, defaults)
+    assert fake.killed is True
+    assert (tmp_path / "source.ts.skipped").read_text(encoding="utf-8") == "1"
 
 
 def test_a_web_page_instead_of_json_is_a_clear_error(monkeypatch):

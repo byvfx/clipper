@@ -161,10 +161,15 @@ SKIPPED = re.compile(r"Skipping fragment", re.I)
 def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
     """The VOD as source.ts. yt-dlp skips a segment Kick no longer has and carries on; that is
     kept (a VOD can lose segments for good, and a gap beats no video), but counted: printed and
-    stored as meta.json's skipped_fragments, since every clip over the gap jumps there."""
+    stored as meta.json's skipped_fragments, since every clip over the gap jumps there. A failed
+    run leaves its count in source.ts.skipped: the retry resumes from source.ts.ytdl and doesn't
+    print those segments again."""
     out = stream_dir / "source.ts"
-    if out.exists() and not (stream_dir / "source.ts.ytdl").exists():
+    resuming = (stream_dir / "source.ts.ytdl").exists()
+    if out.exists() and not resuming:
         return out
+    tally = stream_dir / "source.ts.skipped"
+    skipped = _earlier_skips(tally) if resuming else 0
     k = cfg["kick"]
     proc = subprocess.Popen(
         [sys.executable, "-m", "yt_dlp", "--referer", "https://kick.com/",
@@ -175,12 +180,21 @@ def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
         # (--logtostderr is only the Python API's, the command line refuses it.)
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
     )
-    skipped = 0
-    for line in proc.stdout:  # passed through as it comes
-        sys.stdout.write(line)
-        skipped += bool(SKIPPED.search(line))
-    if proc.wait():
+    ok = False
+    try:
+        for line in proc.stdout:  # passed through as it comes
+            skipped += bool(SKIPPED.search(line))
+            sys.stdout.write(line)
+        ok = proc.wait() == 0
+    finally:
+        if proc.poll() is None:  # stopped above (a closed pipe, Ctrl-C): never leave it writing source.ts
+            proc.kill()
+            proc.wait()
+        if not ok and skipped:
+            tally.write_text(str(skipped), encoding="utf-8")
+    if not ok:
         raise subprocess.CalledProcessError(proc.returncode, proc.args)
+    tally.unlink(missing_ok=True)
     if skipped:
         print(f"{stream_dir.name}: warning: {skipped} video segments were missing on Kick; "
               f"the source has gaps there")
@@ -188,6 +202,14 @@ def fetch_video(stream_dir: Path, meta: dict, cfg: dict) -> Path:
         jsonstate.merge(stream_dir / "meta.json", {"skipped_fragments": skipped} if skipped else {},
                         ["skipped_fragments"])
     return out
+
+
+def _earlier_skips(tally: Path) -> int:
+    """The segments a failed run of this download skipped (0 if none, or unreadable)."""
+    try:
+        return int(tally.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return 0
 
 
 def _page_chunk(channel_id: int, start: float, end: float, ua: str,
