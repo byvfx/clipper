@@ -71,8 +71,8 @@ applies to the cards: a listed word in a header or title is masked, and a read c
 `cut` refuses a narration line with one and names it for you to rewrite in `story.json`.
 
 A story cut's loudness is `[story] lufs` (-14, what YouTube plays at); `[receipts] lufs` stays the
-receipts' own. A story cut before at another loudness is rendered again, and its cover picked
-again, the next time it is cut.
+receipts' own. A story cut before this setting existed, or at another loudness, is rendered
+again, and its cover picked again, the next time it is cut.
 
 ## Setup
 

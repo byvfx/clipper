@@ -140,7 +140,9 @@ tone.
   `[doc] tone_under` LU under the dialogue.
 
 The project's timeline frame rate must be the plan's (`fps` in `plan.toml`, else `[doc] fps`);
-a build into a project at another rate is refused before anything is placed.
+a build into a project at another rate is refused before anything is placed. Only whole frame
+rates are supported (24, 25, 30, 60), and reels at another rate than the timeline are untried:
+conform them first.
 
 After building, every item is read back from Resolve; an item that isn't where the plan put
 it, or a gain or fade Resolve refused, is an error.
@@ -172,7 +174,8 @@ from `banned.txt` is heard, printing the time and the words. It also reads `kit.
 transcript is kept per file, so a second run on the same render costs nothing.
 
 `banned.txt` is one term per line; `#` starts a comment. A term matches the same words (and
-their possessive: `Ann` also finds `Ann's`, not `Anna`), the same letters split or joined differently, and, for terms of five letters or more, letters
+their plural or possessive: `Ann` also finds `Ann's` and `Anns`, not `Anna`; a hyphen, slash or
+dash ends a word, so `Kent` is found in `Kent-based`), the same letters split or joined differently, and, for terms of five letters or more, letters
 close enough that a transcript's spelling of a name still counts (`[doc] leak_fuzzy`). Add the
 spellings you expect anyway. A line starting with `!` marks heard words that look like a
 term but are fine.

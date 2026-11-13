@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from . import wiki
-from .doc import A_CLIP, A_TONE, AUDIO, V_TEXT
+from .doc import A_CLIP, A_TONE, V_TEXT
 from .errors import ClipperError
 
 V_NAMES = ["Picture", "Labels and credits", "Text and cards"]
@@ -115,12 +115,13 @@ def pool_items(pool, media: dict[str, str]) -> dict:
 
 
 def source_frames(row: dict, fps: int, item) -> tuple[int, int]:
-    """A row's in and out in its source's own frames (a 60 fps reel in a 30 fps timeline)."""
+    """A row's in and out in its source's own frames (a 60 fps reel in a 30 fps timeline), its
+    sound rows too. Not tried against Resolve with a reel at another rate: conform such reels first."""
     try:
         rate = float(item.GetClipProperty("FPS") or fps)
     except (TypeError, ValueError):
         rate = fps
-    if row.get("type") == AUDIO or abs(rate - fps) < 0.01:
+    if abs(rate - fps) < 0.01:
         return row["start"], row["end"]
     start = round(row["start"] * rate / fps)
     return start, start + round((row["end"] - row["start"]) * rate / fps)

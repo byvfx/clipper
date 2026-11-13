@@ -260,6 +260,74 @@ def test_score_crosses_over_at_the_section_and_levels_follow_the_dialogue(plan, 
     assert b["sync"][0]["gain"] == 2.0                                            # the peak ceiling holds it back
     assert all(r["gain"] == 2.0 for r in b["audio"] if r["track"] == doc.A_UNDER)  # a fade takes its clip's gain
     assert doc.gain(-60.0, -40.0, -16.0, -1.0) == 0.0
+    # a cue too quiet to measure is left alone, never boosted by 38 dB; a muted clip's pieces share its gain
+    for r in b["audio"]:
+        r.pop("gain", None)
+    seen = []
+
+    def quiet_cue(clip, start, length):
+        seen.append((clip, start, length))
+        return (-70.0, 0.0) if clip == "cue1" else measure(clip, start, length)
+
+    doc.set_levels(b, quiet_cue, dc)
+    assert one["gain"] == 0.0 and two["gain"] == -22.0
+    pieces = [r for r in b["audio"] if r["track"] == doc.A_CLIP]
+    assert [x for x in seen if x[0] == "reel_b"] == [("reel_b", 40.0, 12.0)] * 2 and pieces[0]["gain"] == pieces[1]["gain"]
+    with pytest.raises(ClipperError, match="nothing follows that section"):
+        doc.add_score({**b, "sections": b["sections"][:1]}, plan, DUR, dc)
+
+
+def test_a_short_line_between_two_clips_keeps_its_fades_apart(dc):
+    plan = doc.parse_plan('''
+[[seq]]
+clip = "a"
+reel = "reel_a"
+from = 5
+to = 10
+[[seq]]
+say = "But why?"
+shots = [["reel_b", 0]]
+[[seq]]
+clip = "b"
+reel = "reel_b"
+from = 20
+to = 25
+''')
+    plan["fps"] = 30
+    vo = {1: {"file": "vo_x", "start": 0.0, "end": 0.7, "words": [(0.1, 0.3), (0.4, 0.6)]}}
+    b = doc.layout(plan, vo, DUR, dc, {})
+    rows = sorted((r["record"], r["record"] + r["end"] - r["start"]) for r in b["audio"] if r["track"] == doc.A_UNDER)
+    assert all(x[1] <= y[0] for x, y in zip(rows, rows[1:])) and len(rows) == 2
+    vo[1]["end"] = 0.3                              # no room left for the first clip's fade out: only the fade in
+    b = doc.layout(plan, vo, DUR, dc, {})
+    (only,) = [r for r in b["audio"] if r["track"] == doc.A_UNDER]
+    assert only["clip"].startswith("in_b") and only["record"] >= 150
+
+
+def test_plan_settings_that_cant_work_are_refused(defaults, tmp_path):
+    d = piece(defaults, tmp_path)
+    for fps in ("29.97", '"30"', "-24"):
+        (d / doc.PLAN).write_text(f"fps = {fps}\n" + PLAN, encoding="utf-8")
+        with pytest.raises(ClipperError, match="whole frame rates only"):
+            doc.load_plan(defaults, "lighthouse")
+    (d / doc.PLAN).write_text("fps = 24.0\n" + PLAN, encoding="utf-8")
+    plan = doc.load_plan(defaults, "lighthouse")[1]
+    assert plan["fps"] == 24 and isinstance(plan["fps"], int)
+    plan["media"] = {"intro": "nope/intro.mp4"}
+    with pytest.raises(ClipperError, match=r"\[media\] intro = 'nope/intro.mp4': no such file"):
+        doc.find_media(d, plan)
+
+
+def test_loudness_is_measured_once_a_file_and_stretch(tmp_path, monkeypatch):
+    f = tmp_path / "a.wav"
+    f.write_bytes(b"wav")
+    (tmp_path / "work").mkdir()
+    calls = []
+    monkeypatch.setattr(doc, "loudness", lambda p, s=None, n=None: calls.append((s, n)) or (-20.0, -3.0))
+    m = doc.measurer(tmp_path, {"a": f})
+    assert m("a", 1.0, 2.0) == (-20.0, -3.0) and m("a", 1.0, 2.0) == (-20.0, -3.0) and m("a", None, None)
+    assert doc.measurer(tmp_path, {"a": f})("a", 1.0, 2.0) == (-20.0, -3.0)       # a rebuild
+    assert calls == [(1.0, 2.0), (None, None)]
 
 
 def test_mutes_are_taken_out_as_one_union():
@@ -357,11 +425,16 @@ def test_banned_file_and_leaks(tmp_path):
         "down Marlow Street with Ann's dog".split())]
     hits = doc.leaks(words, terms, allowed, 0.82)
     got = [(h["term"], h["heard"], h["exact"]) for h in hits]
-    assert ("Harbor House", "harbour house,", False) in got     # a transcript's spelling
+    assert ("Harbor House", "harbour house", False) in got      # a transcript's spelling
     assert ("Harbor House", "Harborhouse", True) in got          # joined
     assert ("Marlowe", "Marlow", False) in got
     assert ("Ann", "Ann's", True) in got                         # a possessive
-    assert doc.leaks([("Anna", 0), ("Annex", 1), ("Anns", 2)], ["Ann"], set(), 0.82) == []   # other words, not hers
+    assert doc.leaks([("Anna", 0), ("Annex", 1), ("planning", 2)], ["Ann"], set(), 0.82) == []   # other words, not hers
+    heard = "the Dayton-area suburbs, a Kent-based firm, Kent/Dayton, Kent\u2014a town of Kents".split()
+    split = doc.leaks([(w, i) for i, w in enumerate(heard)], ["Dayton", "Kent"], set(), 0.82)
+    assert [(h["term"], h["heard"], h["t"]) for h in split] == [
+        ("Dayton", "Dayton", 1), ("Kent", "Kent", 4), ("Kent", "Kent", 6), ("Dayton", "Dayton", 6), ("Kent", "Kent", 7),
+        ("Kent", "Kents", 10)]
     joined = doc.leaks([("on", 0), ("HarborHouseRoad", 1.5)], ["Harbor House Road"], set(), 1.0)
     assert [(h["heard"], h["exact"], h["t"]) for h in joined] == [("HarborHouseRoad", True, 1.5)]
     assert not any(h["term"] == "Ann" and "annual" in h["heard"] or "planning" in h["heard"] for h in hits)
@@ -445,10 +518,9 @@ def test_kit_is_written_from_the_last_build(defaults, tmp_path):
 
 
 def test_a_storys_loudness_is_signed_only_when_it_differs():
-    assert story_edit.loud(-16, -16) is None and story_edit.loud(-14.0, -16) == ["lufs", -14.0]
+    assert story_edit.loud(-14.0) == ["lufs", -14.0]
     part = {"id": "p01", "item": "yt-x", "start": 1.0, "end": 9.0, "channel": "C", "date": "2026-01-01", "title": "T"}
     work = Path("work")
-    assert story_edit.part_file(work, part) == story_edit.part_file(work, part, None)      # as before the setting
     assert story_edit.part_file(work, part, ["lufs", -14.0]) != story_edit.part_file(work, part)
     assert story_edit.part_file(work, part, ["lufs", -14.0]) != story_edit.part_file(work, part, ["lufs", -12.0])
     assert story_edit.signature({}, [], lufs=["lufs", -14.0]) == [["lufs", -14.0]]

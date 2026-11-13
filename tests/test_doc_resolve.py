@@ -211,7 +211,7 @@ def test_source_frames_follow_the_reels_own_rate():
     assert doc_resolve.source_frames(row, 30, Item(fps="30")) == (300, 420)
     assert doc_resolve.source_frames(row, 30, Item(fps="60")) == (600, 840)
     assert doc_resolve.source_frames(row, 30, Item(fps="")) == (300, 420)
-    assert doc_resolve.source_frames({**row, "type": doc.AUDIO}, 30, Item(fps="60")) == (300, 420)
+    assert doc_resolve.source_frames({**row, "type": doc.AUDIO}, 30, Item(fps="60")) == (600, 840)   # its sound too
 
 
 def test_where_resolves_scripting_is_looked_for(monkeypatch):

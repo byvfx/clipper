@@ -370,10 +370,10 @@ def source_line(p: dict, t: float) -> dict:
             "link": source_link(p)}
 
 
-def loud(lufs: float, receipts: float) -> list | None:
-    """The signature's loudness entry: only when [story] lufs differs from [receipts] lufs, so a
-    story cut before the setting existed, with both the same, keeps its signature."""
-    return ["lufs", lufs] if lufs != receipts else None
+def loud(lufs: float) -> list:
+    """The loudness entry of a cut's signature and of its parts' file names: a cut made before
+    [story] lufs existed has none, so it is rendered again at the story's loudness."""
+    return ["lufs", lufs]
 
 
 def signature(data: dict, used: list[dict], seq: list[dict] | None = None, nc: dict | None = None,
@@ -464,8 +464,7 @@ def read_words(text: str, at: float, dur: float, seg0: int) -> tuple[list[dict],
 
 
 def part_file(work: Path, p: dict, lufs: list | None = None) -> Path:
-    """A part's render, named by its bounds, its lower third's text and (loud(): when the story
-    has a loudness of its own) its loudness: a changed channel, date, title or loudness renders
+    """A part's render, named by its bounds, its lower third's text and (loud()) its loudness: a changed channel, date, title or loudness renders
     it again, and a part rendered at another loudness is never joined into this cut."""
     h = hashlib.sha1(json.dumps([p["channel"], p["date"], p["title"], *(lufs or [])]).encode()).hexdigest()[:8]
     return work / f"{p['id']}_{p['item']}_{p['start']:.2f}-{p['end']:.2f}_{h}.mp4"
@@ -497,7 +496,6 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
         raise ClipperError(f"story.json: {'; '.join(bad)}")
     cfg = for_stream(cfg, sdir)
     sc = cfg["story"]
-    was = cfg["receipts"]["lufs"]                      # what a cut before [story] lufs was rendered at
     cfg = {**cfg, "receipts": {**cfg["receipts"], "lufs": sc["lufs"]}}   # receipts' renderer, the story's loudness
     rc = cfg["receipts"]
     used = [p for p in data["parts"] if p["use"]]
@@ -511,7 +509,8 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                            "rewrite it (tldr, the part's lead_in or close) and cut again")
     nc = narrator(cfg) if any("card" in x for x in seq) else None
     timing = [rc["card_s"], rc["vo_pad_s"], sc["read_wpm"], bleeper.rx and bleeper.rx.pattern]   # and what cards mask
-    sig = signature(data, used, seq, nc, timing, loud(sc["lufs"], was))
+    lufs = loud(sc["lufs"])
+    sig = signature(data, used, seq, nc, timing, lufs)
     work = sdir / "work"
     work.mkdir(parents=True, exist_ok=True)
     (sdir / "segments").mkdir(exist_ok=True)
@@ -519,7 +518,6 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     retire(sdir, final.stem)
     old = jsonstate.read(final.with_suffix(".json"), {}) or {}
     same = final.exists() and old.get("signature") == sig and not force
-    lufs = loud(sc["lufs"], was)
     bleeps = jsonstate.read(work / "bleeps.json", {}) or {}   # by part render, kept or new
     if same:
         print(f"{final.name}: the edit is unchanged, video kept (--force re-cuts)")
@@ -559,7 +557,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                 jsonstate.write(work / "bleeps.json", bleeps)
             rendered.append(dst)
         join(rendered, work / "concat.txt", final)
-        sig = signature(data, used, seq, nc, timing, loud(sc["lufs"], was))   # with the channels yt-dlp filled in, so the next cut matches
+        sig = signature(data, used, seq, nc, timing, lufs)   # with the channels yt-dlp filled in, so the next cut matches
     # where each piece starts in the video, from the rendered pieces' own lengths; a chapter
     # starts at each card, and at each part not set up by a card of its own
     starts, marks, words, seg0, t = [], [], [], 0, 0.0

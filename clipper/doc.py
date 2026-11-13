@@ -32,6 +32,7 @@ Resolve Studio open on this machine: clipper/doc_resolve.py.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
@@ -231,7 +232,11 @@ def load_plan(cfg: dict, slug: str) -> tuple[Path, dict]:
     if not (d / PLAN).exists():
         raise ClipperError(f"no piece {slug!r} in {d.parent} (clipper doc new {slug})")
     plan = parse_plan((d / PLAN).read_text(encoding="utf-8-sig"))
-    plan["fps"] = int(plan["fps"] or cfg["doc"]["fps"])
+    fps = plan["fps"] or cfg["doc"]["fps"]
+    if isinstance(fps, bool) or not isinstance(fps, (int, float)) or fps != int(fps) or fps <= 0:
+        raise ClipperError(f"{PLAN}: fps = {fps!r}: whole frame rates only (24, 25, 30, 60); a 29.97 or 23.976 "
+                           "project isn't supported")
+    plan["fps"] = int(fps)
     return d, plan
 
 
@@ -399,20 +404,24 @@ def process_take(raw: Path, dst: Path, dc: dict, keep: float) -> float:
     return len(y) / RATE
 
 
-def hear(wav: Path, model: str) -> list[list]:
-    """A take's words as heard, [word, start, end], by a small local Whisper (free, CPU)."""
+@functools.cache
+def whisper(model: str):
     try:
         from faster_whisper import WhisperModel
     except ImportError:
         raise ClipperError("word times need faster-whisper (uv sync --extra gpu, or "
                            "uv pip install faster-whisper)") from None
+    return WhisperModel(model, device="cpu", compute_type="int8")
+
+
+def hear(wav: Path, model: str) -> list[list]:
+    """A take's words as heard, [word, start, end], by a small local Whisper (free, CPU)."""
     import numpy as np
 
     # decoded by ffmpeg, not by faster-whisper's own reader (PyAV versions disagree about it)
     raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(wav), "-ar", "16000", "-ac", "1", "-f", "f32le", "-"],
                          check=True, capture_output=True).stdout
-    segs, _ = WhisperModel(model, device="cpu", compute_type="int8").transcribe(np.frombuffer(raw, np.float32),
-                                                                                word_timestamps=True)
+    segs, _ = whisper(model).transcribe(np.frombuffer(raw, np.float32), word_timestamps=True)
     return [[w.word.strip(), round(w.start, 2), round(w.end, 2)] for s in segs for w in s.words]
 
 
@@ -573,7 +582,7 @@ def layout(plan: dict, vo: dict[int, dict], dur: dict[str, float], dc: dict, lab
                 pieces = kept(a, b, [(fr(m0), fr(m1)) for m0, m1 in e["mute"]])
                 for k, (p0, p1) in enumerate(pieces):
                     audio.append({"clip": e["reel"], "start": p0, "end": p1, "record": f + p0 - a, "track": A_CLIP,
-                                  "type": AUDIO, "fade_in": 2 if k else 0, "fade_out": 2 if k + 1 < len(pieces) else 0})
+                                  "type": AUDIO, "of": [a, b], "fade_in": 2 if k else 0, "fade_out": 2 if k + 1 < len(pieces) else 0})
             sync.append(row)
             if e["over"]:
                 v3.append(_over(e["over"], f, b - a, V_TEXT))
@@ -600,6 +609,7 @@ def layout(plan: dict, vo: dict[int, dict], dur: dict[str, float], dc: dict, lab
             vo_at = 0 if cont else fr(dc["vo_after_clip_s"]) if tail else fr(dc["vo_lead_s"])
             # the block is as long as its words, in whole frames of the take: a take cut in two meets itself exactly
             k = fr(s1) - fr(s0) + round(gap * fps) + vo_at
+            lead_in = lead_in and k >= fr(leadin)
             if lead_in:
                 under("in", nxt["name"], nxt["reel"], fr(nxt["start"]) / fps - leadin, leadin, f + k - fr(leadin))
             shots = list(e["shots"])
@@ -607,7 +617,10 @@ def layout(plan: dict, vo: dict[int, dict], dur: dict[str, float], dc: dict, lab
             if tail:
                 reel, bf = tail
                 tf = fr(tail_s)
-                under("out", before["name"], reel, bf / fps, tail_s, f)
+                # a short line before another clip: the fade out ends where that clip's fade in starts
+                out_s = min(tail_s, (k - (fr(leadin) if lead_in else 0)) / fps)
+                if out_s >= 0.2:
+                    under("out", before["name"], reel, bf / fps, round(out_s, 4), f)
                 if shots[0]["reel"] != reel and (len(starts) == 1 or starts[1] >= tf + 24) and k >= tf + 30:
                     # the clip's picture runs on under the first words
                     shots = [{"reel": reel, "at": bf / fps, "over": before["over"]}, *shots]
@@ -656,6 +669,8 @@ def add_score(b: dict, plan: dict, dur: dict[str, float], dc: dict) -> None:
     fps, total = b["fps"], b["total"]
     xf = round(dc["crossfade_s"] * fps)
     at = {s["name"]: s["frame"] for s in b["sections"]}
+    if lost := [m["at"] for m in plan["music"] if m["at"] and m["at"] not in at]:
+        raise ClipperError(f"{PLAN}: [[music]] at = {lost[0]!r}: nothing follows that section")
     starts = [(at[m["at"]] if m["at"] else 0) + round(m["at_s"] * fps) for m in plan["music"]]
     for k, m in enumerate(plan["music"]):
         a = starts[k]
@@ -694,8 +709,9 @@ def set_levels(b: dict, measure, dc: dict) -> None:
     fps, target, ceiling = b["fps"], dc["dialogue_lufs"], dc["peak_ceiling"]
     whole: dict[str, float] = {}
     clips = [r for r in b["sync"] if r.get("type") != VIDEO] + [r for r in b["audio"] if r["track"] == A_CLIP]
-    for r in clips:
-        r["gain"] = gain(*measure(r["clip"], r["start"] / fps, (r["end"] - r["start"]) / fps), target, ceiling)
+    for r in clips:      # a muted clip's pieces are measured as the one clip they are ("of")
+        a, b_ = r.get("of") or (r["start"], r["end"])
+        r["gain"] = gain(*measure(r["clip"], a / fps, (b_ - a) / fps), target, ceiling)
     for r in b["audio"]:
         if r["track"] == A_VO:      # one gain a take, so a take cut in two doesn't step in level
             if r["clip"] not in whole:
@@ -709,7 +725,8 @@ def set_levels(b: dict, measure, dc: dict) -> None:
         elif r.get("music") or r.get("tone"):
             under = dc["music_under"] if r.get("music") else dc["tone_under"]
             if r["clip"] not in whole:
-                whole[r["clip"]] = round(target - under - measure(r["clip"], None, None)[0], 1)
+                lufs = measure(r["clip"], None, None)[0]
+                whole[r["clip"]] = 0.0 if lufs < -50 else round(max(-40.0, min(target - under - lufs, 14.0)), 1)
             r["gain"] = whole[r["clip"]]
 
 
@@ -728,6 +745,8 @@ def find_media(d: Path, plan: dict) -> dict[str, Path]:
     for name, path in plan["media"].items():
         p = Path(path).expanduser()
         out[name] = p if p.is_absolute() else d / p
+        if not out[name].is_file():
+            raise ClipperError(f"{PLAN}: [media] {name} = {str(path)!r}: no such file")
     return out
 
 
@@ -769,6 +788,21 @@ def loudness(path: Path, start: float | None = None, length: float | None = None
     seek = [] if start is None else ["-ss", f"{start:.3f}", "-t", f"{length:.3f}"]
     e = _run(["ffmpeg", "-hide_banner", *seek, "-i", str(path), "-vn", "-af", "ebur128=peak=true", "-f", "null", "-"]).stderr
     return parse_loudness(e)
+
+
+def measurer(d: Path, media: dict[str, Path]):
+    """set_levels' measure(): loudness(), kept in work/loudness.json by file and stretch, so a
+    rebuild measures only what changed."""
+    cache = jsonstate.read(d / "work" / "loudness.json", {}) or {}
+
+    def measure(clip: str, start: float | None, length: float | None) -> tuple[float, float]:
+        k = key_of(stamp(media[clip]), start, length)
+        if k not in cache:
+            cache[k] = list(loudness(media[clip], start, length))
+            jsonstate.write(d / "work" / "loudness.json", cache)
+        return tuple(cache[k])
+
+    return measure
 
 
 def parse_loudness(stderr: str) -> tuple[float, float]:
@@ -871,7 +905,7 @@ def build(cfg: dict, slug: str, dry_run: bool = False) -> dict:
     still_movies(d, b, media)
     if plan["room_tone"]:
         media["roomtone_bed"] = make_tone(d, media[plan["room_tone"]["file"]], b["total"] / b["fps"])
-    set_levels(b, lambda clip, s, n: loudness(media[clip], s, n), dc)
+    set_levels(b, measurer(d, media), dc)
     b["title"] = plan["title"]
     b["media"] = {k: str(v) for k, v in media.items()}
     jsonstate.write(d / "work" / "build.json", b)
@@ -955,11 +989,11 @@ def read_banned(path: Path) -> tuple[list[str], set[str]]:
 
 
 def leaks(words: list[tuple], terms: list[str], allowed: set[str], fuzzy: float) -> list[dict]:
-    """Where a banned term is in (word, time) pairs: the same words (or their possessive), the same
-    letters split or joined another way, or (five letters and up) letters close enough that a
+    """Where a banned term is in (word, time) pairs: the same words (or their plural or possessive;
+    a hyphen, slash or dash ends a word), the same letters split or joined another way, or (five letters and up) letters close enough that a
     transcript's spelling of a name still counts. One hit a term and place, the closest wording there:
     {term, heard, t, exact}. Words inside a phrase banned.txt marks fine are never a hit."""
-    toks = [(norm(w), w, t) for w, t in words if norm(w)]
+    toks = [(norm(x), x, t) for w, t in words for x in re.split(r"[^\w'\u2019]+", w) if norm(x)]
     fine: set[int] = set()
     for i in range(len(toks)):
         for n in range(1, 7):
@@ -975,7 +1009,7 @@ def leaks(words: list[tuple], terms: list[str], allowed: set[str], fuzzy: float)
                 if len(win) < n or set(range(i, i + n)) <= fine:
                     continue
                 got = "".join(x[0] for x in win)
-                exact = got == want or (got == want + "s" and bool(re.search(r"['\u2019]s\W*$", win[-1][1])))
+                exact = got in (want, want + "s")      # the term, its plural or possessive
                 ratio = SequenceMatcher(None, want, got, autojunk=False).ratio()
                 if exact or (len(want) >= 5 and ratio >= fuzzy):
                     found.append((not exact, -ratio, i, n, {"term": term, "heard": " ".join(x[1] for x in win),

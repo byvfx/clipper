@@ -966,7 +966,7 @@ voice_id = ""                  # the narrator's voice (clipper narrate voices), 
 tts_settings = {}              # the narrator's voice_settings, e.g. { stability = 0.5, speed = 1.0 }
 read_wpm = 160                 # a silent card's reading pace
 lufs = -14.0                   # a story cut's loudness (YouTube plays at -14); [receipts] lufs stays the receipts' own.
-                               # A story cut at another loudness is rendered again, and its cover picked again, on its next cut
+                               # A story cut before this setting, or at another loudness, is rendered again (and its cover picked again) on its next cut
 
 [doc]
 # `clipper doc`: a narrated mini-documentary from a hand-written plan ([paths] documentaries/
