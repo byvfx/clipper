@@ -17,9 +17,13 @@ README.md and SETUP.md are short pointers; CLAUDE.md the conventions; `reports/`
 Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds durable preferences.
 - Plan doc: https://claude.ai/code/artifact/a9bb9e38-ced0-4455-8d8e-18a78122f45f
 - Walkthrough (usage, for presenting; Claude Docs, 2026-10-27): https://claude.ai/code/artifact/0d0e04da-54f6-4f15-bad0-2df72a286383
-- Case study (2026-11-11): https://byvfx.github.io/clippa/ (`clippa/index.html` in byvfx/byvfx.github.io, Pages from
-  main). The README's hero (`docs/readme/hero-*.png`) is a screenshot of its header; the figures in both are
-  dated 11-11 and go stale: the log entry of that day has the re-render recipe.
+- Case study (2026-11-11, refreshed 11-13): https://byvfx.github.io/clippa/ (`clippa/index.html` in
+  byvfx/byvfx.github.io, Pages from main). Its source is the private artifact "Clippa Overview"
+  (https://claude.ai/artifact/HTF3noAawBG1M1JNYsLAMS): edit that, then splice the content from `<div class="figures">`
+  to `<footer` into the site page, which keeps its own head, nav and footer links. The README's hero
+  (`docs/readme/hero-*.png`, #237) is a screenshot of its header; the figures (347 videos, 736 tests) are dated
+  11-13 and go stale: the 11-11 log entry has the re-render recipe. The page has no show names; its documentary
+  case study names no subject, channel or title, and should stay that way.
 - Interactive demo (HTML, numbers as of 2026-10-27): https://claude.ai/artifact/ASL1grYiajRAELyoqTGitN
 - Keys are Windows **User** env vars (ANTHROPIC_API_KEY, KITSU_TOKEN, ...); agent shells must load them:
   `export KITSU_TOKEN="$(powershell.exe -NoProfile -Command "[Environment]::GetEnvironmentVariable('KITSU_TOKEN','User')" | tr -d '\r')"`
