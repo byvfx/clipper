@@ -124,7 +124,7 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   `serve` (war room on 127.0.0.1:8765, on the tailnet as https://clipper.taile415cd.ts.net/; heartbeat
   `streams/.serve/status.json`), `bot` (`streams/.bot/status.json`) and `worker` (cuts with QSV on the iGPU).
   Code changes go out with `bash deploy/hub/deploy.sh` from a main checkout; `clipper services status|restart ...`
-  runs docker compose there (`[serve] hub`). Last deploy 2026-11-08 21:51: main as of #184. **The config and
+  runs docker compose there (`[serve] hub`). Last deploy 2026-11-13 13:51: main as of #239 (with #233). **The config and
   all state are on the NAS:** `//192.168.0.155/docker/clipper` (`/data`) holds `clipper.toml` (the one copy;
   `CLIPPER_CONFIG` on the laptop points at it), `schedule.json`, secrets/, backups/, logs/, faces/, voices/,
   news/, weekly/, archive/, layouts/, people.json, fonts/. The laptop's old copies: `backups/laptop-state-2026-11-05/`.
@@ -239,14 +239,15 @@ live clips #81, blind items #111, investigate anyone #138, agent exploration #15
 a small `clipper mcp`; #13 may fold into it), Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
-- **Documentaries (11-13, PR #233):** `clipper doc
+- **Documentaries (11-13, PR #233, merged and deployed):** `clipper doc
   new|voice|build|master|leak|kit` (wiki Documentaries; `clipper/doc.py`, `doc_resolve.py`), the reusable form
   of the first mini-documentary's one-off Resolve scripts. A piece is `[paths] documentaries/<slug>/` on the
   share (plan.toml, banned.txt, media), never the repo. Tried: take processing, word timing, the take
   split and mastering on real files; `build`, the render and `master` against live Resolve 21.2 with a
-  synthetic piece (`C:\clipper-doc-test` on the laptop and the Resolve project `clipper-doc-test`, both
-  safe to delete). Not tried: `voice` against ElevenLabs, `leak` on Modal. On the first real piece, listen
-  to every take and watch the first built timeline. `[story] lufs = -14` is new: a story cut before it is
+  synthetic piece (its Resolve project is deleted; the folder `C:\clipper-doc-test` on the laptop is the
+  user's to delete). Not tried, because they cost: `voice` against ElevenLabs, `leak` on Modal; `--dry-run`
+  on each prints the cost first. Reels at another frame rate than the timeline are untried too. On the
+  first real piece, listen to every take and watch the first built timeline. `[story] lufs = -14` is new: a story cut before it is
   rendered again, and its cover picked again, on its next cut.
 - **B-roll library #229 (11-12, steps 1-2 of 4, PR #230):** `clipper broll find|add|list|keep|drop`
   (wiki B-roll): NASA, DVIDS (the B-Roll category; keys in `secrets/dvids_secret.txt`, public key first,
