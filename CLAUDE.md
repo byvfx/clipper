@@ -136,13 +136,17 @@ Windows notes above don't apply.
   and Windows (`.github/workflows/check.yml`), except one that changes only notes no test reads
   (root `*.md`, `docs/log/`, `docs/archive/`, `reports/`, `studio/` but for its `streamers.json`):
   that PR shows no checks.
-  Merging a PR that changes code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`: the
-  `review` workflow's paths): wait for the review, Copilot's of the head commit or else Grok's (the workflow runs Grok by itself when Copilot reviewed nothing; its `clipper codereview` comment, up to
-  ~25 min on a big PR), check each finding against the code, handle it and show the user, then
-  merge. Green CI alone isn't enough. A PR that touches none of those (the wiki, `uv.lock` alone,
-  `clipper.example.toml`, `streamers.json`, notes) or comes from Dependabot gets no review: don't wait for one, merge on
-  green CI where it runs and the user's word. A fork's PR gets none either (the workflow skips it:
-  no secrets): read its diff yourself, tell the user what you found, and merge only on their word. Copilot is the default reviewer (user, 2026-11-10): a repo ruleset requests it
-  when a PR opens, not on later pushes, and the `review` workflow runs Grok by itself for any commit it didn't review.
+  A PR that changes code (`clipper/`, `tests/`, `deploy/`, `.github/`, `pyproject.toml`) gets two
+  reviews (user, 2026-11-13; Grok's `review` workflow is gone, too slow): yours first, the
+  `code-review` skill at high effort on the branch against main before the first push, findings
+  fixed before the PR opens; then Copilot's, which a repo ruleset requests when the PR opens.
+  Copilot doesn't review later pushes on its own: run `code-review` again on what each push adds
+  (or ask Copilot with `gh pr edit N --add-reviewer @copilot` for a big one). Merge once Copilot's
+  review is in, each finding checked against the code, handled and shown to the user, and CI is
+  green. Green CI alone isn't enough. A PR that touches none of those (the wiki, `uv.lock` alone,
+  `clipper.example.toml`, `streamers.json`, notes) or comes from Dependabot needs no review: merge on
+  green CI where it runs and the user's word. A fork's PR: read its diff yourself, tell the user
+  what you found, and merge only on their word. `clipper codereview` (Grok through OpenRouter, ~$1
+  and ~25 min) is still there as a by-hand second opinion; say the cost first.
   Avoid `uv run`/`uv sync` while serve or the bot is up: they re-sync and cannot replace the running
   clipper.exe (`uv pip install --python .venv/Scripts/python.exe pytest` installs pytest alone).

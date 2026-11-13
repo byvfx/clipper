@@ -325,6 +325,7 @@ def test_copilot_state_tells_a_review_from_its_out_of_credits_notice():
 
 
 def test_a_commit_copilot_reviewed_gets_a_note_and_no_model_call(monkeypatch, defaults):
+    defaults["codereview"]["copilot_wait_s"] = 600   # the switch on (the default is 0 since 11-13)
     hub = Hub(reviews=[copilot("Looks fine")])
     assert not run_with(monkeypatch, defaults, hub, G)
     assert [n for n, _ in hub.posts] == [9]                 # no new comment on the linked issue
@@ -332,6 +333,7 @@ def test_a_commit_copilot_reviewed_gets_a_note_and_no_model_call(monkeypatch, de
 
 
 def test_copilots_review_replaces_findings_about_older_code(monkeypatch, defaults):
+    defaults["codereview"]["copilot_wait_s"] = 600   # the switch on (the default is 0 since 11-13)
     hub = Hub()
     assert run_with(monkeypatch, defaults, hub, G)          # the first push: findings on PR and issue
     hub.posts.clear()
@@ -342,6 +344,7 @@ def test_copilots_review_replaces_findings_about_older_code(monkeypatch, default
 
 
 def test_copilots_review_replaces_a_failed_one(monkeypatch, defaults):
+    defaults["codereview"]["copilot_wait_s"] = 600   # the switch on (the default is 0 since 11-13)
     failed = codereview.comment("", {**INFO, **G}, failed="timeout")
     hub = Hub({9: [{"id": 1, "body": failed}]}, reviews=[copilot("Looks fine")])
     assert not run_with(monkeypatch, defaults, hub, G)
@@ -356,6 +359,7 @@ def test_a_merge_of_main_after_copilot_isnt_reviewed_again(monkeypatch, defaults
 
 
 def test_a_note_stops_counting_when_copilots_review_is_dismissed(monkeypatch, defaults):
+    defaults["codereview"]["copilot_wait_s"] = 600   # the switch on (the default is 0 since 11-13)
     hub = Hub(reviews=[copilot("Looks fine")])
     run_with(monkeypatch, defaults, hub, G)
     hub.got_reviews = [{**copilot("Looks fine"), "state": "DISMISSED"}]
@@ -370,6 +374,7 @@ def test_a_dismissed_review_gets_the_model_and_no_note(monkeypatch, defaults):
 
 
 def test_a_later_run_repairs_an_issue_the_note_didnt_reach(monkeypatch, defaults):
+    defaults["codereview"]["copilot_wait_s"] = 600   # the switch on (the default is 0 since 11-13)
     hub = Hub(reviews=[copilot("Looks fine")])
     run_with(monkeypatch, defaults, hub, {**G, "digest": "d2"})      # the note, on the PR only
     stale = codereview.comment("### 1. a bug", {**INFO, **G}, pr=9)  # #70's copy, about older code
@@ -382,6 +387,7 @@ def test_a_later_run_repairs_an_issue_the_note_didnt_reach(monkeypatch, defaults
 
 
 def test_copilot_wait_0_runs_the_model_past_a_note(monkeypatch, defaults):
+    defaults["codereview"]["copilot_wait_s"] = 600   # the switch on (the default is 0 since 11-13)
     hub = Hub(reviews=[copilot("Looks fine")])
     run_with(monkeypatch, defaults, hub, G)
     defaults["codereview"]["copilot_wait_s"] = 0
