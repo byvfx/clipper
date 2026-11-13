@@ -77,7 +77,10 @@ def save_json(d: Path, name: str, data: dict) -> None:
 
 
 def save_catalog(d: Path, cat: dict[str, dict]) -> None:
-    save_json(d, "catalog.json", cat)
+    """Under the catalog's lock, which add and a running transcribe take too."""
+    d.mkdir(parents=True, exist_ok=True)
+    with jsonstate.locked(d / "catalog.json"):
+        jsonstate.write(d / "catalog.json", cat, indent=1)
 
 
 def item_dir(d: Path, it: dict) -> Path:
@@ -179,37 +182,49 @@ def add(cfg: dict, subject: str, urls: list[str], match: str | None = None) -> N
     """match: keep only items whose title matches this regex (case-insensitive), for a big
     channel with a few of the subject's videos in it (Adult Swim's On Cinema)."""
     d = subject_dir(cfg, subject)
-    cat = load_catalog(d)
     min_s = cfg["archive"]["min_duration_s"]
     try:
         pattern = re.compile(match, re.I) if match else None
     except re.error as e:
         raise ClipperError(f"--match {match!r} isn't a valid regular expression: {e}") from None
+    listings = []  # listed first (minutes for HEI), then merged into the catalog as it is by then
     for url in urls:
         found = list_source(cfg, url)
-        if pattern:
-            found = [it for it in found if pattern.search(it["title"])]
-        keep = [it for it in found if not 0 < it["duration_s"] < min_s]
-        new = [it for it in keep if it["id"] not in cat]
-        for it in found:  # kept as they are, but what an earlier listing lacked is filled in
-            old = cat.get(it["id"])
-            if old is None:
-                continue
-            if it.get("date") and not old.get("date"):
-                old["date"] = it["date"]
-            if it["duration_s"] and not old.get("duration_s"):  # its probe failed that time
-                idir = item_dir(d, old)
-                if it["duration_s"] < min_s and not (idir / "words.jsonl").exists() and not kept_video(idir):
-                    del cat[it["id"]]  # too short after all, and nothing made of it yet
-                else:
-                    old["duration_s"] = it["duration_s"]
-        # ahead of what was there: a source lists newest first, so one source stays newest first
-        cat = {**{it["id"]: it for it in new}, **cat}
-        matching = f" matching {match!r}" if match else ""
-        print(f"{url}: {len(found)} found{matching}, {len(found) - len(keep)} under {min_s} s skipped, "
-              f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
-    save_catalog(d, newest_first(cat))
+        listings.append((url, [it for it in found if pattern.search(it["title"])] if pattern else found))
+    d.mkdir(parents=True, exist_ok=True)
+    # under the lock a running transcribe takes to fill in a length, so neither loses the other's
+    with jsonstate.update(d / "catalog.json", {}, indent=1) as saved:
+        cat = dict(saved)
+        for url, found in listings:
+            cat = _merge_listing(d, cat, found, min_s)
+            new = [it for it in found if it["id"] in cat and cat[it["id"]] is it]
+            skipped = sum(1 for it in found if 0 < it["duration_s"] < min_s)
+            matching = f" matching {match!r}" if match else ""
+            print(f"{url}: {len(found)} found{matching}, {skipped} under {min_s} s skipped, "
+                  f"{len(new)} new ({sum(i['duration_s'] for i in new) / 3600:.0f} h)")
+        saved.clear()
+        saved.update(newest_first(cat))
     print(f"{subject}: {len(cat)} items, {sum(i['duration_s'] for i in cat.values()) / 3600:.0f} h")
+
+
+def _merge_listing(d: Path, cat: dict[str, dict], found: list[dict], min_s: float) -> dict[str, dict]:
+    """One source's listing into the catalog: its new items ahead of what was there (a source
+    lists newest first, so one source stays newest first); an old item is kept as it is, but
+    gains what an earlier listing lacked (a date, a length whose probe failed)."""
+    new = [it for it in found if not 0 < it["duration_s"] < min_s and it["id"] not in cat]
+    for it in found:
+        old = cat.get(it["id"])
+        if old is None:
+            continue
+        if it.get("date") and not old.get("date"):
+            old["date"] = it["date"]
+        if it["duration_s"] and not old.get("duration_s"):
+            idir = item_dir(d, old)
+            if it["duration_s"] < min_s and not (idir / "words.jsonl").exists() and not kept_video(idir):
+                del cat[it["id"]]  # too short after all, and nothing made of it yet
+            else:
+                old["duration_s"] = it["duration_s"]
+    return {**{it["id"]: it for it in new}, **cat}
 
 
 def newest_first(cat: dict[str, dict]) -> dict[str, dict]:

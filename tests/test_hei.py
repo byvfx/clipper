@@ -369,3 +369,20 @@ def test_a_transcript_fills_the_catalogs_missing_length(defaults, tmp_path, monk
                         lambda cfg, idir, it, gpu, retry_on: {"est_usd": 0.1, "signed_in": False, "duration_s": 3600.0})
     archive._transcribe_all(defaults, d, "oc", list(archive.load_catalog(d).values()), "L4", 1)
     assert archive.load_catalog(d)["hei-ep"]["duration_s"] == 3600.0
+
+
+def test_add_keeps_what_a_transcribe_wrote_during_the_listing(defaults, tmp_path, monkeypatch):
+    defaults["paths"]["archive"] = tmp_path / "archive"
+    d = tmp_path / "archive" / "oc"
+    archive.save_catalog(d, {"hei-old": {"id": "hei-old", "source": "hei", "title": "o", "duration_s": 0.0,
+                                         "date": "2020-01-01"}})
+
+    def slow_listing(cfg, url):  # meanwhile a transcribe learns hei-old's length
+        with archive.jsonstate.update(d / "catalog.json", {}, indent=1) as cat:
+            cat["hei-old"]["duration_s"] = 3600.0
+        return [{"id": "hei-new", "source": "hei", "title": "n", "duration_s": 600.0, "date": "2025-01-01"}]
+
+    monkeypatch.setattr(archive, "list_source", slow_listing)
+    archive.add(defaults, "oc", ["https://www.heinetwork.tv"])
+    cat = archive.load_catalog(d)
+    assert list(cat) == ["hei-new", "hei-old"] and cat["hei-old"]["duration_s"] == 3600.0
