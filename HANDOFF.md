@@ -229,6 +229,15 @@ live clips #81, blind items #111, investigate anyone #138, agent exploration #15
 a small `clipper mcp`; #13 may fold into it), Modal ideas #53, #55, #56,
 Udder Truth #58/#59/#60, P&L #50 (revenue once monetized). Write "#77 L6" rather than "fix #77" in commit
 messages: GitHub closes the issue on "fix".
+- **Documentaries (11-13, PR #233):** `clipper doc
+  new|voice|build|master|leak|kit` (wiki Documentaries; `clipper/doc.py`, `doc_resolve.py`), the reusable form
+  of the first mini-documentary's one-off Resolve scripts. A piece is `[paths] documentaries/<slug>/` on the
+  share (plan.toml, banned.txt, media), never the repo. Tried: take processing, word timing, the take
+  split and mastering on real files; `build`, the render and `master` against live Resolve 21.2 with a
+  synthetic piece (`C:\clipper-doc-test` on the laptop and the Resolve project `clipper-doc-test`, both
+  safe to delete). Not tried: `voice` against ElevenLabs, `leak` on Modal. On the first real piece, listen
+  to every take and watch the first built timeline. `[story] lufs = -14` is new: a story cut before it is
+  rendered again, and its cover picked again, on its next cut.
 - **B-roll library #229 (11-12, steps 1-2 of 4, PR #230):** `clipper broll find|add|list|keep|drop`
   (wiki B-roll): NASA, DVIDS (the B-Roll category; keys in `secrets/dvids_secret.txt`, public key first,
   added by the user 11-12), Prelinger and Commons; public domain / CC0 only, no sound by default (NASA

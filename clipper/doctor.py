@@ -989,6 +989,28 @@ def check_broll(cfg: dict) -> None:
     ok("broll", f"{cfg['paths']['broll']}: {n['kept']} kept, {n['new']} new, {n['long']} long")
 
 
+def check_doc(cfg: dict) -> None:
+    """`clipper doc`, once a piece exists: Resolve's scripting module and the local Whisper."""
+    import importlib.util
+
+    from .doc import PLAN
+    from .doc_resolve import api_paths
+
+    root = cfg["paths"]["documentaries"]
+    pieces = sorted(p.parent.name for p in root.glob(f"*/{PLAN}")) if root.is_dir() else []
+    if not pieces:
+        return
+    api, _ = api_paths(cfg["doc"])
+    if (Path(api) / "Modules").is_dir():
+        ok("doc", f"{len(pieces)} piece(s) in {root}; Resolve's scripting module found")
+    else:
+        warn("doc", f"Resolve's scripting module isn't at {api}: `clipper doc build` and `master` can't reach Resolve "
+             "here", wiki.page("Documentaries", "resolve"))
+    if not importlib.util.find_spec("faster_whisper"):
+        warn("doc", "faster-whisper isn't installed: `clipper doc voice` can't time a take's words",
+             "uv sync --extra gpu, or uv pip install faster-whisper")
+
+
 def check_cast_serve(cfg: dict) -> None:
     """serve's daily `cast auto` and the war room's Cast window check faces with OpenCV."""
     import importlib.util
@@ -1215,6 +1237,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     if role in ("all", "gpu", "claude"):
         check_narrate(cfg)
         check_broll(cfg)
+        check_doc(cfg)
     if role in ("all", "serve"):
         check_tailnet(cfg, offline)
     if role == "serve":
