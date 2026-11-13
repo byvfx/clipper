@@ -20,6 +20,7 @@ BAD = re.compile(r"\b(ERROR|WARNING|CRITICAL|Traceback|exit [1-9]\d*)\b|failed",
 SECRETISH = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD)$", re.I)
 IN_URL = re.compile(r"([?&](?:api_?key|key|access_token|token|secret|client_secret|password)=)[^&\s\"']+", re.I)
 SECRET_FILE_MAX = 64_000   # cookie jars and the like are skipped
+MIN_SECRET = 4   # shorter values (a "1" or "on" in a *_KEY flag) would blank ordinary words everywhere
 
 
 def _file_secrets(path: Path) -> list[str]:
@@ -63,7 +64,7 @@ def _secrets(cfg: dict) -> list[str]:
             for f in d.iterdir():
                 if f.is_file():
                     vals += _file_secrets(f)
-    return sorted({v for v in vals if len(v) >= 8}, key=len, reverse=True)   # longest first: one may contain another
+    return sorted({v for v in vals if len(v) >= MIN_SECRET}, key=len, reverse=True)   # longest first: one may contain another
 
 
 def scrub(line: str, secrets: list[str]) -> str:
@@ -105,10 +106,12 @@ def log_tail(cfg: dict, which: str = "serve", lines: str = "400", grep: str = ""
     # filtered: look further back, so a filter still finds n matches in a busy log
     bad = str(bad).lower() in ("1", "true", "yes", "on")
     got = tail(path, MAX_LINES * 10 if words or bad else n)
+    # blank first: a filter on the raw text would answer "is this the key's prefix?" (Copilot on #244)
+    secrets = _secrets(cfg)
+    got = scrub("\n".join(got), secrets).split("\n") if got else []   # one pass over the text, not one per line
     if bad:
         got = [x for x in got if BAD.search(x)]
     if words:
         got = [x for x in got if all(w in x.lower() for w in words)]
-    secrets = _secrets(cfg)
-    out.update(lines=[scrub(x, secrets) for x in got[-n:]], size=path.stat().st_size, name=path.name)
+    out.update(lines=got[-n:], size=path.stat().st_size, name=path.name)
     return out

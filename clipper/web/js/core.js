@@ -101,6 +101,10 @@ async function refreshLive() {
   catch (e) { /* Kick unreachable: keep the last state */ }
 }
 function renderLive() {
+  // keep the keyboard's place (and the menu's tick) across a re-render, the 60 s poll's included
+  const ae = document.activeElement, had = ae?.closest?.("#lives .live")?.dataset.live;
+  const inMenu = ae?.id === "liveRemember" ? "#liveRemember" : ae?.dataset?.watch ? `[data-watch="${ae.dataset.watch}"]` : "[data-watch]";
+  const ticked = $("#liveRemember")?.checked;
   $("#lives").innerHTML = LIVE.map((l, n) => {
     const rec = l.live ? recording(l) : null;
     const tip = l.live ? `${l.title || ""}\nlive ${since(l.since)} · ${rec ? "recording " + rec.id : "NOT recording"}` : `${l.channel}: offline, click for the channel`;
@@ -108,6 +112,8 @@ function renderLive() {
     return `<span class="live ${l.live ? "on" : ""}" data-live="${n}" title="${esc(tip)}"><button class="chipb" type="button"><span class="dot"></span>${esc(l.show_name)}${l.live
       ? ` · LIVE${l.viewers != null ? " · " + l.viewers.toLocaleString() : ""}${l.since ? " · " + since(l.since) : ""} <span class="rec ${rec ? "" : "off"}">${rec ? "● REC" : "○ no rec"}</span>` : ""}</button>${LIVEMENU === n ? liveMenu(l, rec) : ""}</span>`;
   }).join("");
+  if (ticked && $("#liveRemember")) $("#liveRemember").checked = true;
+  if (had != null) $(`#lives .live[data-live="${had}"] ${LIVEMENU === +had ? inMenu : ".chipb"}`)?.focus();
 }
 function liveMenu(l, rec) {
   return `<div class="livemenu" data-menu>

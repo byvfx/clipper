@@ -425,7 +425,9 @@ async function showLog(opts) {
   let r;
   try { r = await api(`/api/log?which=${encodeURIComponent(LOGQ.which)}&lines=400&q=${encodeURIComponent(LOGQ.q)}${LOGQ.bad ? "&bad=1" : ""}`); }
   catch (e) { return toast("Log: " + e.message, true); }
-  if (win !== LOGWIN || d.open && d.dataset.kind !== was && d.dataset.kind !== "log") return;  // asked again, or another tool opened
+  // asked again; another tool opened; or the window was open when asked and has been closed since
+  // (Copilot on #244: the answer reopened a window the user had just closed)
+  if (win !== LOGWIN || d.open && d.dataset.kind !== was && d.dataset.kind !== "log" || was !== null && !d.open) return;
   const focus = d.open && d.contains(document.activeElement) ? document.activeElement.id : "";
   d.dataset.kind = "log"; d.classList.remove("cover", "facesw");
   const cls = x => /\b(ERROR|CRITICAL|Traceback)\b|exit [1-9]/.test(x) ? "bad" : /\bWARNING\b|failed/i.test(x) ? "mid" : "";

@@ -397,3 +397,18 @@ def test_log_scrub_covers_secret_files_and_url_keys(tmp_path, defaults, monkeypa
     assert b == "404 for url: https://api.example/search?q=moon&api_key=•••&page=2"
     assert "cookiejar-value-not-a-key" not in logview._secrets(cfg)
     assert logview.log_tail(cfg, "serve", bad="0")["lines"] == [a, b]   # "0" is off
+
+
+def test_log_filters_see_only_scrubbed_text(tmp_path, defaults, monkeypatch):
+    """Copilot on #244: a filter on the raw line would confirm a key's prefix; short keys count too."""
+    from clipper.warroom import logview
+    monkeypatch.setenv("SOME_API_KEY", "k3y9")
+    log = tmp_path / "serve.log"
+    log.write_text("ERROR called with k3y9 and sk-live-abcdef123456\n", encoding="utf-8")
+    monkeypatch.setenv("OTHER_TOKEN", "sk-live-abcdef123456")
+    cfg = {**defaults, "paths": {**defaults["paths"], "serve_log": log}}
+    assert logview.log_tail(cfg)["lines"] == ["ERROR called with ••• and •••"]
+    for probe in ("sk-live-a", "k3y", "abcdef"):
+        assert logview.log_tail(cfg, grep=probe)["lines"] == []
+        assert logview.log_tail(cfg, grep=probe, bad="1")["lines"] == []
+    assert logview.log_tail(cfg, grep="•••")["lines"]   # what is shown can be searched
