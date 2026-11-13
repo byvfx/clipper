@@ -246,7 +246,8 @@ messages: GitHub closes the issue on "fix".
   split and mastering on real files; `build`, the render and `master` against live Resolve 21.2 with a
   synthetic piece (its Resolve project is deleted; the folder `C:\clipper-doc-test` on the laptop is the
   user's to delete). Not tried, because they cost: `voice` against ElevenLabs, `leak` on Modal; `--dry-run`
-  on each prints the cost first. Reels at another frame rate than the timeline are untried too. On the
+  first: `voice` prints the characters it would buy (not a price: work it out from the ElevenLabs plan),
+  `leak` prints a dollar estimate. Reels at another frame rate than the timeline are untried too. On the
   first real piece, listen to every take and watch the first built timeline. `[story] lufs = -14` is new: a story cut before it is
   rendered again, and its cover picked again, on its next cut.
 - **B-roll library #229 (11-12, steps 1-2 of 4, PR #230):** `clipper broll find|add|list|keep|drop`
