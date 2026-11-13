@@ -51,7 +51,7 @@ VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".ts", ".mpg", ".mpeg", ".
 OWNED = re.compile(r"©|\(c\) ?\d{4}|\bcopyright(ed)?\b|all rights reserved|used (with|by) permission"
                    r"|\blicensed (from|by|to)\b|\bgetty\b|shutterstock|\bistock|\bpond5\b|storyful"
                    r"|associated press|\bap (photo|video|images?|footage)\b|\breuters\b|\bafp\b", re.I)
-NOT_OWNED = re.compile(r"(not subject to|no known|free of|without) (any )?copyright|\bno copyright"
+NOT_OWNED = re.compile(r"(not subject to|no known|free of|without) (any )?copyright|\bno copyright|copyright[- ]free"
                        r"|copyright\W{0,3}(status\W{0,3})?(public domain|none|expired|not renewed)", re.I)
 MUSIC = re.compile(r"\bmusic\b", re.I)
 
@@ -85,12 +85,12 @@ def licence_code(text: str) -> str:
     t = (text or "").lower().replace("_", " ")
     if not t:
         return "other"
+    if re.search(r"-nc\b|\bnc\b|non[- ]?commercial|-nd\b|\bnd\b|no[- ]?deriv", t):
+        return "other"  # noncommercial or no-derivatives, whatever else it says: not for a monetized channel
     if "publicdomain/zero" in t or re.search(r"\bcc0\b|cc zero", t):
         return "cc0"
     if "publicdomain" in t or "public domain" in t or re.match(r"pd\b|pd-", t) or "public-domain" in t:
         return "pd"
-    if re.search(r"-nc\b|\bnc\b|non-?commercial|-nd\b|\bnd\b|no-?deriv", t):
-        return "other"  # noncommercial or no-derivatives: not for a monetized channel's edits
     if re.search(r"by-sa|by sa|attribution-sharealike", t):
         return "cc-by-sa"
     if re.search(r"licenses/by/|cc by\b|cc-by\b|attribution", t):
@@ -457,7 +457,9 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
     """Search each source for the query; new clips (or "long" entries) in the library, tagged
     with it. Returns how many were added."""
     bc = cfg["broll"]
-    n = n or bc["per_source"]
+    n = bc["per_source"] if n is None else n
+    if n < 1:
+        raise ClipperError("broll find: -n is the most new clips from each source, at least 1")
     query = query.strip()
     if not query:
         raise ClipperError("broll find: a search, e.g. \"hurricane from orbit\"")
@@ -469,7 +471,8 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
             say(f"{src}: {e}")
             continue
         lib = load(cfg)
-        have = {e["key"] for e in lib["clips"].values() if e.get("start") is None}
+        have = {e["key"] for e in lib["clips"].values() if e.get("start") is None
+                and not (e["status"] == "long" and (e.get("duration") or 0) <= bc["max_s"])}  # now fits: taken
         new = skipped = 0
         for c in cands:
             if new >= n:
@@ -515,8 +518,14 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
     tags = tags or []
     lib = load(cfg)
     max_s = cfg["broll"]["max_s"]
+    undrop = ""
     if target in lib["clips"]:
         base = lib["clips"][target]
+        if start is None and end is None and base["status"] == "long" and (base.get("duration") or 0) <= max_s:
+            c = dict(base)  # listed long before [broll] max_s went up: now it fits, taken whole
+            if why := refused(c, cfg):
+                raise ClipperError(f"{target}: {why}")
+            return take(cfg, c, [*base.get("tags", []), *tags], say=say)
         if start is None and end is None:
             raise ClipperError(f"{target} is {'long' if base['status'] == 'long' else 'already in the library'}: "
                                "--from/--to take a part of it")
@@ -534,8 +543,7 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
         c = _candidate(cfg, target, credit, licence)
         _inside(start, end, c["duration"], c["title"][:60])
         if c["key"] in lib["dropped"]:
-            with jsonstate.update(_index(cfg), {}) as idx:  # added by hand: no longer dropped
-                idx["dropped"] = [k for k in idx.get("dropped", []) if k != c["key"]]
+            undrop = c["key"]  # added by hand: no longer dropped, once the add has worked
         if start is None and end is None and c["duration"] > max_s:
             cid = clip_id(c["source"], c["key"])
             old = lib["clips"].get(cid) or {}
@@ -545,6 +553,7 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
                 return load(cfg)["clips"][cid]
             e = _entry(c, cid, "long", [*old.get("tags", []), *tags])
             _save(cfg, e)
+            _undrop(cfg, undrop)
             say(f"{e['id']}: {c['title'][:70]} ({c['duration'] / 60:.0f} min, long: add it again with --from/--to)")
             return e
     if end is None and start is not None:
@@ -553,7 +562,15 @@ def add(cfg: dict, target: str, start: float | None = None, end: float | None = 
             raise ClipperError(f"from {start:.0f} s to the end is over [broll] max_s ({max_s} s): give --to too")
     elif end is not None and start is None:
         start = 0.0
-    return take(cfg, c, tags, start, end, say=say)
+    e = take(cfg, c, tags, start, end, say=say)
+    _undrop(cfg, undrop)
+    return e
+
+
+def _undrop(cfg: dict, key: str) -> None:
+    if key:
+        with jsonstate.update(_index(cfg), {}) as idx:
+            idx["dropped"] = [k for k in idx.get("dropped", []) if k != key]
 
 
 def _candidate(cfg: dict, target: str, credit: str, licence: str) -> dict:
