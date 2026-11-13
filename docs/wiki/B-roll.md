@@ -39,8 +39,9 @@ hour and twenty minutes.
 
 Clips up to `[broll] max_s` (3 minutes) are downloaded whole and re-encoded to at most
 `[broll] max_height`. A longer one, like most Prelinger films, is listed as `long` with no
-file; `add <id> --from --to` takes the part you want. The files and `broll.json` are in
-`[paths] broll`.
+file; `add <id> --from --to` takes the part you want. Raise `max_s` and a long clip that now
+fits is downloaded whole: by the next find that returns it, or by `add <id>` with no times.
+The files and `broll.json` are in `[paths] broll`.
 
 ## Rights
 
@@ -48,7 +49,8 @@ A clip is kept only when its licence is in `[broll] licences` (`pd`, public doma
 `cc0` by default) and nothing in its title, description or credit names an outside owner
 (©, "copyright", "all rights reserved", Getty, AP, Reuters ...). Anything else is skipped,
 and the reason is printed. Adding `cc-by` keeps attribution-licensed clips too, but then every
-video that uses one must credit its author.
+video that uses one must credit its author. A noncommercial or no-derivatives clause (NC, ND)
+is never kept, whatever else the licence says, even "public domain, non-commercial use only".
 
 - **Credits.** Put the clip's credit line in the description of any video that uses it.
 - **Sound.** Clips have no sound unless `[broll] audio = true`. NASA videos often carry
