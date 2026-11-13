@@ -36,6 +36,7 @@
 - [Faces](Faces)
 - [Covers](Covers)
 - [Cast library](Cast-library)
+- [B-roll](B-roll)
 - [Weekly issue](Weekly-issue)
 - [X posts](X-posts)
 - [TikTok](TikTok)
