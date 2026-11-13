@@ -21,7 +21,7 @@ Project memory (`~/.claude/projects/C--clipper/memory/`, MEMORY.md first) holds 
   byvfx/byvfx.github.io, Pages from main). Its source is the private artifact "Clippa Overview"
   (https://claude.ai/artifact/HTF3noAawBG1M1JNYsLAMS): edit that, then splice the content from `<div class="figures">`
   to `<footer` into the site page, which keeps its own head, nav and footer links. The README's hero
-  (`docs/readme/hero-*.png`, #237) is a screenshot of its header; the figures (347 videos, 736 tests) are dated
+  (`docs/readme/hero-*.png`, #237) is a screenshot of its header; the figures (347 videos, 799 tests) are dated
   11-13 and go stale: the 11-11 log entry has the re-render recipe. The page has no show names; its documentary
   case study names no subject, channel or title, and should stay that way.
 - Interactive demo (HTML, numbers as of 2026-10-27): https://claude.ai/artifact/ASL1grYiajRAELyoqTGitN
