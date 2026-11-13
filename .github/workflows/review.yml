@@ -35,7 +35,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0   # the diff needs main's history too
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - name: Install (base dependencies only)
         run: uv sync --locked --no-dev
       - name: Review and post
