@@ -70,6 +70,10 @@ clips alone, and `edit_prompt_version = "v1"` plans the old clips-only edit. The
 applies to the cards: a listed word in a header or title is masked, and a read can't be bleeped, so
 `cut` refuses a narration line with one and names it for you to rewrite in `story.json`.
 
+A story cut's loudness is `[story] lufs` (-14, what YouTube plays at); `[receipts] lufs` stays the
+receipts' own. A story cut before at another loudness is rendered again, and its cover picked
+again, the next time it is cut.
+
 ## Setup
 
 Story dossiers need the swarm's keys plus Modal (as for `clipper

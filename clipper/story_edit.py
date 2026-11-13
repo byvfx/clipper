@@ -370,13 +370,26 @@ def source_line(p: dict, t: float) -> dict:
             "link": source_link(p)}
 
 
+def loud(lufs: float, receipts: float) -> list | None:
+    """The signature's loudness entry: only when [story] lufs differs from [receipts] lufs, so a
+    story cut before the setting existed, with both the same, keeps its signature."""
+    return ["lufs", lufs] if lufs != receipts else None
+
+
+def loud_of(sig: list | None, receipts: float) -> float:
+    """The loudness a signed cut was rendered at."""
+    return next((x[1] for x in sig or [] if isinstance(x, list) and x[:1] == ["lufs"]), receipts)
+
+
 def signature(data: dict, used: list[dict], seq: list[dict] | None = None, nc: dict | None = None,
-              timing: list | None = None) -> list:
+              timing: list | None = None, lufs: list | None = None) -> list:
     sig = [[p["item"], p["start"], p["end"], p["channel"], p["date"], p["title"]] for p in used]
     cards = [[x["card"], x["header"], x.get("title", ""), x["text"]] for x in seq or [] if "card" in x]
     if cards:  # the narration: its words, where the cards sit, the voice reading them, how long they stay up
         sig.append(["narration", [x.get("card") or x["part"]["id"] for x in seq or []], cards,
                     nc and [nc["voice_id"], nc["tts_model"], nc["tts_settings"]], timing])
+    if lufs:
+        sig.append(lufs)
     return sig
 
 
@@ -487,7 +500,10 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     if bad := check_parts(data):
         raise ClipperError(f"story.json: {'; '.join(bad)}")
     cfg = for_stream(cfg, sdir)
-    rc, sc = cfg["receipts"], cfg["story"]
+    sc = cfg["story"]
+    was = cfg["receipts"]["lufs"]                      # what a cut before [story] lufs was rendered at
+    cfg = {**cfg, "receipts": {**cfg["receipts"], "lufs": sc["lufs"]}}   # receipts' renderer, the story's loudness
+    rc = cfg["receipts"]
     used = [p for p in data["parts"] if p["use"]]
     if not used:
         raise ClipperError(f"story {slug}: no part has use = true in story.json")
@@ -499,7 +515,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                            "rewrite it (tldr, the part's lead_in or close) and cut again")
     nc = narrator(cfg) if any("card" in x for x in seq) else None
     timing = [rc["card_s"], rc["vo_pad_s"], sc["read_wpm"], bleeper.rx and bleeper.rx.pattern]   # and what cards mask
-    sig = signature(data, used, seq, nc, timing)
+    sig = signature(data, used, seq, nc, timing, loud(sc["lufs"], was))
     work = sdir / "work"
     work.mkdir(parents=True, exist_ok=True)
     (sdir / "segments").mkdir(exist_ok=True)
@@ -507,6 +523,8 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
     retire(sdir, final.stem)
     old = jsonstate.read(final.with_suffix(".json"), {}) or {}
     same = final.exists() and old.get("signature") == sig and not force
+    # parts rendered at another loudness are rendered again (their files are named by their bounds alone)
+    redo = force or loud_of(old.get("signature"), was) != sc["lufs"]
     bleeps = jsonstate.read(work / "bleeps.json", {}) or {}   # by part render, kept or new
     if same:
         print(f"{final.name}: the edit is unchanged, video kept (--force re-cuts)")
@@ -537,7 +555,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                             q["channel"] = seen
                     jsonstate.write(sdir / "story.json", data)
             dst = part_file(work, p)
-            if force or not dst.exists():
+            if redo or not dst.exists():
                 if p["ours"]:  # our own stream: its source video on the share, read from start
                     bleeps[dst.name] = clip(cfg, Path(p["dir"]), p, media.source_file(Path(p["dir"])), fonts,
                                             bug, bleeper, dst, label="", seek=True)
@@ -546,7 +564,7 @@ def cut(cfg: dict, slug: str, force: bool = False, review: bool = True) -> Path:
                 jsonstate.write(work / "bleeps.json", bleeps)
             rendered.append(dst)
         join(rendered, work / "concat.txt", final)
-        sig = signature(data, used, seq, nc, timing)   # with the channels yt-dlp filled in, so the next cut matches
+        sig = signature(data, used, seq, nc, timing, loud(sc["lufs"], was))   # with the channels yt-dlp filled in, so the next cut matches
     # where each piece starts in the video, from the rendered pieces' own lengths; a chapter
     # starts at each card, and at each part not set up by a card of its own
     starts, marks, words, seg0, t = [], [], [], 0, 0.0

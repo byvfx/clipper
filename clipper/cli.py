@@ -292,6 +292,24 @@ def cmd_broll(cfg: dict, args: argparse.Namespace) -> None:
     return None
 
 
+def cmd_doc(cfg: dict, args: argparse.Namespace) -> None:
+    from . import doc
+
+    a = args.action
+    if a == "new":
+        doc.new(cfg, args.slug, args.title or "")
+    elif a == "voice":
+        doc.voice(cfg, args.slug, args.dry_run)
+    elif a == "build":
+        doc.build(cfg, args.slug, args.dry_run)
+    elif a == "master":
+        doc.master(cfg, args.slug, args.file, args.timeline or "", not args.no_leak)
+    elif a == "leak":
+        doc.leak(cfg, args.slug, args.file, args.dry_run)
+    elif a == "kit":
+        doc.kit(cfg, args.slug)
+
+
 def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
     from . import news
 
@@ -1012,7 +1030,7 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'status', 'checkup', 'audit', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'cast', 'broll', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
+    ('Extras', ['weekly', 'cast', 'broll', 'doc', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'cookies', 'codereview']),
 ]
@@ -1692,6 +1710,31 @@ def add_extras(sub) -> None:
     for act, what in (("keep", "keep these new clips"), ("drop", "delete these clips; their sources aren't found again")):
         r = bsub.add_parser(act, help=what)
         r.add_argument("ids", nargs="+", metavar="ID", help="the clips' ids (clipper broll list)")
+
+    p = sub.add_parser("doc", help="a narrated mini-documentary: a hand-written plan -> narration -> a Resolve "
+                                   "timeline -> a mastered render, a leak check and a publish kit")
+    dsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_doc)
+    r = dsub.add_parser("new", help="a piece's folder in [paths] documentaries, with a starter plan.toml and banned.txt")
+    r.add_argument("slug", help="the piece's folder name: lower-case letters, digits and hyphens")
+    r.add_argument("--title", help="the working title (default: the slug)")
+    r = dsub.add_parser("voice", help="buy the narration (ElevenLabs, once per take), compress it, time its words")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+    r.add_argument("--dry-run", action="store_true", help="check the plan and say how many characters it would buy")
+    r = dsub.add_parser("build", help="the plan in frames, then a new timeline version in the open Resolve project")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+    r.add_argument("--dry-run", action="store_true", help="write work/build.json and stop: Resolve isn't touched")
+    r = dsub.add_parser("master", help="render the timeline, bring its sound to [doc] lufs, run the leak check")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+    r.add_argument("--file", type=Path, help="master this video instead of rendering from Resolve")
+    r.add_argument("--timeline", help="the timeline to render (default: the last one built)")
+    r.add_argument("--no-leak", action="store_true", help="skip the leak check (it transcribes on Modal)")
+    r = dsub.add_parser("leak", help="transcribe a render on Modal and fail on anything banned.txt lists")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+    r.add_argument("--file", type=Path, help="the video to check (default: the newest mastered render)")
+    r.add_argument("--dry-run", action="store_true", help="say what the transcript would cost and stop")
+    r = dsub.add_parser("kit", help="chapters from the section markers, description, credits and disclosures -> kit.md")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
 
     p = sub.add_parser("people", help="one record per person: names, channels, archive subject, cast folder "
                                       "(story and investigate look people up here)")
