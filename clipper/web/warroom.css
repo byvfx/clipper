@@ -26,6 +26,8 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .live.on { color: var(--text); border-color: #ff3b4e88; background: #2a0e13; }
 .live.on .dot { background: var(--red); box-shadow: 0 0 0 0 #ff3b4e; animation: pulse 1.6s infinite; }
 .live { cursor: pointer; position: relative; }
+.live .chipb { all: unset; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.live .chipb:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 99px; }
 .live:hover { border-color: #3a4552; }
 .live .rec { font: 700 10px var(--mono); color: var(--red); letter-spacing: .05em; }
 .live .rec.off { color: var(--faint); }
@@ -461,6 +463,7 @@ nav.views { display: none; }
 /* #206: keyboard focus shows on the clickable titles, slots and chips (role="button") too */
 [role="button"][tabindex]:focus-visible, .btn:focus-visible, .tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .panel h2 .btn.sm { margin-left: 8px; padding: 1px 8px; font: 600 11px var(--mono); letter-spacing: 0; text-transform: none; }
+@media (max-width: 700px) { .panel h2 .btn.sm { margin-left: auto; min-height: 36px; min-width: 56px; padding: 6px 12px; font-size: 13px; } }
 /* the log window */
 @media (min-width: 701px) { #tool[data-kind="log"] { width: min(1100px, 97vw); } }
 #tool .logbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

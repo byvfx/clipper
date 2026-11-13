@@ -194,8 +194,9 @@ class Handler(BaseHTTPRequestHandler):
         return bool(origin) and urlparse(origin).netloc not in hosts
 
     def fail(self, e: BaseException, status: int = 500) -> None:
-        """Errors go to the log in full; the page gets the type only (no NAS paths or
-        Kitsu replies over the network)."""
+        """Errors go to the log in full; the answer gets the type only (no NAS paths or
+        Kitsu replies in every failed request). The details are read on purpose, by whoever
+        holds the page's key, in its Log window (logview.py, secrets blanked)."""
         log.warning(f"{self.command} {urlparse(self.path).path}: {type(e).__name__}: {e}")
         self.send_json({"error": f"{type(e).__name__} (details in the serve log)"}, status)
 

@@ -320,7 +320,8 @@ function dailyChart(days) {
 function statTip(e) {
   const tip = $("#statTip");
   if (!tip) return;
-  const g = e.target.closest?.("[data-tip]");
+  // the element under the pointer, not e.target: a touch keeps its first target while it moves
+  const g = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-tip]");
   if (!g) { tip.hidden = true; return; }
   const [day, v, m, s] = g.dataset.tip.split("|");
   tip.innerHTML = `${new Date(day + "T12:00:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}<br><b>${(+v).toLocaleString()}</b> views<br>${Math.round(m / 60 * 10) / 10} h watched<br>${s >= 0 ? "+" : ""}${s} subscribers`;

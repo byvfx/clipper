@@ -104,8 +104,9 @@ function renderLive() {
   $("#lives").innerHTML = LIVE.map((l, n) => {
     const rec = l.live ? recording(l) : null;
     const tip = l.live ? `${l.title || ""}\nlive ${since(l.since)} · ${rec ? "recording " + rec.id : "NOT recording"}` : `${l.channel}: offline, click for the channel`;
-    return `<span class="live ${l.live ? "on" : ""}" data-live="${n}" role="button" tabindex="0" title="${esc(tip)}"><span class="dot"></span>${esc(l.show_name)}${l.live
-      ? ` · LIVE${l.viewers != null ? " · " + l.viewers.toLocaleString() : ""}${l.since ? " · " + since(l.since) : ""} <span class="rec ${rec ? "" : "off"}">${rec ? "● REC" : "○ no rec"}</span>` : ""}${LIVEMENU === n ? liveMenu(l, rec) : ""}</span>`;
+    // #206: the chip's label is a real button (keyboard, screen readers); its menu sits beside it
+    return `<span class="live ${l.live ? "on" : ""}" data-live="${n}" title="${esc(tip)}"><button class="chipb" type="button"><span class="dot"></span>${esc(l.show_name)}${l.live
+      ? ` · LIVE${l.viewers != null ? " · " + l.viewers.toLocaleString() : ""}${l.since ? " · " + since(l.since) : ""} <span class="rec ${rec ? "" : "off"}">${rec ? "● REC" : "○ no rec"}</span>` : ""}</button>${LIVEMENU === n ? liveMenu(l, rec) : ""}</span>`;
   }).join("");
 }
 function liveMenu(l, rec) {
@@ -253,7 +254,7 @@ function loadHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   TAB = TABS[p.get("tab")] ? p.get("tab") : "waiting"; SHOW = p.get("show") || ""; KINDF = p.get("kind") || "";
   Q = p.get("q") || ""; ST = p.get("st") || ""; FROM = p.get("from") || ""; TO = p.get("to") || "";
-  SORT = SORTS[p.get("sort")] ? p.get("sort") : "";
+  SORT = Object.hasOwn(SORTS, p.get("sort") || "") ? p.get("sort") || "" : "";
   if (Q) searchTranscripts();
 }
 window.addEventListener("hashchange", () => { loadHash(); if (STATE) renderQueue(); });

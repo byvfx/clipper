@@ -379,3 +379,21 @@ def test_log_tail_reads_only_the_end_of_a_big_file(tmp_path, monkeypatch):
     p.write_text("".join(f"line {k:04d}\n" for k in range(1000)), encoding="utf-8")
     got = logview.tail(p, 1000)
     assert got[-1] == "line 0999" and 0 < len(got) <= 10 and all(x.startswith("line ") and len(x) == 9 for x in got)
+
+
+def test_log_scrub_covers_secret_files_and_url_keys(tmp_path, defaults, monkeypatch):
+    from clipper.warroom import logview
+    sec = tmp_path / "secrets"
+    sec.mkdir()
+    (sec / "dvids_secret.txt").write_text("pubkey-0123456789\nsecretkey-abcdefghij\n", encoding="utf-8")
+    (sec / "x_token.json").write_text('{"access_token": "tok-abcdefghijkl", "scope": "tweet.write"}', encoding="utf-8")
+    (sec / "youtube_cookies.txt").write_text("cookiejar-value-not-a-key\n", encoding="utf-8")
+    log = tmp_path / "serve.log"
+    log.write_text("used secretkey-abcdefghij and tok-abcdefghijkl, scope tweet.write\n"
+                   "404 for url: https://api.example/search?q=moon&api_key=zzzzzzzz12345&page=2\n", encoding="utf-8")
+    cfg = {**defaults, "paths": {**defaults["paths"], "serve_log": log, "x_token": sec / "x_token.json"}}
+    a, b = logview.log_tail(cfg, "serve")["lines"]
+    assert a == "used ••• and •••, scope tweet.write"
+    assert b == "404 for url: https://api.example/search?q=moon&api_key=•••&page=2"
+    assert "cookiejar-value-not-a-key" not in logview._secrets(cfg)
+    assert logview.log_tail(cfg, "serve", bad="0")["lines"] == [a, b]   # "0" is off

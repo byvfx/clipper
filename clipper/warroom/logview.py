@@ -1,8 +1,11 @@
 """#206: the end of the serve or bot log for the page, so an error that says "details in the
 serve log" can be read from the phone without ssh. Read-only; behind the page's token like
-every other route. Values of secret env vars and the page's token are blanked on the way out."""
+every other route, so whoever holds the page's key reads what serve logs (fail() keeps details
+out of the API's answers; this is the place they are meant to be read). Secrets are blanked on
+the way out: secret env vars, the keys and tokens under secrets/, and key=... in URLs."""
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -14,20 +17,59 @@ LOGS = {"serve": "serve_log", "bot": "bot_log"}   # ?which= -> its [paths] key
 TAIL_BYTES = 1_000_000   # read at most this much from the end of the file
 MAX_LINES = 2000
 BAD = re.compile(r"\b(ERROR|WARNING|CRITICAL|Traceback|exit [1-9]\d*)\b|failed", re.I)
-SECRETISH = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD)$")
+SECRETISH = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD)$", re.I)
+IN_URL = re.compile(r"([?&](?:api_?key|key|access_token|token|secret|client_secret|password)=)[^&\s\"']+", re.I)
+SECRET_FILE_MAX = 64_000   # cookie jars and the like are skipped
+
+
+def _file_secrets(path: Path) -> list[str]:
+    """The secret-looking values in one file under secrets/: a JSON file's values under keys
+    like *token / *secret / *key, a text file's words (a key file holds one or two)."""
+    try:
+        if path.stat().st_size > SECRET_FILE_MAX:
+            return []
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    if path.suffix == ".json":
+        try:
+            data = json.loads(text)
+        except ValueError:
+            return []
+        out: list[str] = []
+        def walk(x, key=""):
+            if isinstance(x, dict):
+                for k, v in x.items():
+                    walk(v, k)
+            elif isinstance(x, list):
+                for v in x:
+                    walk(v, key)
+            elif isinstance(x, str) and SECRETISH.search(key):
+                out.append(x)
+        walk(data)
+        return out
+    if path.suffix == ".txt" and "cookie" not in path.name:
+        return text.split()
+    return []
 
 
 def _secrets(cfg: dict) -> list[str]:
-    vals = [v for k, v in os.environ.items() if SECRETISH.search(k) and len(v) >= 8]
-    if (t := token(cfg)) and len(t) >= 8:
-        vals.append(t)
-    return sorted(set(vals), key=len, reverse=True)   # a longer secret before one it contains
+    vals = [v for k, v in os.environ.items() if SECRETISH.search(k)]
+    vals.append(token(cfg))
+    dirs = {Path(v).parent for v in base(cfg)["paths"].values()
+            if isinstance(v, (str, Path)) and str(v) and "secrets" in Path(v).parts}
+    for d in dirs:
+        if d.is_dir():
+            for f in d.iterdir():
+                if f.is_file():
+                    vals += _file_secrets(f)
+    return sorted({v for v in vals if len(v) >= 8}, key=len, reverse=True)   # longest first: one may contain another
 
 
 def scrub(line: str, secrets: list[str]) -> str:
     for s in secrets:
         line = line.replace(s, "•••")
-    return line
+    return IN_URL.sub(r"\1•••", line)
 
 
 def tail(path: Path, n: int) -> list[str]:
@@ -61,6 +103,7 @@ def log_tail(cfg: dict, which: str = "serve", lines: str = "400", grep: str = ""
         return out
     words = grep.lower().split()
     # filtered: look further back, so a filter still finds n matches in a busy log
+    bad = str(bad).lower() in ("1", "true", "yes", "on")
     got = tail(path, MAX_LINES * 10 if words or bad else n)
     if bad:
         got = [x for x in got if BAD.search(x)]
