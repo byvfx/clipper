@@ -225,7 +225,7 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 
 ## Open work
 **Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (this week, small: #204 next, then
-#228, #205, #199; #201 and #203 closed and #206 all but done by PR #244, merged 11-13 but NOT deployed yet), `p2-dated` (#192 after 11-16,
+#228, #205, #199; #201 and #203 closed and #206 all but done by PR #244, merged and deployed 11-13), `p2-dated` (#192 after 11-16,
 #41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
 Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
 `parked` (the rest). `gh issue list --label p1-now` is the queue. 11-13: #13 folded into #158, #200 closed (its
