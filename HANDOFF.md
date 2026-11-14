@@ -186,11 +186,8 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   Moving a stage (e.g. Pass A to DeepSeek V4 Pro) is a config change whenever the user wants it.
 
 ## Waiting on the user
-- **p1 PRs #247-#250 are merged (11-13), not deployed:**
-  update the laptop checkout (`git checkout main; git pull`: deploy.sh copies `clipper/` from it) and deploy the hub: `& "C:\Program Files\Git\bin\bash.exe" deploy/hub/deploy.sh`. **After** the deploy (an older
-  hub refuses the new key), back up `clipper.toml` to `backups/` and add `[streams] never_prune =
-  ["kick-131151926"]`: the test stream otherwise looks prunable. `streams prune` stays by hand until you set
-  `[streams] keep_source_days` (111 GB would go at 30 days).
+- **`clipper streams prune`** stays by hand until you set `[streams] keep_source_days` in clipper.toml
+  (111 GB would go at 30 days). The test stream is in `[streams] never_prune` (set 11-13).
 - `secrets/youtube_cookies.netscape.txt` on the share is unused since PR #195 and can be deleted.
 - Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/`).
 - Branches and worktrees were cleaned up again 11-13: everything merged is gone, plus the old `ccr-*` and
@@ -230,7 +227,7 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 
 ## Open work
 **Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (built 11-13, one PR each, all merged
-11-13 and waiting on the hub deploy: #199 PR #247, #204 PR #248, #228 PR #249,
+and deployed 11-13: #199 PR #247, #204 PR #248, #228 PR #249,
 #205 PR #250; #201, #203 and #206 closed), `p2-dated` (#192 after 11-16,
 #41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
 Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
@@ -352,8 +349,7 @@ messages: GitHub closes the issue on "fix".
 ## Back up the taste layer (user, 2026-10-24)
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
 like footage. `clipper backup` (PR #248, #204; wiki Backups) zips the list below into `backups/taste/`
-(about 17 MB, 390 files; the newest 8 kept; secrets only with `--with-secrets`), and once the hub is
-deployed serve makes one every 7 days. The first was made by hand 11-13 (`backups/taste/taste-2026-11-13-1707.zip`,
+(about 17 MB, 390 files; the newest 8 kept; secrets only with `--with-secrets`), and serve makes one every 7 days. The first was made by hand 11-13 (`backups/taste/taste-2026-11-13-1707.zip`,
 no secrets). Copy one off the NAS now and then. Not in it: `deploy/*/env.local` and the Kitsu volumes.
 - **In git (push it):** `clipper/prompts/` (every version, never edit one that produced reviewed output),
   `clipper.example.toml`, `studio/`, `reports/`, this file.
