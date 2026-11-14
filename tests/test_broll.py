@@ -526,3 +526,90 @@ def test_licence_whitespace_runs(cfg):
     for lic in ("CC BY  NC 4.0", "CC BY\tND 4.0", "Public domain; CC  ND", "non   commercial"):
         assert broll.licence_code(lic) == "other", lic
     assert broll.licence_code("  Public\tdomain ") == "pd"
+
+
+PIXABAY_VIDEOS = {"large": {"url": "https://cdn.pixabay.com/v/1_large.mp4", "width": 3840, "height": 2160, "size": 90},
+                  "medium": {"url": "https://cdn.pixabay.com/v/1_medium.mp4", "width": 1920, "height": 1080, "size": 30},
+                  "small": {"url": "https://cdn.pixabay.com/v/1_small.mp4", "width": 1280, "height": 720, "size": 12},
+                  "tiny": {"url": "", "width": 0, "height": 0, "size": 0}}
+
+
+def test_pixabay_search_pick_resolve_and_cache(cfg, monkeypatch):
+    monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
+    cfg["paths"]["pixabay_key"] = cfg["paths"]["broll"] / "missing.txt"
+    with pytest.raises(ClipperError, match="PIXABAY_API_KEY"):
+        broll.pixabay("courtroom", 2, cfg)
+    monkeypatch.setenv("PIXABAY_API_KEY", "sekrit")
+    calls = []
+
+    def get(url, params=None, timeout=20, ua=""):
+        calls.append((url, dict(params)))
+        return {"hits": [{"id": 254922, "pageURL": "https://pixabay.com/videos/id-254922/", "tags": "law, justice, gavel",
+                          "duration": 10, "user": "Someone", "videos": PIXABAY_VIDEOS},
+                         {"id": 2, "videos": "not a dict"}]}
+
+    monkeypatch.setattr(broll, "_get", get)
+    (c,) = broll.pixabay("courtroom", 2, cfg)
+    url, params = calls[0]
+    assert url == "https://pixabay.com/api/videos/" and params["key"] == "sekrit"
+    assert params["video_type"] == "film" and params["safesearch"] == "true" and params["q"] == "courtroom"
+    assert c["url"] == "https://cdn.pixabay.com/v/1_medium.mp4"  # the smallest that's 1080 tall
+    assert c["credit"] == "Someone on Pixabay" and c["duration"] == 10.0 and broll.licence_code(c["licence"]) == "pixabay"
+    assert not broll.refused(c, cfg)
+    broll.pixabay("courtroom", 2, cfg)
+    assert len(calls) == 1  # the same request within 24 h: from the cache
+    cfg["broll"]["max_height"] = 4320
+    for page in ("https://pixabay.com/videos/courthouse-building-254922/", "https://pixabay.com/videos/id-254922/"):
+        c2 = broll.resolve(page, cfg)
+        assert calls[-1][1]["id"] == "254922" and c2["url"].endswith("_large.mp4")  # none that tall: the tallest
+    cfg["broll"]["max_height"] = 1080
+    monkeypatch.setitem(broll.FINDERS, "pixabay", broll.pixabay)
+    assert broll.find(cfg, "courtroom", ["pixabay"], say=lambda s: None) == 1
+    for f in (broll.INDEX, broll.PIXABAY_CACHE):
+        assert "sekrit" not in (cfg["paths"]["broll"] / f).read_text(encoding="utf-8")
+
+
+def test_pixabay_errors_hide_the_key(cfg, monkeypatch):
+    monkeypatch.setenv("PIXABAY_API_KEY", "sekrit")
+
+    def fails(url, params=None, timeout=20, ua=""):
+        raise ClipperError(f"pixabay.com: HTTP 400 {params['key']}")
+
+    monkeypatch.setattr(broll, "_get", fails)
+    with pytest.raises(ClipperError) as e:
+        broll.pixabay("courtroom", 2, cfg)
+    assert "sekrit" not in str(e.value)
+
+
+def test_pixabay_without_a_file_is_skipped(cfg, monkeypatch):
+    monkeypatch.setenv("PIXABAY_API_KEY", "k")
+    monkeypatch.setattr(broll, "_get", lambda url, params=None, timeout=20, ua="": {"hits": [
+        {"id": 3, "pageURL": "https://pixabay.com/videos/id-3/", "tags": "x", "duration": 5,
+         "videos": {"tiny": {"url": ""}}}]})
+    said = []
+    assert broll.find(cfg, "x", ["pixabay"], say=said.append) == 0
+    assert any("no mp4" in s for s in said)
+
+
+def test_cli_source_choices_are_the_sources():
+    from clipper.cli import build_parser
+
+    for src in broll.SOURCES:
+        assert build_parser().parse_args(["broll", "find", "x", "--source", src]).source == [src]
+        assert build_parser().parse_args(["broll", "list", "--source", src]).source == src
+
+
+def test_pixabay_review_fixes(cfg, monkeypatch):  # the local review of the Pixabay source
+    monkeypatch.setenv("PIXABAY_API_KEY", "k")
+    with pytest.raises(ClipperError, match="needs the config"):
+        broll.pixabay("x", 1, None)
+    calls = []
+    monkeypatch.setattr(broll, "_get", lambda url, params=None, timeout=20, ua="": calls.append(params) or {"hits": []})
+    broll.pixabay("", 1, cfg, video_id="12345")
+    assert calls[-1]["id"] == "12345" and "safesearch" not in calls[-1]  # an address added by hand isn't filtered
+    broll.pixabay("cow", 1, cfg)
+    assert calls[-1]["safesearch"] == "true"
+    assert "only Pixabay" in broll.refused(cand(licence="Pixabay License"), cfg)  # not from Commons
+    assert not broll.refused(cand(source="pixabay", licence="Pixabay Content License"), cfg)
+    with pytest.raises(ClipperError, match="no mp4"):
+        broll.media(cand(source="commons", url=""), cfg)

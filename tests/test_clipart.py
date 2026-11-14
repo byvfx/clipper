@@ -372,7 +372,7 @@ def test_pixabay_cache_expires(cfg, monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(clipart.broll, "_get", lambda url, params=None, timeout=20, ua="": calls.append(1) or {"hits": []})
     t = [1_000_000.0]
-    monkeypatch.setattr(clipart.time, "time", lambda: t[0])
+    monkeypatch.setattr(clipart.broll.time, "time", lambda: t[0])
     clipart.pixabay("cow", 4, cfg)
     clipart.pixabay("cow", 4, cfg)
     assert len(calls) == 1

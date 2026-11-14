@@ -25,7 +25,8 @@ where it came from, its credit line and its licence.
 - `pixabay`: Pixabay's vectors (`[clipart] pixabay_type`, or `illustration` or `all`) under
   the Pixabay Content License. It needs a free key: sign up at pixabay.com, copy your key from
   pixabay.com/api/docs into `secrets/pixabay_secret.txt` (`[paths] pixabay_key`), or set
-  `PIXABAY_API_KEY`. The key is never written to `clipart.json` or printed. Without a key,
+  `PIXABAY_API_KEY` ([b-roll](B-roll) uses the same key for Pixabay's video). The key is
+  never written to `clipart.json` or printed. Without a key,
   Pixabay is skipped. Pictures come at most 1280 pixels wide, unless Pixabay grants your key
   full access. `pixabay_transparent = true` keeps only pictures with a transparent background.
 

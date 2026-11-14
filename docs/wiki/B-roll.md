@@ -1,6 +1,7 @@
 The b-roll library (#229) keeps short clips that are free to use, for [story cuts](Story-dossiers),
 explainers and the [weekly issue](Weekly-issue): footage made by the US government has no
-copyright, and the Internet Archive and Wikimedia Commons state each item's licence. Each clip
+copyright, the Internet Archive and Wikimedia Commons state each item's licence, and Pixabay's
+own licence allows commercial use without a credit. Each clip
 keeps where it came from, its credit line and its licence. Still pictures (engravings,
 drawings, emoji, icons) are in the [clip art library](Clip-art).
 
@@ -18,6 +19,13 @@ drawings, emoji, icons) are in the [clip art library](Clip-art).
 - `prelinger`: the Internet Archive's Prelinger films: ads, industrial and educational films
   from the 1930s to the 1970s. No key.
 - `commons`: Wikimedia Commons video, a lot of it government footage already. No key.
+- `pixabay`: Pixabay's stock video (city streets, buildings, nature, everyday objects) under the
+  Pixabay Content License. Only live footage is searched (`[broll] pixabay_type = "film"`;
+  `"animation"` or `""` for both), with safe search on. It needs a free key, the same one
+  [clip art](Clip-art) uses: sign up at pixabay.com, copy your key from pixabay.com/api/docs
+  into `secrets/pixabay_secret.txt` (`[paths] pixabay_key`), or set `PIXABAY_API_KEY`. The key
+  is never written to `broll.json` or printed, and each search's answer is kept for 24 hours in
+  `.pixabay_cache.json`, as Pixabay's API terms ask. Without a key, Pixabay is skipped.
 
 The National Archives needs a key from NARA and comes later (#229).
 
@@ -29,7 +37,8 @@ The National Archives needs a key from NARA and comes later (#229).
 - `clipper broll list [--tag storm] [--status new|kept|long] [--json]`: the library, newest
   first. `--json` adds each file's path, which you can import into Resolve.
 - `clipper broll add <address|id|file> [--from 0:01:20 --to 0:01:45] [--tag X]`: one clip, from
-  an images.nasa.gov/details, dvidshub.net/video, archive.org/details or Commons `File:` page.
+  an images.nasa.gov/details, dvidshub.net/video, archive.org/details, pixabay.com/videos or
+  Commons `File:` page.
   With a library id it takes a part of that clip. A video file you downloaded yourself needs
   `--credit "U.S. Navy video by ..."`.
 - `clipper broll keep|drop <id> ...`: a dropped clip's file is deleted, and the next find
@@ -46,8 +55,8 @@ The files and `broll.json` are in `[paths] broll`.
 
 ## Rights
 
-A clip is kept only when its licence is in `[broll] licences` (`pd`, public domain, and
-`cc0` by default) and nothing in its title, description or credit names an outside owner
+A clip is kept only when its licence is in `[broll] licences` (`pd`, public domain, `cc0`
+and `pixabay` by default) and nothing in its title, description or credit names an outside owner
 (©, "copyright", "all rights reserved", Getty, AP, Reuters ...). Anything else is skipped,
 and the reason is printed. Adding `cc-by` keeps attribution-licensed clips too, but then every
 video that uses one must credit its author. A noncommercial or no-derivatives clause (NC, ND)
@@ -58,13 +67,18 @@ is never kept, whatever else the licence says, even "public domain, non-commerci
   licensed music; with the sound on, a NASA clip whose credits mention music is skipped.
 - **No endorsement.** Nothing may suggest an agency endorses us: no insignia or recognizable
   service member on a cover or as the subject of a title.
+- **Pixabay's limits.** Its licence needs no credit (the uploader's name is kept anyway), but it
+  bans selling a clip unaltered, using one that shows a brand or a logo commercially, and
+  showing a recognisable person in a bad light or as if they endorse something. On a channel
+  that mocks people, use Pixabay for places and things, never a stranger's face next to a
+  joke. Take `pixabay` out of `licences` to stop keeping its clips.
 
 State and foreign government footage (ESA, the EU, UK Parliament) has its own licences and
 isn't a source. Nor is C-SPAN, whose own camera footage is copyrighted.
 
 ## Settings
 
-`[broll]` in `clipper/defaults.toml`: `sources`, `dvids_category`, `per_source`, `max_s`,
-`max_height`, `licences`, `audio`, `codec` (empty uses `[cut] clip_codec`), `crf`, `timeout_s`.
-`clipper doctor` checks the source and licence names, warns when DVIDS has no key, and counts
-the library.
+`[broll]` in `clipper/defaults.toml`: `sources`, `dvids_category`, `pixabay_type`, `per_source`,
+`max_s`, `max_height`, `licences`, `audio`, `codec` (empty uses `[cut] clip_codec`), `crf`,
+`timeout_s`. `clipper doctor` checks the source and licence names and `pixabay_type`, warns when
+DVIDS or Pixabay has no key, and counts the library.

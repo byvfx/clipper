@@ -1010,7 +1010,7 @@ def check_news(cfg: dict, offline: bool) -> None:
 
 
 def check_broll(cfg: dict) -> None:
-    """#229: the b-roll library's settings (its sources need no key)."""
+    """#229: the b-roll library's settings; DVIDS and Pixabay need a key."""
     from . import broll
 
     bc = cfg["broll"]
@@ -1023,6 +1023,11 @@ def check_broll(cfg: dict) -> None:
     if "dvids" in bc["sources"] and not broll.dvids_key(cfg):
         warn("broll", f"no $DVIDS_API_KEY or {cfg['paths']['dvids_key']}: DVIDS is skipped",
              "optional: register at dvidshub.net (API keys under your account), public key on the first line")
+    if bc["pixabay_type"] not in ("film", "animation", ""):
+        fail("broll", f"[broll] pixabay_type {bc['pixabay_type']!r}", 'use film, animation or "" (both)')
+    if "pixabay" in bc["sources"] and not broll.pixabay_key(cfg):
+        warn("broll", f"no $PIXABAY_API_KEY or {cfg['paths']['pixabay_key']}: Pixabay is skipped",
+             "optional: sign up at pixabay.com, copy the key from pixabay.com/api/docs into that file")
     if not cfg["paths"]["broll"]:
         return
     lib = broll.load(cfg)
