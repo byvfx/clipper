@@ -261,18 +261,21 @@ def gpu_hours(hours: float, gpu: str, diarize: bool = False) -> float:
     return hours / speed + (hours / (DIARIZE_SPEED * speed / SPEED["L40S"]) if diarize else 0)
 
 
-def call_overhead_s(cfg: dict, subject: str, gpu: str, diarize: bool) -> tuple[float, str]:
+def call_overhead_s(cfg: dict, subject: str, gpu: str) -> tuple[float, str]:
     """(seconds a call costs beyond its audio, where that figure comes from): the subject's own
-    ok runs in modal_runs.jsonl when it has OWN_RUNS of them, else CALL_OVERHEAD_S."""
+    runs on this GPU in modal_runs.jsonl when it has OWN_RUNS of them, else CALL_OVERHEAD_S. Each
+    run's work is taken off as it was done (with speaker turns if it has diarize_s). A failed
+    call logs no time, so it can't count."""
     from .modalmon import read_runs
 
     runs = [r for r in read_runs(cfg["paths"]["modal_runs"])
             if r.get("event") == "end" and r.get("ok") and r.get("call_s") is not None
-            and str(r.get("what", "")).startswith(f"{subject}/")][-500:]
+            and str(r.get("what", "")).startswith(f"{subject}/")
+            and (r.get("gpu") or gpu).split()[-1] == gpu][-500:]   # "NVIDIA L4" -> L4
     if len(runs) < OWN_RUNS:
         return CALL_OVERHEAD_S, "typical"
-    over = sum(r["call_s"] + 30 - gpu_hours(r["audio_s"], gpu, diarize) for r in runs) / len(runs)
-    return max(over, 0.0), f"{subject}'s last {len(runs)} runs"
+    over = sum(r["call_s"] + 30 - gpu_hours(r["audio_s"], gpu, bool(r.get("diarize_s"))) for r in runs) / len(runs)
+    return max(over, 0.0), f"{subject}'s last {len(runs)} runs on {gpu}"
 
 
 def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[str, ...] = ytdl.AGE) -> dict:
@@ -364,7 +367,7 @@ def transcribe_estimate(cfg: dict, subject: str, todo: list[dict], gpu: str, par
     known = [it for it in todo if it.get("duration_s")]
     unknown = len(todo) - len(known)
     hours = sum(it["duration_s"] for it in known) / 3600
-    over, source = call_overhead_s(cfg, subject, gpu, diarize)
+    over, source = call_overhead_s(cfg, subject, gpu)
     usd = estimate_usd(hours, gpu, diarize, calls=len(known), overhead_s=over)
     head = (f"{subject}: {len(todo)} to transcribe{' with speaker turns' if diarize else ''}, on {gpu} x{parallel}: ")
     each = f"{over:.0f} s a call beyond the audio ({source})"

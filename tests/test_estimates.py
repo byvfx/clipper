@@ -80,22 +80,23 @@ def test_each_call_costs_its_overhead_on_top_of_the_audio(fake_modal):
     assert archive.estimate_usd(24.5, "L4") == pytest.approx(0.8)                         # an hour of work
 
 
-def runs_log(defaults, tmp_path, subject, n, call_s, audio_s=60.0):
+def runs_log(defaults, tmp_path, subject, n, call_s, audio_s=60.0, gpu="NVIDIA L4"):
     defaults["paths"]["modal_runs"] = tmp_path / "modal_runs.jsonl"
-    with open(defaults["paths"]["modal_runs"], "w", encoding="utf-8") as f:
+    with open(defaults["paths"]["modal_runs"], "a", encoding="utf-8") as f:
         for i in range(n):
             f.write(json.dumps({"event": "end", "ok": True, "what": f"{subject}/ig-{i}", "call_s": call_s,
-                                "audio_s": audio_s}) + "\n")
+                                "audio_s": audio_s, "gpu": gpu}) + "\n")
 
 
 def test_overhead_comes_from_the_subjects_own_runs_once_it_has_enough(defaults, tmp_path, fake_modal):
     from clipper import archive
 
-    runs_log(defaults, tmp_path, "cecil", archive.OWN_RUNS - 1, 20.0)
-    assert archive.call_overhead_s(defaults, "cecil", "L4", False) == (archive.CALL_OVERHEAD_S, "typical")
-    runs_log(defaults, tmp_path, "cecil", archive.OWN_RUNS, 20.0, audio_s=49.0)   # 2 s of work at 24.5x
-    over, source = archive.call_overhead_s(defaults, "cecil", "L4", False)
-    assert over == pytest.approx(20 + 30 - 2) and "cecil's last 20 runs" in source
+    runs_log(defaults, tmp_path, "cecil", archive.OWN_RUNS, 5.0, gpu="NVIDIA L40S")   # another GPU: not these
+    runs_log(defaults, tmp_path, "cecil", archive.OWN_RUNS - 1, 20.0, audio_s=49.0)
+    assert archive.call_overhead_s(defaults, "cecil", "L4") == (archive.CALL_OVERHEAD_S, "typical")
+    runs_log(defaults, tmp_path, "cecil", 1, 20.0, audio_s=49.0)                      # 2 s of work at 24.5x
+    over, source = archive.call_overhead_s(defaults, "cecil", "L4")
+    assert over == pytest.approx(20 + 30 - 2) and "cecil's last 20 runs on L4" in source
 
 
 def test_unknown_lengths_are_said_not_priced(defaults, tmp_path, fake_modal):

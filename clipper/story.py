@@ -406,8 +406,8 @@ def triage(cfg: dict, b: dict, d: Path, claude, budget: Budget, prompts) -> dict
 
         # each container's cold start (~10 min, 11-03): it dominates a story's few short items
         starts = min(sc["parallel"], len(todo)) * COLD_START_S / 3600 * GPU_PRICES.get(sc["gpu"], 0.0)
-        usd = (f"~${archive.estimate_usd(hours, sc['gpu'], cfg['archive']['diarize']) + starts:.2f}"
-               f" (${starts:.2f} of it container starts)")
+        work = archive.estimate_usd(hours, sc["gpu"], cfg["archive"]["diarize"], calls=len(todo))  # #228
+        usd = f"~${work + starts:.2f} (${starts:.2f} of it container starts)"
     except ImportError:
         usd = "no estimate (modal isn't installed: uv sync --extra modal)"
     print(f"to transcribe: {len(todo)} items, ~{hours:.1f} h on {sc['gpu']}: {usd}")
