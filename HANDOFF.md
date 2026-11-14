@@ -406,7 +406,8 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   **Intro video idea (user, 2026-11-14):** a weekly magazine intro: the magazine falls into frame (or we
   are already close on it), opens to our cover, opens to a page, a zoom/transition into the video. First
   Runway test started: image-to-video from the Papa Meat v4 cover (Seedance 2.5, 6 s, 720p, 180 credits,
-  task 05669e7f-fe06-4632-b4bc-c8f3216ddc8b). Plan: one Runway render per weekly issue, the per-video
+  task 05669e7f-fe06-4632-b4bc-c8f3216ddc8b, rendered 2026-11-14; the cloud session cannot download Runway
+  output, so the user views it in Runway's assets; not yet judged). Plan: one Runway render per weekly issue, the per-video
   page/zoom transition done by the HTML renderer + ffmpeg so it is automatic; nothing in `clipper/` yet.
   Waiting on the user's reaction; then Illustrator master, `style = "fanmag"`, `clipper intro`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
