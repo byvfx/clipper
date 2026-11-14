@@ -37,6 +37,7 @@ from zoneinfo import ZoneInfo
 from . import jsonstate, review
 from .config import base, for_stream, stream_dir
 from .errors import ClipperError
+from .schedule import truthy
 from .timefmt import length
 
 OPEN = ("pending", "changes_requested")  # decisions still waiting on you
@@ -401,6 +402,12 @@ def other_voices(seconds, limit: float) -> str:
     return f"{s:.0f} s of other voices (limit {limit:g} s)" if s > limit else ""
 
 
+def is_held(fields: dict) -> bool:
+    """The Hold column as Kitsu stores it (a checkbox: true, or text a person typed), read the
+    way the scheduler reads it."""
+    return truthy(fields.get("Hold") or "")
+
+
 def describe(cfg: dict, sdir: Path, gazu=None, links: bool = True) -> dict[str, dict]:
     """Everything a card or list row shows, per item, from local files (review.json is
     as of the last sync). Kitsu is only asked for links older publishes didn't save, and not
@@ -437,7 +444,7 @@ def describe(cfg: dict, sdir: Path, gazu=None, links: bool = True) -> dict[str, 
             "duration_s": it.get("duration_s"),
             "decision": r.get("decision", "pending"), "status": r.get("status", "wfa"),
             "comment": r.get("comment", ""),
-            "hold": str(fields.get("Hold") or "").lower() in ("true", "1", "yes", "on"),
+            "hold": is_held(fields),
             "other_voices": other_voices(fields.get("Other voices") or proposed.get("Other voices"),
                                          cfg["scoring"]["max_source_audio_s"]),
             "publish_at": fields.get("Publish at") or "",
@@ -470,22 +477,56 @@ def list_items(cfg: dict, stream: str | None = None, everything: bool = False,
     return rows
 
 
-def status(cfg: dict, sync: bool = False, links: bool = True) -> dict:
+def stale_at(cfg: dict, sdir: Path, meta: dict) -> datetime | None:
+    """When a stream's approved items stop being scheduled (schedule.release_window, with the
+    stream's own show and config.toml); None: never, or when its meta can't say."""
+    from .schedule import release_window
+
+    try:
+        return release_window(cfg, sdir, {**meta, "duration_s": meta.get("duration_s") or 0})[1]
+    except (ClipperError, KeyError, TypeError, ValueError):   # a broken config.toml too
+        return None
+
+
+def hold_waiting(fields: dict, stale: datetime | None, now: datetime) -> bool:
+    """A held item that could still go out once released: pinned (Publish at, which the
+    scheduler never lets go stale), or its stream not stale yet."""
+    return is_held(fields) and (bool(fields.get("Publish at")) or stale is None or now <= stale)
+
+
+def stream_counts(cfg: dict, sdir: Path, links: bool = False, now: datetime | None = None) -> dict:
+    """One stream's decision counts from review_state.json and review.json alone: three small
+    reads, where describe() opens every item's sidecar (1,913 reads over SMB for 41 streams made
+    `clipper status` take a minute, #199). links=True asks Kitsu for links older publishes lack."""
+    state = review.ensure_links(sdir, cfg) if links else jsonstate.load(sdir / "review_state.json")
+    decisions = jsonstate.read(sdir / "review.json", {})
+    meta = jsonstate.read(sdir / "meta.json", {})
+    stale = stale_at(cfg, sdir, meta)
+    now = now or datetime.now(ZoneInfo("UTC"))
+    counts: dict[str, int] = {}
+    held = waiting = 0
+    for key in state:
+        r = decisions.get(key, {})
+        counts[r.get("decision", "pending")] = counts.get(r.get("decision", "pending"), 0) + 1
+        # only an approved item waits on its hold: a rejected one that arrived held is done with
+        if r.get("decision") == "approved":
+            fields = r.get("fields") or {}
+            held += is_held(fields)
+            waiting += hold_waiting(fields, stale, now)
+    first = next(iter(state.values()), {})
+    return {"stream": sdir.name, "date": meta.get("started_at", "")[:10], "title": meta.get("title", ""),
+            "counts": counts, "held": held, "held_waiting": waiting,
+            "open": sum(counts.get(k, 0) for k in OPEN), "episode_url": first.get("episode_url", "")}
+
+
+def status(cfg: dict, sync: bool = False, links: bool = True, now: datetime | None = None) -> dict:
     """Per stream: decision counts; plus what schedule.json has coming up. links=False never
     asks Kitsu, not even for an old item's missing link."""
     streams = []
     for d in review_dirs(cfg):
         if sync:
             review.sync(d, cfg, quiet=True)
-        rows = describe(cfg, d, links=links).values()
-        counts: dict[str, int] = {}
-        for r in rows:
-            counts[r["decision"]] = counts.get(r["decision"], 0) + 1
-        meta = jsonstate.read(d / "meta.json", {})
-        streams.append({"stream": d.name, "date": meta.get("started_at", "")[:10],
-                        "title": meta.get("title", ""), "counts": counts,
-                        "held": sum(r["hold"] for r in rows),
-                        "episode_url": next(iter(rows))["episode_url"] if rows else ""})
+        streams.append(stream_counts(cfg, d, links=links, now=now))
     data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     now = datetime.now(tz)
