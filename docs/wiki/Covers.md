@@ -56,7 +56,11 @@ otherwise set `[thumbnail] browser` to its executable. Open the page in a browse
 in its CSS, then make it in `clipper/thumbs/fanmag.py`; `--compose-only` redraws without model
 calls. The fonts and the mascot ship in `clipper/assets/fanmag/`. With the `gpu` extra
 (torchvision) the cut-outs follow the person's outline; without it they are the face crop's
-rectangle, still with the paper edge. `clipper doctor` checks the browser, the assets and
+rectangle, still with the paper edge. Where the photo's own edge cuts through the person (the
+shoulders), it is cut by hand too, never one long straight line. When the cut-out comes out messy
+(raised hands, a chair or the room leaking in) the cover uses the head alone, floating, with no
+title box; set `"main_crop": "head"` (or `"body"`) on an item in `thumbnails.json` to choose by
+hand, then `--compose-only`. `clipper doctor` checks the browser, the assets and
 torchvision. Shorts get no 9:16 cover in this style yet, and the NAS hub image has no browser,
 so a fanmag show's covers are drawn on a machine that has one: without one, `clipper thumbs`
 stops before any pick is paid for. Cut-outs are kept in `thumbs/_fanmag/` in the stream, so a

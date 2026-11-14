@@ -93,7 +93,7 @@ def test_build_page(tmp_path: Path):
     assert "BLADE &lt;IN&gt; VEGAS" in page                  # escaped, prefix dropped
     assert "JIM&#x27;S PANTRY" in page or "JIM'S PANTRY" in page
     assert page.count('class="cl "') == 3                     # the three side coverlines
-    assert 'class="stk gap"' in page and 'class="stk inset"' in page
+    assert 'class="stk big"' in page and 'class="stk inset"' in page
     assert "document.fonts.ready.then(fit)" in page
     # Column text is ink: every palette's column is light enough, and never the script's yellow.
     def luminance(c: str) -> float:
@@ -114,7 +114,7 @@ def test_cached_cut_reuses_a_cut_out(tmp_path: Path, monkeypatch):
     Image.new("RGB", (64, 36)).save(src)
     made = []
 
-    def fake_cutout(src, face, size, seed, dst, bleed=False):
+    def fake_cutout(src, face, size, seed, dst, bleed=False, crop_to="auto"):
         made.append(dst)
         Image.new("RGBA", (4, 4)).save(dst)
         return dst
@@ -164,3 +164,26 @@ def test_find_browser_honours_the_setting(tmp_path: Path):
     exe.write_bytes(b"")
     assert fanmag.find_browser({"browser": str(exe)}) == str(exe)
     assert fanmag.find_browser({"browser": str(tmp_path / "missing.exe")}) == ""
+
+
+def test_scissor_cuts_the_crop_edges_by_hand():
+    """A figure the crop cuts at both sides gets no long straight edge there; a bled bottom
+    stays straight and opaque."""
+    img = Image.new("RGBA", (300, 200), (200, 50, 50, 255))   # the rectangle: every side touched
+    a = np.asarray(fanmag.scissor(img, seed=1, bleed=True).split()[3]) > 0
+    assert not a[:, 0].any() and not a[:, -1].any() and not a[0, :].any()
+    assert a[-1, 100:200].all()                                   # the bottom runs off the cover
+    xs = [int(np.argmax(a[y])) for y in range(20, 180, 10)]      # the left cut wanders
+    assert len(set(xs)) > 3
+    floating = Image.new("RGBA", (300, 200), (0, 0, 0, 0))
+    floating.paste((200, 50, 50, 255), (50, 40, 250, 160))
+    assert np.array_equal(np.asarray(fanmag.scissor(floating, seed=1)), np.asarray(floating))
+
+
+def test_head_only_crop_is_tighter():
+    frame = Image.new("RGB", (1280, 720))
+    face = {"x": 0.4, "y": 0.2, "width": 0.1, "height": 0.2}
+    body, _ = fanmag.head_box(frame, face, 300)
+    head, (x0, y0, x1, y1) = fanmag.head_box(frame, face, 300, head_only=True)
+    assert head.width / head.height < body.width / body.height + 0.5
+    assert y1 - y0 > 0.6 * head.height                            # the face fills most of it

@@ -41,6 +41,7 @@ import zlib
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
+from PIL.PngImagePlugin import PngInfo
 
 from ..draw import clamp_box, save
 from ..errors import ClipperError
@@ -262,6 +263,45 @@ def clean_matte(prob: Image.Image, face: tuple[int, int, int, int] | None = None
     return Image.fromarray(m * 255).filter(ImageFilter.GaussianBlur(1.2))
 
 
+def scissor(img: Image.Image, seed: int, bleed: bool = False) -> Image.Image:
+    """Cut the photo's own edges by hand where the figure runs into them (a body the crop cuts
+    at the shoulders, or the whole rectangle when there is no matte): each such side becomes
+    a slightly slanted line of short scissor strokes inside the edge, never one long straight
+    line. bleed keeps the bottom edge straight (it runs off the cover)."""
+    import numpy as np
+
+    rnd = random.Random(f"scissor{seed}")
+    w, h = img.size
+    a = np.asarray(img.split()[3]) > 60
+    if not a.any():
+        return img
+    ins = max(5, round(min(w, h) * 0.035))
+
+    def side(n: int) -> float:  # how far in this side's cut runs at one end
+        return rnd.uniform(ins * 0.6, ins * 2.6)
+
+    left, right, top = a[:, 0].any(), a[:, -1].any(), a[0, :].any()
+    bottom = a[-1, :].any() and not bleed
+    # Corners (x, y) of the cut quadrilateral; an untouched side stays on the edge.
+    tl = (side(0) if left else 0, side(0) if top else 0)
+    tr = (w - (side(0) if right else 0), side(0) if top else 0)
+    br = (w - (side(0) if right else 0), h - (side(0) if bottom else 0))
+    bl = (side(0) if left else 0, h - (side(0) if bottom else 0))
+
+    def edge(p, q, cut: bool) -> list[tuple[float, float]]:
+        if not cut:
+            return [p]
+        length = math.hypot(q[0] - p[0], q[1] - p[1])
+        return [p, *jag(p, q, rnd, seg=max(36, length / 7), amp=max(4, length / 70))]
+
+    pts = edge(tl, tr, top) + edge(tr, br, right) + edge(br, bl, bottom) + edge(bl, tl, left)
+    m = Image.new("L", img.size, 0)
+    ImageDraw.Draw(m).polygon(pts, fill=255)
+    out = img.copy()
+    out.putalpha(Image.fromarray(np.minimum(np.asarray(img.split()[3]), np.asarray(m))))
+    return out
+
+
 def handcut(img: Image.Image, margin: int = 26, strokes: int = 46, wobble: float = 6.0,
             seed: int = 1, bleed: bool = False) -> Image.Image:
     """Put a hand-cut paper margin around an RGBA cut-out: grow the silhouette, trace it as
@@ -303,15 +343,18 @@ def handcut(img: Image.Image, margin: int = 26, strokes: int = 46, wobble: float
     return out.crop((left, top, right, bottom))
 
 
-def head_box(img: Image.Image, face: dict, size: int) -> tuple[Image.Image, tuple[int, int, int, int]]:
+def head_box(img: Image.Image, face: dict, size: int, head_only: bool = False
+             ) -> tuple[Image.Image, tuple[int, int, int, int]]:
     """Head and shoulders around `face` (fractions of img), scaled to `size` px tall: the face
-    box widened and extended down to the chest. Returns the crop and the face's box in it."""
+    box widened and extended down to the chest; head_only: just the head and a little neck.
+    Returns the crop and the face's box in it."""
     fw, fh = img.size
     b = clamp_box(face)
     cx = (b["x"] + b["width"] / 2) * fw
-    top = max(0, (b["y"] - b["height"] * 0.35) * fh)
-    bottom = min(fh, (b["y"] + b["height"] * 2.6) * fh)
-    half = min(fw / 2, max(b["width"] * fw * 1.35, (bottom - top) * 0.42))
+    top = max(0, (b["y"] - b["height"] * (0.2 if head_only else 0.35)) * fh)
+    bottom = min(fh, (b["y"] + b["height"] * (1.25 if head_only else 2.6)) * fh)
+    half = min(fw / 2, b["width"] * fw * 0.75 if head_only
+               else max(b["width"] * fw * 1.35, (bottom - top) * 0.42))
     box = (round(max(0, cx - half)), round(top), round(min(fw, cx + half)), round(bottom))
     crop = img.crop(box)
     k = size / crop.height
@@ -322,29 +365,47 @@ def head_box(img: Image.Image, face: dict, size: int) -> tuple[Image.Image, tupl
     return crop, (x0, y0, x1, y1)
 
 
-def cutout(src: Path, face: dict, size: int, seed: int, dst: Path, bleed: bool = False) -> Path:
-    """The person at `face` in `src` as a hand-cut paper cut-out PNG about `size` px tall."""
-    crop, head = head_box(Image.open(src).convert("RGB"), face, size)
-    rgba = crop.convert("RGBA")
+MESSY = 0.4  # a head-and-shoulders matte covering more of its crop than this has hands, a chair...
+
+
+def cutout(src: Path, face: dict, size: int, seed: int, dst: Path, bleed: bool = False,
+           crop_to: str = "auto") -> Path:
+    """The person at `face` in `src` as a hand-cut paper cut-out PNG about `size` px tall.
+    crop_to: "body" (head and shoulders), "head", or "auto": head and shoulders unless the
+    matte is messy (raised hands, a chair or the room leaking in) or doesn't hold, then the
+    head alone, which reads better than a cluttered body."""
+    frame = Image.open(src).convert("RGB")
+    crop, head = head_box(frame, face, size, crop_to == "head")
     mask = person_matte(crop, head)
+    import numpy as np
+    if crop_to == "auto" and (mask is None or (np.asarray(mask) > 127).mean() > MESSY):
+        crop_to = "head"
+        crop, head = head_box(frame, face, size, True)
+        mask = person_matte(crop, head)
+    bleed = bleed and crop_to != "head"   # a head floats, cut all round
+    rgba = crop.convert("RGBA")
     if mask is not None:
         rgba.putalpha(mask)
         rgba = rgba.crop(rgba.getbbox()) if rgba.getbbox() else rgba
+    rgba = scissor(rgba, seed, bleed)
     out = handcut(rgba, margin=max(10, size // 36), seed=seed, bleed=bleed)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    out.save(dst)
+    meta = PngInfo()
+    meta.add_text("crop", crop_to)        # compose reads it: a head floats, a body sits on the edge
+    out.save(dst, pnginfo=meta)
     return dst
 
 
-CUT_VERSION = 2  # bump when the matte or the paper edge changes, so cached cut-outs are redone
+CUT_VERSION = 5  # bump when the matte or the paper edge changes, so cached cut-outs are redone
 
 
-def cached_cut(cache: Path, src: Path, face: dict, size: int, seed: int, bleed: bool = False) -> Path:
+def cached_cut(cache: Path, src: Path, face: dict, size: int, seed: int, bleed: bool = False,
+               crop_to: str = "auto") -> Path:
     """cutout (or photo_cutout for a whole-picture face) kept in `cache` under what made it:
     the source file and its mtime, the box, the size, the seed, whether torchvision was
     there. A video's teaser cut-out is then made once for all the covers it appears on, and
     --compose-only redraws without redoing a matte."""
-    made = repr((str(src.resolve()), src.stat().st_mtime_ns, face, size, seed, bleed, CUT_VERSION,
+    made = repr((str(src.resolve()), src.stat().st_mtime_ns, face, size, seed, bleed, crop_to, CUT_VERSION,
                  importlib.util.find_spec("torchvision") is not None))
     dst = cache / f"{hashlib.sha1(made.encode()).hexdigest()[:16]}.png"
     if not dst.exists():
@@ -353,7 +414,7 @@ def cached_cut(cache: Path, src: Path, face: dict, size: int, seed: int, bleed: 
         if face == WHOLE:
             photo_cutout(src, size, seed, tmp, bleed)
         else:
-            cutout(src, face, size, seed, tmp, bleed)
+            cutout(src, face, size, seed, tmp, bleed, crop_to)
         tmp.replace(dst)
     return dst
 
@@ -366,6 +427,7 @@ def photo_cutout(src: Path, size: int, seed: int, dst: Path, bleed: bool = False
     if mask is not None:
         img.putalpha(mask)
         img = img.crop(img.getbbox()) if img.getbbox() else img
+    img = scissor(img, seed, bleed)
     out = handcut(img, margin=max(10, size // 36), seed=seed, bleed=bleed)
     dst.parent.mkdir(parents=True, exist_ok=True)
     out.save(dst)
@@ -413,6 +475,9 @@ html,body{width:1280px;height:720px;overflow:hidden;background:#222}
 .cl.boxed{background:#fff;padding:8px 12px;max-width:290px}
 .script{font:400 42px/1.1 "Lobster";color:#ffe600;-webkit-text-stroke:1.5px #1a1a1a;text-shadow:3px 3px 0 #1a1a1a;
   white-space:nowrap;transform-origin:left center}
+.top{display:flex;gap:14px;align-items:flex-start}
+.own{flex:none}.own .head{white-space:nowrap;overflow:hidden}
+.stk.big{margin-top:-6px}
 .foot{bottom:14px;z-index:9;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
 .tab{z-index:9;background:#2fd3ff;color:#1a1a1a;font:700 20px/1 "Oswald";text-transform:uppercase;padding:6px 12px;border:2px solid #1a1a1a}
 .mail{z-index:12;background:#fff;color:#1a1a1a;font:12px/1.3 monospace;padding:8px 10px;width:270px;border:1px solid #bbb}
@@ -463,10 +528,12 @@ function fit(){
     var h=f.querySelector('.h'),img=document.getElementById('mascot');
     if(h&&img){var r=h.getBoundingClientRect();img.style.left=(r.left-8)+'px';img.style.top=(r.top+10)+'px';
       img.style.width=(r.width+16)+'px';img.style.height=(r.height+40)+'px';img.style.transform='rotate(2deg)';}}
+  var own=document.querySelector('.own .head');
+  if(own){var fs=parseFloat(own.style.fontSize);while(own.scrollWidth>own.clientWidth&&fs>28){fs-=2;own.style.fontSize=fs+'px';}}
   var col=document.getElementById('col');if(!col)return;
   var lim=col.getBoundingClientRect().bottom,cls=col.querySelectorAll('.sides .cl');
   for(var i=cls.length-1;i>=0;i--){if(cls[i].getBoundingClientRect().bottom>lim)cls[i].style.display='none';}
-  var stk=col.querySelector('.stk');
+  var stk=col.querySelector('.row .stk');
   if(stk){var room=lim-stk.getBoundingClientRect().top;
     if(room<90)stk.style.display='none';else if(room<stk.offsetHeight)stk.querySelector('img').style.height=(room-4)+'px';}
 }
@@ -507,11 +574,12 @@ def build_page(e: dict, ctx: dict, tc: dict, date: str, cuts: dict, out_dir: Pat
     """Write cover.html for one video and return its path. `cuts`: {"main": Path,
     "inset": Path | None, "side": [Path | None, ...]}.
 
-    The left column (x 40-545) is a flex stack: the script line, this cover's coverline,
-    then the other videos as coverlines beside the first one's sticker; FIT_JS drops what
-    would run off the bottom. The main cut-out is on the right from x 600, bottom-aligned
-    so a body the frame cuts off runs off the cover; over it only the solid title box and
-    the name bar. A second side sticker sits in the gap at the bottom between the two."""
+    The left column (x 40-545) is a flex stack: the script line, this cover's coverline with
+    a big cut-out of the second story's face beside it, then the other videos as coverlines
+    beside the first one's sticker; FIT_JS shrinks the coverline to its width and drops what
+    would run off the bottom. The main cut-out is on the right from x 600: a body runs off
+    the bottom with the solid title box and the name bar over it; a head alone (a messy
+    matte, or "main_crop": "head") floats above the name bar, with no title box."""
     key = e["id"]
     rnd = random.Random(key)
     palette = PALETTES[zlib.crc32(key.encode()) % len(PALETTES)]
@@ -533,34 +601,34 @@ def build_page(e: dict, ctx: dict, tc: dict, date: str, cuts: dict, out_dir: Pat
         col.append(f'<div class="script" style="transform:rotate({rnd.uniform(-3, -1):.1f}deg)">'
                    f'{esc(e["subhead"].lower())}</div>')
     head = "<br>".join(esc(line) for line in cover_lines(e)[:3])
-    col.append(cl(head, [e.get("attribution", "")], INK, BULLETS[0], 50, "own"))
     side = ctx.get("side", [])[:3]
     scuts = list(cuts.get("side") or []) + [None] * 3
-    gap = len(side) > 1 and scuts[1] is not None
+    big = len(side) > 1 and scuts[1] is not None
+    own = cl(head, [e.get("attribution", "")], INK, BULLETS[0], 50, "own", f"width:{275 if big else 490}px")
+    # Beside the coverline, a big cut-out of the second story's face: the column is never empty.
+    col.append(f'<div class="top">{own}' + (sticker(scuts[1], side[1].get("name", ""), rnd.choice((-3, 2, 4)),
+                                                    200, 232, "stk big") if big else "") + "</div>")
     lines = []
     for i, s in enumerate(side):
         topic = esc((s.get("topic") or s.get("name") or "also inside").upper()[:24])
         lines.append(cl(topic, [s["text"]], INK, BULLETS[(i + 1) % 3], 32))
     row = ""
     if scuts[0] is not None:
-        row += sticker(scuts[0], side[0].get("name", ""), rnd.choice((-4, -2, 3)), 130, 150)
+        row += sticker(scuts[0], side[0].get("name", ""), rnd.choice((-4, -2, 3)), 160, 185)
     if lines:
         row += f'<div class="sides">{"".join(lines)}</div>'
     if row:
         col.append(f'<div class="row">{row}</div>')
-    parts.append(f'<div class="col" id="col" style="width:{430 if gap else 505}px">{"".join(col)}</div>')
-    # Main cut-out, right, bottom-aligned.
-    parts.append(f'<img class="main" src="{cuts["main"].resolve().as_uri()}" '
-                 f'style="left:600px;top:96px;width:620px;height:624px">')
-    # A second side story's face in the gap at the bottom, between the column and the photo.
-    if gap:
-        parts.append(sticker(scuts[1], side[1].get("name", ""), rnd.choice((-3, 2, 4)), 120, 140, "stk gap",
-                             "left:478px;top:548px"))
-    # Over the photo: the name bar and the title box (solid), stacked at the bottom.
+    parts.append(f'<div class="col" id="col" style="width:505px">{"".join(col)}</div>')
+    # Main cut-out, right: a body runs off the bottom; a head alone floats above the name bar.
+    bleed = not cuts.get("main_head")
+    box = "left:600px;top:96px;width:620px;height:624px" if bleed else "left:620px;top:168px;width:600px;height:500px"
+    parts.append(f'<img class="main" src="{cuts["main"].resolve().as_uri()}" style="{box}">')
+    # Over the photo: the name bar and (on a body, never a face) the title box, at the bottom.
     foot = ""
     if e.get("main_person"):
         foot += f'<div class="nametag big">{esc(e["main_person"])}</div>'
-    if title := cover_title(e.get("title", "")):
+    if bleed and (title := cover_title(e.get("title", ""))):
         foot += cl(esc(title), [], INK, BULLETS[0], 26, "boxed")
     if foot:
         parts.append(f'<div class="foot" style="left:{rnd.randint(610, 640)}px">{foot}</div>')
@@ -595,19 +663,27 @@ def compose_fanmag(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, dat
         return frame_file(stream_dir, key, e, n, video)
 
     photo = photo_file(tc, e.get("photo", ""), e.get("photo_label", ""))
-    main = cached_cut(cache, photo or frame_path(e["frame"]), WHOLE if photo else e["face"], 900, 1, True)
+    main = cached_cut(cache, photo or frame_path(e["frame"]), WHOLE if photo else e["face"], 900, 1, True,
+                      e.get("main_crop") or "auto")
     inset = None
     if e.get("inset_frame"):
         inset = cached_cut(cache, frame_path(e["inset_frame"]), e["inset_face"], 300, 2)
     side = [cached_cut(cache, Path(s["frame"]), s["face"], 260, 3) if s.get("frame") else None
-            for s in ctx.get("side", [])[:2]]
-    page = build_page(e, ctx, tc, date, {"main": main, "inset": inset, "side": side}, work)
+            for s in ctx.get("side", [])[:3]]
+    page = build_page(e, ctx, tc, date, {"main": main, "inset": inset, "side": side,
+                                          "main_head": head_only(main)}, work)
     png = work / "cover.png"
     screenshot(browser, page, png)
     img = Image.open(png).convert("RGB")
     if img.size != (W, H):
         img = img.resize((W, H), Image.LANCZOS)
     return save(img, dst, tc["max_bytes"])
+
+
+def head_only(cut: Path) -> bool:
+    """Whether cutout() made this a head alone (it floats) rather than head and shoulders."""
+    with Image.open(cut) as img:
+        return img.info.get("crop") == "head"
 
 
 def fanmag_setup(tc: dict) -> dict:

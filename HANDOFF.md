@@ -328,6 +328,9 @@ messages: GitHub closes the issue on "fix".
   multi-cam layout ends at the box's edge and can take a dark patch of the panel below (s03); webcam-corner
   insets fall back to the rectangle. No 9:16 Short covers; the hub image has no browser, so `thumbs`
   refuses before paying for picks there. Cut-outs are cached in `thumbs/_fanmag/` (a redraw of 5: 26 s -> 8 s).
+- User's notes on the first sheet (11-14), done: no long straight cut lines (the crop's edges are cut by
+  hand, `scissor`), a messy matte gives the head alone (`MESSY`, `"main_crop"` per item), and a big second
+  cut-out beside the coverline plus a bigger side sticker so the left column isn't empty.
 - Local code review (high) found 9, all fixed: a stale cover.png hid a failed render, reviewer text edits
   were ignored, picks were paid before the browser check, an empty face region kept the background, raw
   TimeoutExpired, a PATH name for `browser`, mattes redone every redraw, a dead branch, styles copied in JS.
