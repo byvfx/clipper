@@ -32,17 +32,23 @@ def _words(p: argparse.ArgumentParser, streams: list[str]) -> list[str]:
         out += [o for o in a.option_strings if o.startswith("--")]
         if not a.option_strings and a.dest == "stream":
             out += streams
+        elif not a.option_strings and a.choices:   # an action given as choices (services restart)
+            out += [str(c) for c in a.choices]
     return list(dict.fromkeys(out))
 
 
 def table(parser: argparse.ArgumentParser, shows: list[str]) -> dict[str, list[str]]:
-    """{"": top-level words, "<command>": its words, "<command> <action>": the action's}."""
+    """{"": top-level words, "<command>": its words, "<command> <action>": the action's, and so
+    on down (models gold run)}. The shells take the longest path the typed words make."""
     streams = ["latest"] + [f"latest:{s}" for s in shows]
-    out = {"": _words(parser, streams)}
-    for name, p in _subparsers(parser).items():
-        out[name] = _words(p, streams)
-        for action, q in _subparsers(p).items():
-            out[f"{name} {action}"] = _words(q, streams)
+    out: dict[str, list[str]] = {}
+
+    def walk(path: str, p: argparse.ArgumentParser) -> None:
+        out[path] = _words(p, streams)
+        for name, q in _subparsers(p).items():
+            walk(f"{path} {name}".strip(), q)
+
+    walk("", parser)
     return out
 
 
@@ -68,9 +74,11 @@ _clipper() {{
             *) w+=("${{COMP_WORDS[i]}}") ;;
         esac
     done
-    if ((${{#w[@]}} >= 2)) && _clipper_words "${{w[0]}} ${{w[1]}}" >/dev/null; then key="${{w[0]}} ${{w[1]}}"
-    elif ((${{#w[@]}} >= 1)) && _clipper_words "${{w[0]}}" >/dev/null; then key="${{w[0]}}"
-    fi
+    for ((i = 0; i < ${{#w[@]}}; i++)); do   # the longest command path the words make
+        local next="${{key:+$key }}${{w[i]}}"
+        _clipper_words "$next" >/dev/null || break
+        key="$next"
+    done
     COMPREPLY=($(compgen -W "$(_clipper_words "$key")" -- "$cur"))
     if [[ $cur == *:* ]]; then
         local done="${{cur%:*}}:"
@@ -101,8 +109,11 @@ Register-ArgumentCompleter -Native -CommandName clipper, clipper.exe -ScriptBloc
         if (-not $s.StartsWith('-')) {{ $words += $s }}
     }}
     $key = ''
-    if ($words.Count -ge 2 -and $table.ContainsKey("$($words[0]) $($words[1])")) {{ $key = "$($words[0]) $($words[1])" }}
-    elseif ($words.Count -ge 1 -and $table.ContainsKey($words[0])) {{ $key = $words[0] }}
+    foreach ($w in $words) {{   # the longest command path the words make
+        $next = if ($key) {{ "$key $w" }} else {{ $w }}
+        if (-not $table.ContainsKey($next)) {{ break }}
+        $key = $next
+    }}
     $table[$key] -split ' ' | Where-Object {{ $_ -like "$wordToComplete*" }} | ForEach-Object {{
         [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
     }}

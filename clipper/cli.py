@@ -640,8 +640,13 @@ def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
               + ("; restart the bot (clipper services restart bot) for it to count" if added else ""))
         return
     if args.action == "list":
-        rows = actions.list_items(cfg, args.stream, everything=args.all, sync=not args.no_sync)
-        print_json(rows) if args.json else actions.print_rows(rows)
+        if args.json:
+            with to_stderr():   # a sync's notes (thumbnail text, ...): stdout is the JSON alone
+                rows = actions.list_items(cfg, args.stream, everything=args.all, sync=not args.no_sync)
+            print_json(rows)
+        else:
+            actions.print_rows(actions.list_items(cfg, args.stream, everything=args.all,
+                                                  sync=not args.no_sync))
         return
     item = actions.resolve(cfg, args.item)
     text = " ".join(getattr(args, "text", None) or [])
@@ -968,6 +973,13 @@ def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
         if args.send:
             alerts.send(cfg, "digest", text, key=f"digest-now:{time.time():.0f}")
             print("\nqueued; the bot DMs it within a minute")
+
+
+def to_stderr():
+    """For --json: whatever runs inside prints to stderr, so stdout holds the document alone."""
+    import contextlib
+
+    return contextlib.redirect_stdout(sys.stderr)
 
 
 def print_json(obj) -> None:
@@ -2013,14 +2025,14 @@ def main() -> None:
 
 def run_command(args: argparse.Namespace) -> None:
     cfg = config.load(args.config)
+    if args.show:  # kept by every stage's for_stream, whatever the stream's channel (B4)
+        cfg = config.pin_show(cfg, args.show)
     stream = getattr(args, "stream", None)
     if isinstance(stream, str) and stream and not Path(stream).is_dir():
         # latest, latest:<show> or a prefix becomes the id itself, so every stage and the cost log
-        # see the real stream (#205)
+        # see the real stream (#205); after --show, whose [paths] streams may be its own
         args.stream = config.find_stream(cfg, stream).name
-    if args.show:  # kept by every stage's for_stream, whatever the stream's channel (B4)
-        cfg = config.pin_show(cfg, args.show)
-    elif getattr(args, "stream", None):
+    if not args.show and getattr(args, "stream", None):
         cfg = config.for_stream(cfg, stream_dir(cfg, args.stream))
     from . import costs  # what every model call this command makes is recorded under
 

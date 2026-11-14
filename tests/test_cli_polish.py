@@ -134,3 +134,40 @@ def test_shows_json_marks_streams_of_no_show(cfg, capsys):
 def test_config_diff_takes_the_pinned_show(cfg, capsys):
     cli.cmd_config(config.pin_show(cfg, "c404"), cli.build_parser().parse_args(["config", "diff"]))
     assert "[shows.kino]" not in capsys.readouterr().out
+
+
+def test_completion_has_positional_choices_and_every_depth():
+    """Copilot on #250: `services restart` is a choice, not a subparser; `models gold run` is three deep."""
+    t = completion.table(cli.build_parser(), [])
+    assert "restart" in t["services"] and {"bash", "powershell"} <= set(t["completion"])
+    assert "--budget" in t["models gold run"]
+
+
+def test_review_list_json_keeps_stdout_for_the_document(cfg, monkeypatch, capsys):
+    from clipper import actions
+
+    def noisy(*a, **k):
+        print("thumbnail text: 2 updated")   # what a sync can print
+        return [{"ref": "kick-1370001/c01"}]
+
+    monkeypatch.setattr(actions, "list_items", noisy)
+    cli.cmd_review(cfg, cli.build_parser().parse_args(["review", "list", "--json"]))
+    out = capsys.readouterr()
+    assert json.loads(out.out) == [{"ref": "kick-1370001/c01"}] and "thumbnail" in out.err
+
+
+def test_show_streams_folder_is_where_an_id_is_looked_up(tmp_path, monkeypatch):
+    """Copilot on #250: --show first, so [shows.<key>.paths] streams is the folder searched."""
+    path = tmp_path / "clipper.toml"
+    kino = tmp_path / "kino-streams"
+    (kino / "kick-777").mkdir(parents=True)
+    jsonstate.write(kino / "kick-777" / "meta.json", {"channel": "kinocasino"})
+    path.write_text(f'[paths]\nstreams = "{(tmp_path / "streams").as_posix()}"\n[shows.kino]\n'
+                    f'channels = ["kinocasino"]\n[shows.kino.paths]\nstreams = "{kino.as_posix()}"\n',
+                    encoding="utf-8")
+    (tmp_path / "streams").mkdir()
+    seen = {}
+    args = cli.build_parser().parse_args(["--config", str(path), "--show", "kino", "signals", "kick-77"])
+    monkeypatch.setattr(args, "fn", lambda cfg, a: seen.update(stream=a.stream))
+    cli.run_command(args)
+    assert seen["stream"] == "kick-777"
