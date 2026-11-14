@@ -50,6 +50,14 @@ is judged too busy and dropped as a direction. **Overlap check:** `overlap.js` (
 to become part of the thumbs stage) draws every photo's alpha into a canvas and flags any
 coverline whose box covers more than 3% photo pixels; boxed lines with a solid background are
 exempt (the 'Teen "FASHION" box device). All three covers pass.
+**Hand-cut edges** (user, with a collage reference, `refs/handcut_collage_ref.png`): the sticker
+outline is no longer a CSS halo. `handcut.py` (session scratchpad, to join the thumbs stage) grows
+the silhouette by a paper margin (26 px on a 900 px source), traces it as a 46-point polygon from
+the figure's centroid with a few px of wobble, so the margin is straight scissor strokes that skip
+the concavities (hair, the neck), fills it with off-white paper with a grey cut edge, and composites
+the photo on top: `photo_*_cut.png`. Both the main portrait and the stickers use them; the cover
+adds only the hard shadow. The stand-in photos keep their rough flood-fill mattes (a white patch on
+one sweater): the real frames get the thumbs stage's person matte.
 **Small portraits are stickers again** (user, same day): cutouts with the white outline, hard shadow,
 a slight tilt and a red name bar inside the lower-left corner; the main photo stays borderless.
 **`*_v5hp.*`** is the v5 pop-art version with the mosaic tiles replaced by the same crossover halftone

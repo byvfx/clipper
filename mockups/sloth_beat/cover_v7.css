@@ -24,7 +24,7 @@ html,body{width:1280px;height:720px;overflow:hidden;background:#222}
 .sloth{left:380px;top:60px;width:140px;height:200px;z-index:7;transform:rotate(2deg);filter:drop-shadow(3px 5px 0 rgba(0,0,0,.35))}
 .dateline{left:44px;top:232px;z-index:8;font:700 16px/1 "Archivo Narrow";letter-spacing:1px;color:#1a1a1a;text-transform:uppercase}
 /* photos */
-.mainphoto{object-fit:contain;object-position:bottom center;filter:drop-shadow(7px 0 0 #fff) drop-shadow(-7px 0 0 #fff) drop-shadow(0 7px 0 #fff) drop-shadow(0 -7px 0 #fff) drop-shadow(5px 5px 0 #fff) drop-shadow(-5px 5px 0 #fff) drop-shadow(5px -5px 0 #fff) drop-shadow(-5px -5px 0 #fff) drop-shadow(10px 12px 0 rgba(0,0,0,.35))}
+.mainphoto{object-fit:contain;object-position:bottom center;filter:drop-shadow(9px 11px 0 rgba(0,0,0,.32))}
 .frame{border:7px solid #fff;outline:2px solid #1a1a1a;overflow:hidden;box-shadow:4px 5px 0 rgba(0,0,0,.25)}
 .frame img{position:absolute;left:0;bottom:-2px;width:100%;height:104%;object-fit:cover;object-position:top center}
 .sticker{object-fit:contain;object-position:bottom center}
