@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from . import jsonstate
-from .errors import ClipperError
+from .errors import ClipperError, did_you_mean
 
 # Every default, with a comment on what it does, is defaults.toml beside this file: that file is
 # the documentation of the settings, and this is it loaded. TOML has no null, so a key whose
@@ -64,11 +64,15 @@ def _coerce(raw: str, like: Any, name: str = "") -> Any:
     return raw
 
 
+def _stream_ids(root: Path) -> list[str]:
+    return sorted(n.name for n in root.iterdir() if not n.name.startswith(".") and n.is_dir()) \
+        if root.is_dir() else []
+
+
 def stream_dir(cfg: dict, ref: str) -> Path:
     """A stream id under paths.streams, or a stream directory. One that doesn't exist is an
     error here, not a traceback three calls later (or a base config labelled as the stream).
-    Shortcuts (#205): `latest` (the newest finished stream), `latest:<show>` (that show's), or
-    any unique start of an id (`kick-1373`)."""
+    Exact only: the shortcuts are find_stream's, for what a person types."""
     p = Path(ref)
     if p.is_dir():
         return p
@@ -76,20 +80,27 @@ def stream_dir(cfg: dict, ref: str) -> Path:
     d = root / ref
     if d.is_dir():
         return d
+    hint = did_you_mean(ref, _stream_ids(root))
+    raise ClipperError(f"no stream {ref!r} in {root}"
+                       + (f"; {hint}" if hint else " (clipper worker --status lists them)"))
+
+
+def find_stream(cfg: dict, ref: str) -> Path:
+    """stream_dir plus the shortcuts a person types on the command line (#205): `latest` (the
+    newest finished stream), `latest:<show>` (that show's), or any unique start of an id
+    (`kick-1373`). Services keep to stream_dir, so an id they hold never matches another."""
+    root: Path = cfg["paths"]["streams"]
+    if Path(ref).is_dir() or (root / ref).is_dir():
+        return stream_dir(cfg, ref)
     if ref == "latest" or ref.startswith("latest:"):
         return latest_stream(cfg, ref.partition(":")[2])
-    ids = sorted(n.name for n in root.iterdir() if not n.name.startswith(".") and n.is_dir()) \
-        if root.is_dir() else []
-    hits = [i for i in ids if i.startswith(ref)]
+    hits = [i for i in _stream_ids(root) if i.startswith(ref)]
     if len(hits) == 1:
         return root / hits[0]
     if hits:
         more = f" and {len(hits) - 5} more" if len(hits) > 5 else ""
         raise ClipperError(f"{ref!r} starts {len(hits)} stream ids ({', '.join(hits[:5])}{more}): give more of it")
-    import difflib
-    near = difflib.get_close_matches(ref, ids, 3, 0.6)
-    raise ClipperError(f"no stream {ref!r} in {root}"
-                       + (f"; did you mean {', '.join(near)}?" if near else " (clipper worker --status lists them)"))
+    return stream_dir(cfg, ref)  # its error, with the nearest ids
 
 
 def latest_stream(cfg: dict, show: str = "") -> Path:
@@ -98,14 +109,18 @@ def latest_stream(cfg: dict, show: str = "") -> Path:
     root: Path = cfg["paths"]["streams"]
     if show and show not in _root(cfg)["shows"]:
         raise ClipperError(f"latest:{show}: no [shows.{show}] (shows: {', '.join(_root(cfg)['shows']) or 'none'})")
-    best: tuple[str, Path] | None = None
+    from datetime import UTC, datetime
+
+    best: tuple[datetime, Path] | None = None
     for m in root.glob("*/meta.json") if root.is_dir() else []:
         try:
             meta = jsonstate.load(m)
-        except (OSError, ValueError):
+            started = datetime.fromisoformat(meta.get("started_at") or "")
+        except (OSError, ValueError, TypeError):  # unreadable, or no start (yet)
             continue
-        started = meta.get("started_at") or ""
-        if not started or (show and show_of_channel(cfg, meta.get("channel", "")) != show):
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        if show and show_of_channel(cfg, meta.get("channel", "")) != show:
             continue
         if best is None or started > best[0]:
             best = (started, m.parent)
@@ -422,9 +437,8 @@ def explain(cfg: dict, name: str, sdir: Path | None = None) -> dict:
     value that wins, for this stream (or the config's show, or the base config)."""
     section, _, key = name.partition(".")
     if section not in DEFAULTS or key not in DEFAULTS[section]:
-        import difflib
-        near = difflib.get_close_matches(name, [f"{s}.{k}" for s, v in DEFAULTS.items() for k in v], 4, 0.75)
-        raise ClipperError(f"no setting {name!r}" + (f"; did you mean {', '.join(near)}?" if near else ""))
+        hint = did_you_mean(name, [f"{s}.{k}" for s, v in DEFAULTS.items() for k in v], 4, 0.75)
+        raise ClipperError(f"no setting {name!r}" + (f"; {hint}" if hint else ""))
     root = _root(cfg)
     resolved = for_stream(cfg, sdir) if sdir else cfg
     show = resolved["show"]["key"]

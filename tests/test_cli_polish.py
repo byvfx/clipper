@@ -38,16 +38,27 @@ def cfg(tmp_path):
 
 def test_stream_shortcuts(cfg):
     root = cfg["paths"]["streams"]
-    assert config.stream_dir(cfg, "latest") == root / "kick-1370002"
-    assert config.stream_dir(cfg, "latest:c404") == root / "kick-1380001"
-    assert config.stream_dir(cfg, "kick-138") == root / "kick-1380001"  # a unique start
-    assert config.stream_dir(cfg, "kick-1370001") == root / "kick-1370001"
+    assert config.find_stream(cfg, "latest") == root / "kick-1370002"
+    assert config.find_stream(cfg, "latest:c404") == root / "kick-1380001"
+    assert config.find_stream(cfg, "kick-138") == root / "kick-1380001"  # a unique start
+    assert config.find_stream(cfg, "kick-1370001") == root / "kick-1370001"
     with pytest.raises(ClipperError, match="starts 2 stream ids"):
-        config.stream_dir(cfg, "kick-137")
+        config.find_stream(cfg, "kick-137")
     with pytest.raises(ClipperError, match="did you mean kick-1370001"):
-        config.stream_dir(cfg, "kick-1370011")
+        config.find_stream(cfg, "kick-1370011")
     with pytest.raises(ClipperError, match=r"no \[shows.nope\]"):
-        config.stream_dir(cfg, "latest:nope")
+        config.find_stream(cfg, "latest:nope")
+    # what services call stays exact: an id they hold never resolves to another stream
+    with pytest.raises(ClipperError, match="no stream 'kick-138'"):
+        config.stream_dir(cfg, "kick-138")
+
+
+def test_latest_compares_times_not_text(cfg):
+    root = cfg["paths"]["streams"]
+    # 13:00-08:00 is 21:00 UTC: after kick-1370002's 20:00Z, though its text sorts first
+    jsonstate.write(root / "kick-1380001" / "meta.json",
+                    {"channel": "donflurgundy", "started_at": "2026-11-12T13:00:00-08:00"})
+    assert config.find_stream(cfg, "latest") == root / "kick-1380001"
 
 
 def test_config_diff_lists_what_differs_by_layer(cfg, monkeypatch):
@@ -99,5 +110,27 @@ def test_schedule_json_needs_list(cfg):
 
 
 def test_unknown_stage_suggests_the_nearest():
-    assert cli.near_stage("segmnets", ["score", "segments", "cut"]) == "did you mean segments?"
-    assert cli.near_stage("zzz", ["score", "cut"]) == "stages: score, cut"
+    stages = ["score", "segments", "thumbs", "cut"]
+    assert cli.near_stage({"thmubs", "segmnets"}, stages) == (
+        "segmnets: did you mean segments?; thmubs: did you mean thumbs?")
+    assert cli.near_stage(["zzz"], ["score", "cut"]) == "stages: score, cut"
+
+
+def test_completion_bytes_keep_unix_newlines(cfg, capsysbinary):
+    cli.cmd_completion(cfg, cli.build_parser().parse_args(["completion", "bash"]))
+    out = capsysbinary.readouterr().out
+    assert b"complete -o default" in out and b"\r" not in out
+
+
+def test_shows_json_marks_streams_of_no_show(cfg, capsys):
+    jsonstate.write(cfg["paths"]["streams"] / "kick-1390001" / "meta.json", {"channel": "someoneelse"})
+    config._CHANNELS.clear()
+    cli.cmd_shows(cfg, cli.build_parser().parse_args(["shows", "--json"]))
+    rows = json.loads(capsys.readouterr().out)
+    assert {"show": "", "show_name": "", "channels": ["someoneelse"], "kitsu": "",
+            "streams": ["kick-1390001"]} in rows
+
+
+def test_config_diff_takes_the_pinned_show(cfg, capsys):
+    cli.cmd_config(config.pin_show(cfg, "c404"), cli.build_parser().parse_args(["config", "diff"]))
+    assert "[shows.kino]" not in capsys.readouterr().out

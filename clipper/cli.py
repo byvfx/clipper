@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import difflib
 import json
 import logging
 import sys
@@ -12,7 +11,7 @@ from pathlib import Path
 
 from . import __version__, config, jsonstate
 from .config import stream_dir
-from .errors import ClipperError
+from .errors import ClipperError, did_you_mean
 
 STREAM_HELP = "stream id under paths.streams (or latest, latest:<show>, a unique start of an id), or a stream dir"
 
@@ -25,9 +24,8 @@ class Parser(argparse.ArgumentParser):
         if action.choices is None or value in action.choices:
             return
         names = [str(c) for c in action.choices]
-        near = difflib.get_close_matches(str(value), names, 3)
-        hint = (f"did you mean {', '.join(near)}?" if near
-                else f"choose from {', '.join(names)}" if len(names) <= 10 else "see --help")
+        hint = (did_you_mean(value, names)
+                or (f"choose from {', '.join(names)}" if len(names) <= 10 else "see --help"))
         raise argparse.ArgumentError(action, f"invalid choice: {value!r}; {hint}")
 
 
@@ -840,11 +838,10 @@ def config_path(args: argparse.Namespace) -> str:
     return str(config.find(args.config).resolve())
 
 
-def near_stage(name: str, stages) -> str:
-    """The end of an unknown-stage error: the nearest stage names, or all of them (#205)."""
-    import difflib
-    near = difflib.get_close_matches(name, list(stages), 3, 0.6)
-    return f"did you mean {', '.join(near)}?" if near else f"stages: {', '.join(stages)}"
+def near_stage(names, stages) -> str:
+    """The end of an unknown-stage error: the nearest stage to each bad name, or all of them (#205)."""
+    hints = [f"{n}: {h}" for n in sorted(names) if (h := did_you_mean(n, stages))]
+    return "; ".join(hints) if hints else f"stages: {', '.join(stages)}"
 
 
 def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
@@ -855,13 +852,13 @@ def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
     stages = None
     if args.only or args.from_:
         if args.from_ and args.from_ not in worker.STAGES:  # #77 L14
-            raise ClipperError(f"run: unknown stage {args.from_!r}; {near_stage(args.from_, worker.STAGES)}")
+            raise ClipperError(f"run: unknown stage {args.from_!r}; {near_stage([args.from_], worker.STAGES)}")
         if args.only and args.from_:
             raise ClipperError("run: --only or --from, not both")
         stages = args.only.split(",") if args.only else stage_table.from_stage(args.from_, cfg["worker"])
         bad = set(stages) - set(worker.STAGES)
         if bad:
-            raise ClipperError(f"run: unknown stage {sorted(bad)}; {near_stage(min(bad), worker.STAGES)}")
+            raise ClipperError(f"run: unknown stage {sorted(bad)}; {near_stage(bad, worker.STAGES)}")
     try:
         ok = worker.run_stream(cfg, stream_dir(cfg, args.stream), config_path(args), stages,
                                force=args.force or bool(args.from_))
@@ -885,34 +882,40 @@ def cmd_shows(cfg: dict, args: argparse.Namespace) -> None:
     from .review import project_name
 
     by_show: dict[str, list[str]] = {}
+    no_show: dict[str, list[str]] = {}  # by channel
     streams = cfg["paths"]["streams"]
     for meta in sorted(streams.glob("*/meta.json")) if streams.is_dir() else []:
         ch = config.stream_channel(meta.parent)
-        by_show.setdefault(config.show_of_channel(cfg, ch) or f"(none: {ch or '?'})", []).append(
-            meta.parent.name)
+        key = config.show_of_channel(cfg, ch)
+        (by_show.setdefault(key, []) if key else no_show.setdefault(ch, [])).append(meta.parent.name)
     rows = []
     for key, show in cfg["shows"].items():
         sc = config.for_show(cfg, key)
         rows.append({"show": key, "show_name": sc["meta"]["show_name"], "channels": show["channels"],
                      "kitsu": project_name(sc), "streams": by_show.pop(key, [])})
-    rows += [{"show": key, "show_name": "", "channels": [], "kitsu": "", "streams": ids}
-             for key, ids in by_show.items()]  # streams of no show ("(none: <channel>)")
+    # streams whose channel no show has: show "" and the channel
+    rows += [{"show": "", "show_name": "", "channels": [ch] if ch else [], "kitsu": "", "streams": ids}
+             for ch, ids in no_show.items()]
     if args.json:
         print_json(rows)
         return
     for r in rows:
-        if r["kitsu"]:
+        if r["show"]:
             print(f"{r['show']:12} {r['show_name'] or '(no show_name)':24} "
                   f"channels {', '.join(r['channels']) or '-'}; Kitsu {r['kitsu']!r}; "
                   f"{len(r['streams'])} streams")
         else:
-            print(f"{r['show']:12} {len(r['streams'])} streams: {', '.join(r['streams'])}")
+            label = f"(none: {r['channels'][0] if r['channels'] else '?'})"
+            print(f"{label:12} {len(r['streams'])} streams: {', '.join(r['streams'])}")
 
 
 def cmd_completion(cfg: dict, args: argparse.Namespace) -> None:
     from . import completion
 
-    sys.stdout.write(completion.script(args.shell, build_parser(), list(config.base(cfg)["shows"])))
+    text = completion.script(args.shell, build_parser(), list(config.base(cfg)["shows"]))
+    sys.stdout.flush()
+    sys.stdout.buffer.write(text.encode("utf-8"))  # bytes: \n stays \n on Windows, which bash needs
+    sys.stdout.buffer.flush()
 
 
 def cmd_analytics(cfg: dict, args: argparse.Namespace) -> None:
@@ -979,7 +982,7 @@ def short_json(value, width: int = 90) -> str:
 
 def cmd_config(cfg: dict, args: argparse.Namespace) -> None:
     if args.action == "diff":
-        rows = config.diff(cfg, args.show_key or "")
+        rows = config.diff(cfg, args.show_key or (cfg["show"]["key"] if cfg.get("_pinned") else ""))
         if args.json:
             print_json([{"layer": la, "name": n, "default": d, "value": v} for la, n, d, v in rows])
             return
@@ -992,7 +995,7 @@ def cmd_config(cfg: dict, args: argparse.Namespace) -> None:
                 layer = la
             print(f"  {name:<36} {short_json(value)}    (default {short_json(default)})")
         return
-    sdir = stream_dir(cfg, args.for_stream) if args.for_stream else None
+    sdir = config.find_stream(cfg, args.for_stream) if args.for_stream else None
     e = config.explain(cfg, args.name, sdir)
     show = f"show {e['show']}" if e["show"] else "base config, no show"
     where = f"stream {sdir.name}, {show}" if sdir else show
@@ -2014,7 +2017,7 @@ def run_command(args: argparse.Namespace) -> None:
     if isinstance(stream, str) and stream and not Path(stream).is_dir():
         # latest, latest:<show> or a prefix becomes the id itself, so every stage and the cost log
         # see the real stream (#205)
-        args.stream = stream_dir(cfg, stream).name
+        args.stream = config.find_stream(cfg, stream).name
     if args.show:  # kept by every stage's for_stream, whatever the stream's channel (B4)
         cfg = config.pin_show(cfg, args.show)
     elif getattr(args, "stream", None):

@@ -76,7 +76,7 @@ A stream argument takes the id (`kick-137022368`), a stream folder, or a shortcu
 the stream that started last (a recording still going has no start yet and is skipped),
 `latest:kino` that show's, and any unique start of an id works (`kick-13702`); a mistyped id
 names the nearest ones. The read commands take `--json` for a script or the Claude container:
-`status`, `review list`, `schedule --list`, `shows`, `costs`, `config diff`, `checkup`.
+`review list`, `schedule --list`, `shows`, `costs`, `config diff`, `checkup`.
 
 Tab completion: `clipper completion powershell` (or `bash`) prints a script for the shell,
 made from this version's commands, actions and flags; stream arguments complete to `latest`
