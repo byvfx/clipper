@@ -42,6 +42,14 @@ with tiny A dots, the middle a checker, the far end solid A with tiny B holes. B
 c into d toward the corner; top-right wedge: d into c from the top edge; left column: tone on
 tone (the column colour and a darker shade), dark behind the masthead and solid by the date line,
 so no coverline sits on dots.
+**Round 3 (user):** the **wire sloth** (`sloth_sticker.png`, stretched into the H slot as in v4) is the
+mascot after all (`refs/sloth_pick_crop.png` is the user's crop); the **main portrait is a cut-out**
+too (white sticker outline, hard shadow); the black top strip is replaced by v4's **wavy yellow
+ribbon** with the teasing copy ("The truth about PAPA MEAT's obsession"); the v5 halftone edition
+is judged too busy and dropped as a direction. **Overlap check:** `overlap.js` (session scratchpad,
+to become part of the thumbs stage) draws every photo's alpha into a canvas and flags any
+coverline whose box covers more than 3% photo pixels; boxed lines with a solid background are
+exempt (the 'Teen "FASHION" box device). All three covers pass.
 **Small portraits are stickers again** (user, same day): cutouts with the white outline, hard shadow,
 a slight tilt and a red name bar inside the lower-left corner; the main photo stays borderless.
 **`*_v5hp.*`** is the v5 pop-art version with the mosaic tiles replaced by the same crossover halftone
