@@ -75,3 +75,22 @@ already done, and `--no-sync` skips the Kitsu read. Two are command-specific: `-
 stage on `run` and `story run` but a time on `pick` and `preshow fetch`, and `--limit N` caps
 only `upload` and the `archive` and `investigate` commands.
 Flags for different jobs on one command (`upload --links` and `--next`, say) are refused together.
+
+A stream argument takes the id (`kick-137022368`), a stream folder, or a shortcut: `latest` is
+the stream that started last (a recording still going has no start yet and is skipped),
+`latest:kino` that show's, and any unique start of an id works (`kick-13702`); a mistyped id
+names the nearest ones. The read commands take `--json` for a script or the Claude container:
+`review list`, `schedule --list`, `shows`, `costs`, `config diff`, `checkup`.
+
+Tab completion: `clipper completion powershell` (or `bash`) prints a script for the shell,
+made from this version's commands, actions and flags; stream arguments complete to `latest`
+and `latest:<show>`. Write it to a file once and load that from your profile, and make it
+again after an update that adds commands:
+
+```powershell
+clipper completion powershell > ~/clipper-completion.ps1
+Add-Content $PROFILE '. ~/clipper-completion.ps1'
+```
+
+(bash: `clipper completion bash > ~/.clipper-completion.bash` and source it from `~/.bashrc`.)
+A long `clipper run` logs "stage 4 of 15" as each stage starts.

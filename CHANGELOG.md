@@ -8,6 +8,11 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-13: command-line polish (#205): a stream argument takes `latest`, `latest:<show>` or a unique start
+  of an id, and a mistyped one names the nearest; `--json` on `review list`, `schedule --list` and
+  `shows`; `clipper config diff` lists what this install changes from the defaults, by layer; `clipper
+  completion bash|powershell` prints a tab-completion script; `run --only` suggests the nearest stage;
+  `clipper run` logs "stage N of M".
 - 11-13: the `archive transcribe` and `investigate facts` dry runs count what every call costs
   beyond its content (a minute of GPU a transcribe call, from the subject's own Modal runs when it has
   20; the prompt, schema and header a facts call repeats). Items with no length yet are said, not
