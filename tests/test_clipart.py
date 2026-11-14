@@ -217,7 +217,7 @@ def test_commons_drawings_first_then_pictures_only_if_wanted(cfg, monkeypatch):
     cfg["paths"]["clipart"] = cfg["paths"]["clipart"].with_name("clipart2")
     said = []
     assert clipart.find(cfg, "popcorn", ["commons"], n=3, say=said.append) == 1
-    assert "commons: 1 added" in said
+    assert "commons: 1 added, stopped early: commons.wikimedia.org: HTTP 503" in said
 
 
 def test_met_parse_keeps_only_public_domain(cfg, monkeypatch):

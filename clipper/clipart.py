@@ -125,11 +125,8 @@ def _commons_then_pictures(drawings: list[dict], query: str, limit: int, cfg: di
     yield from drawings
     if not cfg["clipart"]["commons_pictures"]:
         return
-    try:  # asked only once the drawings ran out; failing now leaves the drawings taken
-        js = _commons_query(cfg, gsrsearch=f"{query} filetype:bitmap", gsrlimit=limit)
-    except ClipperError:
-        return
-    yield from _commons_files(js, cfg)
+    # asked only once the drawings ran out; find says it if this fails, the drawings stay taken
+    yield from _commons_files(_commons_query(cfg, gsrsearch=f"{query} filetype:bitmap", gsrlimit=limit), cfg)
 
 
 def _commons_query(cfg: dict, **search) -> dict:
@@ -477,7 +474,8 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
         lib = load(cfg)
         have = {e["key"] for e in lib["art"].values()}
         new = skipped = 0
-        for c in cands:  # a lazy source (met) is asked for no more than this takes
+        stopped: list[str] = []
+        for c in _until_error(cands, stopped):  # a lazy source (met, commons) fetches only what this takes
             if c["key"] in lib["dropped"]:
                 continue
             if c["key"] in have:
@@ -495,9 +493,24 @@ def find(cfg: dict, query: str, sources: list[str], n: int | None = None, say=pr
             new += 1
             if new >= n:
                 break
-        say(f"{src}: {new} added" + (f", {skipped} skipped" if skipped else ""))
+        say(f"{src}: {new} added" + (f", {skipped} skipped" if skipped else "")
+            + (f", stopped early: {stopped[0]}" if stopped else ""))
         added += new
     return added
+
+
+def _until_error(cands, errors: list[str]) -> Iterator[dict]:
+    """A source's candidates until it raises while fetching more (a lazy source's later
+    request); the error goes in errors and what came before stays."""
+    it = iter(cands)
+    while True:
+        try:
+            yield next(it)
+        except StopIteration:
+            return
+        except ClipperError as e:
+            errors.append(str(e))
+            return
 
 
 def add(cfg: dict, target: str, tags: list[str] | None = None, credit: str = "", licence: str = "public domain",
