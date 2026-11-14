@@ -224,8 +224,8 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (this week, small: #204, #206, #228,
-#201, #203, #205, #199; start with #206+#201+#203 as one war room PR, then #204), `p2-dated` (#192 after 11-16,
+**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (this week, small: #204 next, then
+#228, #205, #199; #201 and #203 closed and #206 all but done by PR #244, merged 11-13 but NOT deployed yet), `p2-dated` (#192 after 11-16,
 #41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
 Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
 `parked` (the rest). `gh issue list --label p1-now` is the queue. 11-13: #13 folded into #158, #200 closed (its
@@ -259,10 +259,10 @@ messages: GitHub closes the issue on "fix".
   room window. The library is `[paths] broll` on the share.
 - **Usability review (11-10, issues only, nothing built):** `clipper status` takes a minute from the laptop
   and buries what needs the user #199; a first run without Kitsu #200 (against "Kitsu-optional is not a goal"
-  above: a try-it route, not a second record; close it if unwanted); war room stale data #201, double sends /
-  lost edits / bulk actions on hidden items #202, cost before a paid action #203; `clipper streams prune` and
-  `clipper backup` #204; checklists: CLI polish #205, war room small fixes #206 (`core.js:145` has a
-  mis-encoded dot), new users and the public repo #207 (this install's values in tracked files, which are already visible since the
+  above: a try-it route, not a second record; close it if unwanted); war room #201, #202, #203 done (#211,
+  #238); `clipper streams prune` and `clipper backup` #204; checklists: CLI polish #205, war room #206 (#244
+  did all but three: who-did-it signing per reviewer, shortcuts inside the tool dialog, schedule drag on
+  touch; the issue's last comment lists them), new users and the public repo #207 (this install's values in tracked files, which are already visible since the
   repo is public; packaging).
 - **Checkup (#185 closed 11-09, the rest is tracked here):** `clipper checkup` (services, streams, schedule,
   lint; `[checkup]`; wiki Checkup) and `clipper alert send` are merged (#189). The nightly run
