@@ -95,8 +95,58 @@ def test_build_page(tmp_path: Path):
     assert page.count('class="cl "') == 3                     # the three side coverlines
     assert 'class="stk gap"' in page and 'class="stk inset"' in page
     assert "document.fonts.ready.then(fit)" in page
-    # Every palette's column is light enough for ink and never the script's yellow.
-    assert all(fanmag.luminance(b) > 0.5 and b != "#ffe066" for _, b, _, _ in fanmag.PALETTES)
+    # Column text is ink: every palette's column is light enough, and never the script's yellow.
+    def luminance(c: str) -> float:
+        r, g, b = (int(c[i:i + 2], 16) / 255 for i in (1, 3, 5))
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    assert all(luminance(b) > 0.5 and b != "#ffe066" for _, b, _, _ in fanmag.PALETTES)
+
+
+def test_cover_lines_follow_a_reviewer_edit():
+    e = {"headline": ["JER'S", "SECRET", "ORDER"], "text": "JER'S SECRET ORDER"}
+    assert fanmag.cover_lines(e) == ["JER'S", "SECRET", "ORDER"]
+    edited = fanmag.cover_lines({**e, "text": "JER GOES KETO"})
+    assert " ".join(edited) == "JER GOES KETO"
+
+
+def test_cached_cut_reuses_a_cut_out(tmp_path: Path, monkeypatch):
+    src = tmp_path / "frame.jpg"
+    Image.new("RGB", (64, 36)).save(src)
+    made = []
+
+    def fake_cutout(src, face, size, seed, dst, bleed=False):
+        made.append(dst)
+        Image.new("RGBA", (4, 4)).save(dst)
+        return dst
+
+    monkeypatch.setattr(fanmag, "cutout", fake_cutout)
+    face = {"x": 0.1, "y": 0.1, "width": 0.3, "height": 0.5}
+    a = fanmag.cached_cut(tmp_path / "cache", src, face, 260, 3)
+    b = fanmag.cached_cut(tmp_path / "cache", src, face, 260, 3)
+    c = fanmag.cached_cut(tmp_path / "cache", src, {**face, "x": 0.2}, 260, 3)
+    assert a == b != c and len(made) == 2 and a.exists()
+
+
+def test_screenshot_never_keeps_the_last_render(tmp_path: Path, monkeypatch):
+    import subprocess
+
+    import pytest
+
+    from clipper.errors import ClipperError
+
+    page, dst = tmp_path / "cover.html", tmp_path / "cover.png"
+    page.write_text("<html></html>")
+    dst.write_bytes(b"old")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 1, "", "crashed"))
+    with pytest.raises(ClipperError, match="crashed"):
+        fanmag.screenshot("browser", page, dst)
+
+    def hang(*a, **k):
+        raise subprocess.TimeoutExpired("browser", 120)
+
+    monkeypatch.setattr(subprocess, "run", hang)
+    with pytest.raises(ClipperError, match="timed out"):
+        fanmag.screenshot("browser", page, dst)
 
 
 def test_fanmag_shares_the_enquirer_pick():

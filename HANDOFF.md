@@ -324,8 +324,13 @@ messages: GitHub closes the issue on "fix".
   cut-out floated mid-cover (now bleeds off the bottom); the title box was cut mid-word (now whole titles
   of 48 characters or less, else none); script line unreadable (yellow with an ink edge); only one side story
   fit (the column is a flex stack, the page's script drops what runs off); 5 palettes instead of 3.
-  Still seen: a dark chair joined at the shoulder stays in the matte (s18); webcam-corner insets fall back
-  to the rectangle. No 9:16 Short covers; the hub image has no browser (fanmag renders where one is).
+  Still seen: a dark chair joined at the shoulder stays in the matte (s18); a face in a webcam box of a
+  multi-cam layout ends at the box's edge and can take a dark patch of the panel below (s03); webcam-corner
+  insets fall back to the rectangle. No 9:16 Short covers; the hub image has no browser, so `thumbs`
+  refuses before paying for picks there. Cut-outs are cached in `thumbs/_fanmag/` (a redraw of 5: 26 s -> 8 s).
+- Local code review (high) found 9, all fixed: a stale cover.png hid a failed render, reviewer text edits
+  were ignored, picks were paid before the browser check, an empty face region kept the background, raw
+  TimeoutExpired, a PATH name for `browser`, mattes redone every redraw, a dead branch, styles copied in JS.
 
 ## Recipes (how we did it last time; details in the log)
 - **Restart serve / the bot / the worker:** `clipper services restart serve|bot|worker` (docker compose on the

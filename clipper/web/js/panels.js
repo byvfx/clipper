@@ -158,7 +158,7 @@ async function showCover(ref) {
 }
 function cvVal(k) { return k in CV.changes ? CV.changes[k] : CV.info.fields[k]; }
 function renderCover() {
-  const { info } = CV, enq = info.style === "enquirer" || info.style === "fanmag", main = cvVal("frame"), inset = cvVal("inset_frame");
+  const { info } = CV, enq = !!info.cover, main = cvVal("frame"), inset = cvVal("inset_frame");
   const frameUrl = n => info.frames[n - 1]?.url;
   const boxFrame = CV.box === "face" ? main : inset;
   const b = cvVal(CV.box) || { x: 0.35, y: 0.2, width: 0.3, height: 0.4 };
@@ -236,7 +236,7 @@ document.addEventListener("click", e => {
   const f = e.target.closest?.("[data-cvframe]");
   if (f && CV) {
     const n = +f.dataset.cvframe;
-    if (e.shiftKey && (CV.info.style === "enquirer" || CV.info.style === "fanmag")) { CV.changes.inset_frame = n; CV.box = "inset_face"; }
+    if (e.shiftKey && CV.info.cover) { CV.changes.inset_frame = n; CV.box = "inset_face"; }
     else { CV.changes.frame = n; CV.box = "face"; }
     renderCover(); return;
   }

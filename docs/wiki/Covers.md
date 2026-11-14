@@ -58,4 +58,6 @@ calls. The fonts and the mascot ship in `clipper/assets/fanmag/`. With the `gpu`
 (torchvision) the cut-outs follow the person's outline; without it they are the face crop's
 rectangle, still with the paper edge. `clipper doctor` checks the browser, the assets and
 torchvision. Shorts get no 9:16 cover in this style yet, and the NAS hub image has no browser,
-so a fanmag show's covers are drawn on a machine that has one.
+so a fanmag show's covers are drawn on a machine that has one: without one, `clipper thumbs`
+stops before any pick is paid for. Cut-outs are kept in `thumbs/_fanmag/` in the stream, so a
+redraw doesn't redo them.

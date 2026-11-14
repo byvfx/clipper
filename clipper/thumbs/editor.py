@@ -29,7 +29,7 @@ def cover_info(stream_dir: Path, cfg: dict, key: str) -> dict:
         e["headline"] = enquirer_lines(e["text"])  # a hand edit of the words: what the cover prints
     tc = {**cfg["thumbnail"]}
     tc["_photos"] = photos(tc)
-    return {"key": key, "style": e.get("style", "classic"), "id": e["id"],
+    return {"key": key, "style": e.get("style", "classic"), "cover": e.get("style") in COVER_STYLES, "id": e["id"],
             "frames": [{"n": i, "t": f["t"], "path": f"thumbs/{key}/{f['path']}"}
                        for i, f in enumerate(e["frames"], 1)],
             "fields": {k: e.get(k) for k in ("frame", "face", "inset_frame", "inset_face", *PHOTO_KEYS,

@@ -27,7 +27,9 @@ with off-white paper).
 from __future__ import annotations
 
 import colorsys
+import hashlib
 import html
+import importlib.util
 import math
 import os
 import random
@@ -44,6 +46,7 @@ from ..draw import clamp_box, save
 from ..errors import ClipperError
 from .enquirer import WHOLE, frame_file
 from .frames import photo_file
+from .pick import enquirer_lines
 
 W, H = 1280, 720
 ASSETS = Path(__file__).parent.parent / "assets" / "fanmag"
@@ -80,7 +83,8 @@ def find_browser(tc: dict) -> str:
     """The Chromium-based browser to render with: [thumbnail] browser, else the first of
     the usual install paths / PATH names that exists; "" if none."""
     if tc.get("browser"):
-        return tc["browser"] if Path(tc["browser"]).exists() else ""
+        b = tc["browser"]
+        return b if Path(b).exists() else shutil.which(b) or ""
     for p in BROWSERS:
         if Path(p).exists():
             return p
@@ -106,7 +110,11 @@ def screenshot(browser: str, page: Path, dst: Path, size: tuple[int, int] = (W, 
         elif os.geteuid() == 0:
             cmd.append("--no-sandbox")
         cmd += [*CHROME_FLAGS, page.resolve().as_uri()]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+        dst.unlink(missing_ok=True)  # the last render's: never mistaken for this one's
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+        except subprocess.TimeoutExpired:
+            raise ClipperError(f"browser screenshot timed out after 120 s ({browser})") from None
         if not dst.exists():
             raise ClipperError(f"browser screenshot failed ({browser}): {r.stderr.strip()[-300:]}")
 
@@ -241,7 +249,7 @@ def clean_matte(prob: Image.Image, face: tuple[int, int, int, int] | None = None
         counts = np.bincount(mid.ravel(), minlength=n)
         counts[0] = 0
         keep = int(counts.argmax())
-        if counts[keep] < 0.3 * mid.size:
+        if not mid.size or counts[keep] < 0.3 * mid.size:
             return None
     else:
         keep = 1 + int(stats[1:, cv2.CC_STAT_AREA].argmax())
@@ -325,6 +333,28 @@ def cutout(src: Path, face: dict, size: int, seed: int, dst: Path, bleed: bool =
     out = handcut(rgba, margin=max(10, size // 36), seed=seed, bleed=bleed)
     dst.parent.mkdir(parents=True, exist_ok=True)
     out.save(dst)
+    return dst
+
+
+CUT_VERSION = 2  # bump when the matte or the paper edge changes, so cached cut-outs are redone
+
+
+def cached_cut(cache: Path, src: Path, face: dict, size: int, seed: int, bleed: bool = False) -> Path:
+    """cutout (or photo_cutout for a whole-picture face) kept in `cache` under what made it:
+    the source file and its mtime, the box, the size, the seed, whether torchvision was
+    there. A video's teaser cut-out is then made once for all the covers it appears on, and
+    --compose-only redraws without redoing a matte."""
+    made = repr((str(src.resolve()), src.stat().st_mtime_ns, face, size, seed, bleed, CUT_VERSION,
+                 importlib.util.find_spec("torchvision") is not None))
+    dst = cache / f"{hashlib.sha1(made.encode()).hexdigest()[:16]}.png"
+    if not dst.exists():
+        cache.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_suffix(".tmp.png")
+        if face == WHOLE:
+            photo_cutout(src, size, seed, tmp, bleed)
+        else:
+            cutout(src, face, size, seed, tmp, bleed)
+        tmp.replace(dst)
     return dst
 
 
@@ -467,9 +497,10 @@ def cover_title(title: str, limit: int = 48) -> str:
     return t if len(t) <= limit else ""
 
 
-def luminance(hexc: str) -> float:
-    r, g, b = (int(hexc[i:i + 2], 16) / 255 for i in (1, 3, 5))
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+def cover_lines(e: dict) -> list[str]:
+    """The coverline's lines: the model's headline, or a reviewer's edit of the text (Kitsu's
+    Thumbnail text, the war room) broken into lines, as the enquirer cover does."""
+    return e["headline"] if e.get("text", "") in ("", " ".join(e["headline"])) else enquirer_lines(e["text"])
 
 
 def build_page(e: dict, ctx: dict, tc: dict, date: str, cuts: dict, out_dir: Path) -> Path:
@@ -485,10 +516,6 @@ def build_page(e: dict, ctx: dict, tc: dict, date: str, cuts: dict, out_dir: Pat
     rnd = random.Random(key)
     palette = PALETTES[zlib.crc32(key.encode()) % len(PALETTES)]
     _, b, c, d = palette
-    # Column text: white with an ink shadow on the darker column colours, ink on the light ones.
-    light = luminance(b) > 0.5
-    on_col, other = (INK, INK) if light else ("#fff", INK)
-    shadow = "" if light else "text-shadow:3px 3px 0 #1a1a1a;"
     parts = []
     # Ribbon: another cover's band line, with this cover's date as the tail.
     band = ctx.get("band") or {}
@@ -505,16 +532,15 @@ def build_page(e: dict, ctx: dict, tc: dict, date: str, cuts: dict, out_dir: Pat
     if e.get("subhead"):
         col.append(f'<div class="script" style="transform:rotate({rnd.uniform(-3, -1):.1f}deg)">'
                    f'{esc(e["subhead"].lower())}</div>')
-    head = "<br>".join(esc(line) for line in e["headline"][:3])
-    col.append(cl(head, [e.get("attribution", "")], on_col, BULLETS[0], 50, "own", shadow))
+    head = "<br>".join(esc(line) for line in cover_lines(e)[:3])
+    col.append(cl(head, [e.get("attribution", "")], INK, BULLETS[0], 50, "own"))
     side = ctx.get("side", [])[:3]
     scuts = list(cuts.get("side") or []) + [None] * 3
     gap = len(side) > 1 and scuts[1] is not None
     lines = []
     for i, s in enumerate(side):
         topic = esc((s.get("topic") or s.get("name") or "also inside").upper()[:24])
-        lines.append(cl(topic, [s["text"]], other if light else on_col, BULLETS[(i + 1) % 3], 32, "",
-                        "" if light else "text-shadow:2px 2px 0 #1a1a1a;"))
+        lines.append(cl(topic, [s["text"]], INK, BULLETS[(i + 1) % 3], 32))
     row = ""
     if scuts[0] is not None:
         row += sticker(scuts[0], side[0].get("name", ""), rnd.choice((-4, -2, 3)), 130, 150)
@@ -563,24 +589,18 @@ def compose_fanmag(stream_dir: Path, key: str, e: dict, ctx: dict, tc: dict, dat
         raise ClipperError("[thumbnail] style = \"fanmag\" needs a Chromium-based browser (Edge, Chrome, "
                          "Chromium); set [thumbnail] browser to its executable")
     work = stream_dir / "thumbs" / key / "fanmag"
+    cache = stream_dir / "thumbs" / "_fanmag"
 
     def frame_path(n: int) -> Path:
         return frame_file(stream_dir, key, e, n, video)
 
     photo = photo_file(tc, e.get("photo", ""), e.get("photo_label", ""))
-    main = (photo_cutout(photo, 900, 1, work / "main.png", bleed=True) if photo
-            else cutout(frame_path(e["frame"]), e["face"], 900, 1, work / "main.png", bleed=True))
+    main = cached_cut(cache, photo or frame_path(e["frame"]), WHOLE if photo else e["face"], 900, 1, True)
     inset = None
     if e.get("inset_frame"):
-        inset = cutout(frame_path(e["inset_frame"]), e["inset_face"], 300, 2, work / "inset.png")
-    side = []
-    for i, s in enumerate(ctx.get("side", [])[:2]):
-        if s.get("frame"):
-            src = Path(s["frame"])
-            side.append(photo_cutout(src, 260, 3 + i, work / f"side{i}.png") if s.get("face") == WHOLE
-                        else cutout(src, s["face"], 260, 3 + i, work / f"side{i}.png"))
-        else:
-            side.append(None)
+        inset = cached_cut(cache, frame_path(e["inset_frame"]), e["inset_face"], 300, 2)
+    side = [cached_cut(cache, Path(s["frame"]), s["face"], 260, 3) if s.get("frame") else None
+            for s in ctx.get("side", [])[:2]]
     page = build_page(e, ctx, tc, date, {"main": main, "inset": inset, "side": side}, work)
     png = work / "cover.png"
     screenshot(browser, page, png)

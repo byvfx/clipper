@@ -277,6 +277,11 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         print("\n".join(["estimate:"] + estimate(cfg, tc, todo, style)))
         return []
     claude = None
+    if todo and style == "fanmag":
+        from .fanmag import find_browser
+        if not find_browser(tc):  # before any pick is paid for: the covers couldn't be drawn
+            raise ClipperError('[thumbnail] style = "fanmag" needs a Chromium-based browser (Edge, Chrome, '
+                               "Chromium) on this machine; set [thumbnail] browser to its executable")
     if todo:
         claude = Claude(cfg)
         preflight(claude, tc["model"])
