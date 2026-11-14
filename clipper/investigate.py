@@ -127,6 +127,12 @@ MAX_THREAD_FACTS = 60   # facts one candidate shows the leads model (evenly spre
 COMMON_SHARE = 0.25     # a name in more of the videos than this is the background, not a thread
 BASELINE_WEEKS = 26
 OUT_RATIO = 0.65        # facts: output tokens per input token, for the estimate (Sept-Oct 2026 jer run)
+# Per facts call, beyond its transcript (#228; the 690-call cecil run, 2026-11-12): the system
+# prompt and schema are sent every time, the API adds about this much for a JSON-schema answer
+# (a near-empty transcript cost 1,798 tokens in), the video header, and a floor of output.
+STRUCTURED_TOKENS = 730
+HEADER_TOKENS = 40
+OUT_PER_CALL = 60
 
 
 def inv_dir(cfg: dict, subject: str) -> Path:
@@ -324,19 +330,40 @@ def facts_todo(cfg: dict, subject: str, since: str | None, before: str | None, l
     return (todo[:limit] if limit else todo), current
 
 
+def facts_estimate(cfg: dict, subject: str, todo: list[dict]) -> tuple[float, int, float]:
+    """(tokens in, calls, dollars) for reading todo: the transcripts at the subject's characters
+    per second, plus what every call repeats (the prompt, the schema, the header), one call per
+    [investigate] chunk_s of video and at least one an item."""
+    import json
+    import math
+
+    from .prompts import Prompts
+
+    ic = cfg["investigate"]
+    prompts = Prompts(cfg)
+    prompts.vars.update(subject=subject, channels="")
+    per_call = (len(prompts.get("investigate_facts")) + len(json.dumps(FACTS_SCHEMA))) / 4 \
+        + STRUCTURED_TOKENS + HEADER_TOKENS
+    chars_per_s = sample_rate(cfg, subject, todo)
+    talk = sum(it["duration_s"] or 0 for it in todo) * chars_per_s / 4
+    calls = sum(max(1, math.ceil((it["duration_s"] or 0) / ic["chunk_s"])) for it in todo)
+    tok_in = talk + calls * per_call
+    return tok_in, calls, estimate(cfg, ic["facts_model"], tok_in, talk * OUT_RATIO + calls * OUT_PER_CALL)
+
+
 def run_facts(cfg: dict, subject: str, since: str | None = None, before: str | None = None,
               limit: int | None = None, new: bool = False, dry_run: bool = False) -> float:
     """Read the items not read yet; returns what it spent."""
     ic = cfg["investigate"]
     d = inv_dir(cfg, subject)
     todo, current = facts_todo(cfg, subject, since, before, limit, new)
-    hours = sum(it["duration_s"] for it in todo) / 3600
-    chars_per_s = sample_rate(cfg, subject, todo)
-    tok_in = hours * 3600 * chars_per_s / 4
-    est = estimate(cfg, ic["facts_model"], tok_in * 1.08, tok_in * OUT_RATIO)  # + prompt per chunk
+    hours = sum(it["duration_s"] or 0 for it in todo) / 3600
     span = f"{todo[-1]['date'] or '?'} to {todo[0]['date'] or '?'}" if todo else ""
+    tok_in, calls, est = facts_estimate(cfg, subject, todo)
+    unknown = sum(1 for it in todo if not it["duration_s"])
     print(f"{subject}: {len(todo)} items to read ({hours:.1f} h, {span}), {current} already read; "
-          f"~{tok_in / 1e6:.1f}M tokens in, ~${est:.2f} on {ic['facts_model']}")
+          f"{calls} calls, ~{tok_in / 1e6:.1f}M tokens in, ~${est:.2f} on {ic['facts_model']}"
+          + (f" ({unknown} of unknown length priced as one short call each)" if unknown else ""))
     if dry_run or not todo:
         return 0.0
     claude, prompts = llm_setup(cfg, ic["facts_model"])

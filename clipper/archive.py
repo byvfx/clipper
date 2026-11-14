@@ -237,12 +237,42 @@ def newest_first(cat: dict[str, dict]) -> dict[str, dict]:
 
 # ---------- transcribing ----------
 
-def estimate_usd(hours: float, gpu: str, diarize: bool = False) -> float:
-    from .modal_app import DIARIZE_SPEED, GPU_PRICES, SPEED
+# Billed seconds a call costs beyond its audio at the measured speed: the download into the
+# container, model load, and the 30 s idle transcribe.modal_cost adds (#228). Measured from
+# modal_runs.jsonl on 2026-11-13: Jer's long videos 37 s a call, 759 short Instagram clips 58 s,
+# HEI items 224 s (big downloads). A subject with enough runs of its own uses its own mean.
+CALL_OVERHEAD_S = 60.0
+OWN_RUNS = 20   # runs of a subject before its own overhead is trusted
+
+
+def estimate_usd(hours: float, gpu: str, diarize: bool = False, calls: int = 0,
+                 overhead_s: float = CALL_OVERHEAD_S) -> float:
+    """GPU time for `hours` of audio at the measured speed, plus `overhead_s` for each of `calls`."""
+    from .modal_app import GPU_PRICES
+
+    return (gpu_hours(hours, gpu, diarize) + calls * overhead_s / 3600) * GPU_PRICES.get(gpu, 0.0)
+
+
+def gpu_hours(hours: float, gpu: str, diarize: bool = False) -> float:
+    """GPU hours the work itself takes for `hours` of audio, at the measured speeds."""
+    from .modal_app import DIARIZE_SPEED, SPEED
 
     speed = SPEED.get(gpu, 30.0)
-    gpu_h = hours / speed + (hours / (DIARIZE_SPEED * speed / SPEED["L40S"]) if diarize else 0)
-    return gpu_h * GPU_PRICES.get(gpu, 0.0)
+    return hours / speed + (hours / (DIARIZE_SPEED * speed / SPEED["L40S"]) if diarize else 0)
+
+
+def call_overhead_s(cfg: dict, subject: str, gpu: str, diarize: bool) -> tuple[float, str]:
+    """(seconds a call costs beyond its audio, where that figure comes from): the subject's own
+    ok runs in modal_runs.jsonl when it has OWN_RUNS of them, else CALL_OVERHEAD_S."""
+    from .modalmon import read_runs
+
+    runs = [r for r in read_runs(cfg["paths"]["modal_runs"])
+            if r.get("event") == "end" and r.get("ok") and r.get("call_s") is not None
+            and str(r.get("what", "")).startswith(f"{subject}/")][-500:]
+    if len(runs) < OWN_RUNS:
+        return CALL_OVERHEAD_S, "typical"
+    over = sum(r["call_s"] + 30 - gpu_hours(r["audio_s"], gpu, diarize) for r in runs) / len(runs)
+    return max(over, 0.0), f"{subject}'s last {len(runs)} runs"
 
 
 def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[str, ...] = ytdl.AGE) -> dict:
@@ -327,6 +357,25 @@ def transcribe_item(cfg: dict, idir: Path, it: dict, gpu: str, retry_on: tuple[s
     return {**cost, "signed_in": signed_in, "duration_s": meta["duration_s"]}
 
 
+def transcribe_estimate(cfg: dict, subject: str, todo: list[dict], gpu: str, parallel: int) -> str:
+    """The dry-run line: hours and price, a per-call overhead included (#228), and how many items
+    have no length yet (an Instagram listing has none before the download), which aren't priced."""
+    diarize = bool(cfg["archive"]["diarize"])
+    known = [it for it in todo if it.get("duration_s")]
+    unknown = len(todo) - len(known)
+    hours = sum(it["duration_s"] for it in known) / 3600
+    over, source = call_overhead_s(cfg, subject, gpu, diarize)
+    usd = estimate_usd(hours, gpu, diarize, calls=len(known), overhead_s=over)
+    head = (f"{subject}: {len(todo)} to transcribe{' with speaker turns' if diarize else ''}, on {gpu} x{parallel}: ")
+    each = f"{over:.0f} s a call beyond the audio ({source})"
+    if not known:
+        return head + (f"lengths unknown until each is downloaded, so no price; at least "
+                       f"~${estimate_usd(0, gpu, diarize, calls=unknown, overhead_s=over):.2f} for the calls alone ({each})"
+                       if unknown else "nothing")
+    return (head + f"{hours:.1f} h, ~${usd:.2f} ({each})"
+            + (f"; {unknown} more of unknown length, not priced" if unknown else ""))
+
+
 def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu: str,
                    parallel: int, dry_run: bool) -> None:
     d = subject_dir(cfg, subject)
@@ -342,10 +391,7 @@ def run_transcribe(cfg: dict, subject: str, limit: int | None, oldest: bool, gpu
     if oldest:
         todo.reverse()
     todo = todo[:limit] if limit else todo
-    hours = sum(it["duration_s"] for it in todo) / 3600
-    diarize = " with speaker turns" if cfg["archive"]["diarize"] else ""
-    print(f"{subject}: {len(todo)} to transcribe{diarize}, {hours:.1f} h, on {gpu} x{parallel}: "
-          f"~${estimate_usd(hours, gpu, bool(diarize)):.2f} (measured speed; upload and cold starts extra)")
+    print(transcribe_estimate(cfg, subject, todo, gpu, parallel))
     if dry_run or not todo:
         return
     # Our own log next to the data: a detached run's shell redirect once wrote nothing (2026-10-23).

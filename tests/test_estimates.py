@@ -1,4 +1,7 @@
-"""`--dry-run` on score, segments, meta and thumbs: what a run would send, priced, nothing called."""
+"""`--dry-run` estimates: score, segments, meta and thumbs (what a run would send, priced, nothing
+called), and archive transcribe and investigate facts with their per-call overhead (#228)."""
+import json
+
 import pytest
 
 from clipper import cli, jsonstate, llm, meta, segments
@@ -56,3 +59,63 @@ def test_segments_estimate_without_a_split_costs_nothing(defaults, tmp_path):
                                   ["thumbs", "kick-1", "--dry-run"], ["score", "kick-1", "--dry-run"]])
 def test_the_four_stages_take_dry_run(argv):
     assert cli.build_parser().parse_args(argv).dry_run is True
+
+
+# ---------- #228: archive transcribe and investigate facts, per-call overhead ----------
+
+@pytest.fixture
+def fake_modal(monkeypatch):
+    """modal_app needs the modal package, which the tests don't install: its price tables only."""
+    import sys
+    from types import SimpleNamespace
+
+    monkeypatch.setitem(sys.modules, "clipper.modal_app", SimpleNamespace(
+        SPEED={"L4": 24.5, "L40S": 46.5}, DIARIZE_SPEED=59.0, GPU_PRICES={"L4": 0.8, "L40S": 1.95}))
+
+
+def test_each_call_costs_its_overhead_on_top_of_the_audio(fake_modal):
+    from clipper import archive
+
+    assert archive.estimate_usd(0, "L4", calls=60, overhead_s=60) == pytest.approx(0.8)   # an hour of overhead
+    assert archive.estimate_usd(24.5, "L4") == pytest.approx(0.8)                         # an hour of work
+
+
+def runs_log(defaults, tmp_path, subject, n, call_s, audio_s=60.0):
+    defaults["paths"]["modal_runs"] = tmp_path / "modal_runs.jsonl"
+    with open(defaults["paths"]["modal_runs"], "w", encoding="utf-8") as f:
+        for i in range(n):
+            f.write(json.dumps({"event": "end", "ok": True, "what": f"{subject}/ig-{i}", "call_s": call_s,
+                                "audio_s": audio_s}) + "\n")
+
+
+def test_overhead_comes_from_the_subjects_own_runs_once_it_has_enough(defaults, tmp_path, fake_modal):
+    from clipper import archive
+
+    runs_log(defaults, tmp_path, "cecil", archive.OWN_RUNS - 1, 20.0)
+    assert archive.call_overhead_s(defaults, "cecil", "L4", False) == (archive.CALL_OVERHEAD_S, "typical")
+    runs_log(defaults, tmp_path, "cecil", archive.OWN_RUNS, 20.0, audio_s=49.0)   # 2 s of work at 24.5x
+    over, source = archive.call_overhead_s(defaults, "cecil", "L4", False)
+    assert over == pytest.approx(20 + 30 - 2) and "cecil's last 20 runs" in source
+
+
+def test_unknown_lengths_are_said_not_priced(defaults, tmp_path, fake_modal):
+    from clipper import archive
+
+    defaults["paths"]["modal_runs"] = tmp_path / "none.jsonl"
+    defaults["archive"]["diarize"] = False
+    line = archive.transcribe_estimate(defaults, "s", [{"duration_s": 0}] * 3, "L4", 2)
+    assert "lengths unknown" in line and "no price" in line and "at least ~$0.04" in line
+    line = archive.transcribe_estimate(defaults, "s", [{"duration_s": 3600}, {"duration_s": None}], "L4", 2)
+    assert "1.0 h" in line and "1 more of unknown length, not priced" in line
+
+
+def test_facts_estimate_counts_the_prompt_every_call(defaults, monkeypatch):
+    from clipper import investigate
+
+    monkeypatch.setattr(investigate, "sample_rate", lambda *a: 15.0)
+    one, calls, usd = investigate.facts_estimate(defaults, "s", [{"duration_s": 60}])
+    assert calls == 1 and one > 15 * 60 / 4 + investigate.STRUCTURED_TOKENS
+    many, calls, usd2 = investigate.facts_estimate(defaults, "s", [{"duration_s": 60}] * 10)
+    assert calls == 10 and many == pytest.approx(one * 10) and usd2 == pytest.approx(usd * 10)
+    _, calls, _ = investigate.facts_estimate(defaults, "s", [{"duration_s": defaults["investigate"]["chunk_s"] * 2.5}])
+    assert calls == 3
