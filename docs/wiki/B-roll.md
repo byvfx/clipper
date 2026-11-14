@@ -1,7 +1,8 @@
 The b-roll library (#229) keeps short clips that are free to use, for [story cuts](Story-dossiers),
 explainers and the [weekly issue](Weekly-issue): footage made by the US government has no
 copyright, and the Internet Archive and Wikimedia Commons state each item's licence. Each clip
-keeps where it came from, its credit line and its licence.
+keeps where it came from, its credit line and its licence. Still pictures (engravings,
+drawings, emoji, icons) are in the [clip art library](Clip-art).
 
 ## Sources
 

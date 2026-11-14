@@ -25,6 +25,7 @@ x_token = "secrets/x_token.json"               # written by clipper x --sign-in
 warroom_token = "secrets/warroom_token.txt"    # made by clipper warroom --tailnet on, if [warroom] token is ""
 brave_key = "secrets/brave_secret.txt"        # Brave Search API key for cast image search, if not $BRAVE_API_KEY
 dvids_key = "secrets/dvids_secret.txt"        # DVIDS API keys for clipper broll (public key first), if not $DVIDS_API_KEY
+pixabay_key = "secrets/pixabay_secret.txt"    # Pixabay API key for clipper clipart, if not $PIXABAY_API_KEY
 openai_key = "secrets/openai_secret.txt"      # model provider keys, each if its env var isn't set
 gemini_key = "secrets/gemini_secret.txt"      # ($OPENAI_API_KEY, $GEMINI_API_KEY, $OPENROUTER_API_KEY)
 openrouter_key = "secrets/openrouter_secret.txt"
@@ -50,6 +51,7 @@ warroom_undo = "logs/warroom_undo.json"        # the war room's last 20 actions,
 warroom_layouts = "logs/warroom_layouts.json"  # the war room's saved panel layouts (Layout button)
 weekly = "weekly"                              # clipper weekly issues, one folder per week's Saturday
 broll = "broll"                                # clipper broll: the b-roll library (clips + broll.json)
+clipart = "clipart"                            # clipper clipart: the clip art library (pictures + clipart.json)
 news = "news"                                  # clipper news: news.sqlite and context.json
 documentaries = "documentaries"                # clipper doc: one folder per piece (plan.toml, banned.txt, media)
 
@@ -190,6 +192,27 @@ audio = false              # keep the sound (NASA videos often carry licensed mu
 codec = ""                 # empty = [cut] clip_codec
 crf = 20
 timeout_s = 600            # one download and encode
+
+[clipart]
+# `clipper clipart`: free clip art, engravings, icons and emoji in [paths] clipart, each file's
+# source, credit and licence in clipart.json. Sources: commons (Wikimedia Commons drawings and
+# pictures), met (The Met's public-domain works, CC0), cleveland (the Cleveland Museum of Art's
+# CC0 works), iconify (emoji and icon sets, each set's own licence; logo and brand sets never),
+# pixabay (illustrations and vectors; a free key, $PIXABAY_API_KEY or [paths] pixabay_key).
+# A source whose key is missing is skipped.
+sources = ["commons", "met", "cleveland", "iconify", "pixabay"]   # what a find searches
+per_source = 4             # most new pictures one find adds from each source
+licences = ["pd", "cc0", "permissive", "pixabay"]  # kept: public domain, CC0, MIT/Apache/ISC/BSD/OFL, Pixabay's;
+                           # also cc-by / cc-by-sa (credit the author on every use; share-alike reaches what you make)
+commons_pictures = true    # Commons: after its drawings (SVG), photos and scans too when a find wants more
+max_px = 2000              # Commons pictures wider than this, and its SVGs, come as its render about this wide;
+                           # Iconify SVGs are sized this tall
+max_mb = 25                # a bigger file falls back to the source's smaller copy, else isn't taken
+iconify_sets = ["fluent-emoji", "fluent-emoji-flat", "noto", "tabler", "ph"]  # Iconify sets searched; [] = every
+                           # set whose licence is in licences (Fluent Emoji MIT, Noto Apache, Tabler MIT, Phosphor MIT)
+pixabay_type = "vector"    # vector | illustration | all (photos too)
+pixabay_transparent = false  # only Pixabay pictures with a transparent background
+timeout_s = 60             # one download
 
 [cast]
 # `clipper cast` (#41): a few head-and-shoulders photos of each regular in [thumbnail]

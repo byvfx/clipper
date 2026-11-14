@@ -30,14 +30,13 @@ from __future__ import annotations
 import hashlib
 import html
 import json
-import os
 import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
-from . import jsonstate
+from . import config, jsonstate
 from .errors import ClipperError
 
 INDEX = "broll.json"
@@ -82,12 +81,14 @@ def clip_id(source: str, key: str, start: float | None = None, end: float | None
 
 
 def licence_code(text: str) -> str:
-    """A licence as the source states it -> pd | cc0 | cc-by | cc-by-sa | other."""
+    """A licence as the source states it -> pd | cc0 | cc-by | cc-by-sa | pixabay | permissive | other
+    (permissive: MIT, ISC, Apache, BSD, OFL; the clip art library's icon sets). Noncommercial,
+    no-derivatives and GPL licences are always other."""
     t = re.sub(r"\s+", " ", (text or "").lower().replace("_", " ")).strip()  # "CC BY  NC", tabs
     if not t:
         return "other"
-    if re.search(r"\b(by|cc)[- ]n[cd]\b|-n[cd]\b|non[- ]?commercial|no[- ]?deriv", t):
-        return "other"  # noncommercial or no-derivatives, whatever else it says: not for a monetized channel
+    if re.search(r"\b(by|cc)[- ]n[cd]\b|-n[cd]\b|non[- ]?commercial|no[- ]?deriv|\bl?gpl\b", t):
+        return "other"  # noncommercial, no-derivatives or copyleft, whatever else it says
     if "publicdomain/zero" in t or re.search(r"\bcc0\b|cc zero", t):
         return "cc0"
     if "publicdomain" in t or "public domain" in t or re.match(r"pd\b|pd-", t) or "public-domain" in t:
@@ -96,6 +97,10 @@ def licence_code(text: str) -> str:
         return "cc-by-sa"
     if re.search(r"licenses/by/|cc by\b|cc-by\b|attribution", t):
         return "cc-by"
+    if "pixabay" in t:
+        return "pixabay"  # the Pixabay Content License: free, commercial, no credit
+    if re.search(r"\b(mit|isc|apache|unlicense|0bsd|bsd|ofl)\b", t):
+        return "permissive"  # the notice stays beside copies of the files; no credit on use
     return "other"
 
 
@@ -141,21 +146,15 @@ def seconds(text: str | float | None) -> float | None:
 def dvids_key(cfg: dict | None = None) -> str:
     """$DVIDS_API_KEY, else the first line of [paths] dvids_key (the public key; the second line,
     the private key, isn't needed to read); "" if neither."""
-    if k := os.environ.get("DVIDS_API_KEY", "").strip():
-        return k
-    path = (cfg or {}).get("paths", {}).get("dvids_key")
-    try:
-        return Path(path).read_text(encoding="utf-8").splitlines()[0].strip() if path else ""
-    except (OSError, IndexError):
-        return ""
+    return config.key(cfg, "DVIDS_API_KEY", "dvids_key")
 
 
-def _get(url: str, params: dict | None = None, timeout: int = 20):
+def _get(url: str, params: dict | None = None, timeout: int = 20, ua: str = UA):
     import requests
 
     host = urlparse(url).hostname or url
     try:
-        r = requests.get(url, params=params, timeout=timeout, headers={"User-Agent": UA})
+        r = requests.get(url, params=params, timeout=timeout, headers={"User-Agent": ua})
     except requests.RequestException as e:
         raise ClipperError(f"{host}: {type(e).__name__}") from e
     if not r.ok:
