@@ -119,12 +119,15 @@ def check_disk(cfg: dict, now: datetime, days: int) -> dict:
 
 
 def check_backups(cfg: dict, now: datetime, days: int) -> dict:
-    """The newest thing in [audit] backup_folder. Relative: beside schedule.json."""
-    name = cfg["audit"]["backup_folder"]
-    if not name:
+    """The newest file in [backup] folder (`clipper backup` writes there; relative: the config
+    file's folder)."""
+    from . import backup
+
+    try:
+        where = backup.folder(cfg)
+    except ClipperError:
         return {"set_up": False}
-    where = Path(cfg["paths"]["schedule"]).parent / name
-    times = [p.stat().st_mtime for p in where.iterdir()] if where.is_dir() else []
+    times = [p.stat().st_mtime for p in where.iterdir() if p.is_file()] if where.is_dir() else []
     return {"set_up": True, "age_days": round((now.timestamp() - max(times)) / 86400, 1) if times else None}
 
 
@@ -194,7 +197,7 @@ def issues(snap: dict, max_days: int) -> list[dict]:
                          look=wiki.page("Audit", "backups")))
     elif b and (b["age_days"] is None or b["age_days"] > max_days):
         age = "it is empty" if b["age_days"] is None else f"the newest is {b['age_days']:.0f} days old"
-        out.append(issue("backups:old", BAD, f"backups have stopped: {age}", look="[audit] backup_folder"))
+        out.append(issue("backups:old", BAD, f"backups have stopped: {age}", look="clipper backup; [backup] every_days (serve)"))
     out += [issue(f"section:{name}", WARN, f"the {name} section couldn't be read: {err}")
             for name, err in snap["errors"].items()]
     out += [issue(f["key"], WARN, f["text"], f["look"], f["stream"]) for f in found if f["level"] != BAD]
@@ -214,7 +217,7 @@ def collect(cfg: dict, now: datetime | None = None) -> dict:
         except Exception as e:  # noqa: BLE001  # one unreadable section mustn't lose the week
             snap[name] = None
             snap["errors"][name] = f"{type(e).__name__}: {e}"[:200]
-    snap["issues"] = issues(snap, ac["backup_max_days"])
+    snap["issues"] = issues(snap, cfg["backup"]["max_age_days"])
     return snap
 
 

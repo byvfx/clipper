@@ -52,4 +52,6 @@ def source_file(stream_dir: Path) -> Path:
     for p in sorted(stream_dir.glob("source.*")):
         if p.suffix not in (".part", ".ytdl") and "Frag" not in p.name:
             return p
-    raise ClipperError(f"no source video in {stream_dir}")
+    from .streams import pruned_note
+
+    raise ClipperError(f"no source video in {stream_dir}{pruned_note(stream_dir)}")
