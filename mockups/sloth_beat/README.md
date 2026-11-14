@@ -19,6 +19,24 @@ real covers cut the face from the video's frames the way the enquirer style does
 is mockup copy. The sloth is a placeholder drawn in SVG; the real mascot is a Runway job
 (flat sticker style, transparent background, a few poses) like Mother Moo was.
 
+## v3: as dense as the references (user: "density can be even tighter", 2026-11-14)
+`*_v3.html/jpg` + `contact_sheet_v3.jpg`, `cover_v3.css`. Every gap is filled and things overlap
+the way the Bop covers do: the main face stands in front of the masthead's tail, labels sit on
+shoulders, a starburst sits on a face's edge. New over v2:
+- Wavy yellow ribbon across the top with a white "details (since you asked)" circle on it; on
+  the flat cover "12 HUGE POSTERS!" in white bubble letters plus a "NEW!" burst.
+- Masthead with a four-point sparkle; thinner stripe bands; the sloth is a real sticker when
+  `SLOTH_IMG` is set in the build (see below).
+- Red name bars on the small cutouts (Bop's "DYLAN" / "COLE"), 5-6 faces per cover including
+  a two-face "sneak backstage" pair and the stuffed owl as a recurring bit.
+- More shape slots: "ONLY IN SLOTH BEAT!" slug, QUIZ circle, "X wants a new look!" label,
+  "FREE STICKERS", a white quote card in a slab serif, the posters list with a starburst behind
+  the number, hearts, the barcode rotated onto the right edge on the flat cover.
+- The tagline is gone from the face of the cover; it lives in tiny spine text on the left edge.
+- Heavier crayon scribble (two turbulence layers, one light, one dark) on the two crayon covers.
+Fonts added: Titan One (masthead), Fredoka (name bars, slugs), Kalam (ribbon, quotes), Lobster
+(window subtitles), Alfa Slab One (quote card), Bubblegum Sans, Chewy.
+
 ## v2: the Bop references (user sent two Bop covers, July 1995 and ~2007)
 `*_v2.html/jpg` + `contact_sheet_v2.jpg`, built against the references rather than a tidy pastel
 layout. What they add over v1:
