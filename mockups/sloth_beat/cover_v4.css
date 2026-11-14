@@ -1,0 +1,102 @@
+@font-face{font-family:"Titan One";src:local("Titan One"),url("fonts/TitanOne.ttf")}
+@font-face{font-family:"Bubblegum Sans";src:local("Bubblegum Sans"),url("fonts/BubblegumSans.ttf")}
+@font-face{font-family:"Chewy";src:local("Chewy"),url("fonts/Chewy.ttf")}
+@font-face{font-family:"Bangers";src:local("Bangers"),url("fonts/Bangers.ttf")}
+@font-face{font-family:"Lilita One";src:local("Lilita One"),url("fonts/LilitaOne.ttf")}
+@font-face{font-family:"Fredoka";src:local("Fredoka"),url("fonts/Fredoka.ttf");font-weight:700}
+@font-face{font-family:"Lobster";src:local("Lobster"),url("fonts/Lobster.ttf")}
+@font-face{font-family:"Kalam";src:local("Kalam"),url("fonts/Kalam.ttf");font-weight:700}
+@font-face{font-family:"Alfa Slab One";src:local("Alfa Slab One"),url("fonts/AlfaSlabOne.ttf")}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:720px;overflow:hidden;background:#222}
+.cover{position:relative;width:1280px;height:720px;overflow:hidden;font-family:"Chewy";color:#1a1a1a}
+.cover>*{position:absolute}
+.bg{inset:0;z-index:0;background:linear-gradient(115deg,#ff79c1 0,#c68cff 22%,#7fd0ff 45%,#9df08a 68%,#ffd54f 86%,#ff8a65 100%)}
+body.crayon2 .bg{background:linear-gradient(115deg,#ffb347 0,#ff6fae 28%,#b388ff 55%,#64d8ff 80%,#a5f58c 100%)}
+body.flat .bg{background:#2ec4ea}
+.scribble{position:absolute;inset:0;width:100%;height:100%;opacity:.8}
+.rays{position:absolute;inset:-300px;background:repeating-conic-gradient(from 0deg at 48% 42%,rgba(255,255,255,.22) 0 5deg,transparent 5deg 12deg)}
+.spine{left:-250px;top:340px;width:600px;transform:rotate(-90deg);transform-origin:center;font:400 13px/1 "Bangers";letter-spacing:3px;color:#1a1a1a;opacity:.8;z-index:2;text-align:center}
+/* top strip */
+.ribbon{left:-20px;right:-20px;top:4px;height:62px;background:#ffe600;z-index:3;text-align:center;font:400 40px/58px "Kalam";color:#1a1a1a;
+  clip-path:polygon(0 20%,4% 0,8% 20%,12% 0,16% 20%,20% 0,24% 20%,28% 0,32% 20%,36% 0,40% 20%,44% 0,48% 20%,52% 0,56% 20%,60% 0,64% 20%,68% 0,72% 20%,76% 0,80% 20%,84% 0,88% 20%,92% 0,96% 20%,100% 0,100% 100%,0 100%)}
+.ribbon b{font-family:"Titan One";font-weight:400;color:#e8102e;font-size:40px;-webkit-text-stroke:1px #1a1a1a}
+.wcircle{width:170px;height:170px;border-radius:50%;background:#fff;border:4px solid #1a1a1a;z-index:9;text-align:center;padding-top:34px;font:400 18px/1 "Chewy";color:#1a1a1a;filter:drop-shadow(4px 5px 0 rgba(0,0,0,.4))}
+.wcircle b{display:block;font:400 30px/.9 "Titan One";color:#8b2be2;margin:2px 0}
+.wcircle i{display:block;font:400 15px/1 "Kalam";color:#1a1a1a;margin-top:4px}
+.posters{left:40px;top:4px;z-index:3;font:400 58px/1 "Titan One";color:#fff;-webkit-text-stroke:3px #1a1a1a;text-shadow:5px 5px 0 #1a1a1a;white-space:nowrap}
+.posters b{color:#8b2be2;font-weight:400}
+/* masthead */
+.mast{left:34px;top:60px;width:820px;height:170px;z-index:4;font:400 140px/1 "Titan One"}
+.mast .layer{position:absolute;left:0;top:0;white-space:nowrap;-webkit-text-stroke:3px #1a1a1a}
+.mast .l4{transform:translate(28px,28px);color:#fff}.mast .l3{transform:translate(22px,22px);color:#ff2d8a}
+.mast .l2{transform:translate(16px,16px);color:#fff}.mast .l1{transform:translate(10px,10px);color:#ff2d8a}.mast .l0{transform:translate(5px,5px);color:#fff}
+.mast .front{background:repeating-linear-gradient(180deg,#ff4fa6 0 10px,#fff 10px 15px,#ff4fa6 15px 25px,#fff 25px 29px);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.glint{position:absolute;width:64px;left:118px;top:-18px;transform:rotate(15deg)}
+.sloth{left:214px;top:30px;width:118px;z-index:7;transform:rotate(14deg);filter:drop-shadow(3px 5px 0 rgba(0,0,0,.4))}
+img.sloth{width:104px;height:auto;left:438px;top:38px;transform:rotate(5deg);filter:drop-shadow(0 0 0 #fff) drop-shadow(0 0 1px #fff) drop-shadow(4px 6px 0 rgba(0,0,0,.4))}
+/* cutouts */
+.bust{filter:drop-shadow(5px 7px 0 rgba(0,0,0,.35))}
+/* shapes */
+.s{z-index:8;text-align:center;filter:drop-shadow(5px 6px 0 rgba(0,0,0,.4))}
+.s b{display:block;font-family:"Titan One";font-weight:400}
+.tri{width:240px;height:220px;background:#8b2be2;clip-path:polygon(50% 0,100% 100%,0 100%);padding:64px 26px 10px;color:#fff;font:400 22px/1 "Chewy"}
+.tri b{font-size:66px;line-height:.85;color:#ffe600}.tri i{font-style:normal;color:#ffe600;font-family:"Titan One";font-size:24px}
+.heart{width:300px;height:272px;color:#fff;font:400 20px/1 "Chewy";padding:54px 44px 0;background:#ff3b8a;
+  clip-path:path("M150 262 C100 220 10 168 10 92 C10 46 46 14 84 14 C114 14 136 32 150 53 C164 32 186 14 216 14 C254 14 290 46 290 92 C290 168 200 220 150 262 Z")}
+.heart b{font-size:30px;line-height:.9;color:#ffe600;-webkit-text-stroke:1.5px #1a1a1a}.heart .big{font:400 38px/1 "Titan One";color:#fff}
+.circle{width:190px;height:190px;border-radius:50%;background:#ffe600;border:4px solid #1a1a1a;padding:40px 16px 0;font:400 21px/1 "Chewy"}
+.circle b{font-size:34px;line-height:.95;color:#ff2d8a;-webkit-text-stroke:1.5px #1a1a1a}
+.circle.purple{background:#8b2be2;color:#fff}.circle.purple b{color:#ffe600}
+.star{width:210px;height:210px;background:#ff3b2f;color:#fff;padding:40px 24px;font:400 22px/.9 "Chewy";
+  clip-path:polygon(50% 0%,61% 12%,76% 6%,80% 21%,96% 24%,91% 39%,100% 50%,91% 61%,96% 76%,80% 79%,76% 94%,61% 88%,50% 100%,39% 88%,24% 94%,20% 79%,4% 76%,9% 61%,0% 50%,9% 39%,4% 24%,20% 21%,24% 6%,39% 12%)}
+.star b{font-size:88px;line-height:.9;color:#fff;-webkit-text-stroke:3px #1a1a1a}
+.star.yellow{background:#ffe600;color:#1a1a1a}.star.yellow b{color:#ff2d8a;font-size:44px}
+.vert{z-index:8;writing-mode:vertical-rl;text-orientation:upright;font:400 40px/1 "Titan One";letter-spacing:2px;color:#fff;background:#ff3b2f;padding:12px 4px;border:4px solid #fff;outline:3px solid #1a1a1a;filter:drop-shadow(5px 6px 0 rgba(0,0,0,.4))}
+.box{background:#2fd3ff;border:4px solid #1a1a1a;border-radius:10px;padding:10px 14px;font:400 22px/1.02 "Chewy";color:#1a1a1a}
+.box b{font-size:46px;line-height:.9;color:#fff;-webkit-text-stroke:2px #1a1a1a}
+.box.pink{background:#ff6fb5;font-family:"Bubblegum Sans"}.box.pink b{color:#fff;font-size:40px}
+.box.pink .q{display:block;font:400 20px/1.1 "Chewy";color:#fff}
+.box.blue{background:#3b7bff;color:#fff}.box.blue b{color:#ffe600;font-size:36px}
+.slug{background:#ff2d8a;color:#fff;border:3px solid #fff;outline:3px solid #1a1a1a;padding:6px 14px;font:400 26px/1 "Fredoka";white-space:nowrap}
+.slug.yellow{background:#ffe600;color:#1a1a1a}.slug.white{background:#fff;color:#ff2d8a}.slug.purple{background:#8b2be2}
+.label{background:#ff6fb5;color:#fff;border:3px solid #fff;padding:6px 10px;font:400 18px/1 "Chewy";text-align:center;border-radius:8px}
+.label b{font:400 26px/1 "Titan One";color:#ffe600;-webkit-text-stroke:1px #1a1a1a;display:block}
+.window{background:#1a1a1a;border:6px solid #fff;border-radius:16px;color:#ffe600;font:400 34px/1 "Titan One";padding:10px 16px 0;overflow:hidden}
+.window small{display:block;font:400 30px/1 "Lobster";color:#fff;margin-top:2px}
+.window .row{display:flex;justify-content:center;margin-top:6px;height:64px;align-items:flex-end;overflow:hidden}
+.window .row .m{width:56px;height:76px;border-radius:28px 28px 0 0;margin:0 -3px;border:3px solid #fff;border-bottom:0}
+.panel{background:#ff7a00;border:5px solid #ffe600;outline:3px solid #1a1a1a;border-radius:12px;padding:10px 14px 10px;font:400 54px/.9 "Titan One";color:#ffe600;-webkit-text-stroke:2px #1a1a1a}
+.panel .strip{display:flex;gap:6px;margin-top:8px}.panel .strip div{flex:1;height:58px;border:3px solid #fff;font:400 13px/1 "Chewy";color:#fff;-webkit-text-stroke:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px}
+.list{background:#fff;border:4px solid #1a1a1a;border-radius:10px;padding:8px 12px 10px;font:400 20px/1.1 "Chewy";text-align:left;color:#1a1a1a}
+.list b{font:400 40px/1 "Titan One";color:#ff2d8a;-webkit-text-stroke:1.5px #1a1a1a;text-align:center}
+.list span{display:block;color:#0a84ff}.list span:nth-child(odd){color:#ff2d8a}
+.quote{background:#fff;border:4px solid #1a1a1a;padding:8px 12px;font:italic 700 20px/1.1 "Kalam";color:#1a1a1a;text-align:left}
+.quote b{font:400 30px/1 "Alfa Slab One";color:#e8102e;display:block}
+.hearts{z-index:9;font-size:34px;color:#ff2d8a;text-shadow:2px 2px 0 #fff,4px 4px 0 #1a1a1a;letter-spacing:6px}
+.price{left:12px;bottom:8px;z-index:12;font:400 15px/1 "Lilita One";color:#1a1a1a;background:#fff;padding:5px 8px 7px;border:2px solid #1a1a1a}
+.barcode{margin-top:4px;width:120px;height:30px;background:repeating-linear-gradient(90deg,#1a1a1a 0 2px,#fff 2px 4px,#1a1a1a 4px 7px,#fff 7px 9px)}
+
+.rosette{z-index:10;width:92px;height:92px;border-radius:50%;background:#e8102e;color:#fff;font:400 15px/1 "Fredoka";display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;
+  clip-path:polygon(50% 0,57% 8%,66% 3%,70% 12%,80% 10%,81% 20%,91% 21%,89% 31%,98% 35%,93% 43%,100% 50%,93% 57%,98% 65%,89% 69%,91% 79%,81% 80%,80% 90%,70% 88%,66% 97%,57% 92%,50% 100%,43% 92%,34% 97%,30% 88%,20% 90%,19% 80%,9% 79%,11% 69%,2% 65%,7% 57%,0 50%,7% 43%,2% 35%,11% 31%,9% 21%,19% 20%,20% 10%,30% 12%,34% 3%,43% 8%)}
+.rosette.yellow{background:#ffe600;color:#1a1a1a}.rosette.blue{background:#3b7bff}
+.win{z-index:10;width:110px;height:110px;background:#ffe600;color:#1a1a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:16px;font:400 13px/1 "Chewy";
+  clip-path:polygon(50% 0%,61% 12%,76% 6%,80% 21%,96% 24%,91% 39%,100% 50%,91% 61%,96% 76%,80% 79%,76% 94%,61% 88%,50% 100%,39% 88%,24% 94%,20% 79%,4% 76%,9% 61%,0% 50%,9% 39%,4% 24%,20% 21%,24% 6%,39% 12%);filter:drop-shadow(3px 4px 0 rgba(0,0,0,.4))}
+.win b{font:400 30px/1 "Titan One";color:#e8102e;-webkit-text-stroke:1px #1a1a1a}
+.win.pink{background:#ff3b8a;color:#fff}.win.pink b{color:#ffe600}.win.cyan{background:#2fd3ff}
+.pg{z-index:11;background:#1a1a1a;color:#ffe600;font:400 13px/1 "Fredoka";padding:3px 6px;border-radius:4px;white-space:nowrap}
+.sp{z-index:3;width:34px;filter:drop-shadow(2px 2px 0 rgba(0,0,0,.35))}
+.ht{z-index:3;font-size:30px;color:#ff2d8a;text-shadow:2px 2px 0 #fff,3px 3px 0 #1a1a1a;line-height:1}
+.ht.y{color:#ffe600}.ht.c{color:#2fd3ff}.ht.w{color:#fff}
+.xoxo{z-index:10;font:400 34px/1 "Kalam";color:#e8102e;transform:rotate(-12deg);text-shadow:2px 2px 0 #fff;letter-spacing:2px}
+.kiss{z-index:10;width:54px}
+.bubble{z-index:10;background:#fff;border:3px solid #1a1a1a;border-radius:20px;padding:4px 10px;font:700 18px/1 "Kalam";color:#1a1a1a}
+.bubble::after{content:"";position:absolute;left:-10px;bottom:6px;width:14px;height:14px;background:#fff;border-left:3px solid #1a1a1a;border-bottom:3px solid #1a1a1a;transform:rotate(45deg)}
+.top{z-index:9;background:#fff;border:4px solid #1a1a1a;border-radius:8px;padding:6px 10px 8px;font:400 15px/1.15 "Chewy";color:#1a1a1a;text-align:left;filter:drop-shadow(4px 5px 0 rgba(0,0,0,.4))}
+.top b{display:block;font:400 22px/1 "Titan One";color:#8b2be2;text-align:center;margin-bottom:3px}
+.top i{font-style:normal;color:#e8102e;font-family:"Fredoka"}
+.tab{z-index:11;writing-mode:vertical-rl;text-orientation:mixed;background:#ffe600;color:#1a1a1a;border:3px solid #1a1a1a;padding:10px 4px;font:400 18px/1 "Fredoka";letter-spacing:1px}
+.tab.pink{background:#ff3b8a;color:#fff}
+.plus{z-index:10;background:#8b2be2;color:#fff;border:3px solid #fff;outline:2px solid #1a1a1a;border-radius:50%;width:70px;height:70px;display:flex;align-items:center;justify-content:center;font:400 20px/1 "Titan One"}
+.seal{z-index:11;font:400 11px/1.1 "Fredoka";color:#1a1a1a;background:#fff;border:2px dashed #1a1a1a;padding:3px 5px;text-align:center;width:88px;transform:rotate(-6deg)}
+body.flat .price{left:auto;right:12px;bottom:auto;top:250px;transform:rotate(90deg);transform-origin:right top}

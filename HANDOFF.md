@@ -393,8 +393,12 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   **v3** (2026-11-14, user: "density can be even tighter, let's really go after the actual look"):
   every gap filled, 5-6 faces with red name bars, wavy ribbon + "since you asked" circle, sparkle on
   the masthead, spine text instead of a tagline, more slots (QUIZ circle, slugs, quote card, posters
-  list). `*_v3.*`. Mascot sticker generated in Runway (seedream, transparent) if the cloud session
-  could fetch it; see README. Waiting on the user's reaction.
+  list). `*_v3.*`. **Mascot: the "wire sloth"** (user's pick), a Runway Seedream 5 Pro sticker, cut out
+  with Pillow from the JPEG preview (the cloud session cannot fetch Runway's PNGs); the branch variant is
+  `sloth_sticker_b.png`. Both are kawaii rather than 1990s flat; a proper mascot pass is still to do.
+  **v4** (same day, user: "add more stuff, I want it to feel really busy"): seals, WIN! bursts, PLUS!,
+  TOP 5 cards, page refs, XOXO + kiss, zzz bubble, pull-out tab, sparkles and hearts in every gap.
+  `*_v4.*`. Waiting on the user's reaction; then mascot brief, Illustrator master, `style = "fanmag"`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
   template rendered by headless Chromium (Playwright), not Pillow. Figma's REST API is read/export only
   and an Illustrator MCP needs the app open in a logged-in session, so neither can be the pipeline

@@ -19,6 +19,14 @@ real covers cut the face from the video's frames the way the enquirer style does
 is mockup copy. The sloth is a placeholder drawn in SVG; the real mascot is a Runway job
 (flat sticker style, transparent background, a few poses) like Mother Moo was.
 
+## v4: busier still (user, 2026-11-14: wire sloth, "I would add more stuff, I want it to feel really busy")
+`*_v4.html/jpg` + `contact_sheet_v4.jpg`, `cover_v4.css` = v3 plus, on every cover: an
+EXCLUSIVE! scalloped seal, a WIN! burst with a prize line, a PLUS! roundel, a white TOP 5 list
+card, "pg. N" page-reference tags on four items, XOXO in red marker, a lipstick kiss, a
+"zzz..." speech bubble from the sloth, a dashed "100% UNOFFICIAL FAN MAG" seal by the barcode,
+a PULL-OUT POSTER edge tab, and 7-8 sparkles and 7 hearts scattered in the gaps. The wire sloth
+(`sloth_sticker.png`) is the mascot; the branch variant is kept for reference only.
+
 ## v3: as dense as the references (user: "density can be even tighter", 2026-11-14)
 `*_v3.html/jpg` + `contact_sheet_v3.jpg`, `cover_v3.css`. Every gap is filled and things overlap
 the way the Bop covers do: the main face stands in front of the masthead's tail, labels sit on
