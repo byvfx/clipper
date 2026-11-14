@@ -35,7 +35,7 @@ body.flat .bg{background:#2ec4ea}
 .mast .front{background:repeating-linear-gradient(180deg,#ff4fa6 0 10px,#fff 10px 15px,#ff4fa6 15px 25px,#fff 25px 29px);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 .glint{position:absolute;width:64px;left:118px;top:-18px;transform:rotate(15deg)}
 .sloth{left:214px;top:30px;width:118px;z-index:7;transform:rotate(14deg);filter:drop-shadow(3px 5px 0 rgba(0,0,0,.4))}
-img.sloth{width:114px;height:auto;left:393px;top:40px;transform:rotate(3deg);filter:drop-shadow(0 0 0 #fff) drop-shadow(0 0 1px #fff) drop-shadow(4px 6px 0 rgba(0,0,0,.4))}
+img.sloth{width:140px;height:200px;left:380px;top:60px;transform:rotate(2deg);filter:drop-shadow(0 0 0 #fff) drop-shadow(0 0 1px #fff) drop-shadow(4px 6px 0 rgba(0,0,0,.4))}
 /* cutouts */
 .bust{filter:drop-shadow(5px 7px 0 rgba(0,0,0,.35))}
 /* shapes */
