@@ -186,6 +186,11 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   Moving a stage (e.g. Pass A to DeepSeek V4 Pro) is a config change whenever the user wants it.
 
 ## Waiting on the user
+- **p1 PRs #247-#250 are merged (11-13), not deployed:**
+  update the laptop checkout (`git checkout main; git pull`: deploy.sh copies `clipper/` from it) and deploy the hub: `& "C:\Program Files\Git\bin\bash.exe" deploy/hub/deploy.sh`. **After** the deploy (an older
+  hub refuses the new key), back up `clipper.toml` to `backups/` and add `[streams] never_prune =
+  ["kick-131151926"]`: the test stream otherwise looks prunable. `streams prune` stays by hand until you set
+  `[streams] keep_source_days` (111 GB would go at 30 days).
 - `secrets/youtube_cookies.netscape.txt` on the share is unused since PR #195 and can be deleted.
 - Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/`).
 - Branches and worktrees were cleaned up again 11-13: everything merged is gone, plus the old `ccr-*` and
@@ -224,8 +229,9 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (this week, small: #204 next, then
-#228, #205, #199; #201 and #203 closed and #206 all but done by PR #244, merged and deployed 11-13), `p2-dated` (#192 after 11-16,
+**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (built 11-13, one PR each, all merged
+11-13 and waiting on the hub deploy: #199 PR #247, #204 PR #248, #228 PR #249,
+#205 PR #250; #201, #203 and #206 closed), `p2-dated` (#192 after 11-16,
 #41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
 Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
 `parked` (the rest). `gh issue list --label p1-now` is the queue. 11-13: #13 folded into #158, #200 closed (its
@@ -257,13 +263,13 @@ messages: GitHub closes the issue on "fix".
   added by the user 11-12), Prelinger and Commons; public domain / CC0 only, no sound by default (NASA
   music). Next: the National Archives (key by email from NARA), `[story] broll` in story cuts, then a war
   room window. The library is `[paths] broll` on the share.
-- **Usability review (11-10, issues only, nothing built):** `clipper status` takes a minute from the laptop
-  and buries what needs the user #199; a first run without Kitsu #200 (against "Kitsu-optional is not a goal"
-  above: a try-it route, not a second record; close it if unwanted); war room #201, #202, #203 done (#211,
-  #238); `clipper streams prune` and `clipper backup` #204; checklists: CLI polish #205, war room #206 (#244
-  did all but three: who-did-it signing per reviewer, shortcuts inside the tool dialog, schedule drag on
-  touch; the issue's last comment lists them), new users and the public repo #207 (this install's values in tracked files, which are already visible since the
-  repo is public; packaging).
+- **Usability review (11-10):** built and merged 11-13: `clipper status` with "needs you" first, 60 s to 12 s
+  on the share (#199, PR #247); `clipper streams list|prune` and `clipper backup`, both also serve jobs (#204,
+  PR #248); Modal per-call overhead in the archive/story estimates (#228, PR #249); CLI polish: `latest`,
+  `latest:<show>` and id prefixes, `--json` on the read commands, `config diff`, `completion bash|powershell`
+  (#205, PR #250; `--quiet`/`--verbose` left out on purpose). War room #201-#203 and #206 closed (#206's
+  closing comment lists the three items left on purpose); #200 closed. Still open: new users and the public
+  repo #207 (this install's values in tracked files, packaging).
 - **Checkup (#185 closed 11-09, the rest is tracked here):** `clipper checkup` (services, streams, schedule,
   lint; `[checkup]`; wiki Checkup) and `clipper alert send` are merged (#189). The nightly run
   (`deploy/claude/checkup.sh`, prompt `checkup.md`, both baked into the image) is not on yet. Left:
@@ -294,8 +300,8 @@ messages: GitHub closes the issue on "fix".
 - **Weekly and monthly audit (11-10, wiki Audit):** `clipper audit` (no model) DMs how the week went and saves
   `streams/.audit/weekly-<date>.json`; on the 1st a read-only `claude -p` reads the saved weeks, traces repeat
   problems and leaves `deep-<YYYY-MM>.md`. The claude container runs both after the checkup (`audit.sh`), so it
-  needs `bash deploy/claude/deploy.sh` once. `[audit] backup_folder` is empty until #204: the digest says so
-  weekly. Dependabot opens grouped weekly PRs (ruff ignored; no review, no secrets). Its security
+  needs `bash deploy/claude/deploy.sh` once. Since PR #248 the backup settings are `[backup]` (folder
+  `backups/taste`, every 7 days by serve), and the digest and doctor read the newest zip there. Dependabot opens grouped weekly PRs (ruff ignored; no review, no secrets). Its security
   alerts are a separate repo switch, off as of 11-10.
 - **News watcher #110:** off since 2026-11-03 at the user's word (`[news] check_minutes = 0`, no terms); only
   `[news] watch` / `[shows.<key>.news] watch` terms are watched, `auto_watch = true` brings back the
@@ -303,8 +309,7 @@ messages: GitHub closes the issue on "fix".
 - **Older notes not on an issue:** republish the 2026-10-19 re-cut streams to Kitsu (user said not yet); Blade
   compilation's Discord card never posted (`review notify kick-131151926 --keys comp-blade-in-vegas`); a daily
   "post kit" folder; thumbs: reject a picked frame with no face, `--frame-at <s>`; Discord excerpts for one-offs
-  could start after the intro; pick/preshow/retake prompts don't read speaker tags yet (a `clipper backup` for
-  the taste layer is #204 now).
+  could start after the intro; pick/preshow/retake prompts don't read speaker tags yet.
 
 ## Recipes (how we did it last time; details in the log)
 - **Restart serve / the bot / the worker:** `clipper services restart serve|bot|worker` (docker compose on the
@@ -346,7 +351,10 @@ messages: GitHub closes the issue on "fix".
 
 ## Back up the taste layer (user, 2026-10-24)
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
-like footage. Nothing automates this yet (a `clipper backup` or a NAS cron is an open idea, not built: #204).
+like footage. `clipper backup` (PR #248, #204; wiki Backups) zips the list below into `backups/taste/`
+(about 17 MB, 390 files; the newest 8 kept; secrets only with `--with-secrets`), and once the hub is
+deployed serve makes one every 7 days. The first was made by hand 11-13 (`backups/taste/taste-2026-11-13-1707.zip`,
+no secrets). Copy one off the NAS now and then. Not in it: `deploy/*/env.local` and the Kitsu volumes.
 - **In git (push it):** `clipper/prompts/` (every version, never edit one that produced reviewed output),
   `clipper.example.toml`, `studio/`, `reports/`, this file.
 - **Not in git, copy by hand or script** (all in the NAS folder since 2026-11-05): `clipper.toml` (show tables,
