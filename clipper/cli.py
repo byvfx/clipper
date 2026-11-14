@@ -1823,13 +1823,15 @@ def add_extras(sub) -> None:
     r.add_argument("--channel", action="append", metavar="URL", help="https://www.youtube.com/@name or "
                                                                      "https://kick.com/name (repeatable; replaces the list)")
 
-    p = sub.add_parser("broll", help="free b-roll from public-domain archives (NASA, DVIDS, Prelinger films, Pixabay, "
-                                     "Wikimedia Commons), with each clip's credit and licence (#229)")
+    p = sub.add_parser("broll", help="free b-roll from public-domain archives (NASA, DVIDS, Prelinger films, "
+                                     "Wikimedia Commons) and Pixabay's free stock video, with each clip's credit "
+                                     "and licence (#229)")
     bsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_broll)
+    broll_sources = ["nasa", "dvids", "prelinger", "commons", "pixabay"]  # broll.SOURCES (a test checks)
     r = bsub.add_parser("find", help="search the sources; new clips tagged with the search ([broll] per_source each)")
     r.add_argument("query", help='what to look for, e.g. "hurricane from orbit"')
-    r.add_argument("--source", action="append", choices=["nasa", "dvids", "prelinger", "commons", "pixabay"],
+    r.add_argument("--source", action="append", choices=broll_sources,
                    help="only these (repeatable; default [broll] sources)")
     r.add_argument("-n", type=int, help="most new clips from each source (default [broll] per_source)")
     r = bsub.add_parser("add", help="one clip: a source page's address, a library id (a part of a long one) "
@@ -1845,7 +1847,7 @@ def add_extras(sub) -> None:
     r.add_argument("--licence", default="public domain", help="a file: its licence (default: public domain)")
     r = bsub.add_parser("list", help="the library, newest first")
     r.add_argument("--tag", help="only clips with a tag containing this")
-    r.add_argument("--source", choices=["nasa", "dvids", "prelinger", "commons", "pixabay", "file"],
+    r.add_argument("--source", choices=[*broll_sources, "file"],
                    help="only clips from this source")
     r.add_argument("--status", choices=["new", "kept", "long"], help="only clips in this state")
     r.add_argument("--json", action="store_true", help="as JSON, with each file's path (for Resolve)")

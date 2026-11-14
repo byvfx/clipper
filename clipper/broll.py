@@ -121,6 +121,8 @@ def refused(c: dict, cfg: dict) -> str:
     code = licence_code(c.get("licence", ""))
     if code not in bc["licences"]:
         return f"licence {c.get('licence') or 'not stated'} ({code}; [broll] licences: {', '.join(bc['licences'])})"
+    if code == "pixabay" and c["source"] not in ("pixabay", "file"):
+        return f"a Pixabay licence on {c['source']}: only Pixabay's own files carry it"  # Commons deletes them
     text = " ".join(str(c.get(k, "")) for k in ("title", "description", "credit"))
     if who := owned(text):
         return f"its description says {who!r}"
@@ -348,26 +350,34 @@ def _dvids_media(c: dict, cfg: dict) -> None:
     mp4 = [f for f in files if f.get("type") == "video/mp4" and f.get("src")]
     if not mp4:
         raise ClipperError(f"{c['page']}: no mp4")
-    tall = [f for f in mp4 if int(f.get("height") or 0) >= cfg["broll"]["max_height"]]
-    pick = (min(tall, key=lambda f: int(f.get("size") or 0)) if tall
-            else max(mp4, key=lambda f: int(f.get("height") or 0)))
-    c["url"] = pick["src"]
+    c["url"] = _pick(mp4, cfg["broll"]["max_height"])["src"]
+
+
+def _pick(files: list[dict], max_height: int) -> dict:
+    """Of a video's files (at least one), the smallest at least max_height tall, else the tallest."""
+    tall = [f for f in files if int(f.get("height") or 0) >= max_height]
+    return (min(tall, key=lambda f: int(f.get("size") or 0)) if tall
+            else max(files, key=lambda f: int(f.get("height") or 0)))
 
 
 def pixabay(query: str, n: int, cfg: dict | None = None, video_id: str = "") -> list[dict]:
     """Pixabay's stock video (pixabay.com/api/videos, a free key) under the Pixabay Content
     License: commercial use and edits without credit (the uploader is credited anyway); it bans
     selling a clip unaltered and using one that shows a brand, or a person in a bad light. A
-    search is of [broll] pixabay_type (film: no animation) unless that's "", safe search on.
-    Each hit lists its files (`_pixabay_media` picks one), whose addresses carry no key."""
+    search is of [broll] pixabay_type (film: no animation) unless that's "", with safe search
+    on (a video added by its address isn't filtered). Each hit lists its files, and
+    `_pixabay_file` picks one; their addresses carry no key."""
+    if not cfg:
+        raise ClipperError("pixabay: needs the config (its 24-hour cache is in [paths] broll)")
     key = pixabay_key(cfg)
     if not key:
         raise ClipperError(f"no $PIXABAY_API_KEY or [paths] pixabay_key file ({wiki.page('B-roll', 'sources')})")
-    params: dict = {"safesearch": "true"}
+    params: dict = {}
     if video_id:
         params["id"] = video_id
     else:
-        params.update(q=query[:100], per_page=min(max(n * 3, 10), 200))  # the API's limits: 100 chars, 3-200
+        params.update(q=query[:100], safesearch="true",
+                      per_page=min(max(n * 3, 10), 200))  # the API's limits: 100 chars, 3-200
         if vt := ((cfg or {}).get("broll") or {}).get("pixabay_type"):
             params["video_type"] = vt
     out = []
@@ -377,23 +387,18 @@ def pixabay(query: str, n: int, cfg: dict | None = None, video_id: str = "") -> 
         page = h.get("pageURL") or f"https://pixabay.com/videos/id-{h['id']}/"
         tags = str(h.get("tags") or "")
         out.append({"key": page, "source": "pixabay", "title": tags or f"Pixabay video {h['id']}", "page": page,
-                    "url": _pixabay_file(h["videos"], cfg), "date": "",
+                    "url": _pixabay_file(h["videos"], cfg["broll"]["max_height"]), "date": "",
                     "credit": f"{h['user']} on Pixabay" if h.get("user") else "Pixabay",
                     "licence": "Pixabay Content License", "description": tags,
                     "duration": seconds(h.get("duration"))})
     return out
 
 
-def _pixabay_file(videos: dict, cfg: dict | None) -> str:
-    """The smallest file at least [broll] max_height tall, else the tallest (Pixabay keeps each
-    video as large, medium, small and tiny; a size it hasn't made has no url); "" if none."""
+def _pixabay_file(videos: dict, max_height: int) -> str:
+    """A hit's file by `_pick` (Pixabay keeps each video as large, medium, small and tiny; a size
+    it hasn't made has no url); "" if none, which `media` refuses."""
     mp4 = [f for f in videos.values() if isinstance(f, dict) and f.get("url")]
-    if not mp4:
-        return ""
-    tall = [f for f in mp4 if int(f.get("height") or 0) >= ((cfg or {}).get("broll") or {}).get("max_height", 1080)]
-    pick = (min(tall, key=lambda f: int(f.get("size") or 0)) if tall
-            else max(mp4, key=lambda f: int(f.get("height") or 0)))
-    return pick["url"]
+    return _pick(mp4, max_height)["url"] if mp4 else ""
 
 
 def media(c: dict, cfg: dict) -> None:
@@ -404,8 +409,8 @@ def media(c: dict, cfg: dict) -> None:
         _nasa_media(c)
     elif c["source"] == "dvids":
         _dvids_media(c, cfg)
-    elif c["source"] == "pixabay":
-        raise ClipperError(f"{c['page']}: no mp4")  # its search gives the file, when there is one
+    if not c.get("url"):  # a source that gives the file in its search gave none (Pixabay)
+        raise ClipperError(f"{c.get('page') or c.get('title')}: no mp4")
 
 
 FINDERS = {"nasa": nasa, "dvids": dvids, "prelinger": prelinger, "commons": commons, "pixabay": pixabay}

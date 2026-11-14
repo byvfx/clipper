@@ -589,3 +589,27 @@ def test_pixabay_without_a_file_is_skipped(cfg, monkeypatch):
     said = []
     assert broll.find(cfg, "x", ["pixabay"], say=said.append) == 0
     assert any("no mp4" in s for s in said)
+
+
+def test_cli_source_choices_are_the_sources():
+    from clipper.cli import build_parser
+
+    for src in broll.SOURCES:
+        assert build_parser().parse_args(["broll", "find", "x", "--source", src]).source == [src]
+        assert build_parser().parse_args(["broll", "list", "--source", src]).source == src
+
+
+def test_pixabay_review_fixes(cfg, monkeypatch):  # the local review of the Pixabay source
+    monkeypatch.setenv("PIXABAY_API_KEY", "k")
+    with pytest.raises(ClipperError, match="needs the config"):
+        broll.pixabay("x", 1, None)
+    calls = []
+    monkeypatch.setattr(broll, "_get", lambda url, params=None, timeout=20, ua="": calls.append(params) or {"hits": []})
+    broll.pixabay("", 1, cfg, video_id="12345")
+    assert calls[-1]["id"] == "12345" and "safesearch" not in calls[-1]  # an address added by hand isn't filtered
+    broll.pixabay("cow", 1, cfg)
+    assert calls[-1]["safesearch"] == "true"
+    assert "only Pixabay" in broll.refused(cand(licence="Pixabay License"), cfg)  # not from Commons
+    assert not broll.refused(cand(source="pixabay", licence="Pixabay Content License"), cfg)
+    with pytest.raises(ClipperError, match="no mp4"):
+        broll.media(cand(source="commons", url=""), cfg)
