@@ -70,7 +70,8 @@ def fake_modal(monkeypatch):
     from types import SimpleNamespace
 
     monkeypatch.setitem(sys.modules, "clipper.modal_app", SimpleNamespace(
-        SPEED={"L4": 24.5, "L40S": 46.5}, DIARIZE_SPEED=59.0, GPU_PRICES={"L4": 0.8, "L40S": 1.95}))
+        SPEED={"L4": 24.5, "L40S": 46.5}, DIARIZE_SPEED=59.0,
+        GPU_PRICES={"T4": 0.59, "L4": 0.8, "A10": 1.1, "L40S": 1.95, "A100": 2.1, "H100": 3.95}))
 
 
 def test_each_call_costs_its_overhead_on_top_of_the_audio(fake_modal):
@@ -97,6 +98,29 @@ def test_overhead_comes_from_the_subjects_own_runs_once_it_has_enough(defaults, 
     runs_log(defaults, tmp_path, "cecil", 1, 20.0, audio_s=49.0)                      # 2 s of work at 24.5x
     over, source = archive.call_overhead_s(defaults, "cecil", "L4")
     assert over == pytest.approx(20 + 30 - 2) and "cecil's last 20 runs on L4" in source
+
+
+def test_a_run_is_matched_to_the_gpu_it_asked_for(fake_modal):
+    """Copilot on #249: device names beyond "NVIDIA L4"; the logged sku wins when there is one."""
+    from clipper import archive
+
+    names = {"NVIDIA L4": "L4", "NVIDIA L40S": "L40S", "Tesla T4": "T4", "NVIDIA A10": "A10",
+             "NVIDIA A100-SXM4-40GB": "A100", "NVIDIA H100 80GB HBM3": "H100", "Some New GPU": ""}
+    assert {n: archive.gpu_sku({"gpu": n}) for n in names} == names
+    assert archive.gpu_sku({"gpu": "NVIDIA L4", "sku": "L4"}) == "L4"
+
+
+def test_the_newest_runs_count_even_after_a_backfill(defaults, tmp_path, fake_modal):
+    """A backfill appends old runs after new ones: the newest by time are the ones used."""
+    from clipper import archive
+
+    defaults["paths"]["modal_runs"] = tmp_path / "modal_runs.jsonl"
+    with open(defaults["paths"]["modal_runs"], "a", encoding="utf-8") as f:
+        for i, (at, call_s) in enumerate([("2026-11-10T10:00:00", 10.0)] * 500 + [("2026-01-01T10:00:00", 99.0)] * 500):
+            f.write(json.dumps({"event": "end", "ok": True, "what": f"s/ig-{i}", "call_s": call_s, "at": at,
+                                "audio_s": 0.0, "gpu": "NVIDIA L4"}) + "\n")
+    over, _ = archive.call_overhead_s(defaults, "s", "L4")
+    assert over == pytest.approx(10 + 30)
 
 
 def test_unknown_lengths_are_said_not_priced(defaults, tmp_path, fake_modal):

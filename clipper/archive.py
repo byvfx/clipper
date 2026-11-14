@@ -261,6 +261,18 @@ def gpu_hours(hours: float, gpu: str, diarize: bool = False) -> float:
     return hours / speed + (hours / (DIARIZE_SPEED * speed / SPEED["L40S"]) if diarize else 0)
 
 
+def gpu_sku(run: dict) -> str:
+    """The Modal GPU a logged run asked for: its "sku" (logged since #228's review), else its
+    device name matched to a priced GPU ("NVIDIA L4" -> L4, "NVIDIA A100-SXM4-40GB" -> A100,
+    "NVIDIA H100 80GB HBM3" -> H100); "" when none matches."""
+    from .modal_app import GPU_PRICES
+
+    if run.get("sku"):
+        return str(run["sku"])
+    tokens = str(run.get("gpu") or "").upper().replace("-", " ").split()
+    return next((k for k in GPU_PRICES if k.upper() in tokens), "")
+
+
 def call_overhead_s(cfg: dict, subject: str, gpu: str) -> tuple[float, str]:
     """(seconds a call costs beyond its audio, where that figure comes from): the subject's own
     runs on this GPU in modal_runs.jsonl when it has OWN_RUNS of them, else CALL_OVERHEAD_S. Each
@@ -270,8 +282,9 @@ def call_overhead_s(cfg: dict, subject: str, gpu: str) -> tuple[float, str]:
 
     runs = [r for r in read_runs(cfg["paths"]["modal_runs"])
             if r.get("event") == "end" and r.get("ok") and r.get("call_s") is not None
-            and str(r.get("what", "")).startswith(f"{subject}/")
-            and (r.get("gpu") or gpu).split()[-1] == gpu][-500:]   # "NVIDIA L4" -> L4
+            and str(r.get("what", "")).startswith(f"{subject}/") and gpu_sku(r) == gpu]
+    # the newest by time: a backfill appends old runs after new ones
+    runs = sorted(runs, key=lambda r: str(r.get("at", "")))[-500:]
     if len(runs) < OWN_RUNS:
         return CALL_OVERHEAD_S, "typical"
     over = sum(r["call_s"] + 30 - gpu_hours(r["audio_s"], gpu, bool(r.get("diarize_s"))) for r in runs) / len(runs)
