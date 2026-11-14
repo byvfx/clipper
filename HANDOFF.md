@@ -186,8 +186,10 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   Moving a stage (e.g. Pass A to DeepSeek V4 Pro) is a config change whenever the user wants it.
 
 ## Waiting on the user
-- **Fan-mag covers** (Sloth Beat, branch `ccr-8319354b-axsr9v`): react to the five real covers in
-  `streams/fanmag-kick-131151926/` on the laptop (`sheet.jpg`), then the PR. See "Fan-mag thumbnails".
+- **Fan-mag covers** (Sloth Beat, branch `ccr-8319354b-axsr9v`, pushed, no PR yet): the user has more
+  tweaks for the five real covers in `streams/fanmag-kick-131151926/` on the laptop (`sheet.jpg`;
+  redraw with `CLIPPER_THUMBNAIL_STYLE=fanmag CLIPPER_THUMBNAIL_MASTHEAD="SLOTH BEAT"` and
+  `--compose-only`, no model calls). Then the PR. See "Fan-mag thumbnails".
 - **`clipper streams prune`** stays by hand until you set `[streams] keep_source_days` in clipper.toml
   (111 GB would go at 30 days). The test stream is in `[streams] never_prune` (set 11-13).
 - `secrets/youtube_cookies.netscape.txt` on the share is unused since PR #195 and can be deleted.
