@@ -34,7 +34,12 @@ shoulders, a starburst sits on a face's edge. New over v2:
   the number, hearts, the barcode rotated onto the right edge on the flat cover.
 - The tagline is gone from the face of the cover; it lives in tiny spine text on the left edge.
 - Heavier crayon scribble (two turbulence layers, one light, one dark) on the two crayon covers.
-Fonts added: Titan One (masthead), Fredoka (name bars, slugs), Kalam (ribbon, quotes), Lobster
+**Mascot:** `sloth_sticker.png` is a Runway image (Seedream 5 Pro, prompt in HANDOFF, task
+1b5e5334-57ab-42f2-9026-c51ad30d8b1d), cut out of the tool's JPEG preview with Pillow because the
+cloud session could not fetch the transparent PNG; `sloth_sticker_b.png` is the second variant
+(task 4d759bc7-5165-4588-a932-9d3b4374752b, on a branch with leaves). Both are cute-kawaii rather
+than the 1990s flat-mascot look; a proper mascot pass (poses, a Sloth Beat badge, less kawaii) is
+still to do. Fonts added: Titan One (masthead), Fredoka (name bars, slugs), Kalam (ribbon, quotes), Lobster
 (window subtitles), Alfa Slab One (quote card), Bubblegum Sans, Chewy.
 
 ## v2: the Bop references (user sent two Bop covers, July 1995 and ~2007)
