@@ -40,8 +40,12 @@ auto_upload_minutes` (`clipper schedule`, `clipper upload` by hand when that's 0
 
 ## Check
 
-`clipper status` is the one screen: the services' heartbeats and the recorder, each
-recording's stages, review counts, the next releases and the month's spend. Behind it:
+`clipper status` is the one screen. It opens with **needs you**: streams with items waiting
+on a decision or held, and [Checkup](Checkup)'s findings on the services, stuck or failed runs
+and late releases. Below that: the services' heartbeats and the recorder, each recent
+recording's show, date and stages, review counts, the next releases and the month's spend.
+Streams older than a week with nothing waiting are left out (`--all` lists them); `--json`
+prints the same as data. Behind it:
 `clipper doctor --role gpu|serve|bot|nas` (this machine's setup), `clipper worker --status`,
 `clipper review status` (decisions and what's scheduled) and `clipper costs` ([Costs](Costs)).
 

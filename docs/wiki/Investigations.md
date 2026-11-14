@@ -20,7 +20,7 @@ with its numbers and any negation unchanged), and the receipt keeps his wording,
 lead is something he said, linked to the moment. Each item's facts are cached
 (`archive/jer/investigate/facts/<item>.json`) until the prompt version or the transcript
 changes, so a rerun reads only new uploads. The whole Jer catalog (2,731 h) is about $14 once;
-quote the `--dry-run` figure before running it. `leads` builds `facts.sqlite` and finds
+quote the `--dry-run` figure before running it. It counts the prompt, the schema and the header that every call repeats (about 1,800 tokens), one call per `[investigate] chunk_s` of video and at least one an item, so a catalog of short clips costs much more per hour than long videos. `leads` builds `facts.sqlite` and finds
 candidate threads with no model call: a trend, a contradiction (affirmed, then denied), a
 shift (a number that changes), a dropped thread (checked against the full transcripts) and a
 convergence (personal remarks from several videos close together); Sonnet reads each one and

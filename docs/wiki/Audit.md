@@ -34,9 +34,10 @@ The settings are `[audit]` in the config.
 
 ### Backups
 
-Set `backup_folder` to where your backups land. Until you do, the digest says every week that
-nothing is backing up your files, and once it is set, it warns when the newest file there is
-older than `backup_max_days`. It only looks at the date of the newest file, so restore from a
+`clipper backup` ([Backups](Backups)) writes to `[backup] folder`, and serve makes one every
+`[backup] every_days`. With the folder set to `""`, the digest says every week that nothing is
+backing up your files. Once it is set, the digest warns when the newest file there is older
+than `[backup] max_age_days`. It only looks at the date of the newest file, so restore from a
 backup now and then to know it works.
 
 ### Reminders
