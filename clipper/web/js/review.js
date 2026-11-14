@@ -54,6 +54,7 @@ function renderBulk() {
   const off = [...PICK].filter(r => !VISIBLE.includes(r) && STATE.items.some(i => i.ref === r)).length;
   b.hidden = !n;
   if (!n) return;
+  const gap = gaps().length;
   b.innerHTML = `<b>${n} selected</b>${off ? `<span style="color:var(--amber)" title="Picked under another tab or filter. Bulk actions leave them out until they're on screen again.">+ ${off} not shown, left out</span>` : ""}
     <button class="btn good" data-bulk="approve">✓ Approve</button>
     <button class="btn" data-bulk="hold">Hold</button><button class="btn" data-bulk="release">Release</button>
@@ -61,8 +62,14 @@ function renderBulk() {
     <button class="btn warn" data-bulk="changes">✎ Same retake note…</button>
     <button class="btn bad" data-bulk="reject">✕ Reject…</button>
     <button class="btn" data-bulk="reopen">↺ Reopen</button>
+    ${gap ? `<button class="btn" data-bulk="fill" title="Also select the ${gap} between the first and last selected (shift-click does this with a mouse)">⇕ Fill the gaps</button>` : ""}
     <button class="btn" data-bulk="replace">Find and replace…</button>
     <button class="btn" data-bulk="clear">Clear</button>`;
+}
+// #206: shift-click's range, for a phone: what lies between the first and last selected on screen
+function gaps() {
+  const at = picked().map(r => VISIBLE.indexOf(r));
+  return at.length < 2 ? [] : VISIBLE.slice(Math.min(...at), Math.max(...at) + 1).filter(r => !PICK.has(r));
 }
 function pick(ref, on, range) {
   if (range && LASTPICK && VISIBLE.includes(LASTPICK) && VISIBLE.includes(ref)) {
@@ -75,6 +82,7 @@ function pick(ref, on, range) {
 async function bulk(action) {
   const refs = picked(), n = refs.length;
   if (action === "clear") { PICK.clear(); renderQueue(); return; }
+  if (action === "fill") { gaps().forEach(r => PICK.add(r)); renderQueue(); return; }
   if (action === "replace") return showReplace();
   const extra = {};
   let api_action = action;
@@ -189,6 +197,7 @@ document.addEventListener("change", e => {
   if (e.target.id === "showSel") { SHOW = e.target.value; renderQueue(); }
   if (e.target.id === "kindSel") { KINDF = e.target.value; renderQueue(); }
   if (e.target.id === "stSel") { ST = e.target.value; renderQueue(); }
+  if (e.target.id === "sortSel") { SORT = e.target.value; renderQueue(); }
   if (e.target.id === "fromD") { FROM = e.target.value; renderQueue(); }
   if (e.target.id === "toD") { TO = e.target.value; renderQueue(); }
 });

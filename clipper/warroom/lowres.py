@@ -1,6 +1,7 @@
 """Low-res copies of previews for phones: made on demand, pre-warmed for what is in review."""
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import threading
@@ -10,6 +11,8 @@ from urllib.parse import quote, unquote, urlparse
 
 from ..errors import ClipperError
 from .data import all_rows
+
+log = logging.getLogger("clipper.warroom")
 
 LOWRES: dict = {"queue": [], "busy": "", "error": ""}
 
@@ -67,7 +70,7 @@ def _lowres_worker(cfg: dict) -> None:
                 render_lowres(src, cfg["warroom"]["lowres_height"])
         except Exception as e:  # noqa: BLE001
             LOWRES["error"] = f"{src.name}: {type(e).__name__}: {e}"
-            print(f"warroom: low-res {LOWRES['error']}", flush=True)
+            log.warning(f"low-res {LOWRES['error']}")
         finally:
             with LOWRES_COND:
                 LOWRES["busy"] = ""
@@ -83,7 +86,7 @@ def _lowres_prewarm(cfg: dict) -> None:
                     if not lowres_ready(src):
                         lowres_want(src)
         except Exception as e:  # noqa: BLE001
-            print(f"warroom: low-res prewarm: {type(e).__name__}: {e}", flush=True)
+            log.warning(f"low-res prewarm: {type(e).__name__}: {e}")
         time.sleep(300)
 
 def lowres_status(cfg: dict, url: str) -> dict:

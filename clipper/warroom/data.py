@@ -3,6 +3,7 @@ services' health, the spend and analytics panels. Reads the files the pipeline w
 digest DM (clipper/digest.py) is built from `overview` too, so nothing here knows HTTP."""
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -15,6 +16,8 @@ from .. import actions, daemon, jsonstate, review, schedule, worker
 from ..config import base, for_stream
 from ..timefmt import age_s
 from .state import SYNC, TAILNET
+
+log = logging.getLogger("clipper.warroom")
 
 LIVE_CACHE: dict = {"at": 0.0, "data": []}
 
@@ -156,7 +159,7 @@ def all_rows(cfg: dict, streams: list | None = None) -> list[dict]:
             rows += _cached(sdir, "rows", sig + (sched,), lambda d=sdir: stream_rows(cfg, d))
         # ClipperError too: for_stream raises it on a bad streams/<id>/config.toml
         except Exception as e:  # noqa: BLE001 - one broken stream shouldn't blank the page
-            print(f"warroom: {sdir.name}: {type(e).__name__}: {e}", flush=True)
+            log.warning(f"{sdir.name}: {type(e).__name__}: {e}")
     return rows
 
 def stream_infos(cfg: dict, streams: list) -> list[dict]:
@@ -169,7 +172,7 @@ def stream_infos(cfg: dict, streams: list) -> list[dict]:
         try:
             infos.append(_cached(d, "info", sig, lambda d=d: stream_info(cfg, d)))
         except Exception as e:  # noqa: BLE001 - as in all_rows
-            print(f"warroom: {d.name}: {type(e).__name__}: {e}", flush=True)
+            log.warning(f"{d.name}: {type(e).__name__}: {e}")
     return sorted(infos, key=lambda i: i["started_at"], reverse=True)
 
 def _show_name(cfg: dict, sdir: Path) -> str:

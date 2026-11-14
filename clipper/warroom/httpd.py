@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import mimetypes
 import threading
 import webbrowser
@@ -18,18 +19,17 @@ from ..errors import ClipperError
 from .cast import cast_get, cast_label, cast_mark, cast_run, cast_set
 from .covers import cover_get, cover_post
 from .data import (
-    all_rows,
     analytics_status,
     costs_status,
     health,
     kick_live,
     modal_status,
     overview,
-    retakes,
     usage_status,
 )
 from .faces import faces_enroll, faces_forget, faces_get, faces_name, faces_pick
 from .investigations import investigations_get
+from .logview import log_tail
 from .lowres import _lowres_prewarm, _lowres_worker, lowres_status
 from .news import news_context, news_dismiss, news_get, news_search
 from .review import (
@@ -48,6 +48,8 @@ from .saved_layouts import layouts, save_layout
 from .search import search_transcripts
 from .state import TAILNET, token
 from .tailscale import tailnet_status
+
+log = logging.getLogger("clipper.warroom")
 
 WEB = Path(__file__).resolve().parents[1] / "web"
 
@@ -95,15 +97,14 @@ def _q(qs: dict, key: str) -> str:
 GET_API = {
     "/api/overview": lambda cfg, qs: overview(cfg),
     "/api/health": lambda cfg, qs: health(cfg),
-    "/api/items": lambda cfg, qs: all_rows(cfg),
     "/api/live": lambda cfg, qs: kick_live(cfg),
     "/api/lowres": lambda cfg, qs: lowres_status(cfg, _q(qs, "src")),
-    "/api/retakes": lambda cfg, qs: retakes(cfg, 50),
     "/api/modal": lambda cfg, qs: modal_status(cfg),
     "/api/costs": lambda cfg, qs: costs_status(cfg),
     "/api/usage": lambda cfg, qs: usage_status(cfg),
     "/api/analytics": lambda cfg, qs: analytics_status(cfg, _q(qs, "month")),
     "/api/undo": lambda cfg, qs: {"actions": recent_actions(cfg)},
+    "/api/log": lambda cfg, qs: log_tail(cfg, _q(qs, "which"), _q(qs, "lines"), _q(qs, "q"), _q(qs, "bad")),
     "/api/cover": lambda cfg, qs: cover_get(cfg, _q(qs, "ref")),
     "/api/search": lambda cfg, qs: search_transcripts(cfg, _q(qs, "q")),
     "/api/layouts": lambda cfg, qs: layouts(cfg),
@@ -193,9 +194,10 @@ class Handler(BaseHTTPRequestHandler):
         return bool(origin) and urlparse(origin).netloc not in hosts
 
     def fail(self, e: BaseException, status: int = 500) -> None:
-        """Errors go to the log in full; the page gets the type only (no NAS paths or
-        Kitsu replies over the network)."""
-        print(f"warroom: {self.command} {urlparse(self.path).path}: {type(e).__name__}: {e}", flush=True)
+        """Errors go to the log in full; the answer gets the type only (no NAS paths or
+        Kitsu replies in every failed request). The details are read on purpose, by whoever
+        holds the page's key, in its Log window (logview.py, secrets blanked)."""
+        log.warning(f"{self.command} {urlparse(self.path).path}: {type(e).__name__}: {e}")
         self.send_json({"error": f"{type(e).__name__} (details in the serve log)"}, status)
 
     def send_json(self, data, status=200):
@@ -382,13 +384,13 @@ def server(cfg: dict, port: int | None = None) -> ThreadingHTTPServer:
         try:
             overview(cfg)
         except Exception as e:  # noqa: BLE001
-            print(f"warroom: warm-up: {type(e).__name__}: {e}", flush=True)
+            log.warning(f"warm-up: {type(e).__name__}: {e}")
         modal_status(cfg)  # billing and the archive folders take seconds the first time
         if wc["tailnet"]:  # the phone's URL, for Health and the DMs (tailscale status takes a moment)
             try:
                 TAILNET["served"] = tailnet_status(cfg)["served"]
             except Exception as e:  # noqa: BLE001
-                print(f"warroom: tailnet status: {type(e).__name__}: {e}", flush=True)
+                log.warning(f"tailnet status: {type(e).__name__}: {e}")
     threading.Thread(target=warm, name="warroom-warm", daemon=True).start()
     threading.Thread(target=_lowres_worker, args=(cfg,), name="warroom-lowres", daemon=True).start()
     if wc["lowres_prewarm"]:

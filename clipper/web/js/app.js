@@ -91,6 +91,14 @@ function keyAct(key, ref) {
   } else if (key === "h") act(ref, "hold", { on: !i.hold });
   else if (key === "p") { if (OPEN !== ref) openModal(ref); $("#fPin").scrollIntoView({ block: "center" }); $("#fPin").focus(); }
 }
+// #206: the clickable card titles and schedule slots (role="button") answer Enter and Space like a
+// button. Caught first, so Enter doesn't also open the selected card and Space doesn't play the video.
+document.addEventListener("keydown", e => {
+  const t = e.target;
+  if ((e.key === "Enter" || e.key === " ") && t.matches?.('[role="button"][tabindex]') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault(); e.stopImmediatePropagation(); t.click();
+  }
+}, true);
 document.addEventListener("keydown", e => {
   if (e.ctrlKey || e.metaKey || e.altKey || !STATE) return;
   const tg = e.target;
@@ -286,7 +294,8 @@ document.addEventListener("click", async e => {
 document.addEventListener("keydown", e => {
   if (!EDITING) return;
   if (e.key === "Escape") { EDITING = false; applyLayout(); return; }
-  const h = e.target.closest?.("section[data-panel] > h2");
+  // the title itself: a control inside it (Health's Log, Analytics' month) keeps its own keys
+  const h = e.target.matches?.("section[data-panel] > h2") ? e.target : null;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (!h || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "h"].includes(k)) return;
   e.preventDefault(); e.stopImmediatePropagation();

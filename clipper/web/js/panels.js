@@ -316,16 +316,20 @@ function dailyChart(days) {
   }).join("");
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Views per day">${ticks}${bars}${labels}</svg>`;
 }
-document.addEventListener("mousemove", e => {
+// pointer events, so a tap on a bar shows it on a phone too (#206: it was mouse only)
+function statTip(e) {
   const tip = $("#statTip");
   if (!tip) return;
-  const g = e.target.closest?.("[data-tip]");
+  // the element under the pointer, not e.target: a touch keeps its first target while it moves
+  const g = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-tip]");
   if (!g) { tip.hidden = true; return; }
   const [day, v, m, s] = g.dataset.tip.split("|");
   tip.innerHTML = `${new Date(day + "T12:00:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}<br><b>${(+v).toLocaleString()}</b> views<br>${Math.round(m / 60 * 10) / 10} h watched<br>${s >= 0 ? "+" : ""}${s} subscribers`;
   tip.hidden = false;
   tip.style.left = Math.min(innerWidth - 150, e.clientX + 12) + "px"; tip.style.top = (e.clientY + 12) + "px";
-});
+}
+document.addEventListener("pointermove", statTip);
+document.addEventListener("pointerdown", statTip);
 document.addEventListener("change", e => { if (e.target.id === "statsMonth") { STATS_MONTH = e.target.value; refreshStats(); } });
 
 // ---------- Costs (#50) ----------
@@ -410,3 +414,42 @@ function renderCloud() {
 
 function closeModal(force) { if (!force && !discardOk()) return; OPEN = null; const v = $("#modal video"); if (v) v.pause(); $("#modal").close(); }
 $("#modal").addEventListener("close", () => { OPEN = null; const v = $("#modal video"); if (v) v.pause(); });
+
+// ---------- #206 the serve and bot logs: what "details in the serve log" points at ----------
+
+const LOGQ = { which: "serve", q: "", bad: false };
+let LOGWIN = 0;
+async function showLog(opts) {
+  Object.assign(LOGQ, opts || {});
+  const d = $("#tool"), win = ++LOGWIN, was = d.open ? d.dataset.kind : null;
+  let r;
+  try { r = await api(`/api/log?which=${encodeURIComponent(LOGQ.which)}&lines=400&q=${encodeURIComponent(LOGQ.q)}${LOGQ.bad ? "&bad=1" : ""}`); }
+  catch (e) { return toast("Log: " + e.message, true); }
+  // asked again; another tool opened; or the window was open when asked and has been closed since
+  // (Copilot on #244: the answer reopened a window the user had just closed)
+  if (win !== LOGWIN || d.open && d.dataset.kind !== was && d.dataset.kind !== "log" || was !== null && !d.open) return;
+  const focus = d.open && d.contains(document.activeElement) ? document.activeElement.id : "";
+  d.dataset.kind = "log"; d.classList.remove("cover", "facesw");
+  const cls = x => /\b(ERROR|CRITICAL|Traceback)\b|exit [1-9]/.test(x) ? "bad" : /\bWARNING\b|failed/i.test(x) ? "mid" : "";
+  const size = r.size ? ` · ${(r.size / 1e6).toFixed(1)} MB` : "";
+  d.innerHTML = `<div class="m-head"><b>Log</b>
+      <select id="logWhich" aria-label="Which log">${r.logs.map(k => `<option value="${esc(k)}" ${k === r.which ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>
+      <span style="color:var(--faint);font-size:12px">${esc(r.name || "")}${r.name ? ` · ${r.lines.length ? `the last ${r.lines.length} line${r.lines.length === 1 ? "" : "s"}${LOGQ.q || LOGQ.bad ? " that match" : ""}` : "nothing matches"}${size}` : ""}</span>
+      <button class="x" aria-label="Close" title="Close (Esc)" data-close>×</button></div>
+    <div class="tbody"><div class="logbar">
+      <input class="search" id="logQ" aria-label="Filter the log" placeholder="Words on the line (Enter)" value="${esc(LOGQ.q)}">
+      <label><input type="checkbox" id="logBad" ${LOGQ.bad ? "checked" : ""}> Errors and warnings</label>
+      <button class="btn" id="logRefresh">↻ Refresh</button></div>
+      ${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}
+      <pre class="logview" id="logPre">${r.lines.map(x => `<span class="${cls(x)}">${esc(x)}</span>`).join("\n") || (r.note ? "" : "Nothing matches.")}</pre></div>`;
+  if (!d.open) d.showModal();
+  const pre = $("#logPre"); pre.scrollTop = pre.scrollHeight;
+  if (focus) $("#" + focus)?.focus();
+}
+$("#logBtn").onclick = () => showLog();
+document.addEventListener("change", e => {
+  if (e.target.id === "logWhich") showLog({ which: e.target.value });
+  else if (e.target.id === "logQ") showLog({ q: e.target.value.trim() });
+  else if (e.target.id === "logBad") showLog({ bad: e.target.checked });
+});
+document.addEventListener("click", e => { if (e.target.id === "logRefresh") showLog(); });

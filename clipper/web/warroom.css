@@ -26,6 +26,8 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .live.on { color: var(--text); border-color: #ff3b4e88; background: #2a0e13; }
 .live.on .dot { background: var(--red); box-shadow: 0 0 0 0 #ff3b4e; animation: pulse 1.6s infinite; }
 .live { cursor: pointer; position: relative; }
+.live .chipb { all: unset; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.live .chipb:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 99px; }
 .live:hover { border-color: #3a4552; }
 .live .rec { font: 700 10px var(--mono); color: var(--red); letter-spacing: .05em; }
 .live .rec.off { color: var(--faint); }
@@ -147,8 +149,9 @@ body.editing .panel h2::before { content: "⠿"; color: var(--faint); }
 .stage { flex: 1; height: 6px; border-radius: 3px; background: #262e38; position: relative; }
 .stage.done { background: var(--green); }
 .stage.running { background: var(--accent); animation: blink 1s infinite alternate; }
-.stage.failed { background: var(--red); }
-.stage.skipped { background: #3a4552; }
+/* #206: a shape as well as a colour: failed is hatched, skipped hollow, running blinks */
+.stage.failed { background: repeating-linear-gradient(135deg, var(--red) 0 3px, #6b1a24 3px 6px); }
+.stage.skipped { background: none; box-shadow: inset 0 0 0 1px #4a5666; }
 @keyframes blink { from { opacity: 1; } to { opacity: .45; } }
 .stream .meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); margin-top: 4px; }
 
@@ -456,3 +459,15 @@ nav.views { display: none; }
   .unslotted .chip .nx { min-width: 44px; min-height: 36px; font-size: 18px; }
   .fk button { min-width: 36px; min-height: 36px; font-size: 18px; }
 }
+
+/* #206: keyboard focus shows on the clickable titles, slots and chips (role="button") too */
+[role="button"][tabindex]:focus-visible, .btn:focus-visible, .tab:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.panel h2 .btn.sm { margin-left: 8px; padding: 1px 8px; font: 600 11px var(--mono); letter-spacing: 0; text-transform: none; }
+@media (max-width: 700px) { .panel h2 .btn.sm { margin-left: auto; min-height: 36px; min-width: 56px; padding: 6px 12px; font-size: 13px; } }
+/* the log window */
+@media (min-width: 701px) { #tool[data-kind="log"] { width: min(1100px, 97vw); } }
+#tool .logbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#tool .logbar input.search { flex: 1; min-width: 160px; width: auto; }
+.logview { margin: 0; max-height: 65vh; max-height: 65dvh; overflow: auto; padding: 8px 10px; background: #0b0e12; border: 1px solid var(--line); border-radius: 8px;
+  font: 11px/1.5 var(--mono); color: var(--dim); white-space: pre-wrap; word-break: break-word; }
+.logview .bad { color: var(--red); } .logview .mid { color: var(--amber); }
