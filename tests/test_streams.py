@@ -106,6 +106,15 @@ def test_cuts_go_only_for_uploaded_or_rejected_items(cfg):
     assert (d / "segments" / "s03.mp4").exists() and (d / "review" / "s03.mp4").exists()
 
 
+def test_sidecars_named_source_stay_and_unfinished_runs_are_left_alone(cfg):
+    d = make(cfg, "yt-1", 40, {"s00": {"decision": "rejected"}}, files=("source.mp4", "source.info.json"))
+    streams.prune(cfg, yes=True)
+    assert not (d / "source.mp4").exists() and (d / "source.info.json").exists()
+    p = make(cfg, "kick-partial", 40, {"s01": {"decision": "rejected"}})
+    jsonstate.write(p / "run.json", {"status": "partial"})
+    assert "its run is partial" in streams.check(cfg, p, {}, 30)["why"]
+
+
 def test_an_unreadable_review_file_leaves_the_stream_alone(cfg):
     d = make(cfg, "kick-1", 40, {"s01": {"decision": "rejected"}})
     (d / "review.json").write_text("{broken", encoding="utf-8")

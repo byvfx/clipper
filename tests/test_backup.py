@@ -73,9 +73,11 @@ def test_old_zips_go_past_keep(cfg):
     dest.mkdir(parents=True)
     for day in ("01", "02", "03"):
         (dest / f"taste-2026-11-{day}-0900.zip").write_bytes(b"")
+    (dest / "taste-2026-11-03-1000.zip.part").write_bytes(b"")   # a run killed mid-write
     cfg["backup"]["keep"] = 2
     out = backup.run(cfg)
     assert len(list(dest.glob("taste-*.zip"))) == 2 and "removed 2 older backups" in out[-1]
+    assert not list(dest.glob("*.part"))
 
 
 def test_no_folder_is_an_error_and_newest_is_none(cfg):

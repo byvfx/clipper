@@ -127,7 +127,9 @@ def check_backups(cfg: dict, now: datetime, days: int) -> dict:
         where = backup.folder(cfg)
     except ClipperError:
         return {"set_up": False}
-    times = [p.stat().st_mtime for p in where.iterdir() if p.is_file()] if where.is_dir() else []
+    # a .part is a backup that never finished
+    times = [p.stat().st_mtime for p in where.iterdir() if p.is_file() and p.suffix != ".part"] \
+        if where.is_dir() else []
     return {"set_up": True, "age_days": round((now.timestamp() - max(times)) / 86400, 1) if times else None}
 
 

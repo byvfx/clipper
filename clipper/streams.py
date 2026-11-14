@@ -35,13 +35,17 @@ from .timefmt import age_s, now_iso
 
 PRUNED = "pruned.json"
 LIVE = ("recording", "paused", "finalizing")
+DONE_RUNS = ("done", "skip")   # a stream with no run.json (fetched by hand) counts as done too
 CUT_DIRS = ("segments", "compilations")   # the long cuts --cuts may remove (clips/, shorts/ stay)
 PARTS = ("source", "audio", "cuts", "previews", "other")
 
 
+NOT_MEDIA = (".json", ".txt", ".part", ".ytdl")   # source.info.json and the like stay
+
+
 def _part(name: str) -> str:
     stem = name.split(".", 1)[0]
-    if stem in ("source", "audio") and "." in name:
+    if stem in ("source", "audio") and "." in name and not name.endswith(NOT_MEDIA):
         return stem
     if name in ("segments", "compilations", "clips", "shorts"):
         return "cuts"
@@ -108,6 +112,8 @@ def _check(cfg: dict, sdir: Path, entries: dict[str, dict], older_than_days: flo
         out["why"] = f"recording ({live['status']})"
     elif run.get("status") == "running" and age_s(run.get("heartbeat")) < cfg["worker"]["stale_minutes"] * 60:
         out["why"] = "the worker is running it"
+    elif run and run.get("status") not in DONE_RUNS:
+        out["why"] = f"its run is {run.get('status') or 'unfinished'} (a later stage may need the source)"
     elif not (sdir / "review_state.json").exists():
         out["why"] = "not in review yet"
     elif days < older_than_days:
@@ -228,22 +234,29 @@ def prune(cfg: dict, older_than_days: float | None = None, cuts: bool = False,
         files = removable(d, c, cuts)
         if not files:
             continue
-        size = sum(f.stat().st_size for f in files)
-        freed += size
+        sized = [(f, f.stat().st_size) for f in files]
+        size = sum(n for _, n in sized)
         names = sorted({f.relative_to(d).parts[0] for f in files})
+        line = len(out)
         out.append(f"{d.name} ({c['date']}): {'removed' if yes else 'would remove'} {gb(size)}: "
                    f"{', '.join(names)}" + (f" ({len(files)} files)" if len(files) > len(names) else ""))
-        if yes:
-            gone = []
-            for f in files:
-                try:
-                    f.unlink()
-                    gone.append(f.relative_to(d).as_posix())
-                except OSError as e:
-                    out.append(f"  couldn't remove {f.name}: {e}")
-            old = jsonstate.read(d / PRUNED, {})
-            jsonstate.write(d / PRUNED, {"at": now_iso(), "removed": sorted(set(old.get("removed", [])) | set(gone)),
-                                         "freed_bytes": old.get("freed_bytes", 0) + size}, indent=1)
+        if not yes:
+            freed += size
+            continue
+        gone, done = [], 0
+        for f, n in sized:
+            try:
+                f.unlink()
+                gone.append(f.relative_to(d).as_posix())
+                done += n
+            except OSError as e:
+                out.append(f"  couldn't remove {f.name}: {e}")
+        if done != size:
+            out[line] = out[line].replace(f"removed {gb(size)}", f"removed {gb(done)} of {gb(size)}")
+        freed += done
+        old = jsonstate.read(d / PRUNED, {})
+        jsonstate.write(d / PRUNED, {"at": now_iso(), "removed": sorted(set(old.get("removed", [])) | set(gone)),
+                                     "freed_bytes": old.get("freed_bytes", 0) + done}, indent=1)
     out.append(f"{'freed' if yes else 'would free'} {gb(freed)}"
                + ("" if yes or not freed else "; --yes removes them"))
     return out

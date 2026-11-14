@@ -40,12 +40,11 @@ def folder(cfg: dict, to: str | Path | None = None) -> Path:
     return p if p.is_absolute() else Path(cfg["_dir"]) / p
 
 
-def _walk(top: Path, skip: Path | None = None):
+def _walk(top: Path):
     for dirpath, dirnames, filenames in os.walk(top):
-        d = Path(dirpath)
-        dirnames[:] = [n for n in dirnames if n not in SKIP_DIRS and (skip is None or d / n != skip)]
+        dirnames[:] = [n for n in dirnames if n not in SKIP_DIRS]
         for n in filenames:
-            yield d / n
+            yield Path(dirpath) / n
 
 
 def plan(cfg: dict, with_secrets: bool = False, dest: Path | None = None) -> list[tuple[str, Path]]:
@@ -54,6 +53,7 @@ def plan(cfg: dict, with_secrets: bool = False, dest: Path | None = None) -> lis
     paths = cfg["paths"]
     seen: set[Path] = set()
     out: list[tuple[str, Path]] = []
+    skip = dest.resolve() if dest else None
 
     def add(p: Path | str | None) -> None:
         if not p:
@@ -61,10 +61,9 @@ def plan(cfg: dict, with_secrets: bool = False, dest: Path | None = None) -> lis
         p = Path(p)
         if not p.exists():
             return
-        files = _walk(p, dest) if p.is_dir() else [p]
-        for f in files:
+        for f in _walk(p) if p.is_dir() else [p]:
             f = f.resolve()
-            if f in seen or not f.is_file() or (dest and dest.resolve() in f.parents):
+            if f in seen or not f.is_file() or (skip and skip in f.parents):   # never the zips themselves
                 continue
             seen.add(f)
             try:
@@ -114,6 +113,8 @@ def run(cfg: dict, to: str | Path | None = None, with_secrets: bool | None = Non
         return [f"would write {target} ({len(files)} files, {_mb(size)} before compression"
                 + (", secrets included" if secrets else ", no secrets") + "):", *lines]
     dest.mkdir(parents=True, exist_ok=True)
+    for left in dest.glob(f"{PREFIX}*.zip.part"):   # a run killed mid-write
+        left.unlink(missing_ok=True)
     tmp = target.with_suffix(".zip.part")
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for name, f in files:
