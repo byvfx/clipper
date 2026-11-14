@@ -415,7 +415,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   **Photo test** (user asked for real pictures on both): `*_v4p.*` / `*_v5p.*` with Runway stand-in
   portraits (generic people, not the real subjects: the cloud session cannot fetch frames). User also
   sent a Feb 1989 'Teen cover as a third reference (flat colour panels on diagonals, framed photo boxes,
-  condensed coverlines with bullet dots, slab-serif masthead); a 'Teen-style v6 is next.
+  condensed coverlines with bullet dots, slab-serif masthead); **v6** = the 'Teen grammar (flat diagonal panels, framed photos, condensed coverlines with bullet
+  dots, mailing label), same stand-in photos, `*_v6.*`. References stored in `mockups/sloth_beat/refs/`
+  (two of the 'Teen scans did not arrive as files; notes only). User to choose between v5 and v6, or a mix.
   Waiting on the user's reaction; then Illustrator master, `style = "fanmag"`, `clipper intro`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
   template rendered by headless Chromium (Playwright), not Pillow. Figma's REST API is read/export only

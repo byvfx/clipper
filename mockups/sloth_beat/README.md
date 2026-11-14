@@ -29,6 +29,19 @@ a PULL-OUT POSTER edge tab, and 7-8 sparkles and 7 hearts scattered in the gaps.
 **The sloth is the H** (user, same day): the masthead renders SLOT·BEAT with the H's advance kept
 blank (`.mast .h{visibility:hidden}`) and the sticker hung in the gap at 110% (114 px wide).
 
+## v6: the 'Teen grammar (user sent three 'Teen covers, 1986-1989; see `refs/README.md`)
+`*_v6.html/jpg` + `contact_sheet_v6.jpg`, `cover_v6.css`, built with the same stand-in photos.
+Different rules from Bop: flat colour panels cut on diagonals (one ground, one left column, two
+wedges, four colours per issue, no gradients, no outlines on text); a black top strip with
+coloured bullet dots; the striped Sloth Beat masthead kept as the brand with the sloth as the H;
+a tiny date/price line under it; one dominant photo right (two on the duo cover) with no sticker
+border; secondary photos in thick white frames with a black keyline and their names in condensed
+caps underneath; coverlines in Oswald condensed caps, white or black, each with a bullet-dot
+sub-line in Archivo Narrow; one script line in Lobster ("stories you'll lose sleep over!"); a
+"'SLOTH BEAT INQUIRER..." box of small photos; a cyan "INSIDER'S REPORT" tab; a vertical coverline;
+and the mailing label bottom-right as the period artifact. Cleaner than v4/v5 and reads better
+small; the elements are fewer but each is bigger.
+
 ## Photo test (user, 2026-11-14: "run a test with real pictures on both versions")
 `*_v4p.*` and `*_v5p.*` + `contact_sheet_v4p.jpg` / `contact_sheet_v5p.jpg`: v4 and v5 with
 photographs in every face slot instead of silhouettes. The cloud session cannot fetch frames of

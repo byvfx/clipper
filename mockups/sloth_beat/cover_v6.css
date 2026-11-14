@@ -1,0 +1,37 @@
+@font-face{font-family:"Titan One";src:local("Titan One"),url("fonts/TitanOne.ttf")}
+@font-face{font-family:"Oswald";src:local("Oswald Bold"),local("Oswald"),url("fonts/Oswald.ttf");font-weight:700}
+@font-face{font-family:"Archivo Narrow";src:local("Archivo Narrow Bold"),url("fonts/ArchivoNarrow.ttf");font-weight:700}
+@font-face{font-family:"Lobster";src:local("Lobster"),url("fonts/Lobster.ttf")}
+@font-face{font-family:"Lilita One";src:local("Lilita One"),url("fonts/LilitaOne.ttf")}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:720px;overflow:hidden;background:#222}
+.cover{position:relative;width:1280px;height:720px;overflow:hidden;font-family:"Oswald";color:#1a1a1a}
+.cover>*{position:absolute}
+.panels{inset:0;width:100%;height:100%;z-index:0}
+.topstrip{left:0;right:0;top:0;height:46px;z-index:9;color:#fff;font:700 26px/46px "Oswald";letter-spacing:1px;padding-left:40px;text-transform:uppercase}
+.topstrip i{display:inline-block;width:14px;height:14px;border-radius:50%;background:#ffe600;margin:0 10px 0 14px;vertical-align:middle}
+.topstrip b{color:#ffe600;font-weight:700}
+/* masthead: the brand, unchanged, with the sloth as the H */
+.mast{left:34px;top:54px;width:820px;height:170px;z-index:4;font:400 140px/1 "Titan One"}
+.mast .layer{position:absolute;left:0;top:0;white-space:nowrap;-webkit-text-stroke:3px #1a1a1a}
+.mast .h{visibility:hidden}
+.mast .l4{transform:translate(28px,28px);color:#fff}.mast .l3{transform:translate(22px,22px);color:#ff2d8a}
+.mast .l2{transform:translate(16px,16px);color:#fff}.mast .l1{transform:translate(10px,10px);color:#ff2d8a}.mast .l0{transform:translate(5px,5px);color:#fff}
+.mast .front{background:repeating-linear-gradient(180deg,#ff4fa6 0 10px,#fff 10px 15px,#ff4fa6 15px 25px,#fff 25px 29px);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.glint{position:absolute;width:64px;left:118px;top:-18px;transform:rotate(15deg)}
+.sloth{left:380px;top:62px;width:140px;height:200px;object-fit:contain;object-position:top center;z-index:7;transform:rotate(2deg);filter:drop-shadow(3px 5px 0 rgba(0,0,0,.35))}
+.dateline{left:44px;top:232px;z-index:8;font:700 16px/1 "Archivo Narrow";letter-spacing:1px;color:#1a1a1a;text-transform:uppercase}
+/* photos */
+.mainphoto{object-fit:contain;object-position:bottom center;filter:drop-shadow(0 0 2px rgba(0,0,0,.35))}
+.frame{border:7px solid #fff;outline:2px solid #1a1a1a;overflow:hidden;box-shadow:4px 5px 0 rgba(0,0,0,.25)}
+.frame img{position:absolute;left:0;bottom:-2px;width:100%;height:104%;object-fit:cover;object-position:top center}
+.pname{font:700 20px/1 "Archivo Narrow";letter-spacing:1px;text-transform:uppercase;text-align:center;color:#1a1a1a}
+/* coverlines */
+.cl .head{font:700 44px/.92 "Oswald";text-transform:uppercase;letter-spacing:-.5px}
+.cl .sub{font:700 21px/1.12 "Archivo Narrow";margin-top:6px;display:flex;align-items:flex-start;gap:7px;text-transform:none}
+.cl .sub i{flex:none;width:15px;height:15px;border-radius:50%;margin-top:3px;border:1.5px solid rgba(0,0,0,.25)}
+.script{font:400 44px/1 "Lobster";text-shadow:2px 2px 0 rgba(0,0,0,.25)}
+.mail{right:auto;z-index:12;background:#fff;color:#1a1a1a;font:12px/1.3 "DejaVu Sans Mono",monospace;padding:8px 10px;width:270px;border:1px solid #bbb}
+.vert{z-index:8;writing-mode:vertical-rl;transform:rotate(180deg);font:700 34px/1 "Oswald";text-transform:uppercase;color:#fff;letter-spacing:1px}
+.tab{z-index:9;background:#2fd3ff;color:#1a1a1a;font:700 20px/1 "Oswald";text-transform:uppercase;padding:6px 12px;border:2px solid #1a1a1a}
+.heartdot{z-index:9;font-size:26px;color:#ff2d8a;text-shadow:1px 1px 0 #fff}
