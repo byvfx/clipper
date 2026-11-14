@@ -997,7 +997,15 @@ def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_status(cfg: dict, args: argparse.Namespace) -> None:
     from . import status
 
-    print("\n".join(status.lines(cfg, days=args.days, sync=args.sync)))
+    if args.json:
+        import contextlib
+
+        with contextlib.redirect_stdout(sys.stderr):  # a sync's notes; stdout is the JSON alone
+            s = status.collect(cfg, days=args.days, sync=args.sync, everything=args.all)
+        print(json.dumps(s, indent=1, ensure_ascii=False, default=str))
+        return
+    print("\n".join(status.render(status.collect(cfg, days=args.days, sync=args.sync,
+                                                 everything=args.all), cfg)))
 
 
 def cmd_checkup(cfg: dict, args: argparse.Namespace) -> None:
@@ -1042,13 +1050,30 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
     bot.run(cfg)
 
 
+def cmd_streams(cfg: dict, args: argparse.Namespace) -> None:
+    from . import streams
+
+    if args.action == "list":
+        s = streams.listing(cfg, everything=args.all, older_than_days=args.older_than)
+        print(json.dumps(s, indent=1, default=str) if args.json else "\n".join(streams.listing_lines(s)))
+    else:
+        print("\n".join(streams.prune(cfg, older_than_days=args.older_than, cuts=args.cuts,
+                                      only=args.only, yes=args.yes)))
+
+
+def cmd_backup(cfg: dict, args: argparse.Namespace) -> None:
+    from . import backup
+
+    print("\n".join(backup.run(cfg, to=args.to, with_secrets=args.with_secrets or None, dry_run=args.dry_run)))
+
+
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'status', 'checkup', 'audit', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'broll', 'doc', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
-    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'cookies', 'codereview']),
+    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'streams', 'backup', 'cookies', 'codereview']),
 ]
 
 
@@ -1400,10 +1425,13 @@ def add_services(sub) -> None:
                    help="restart or stop the recorder even while it's recording (starts a new part)")
     p.set_defaults(fn=cmd_services)
 
-    p = sub.add_parser("status", help="one screen: services and recorder, the worker's streams, review counts, "
-                                      "the next releases, this month's spend (reads files; runs nothing)")
+    p = sub.add_parser("status", help="one screen: what needs you, services and recorder, the worker's streams, "
+                                      "review counts, the next releases, this month's spend (reads files; runs nothing)")
     p.add_argument("--days", type=int, default=2, help="releases this far ahead (default 2)")
     p.add_argument("--sync", action="store_true", help="read Kitsu's decisions first (slower)")
+    p.add_argument("--all", action="store_true",
+                   help="every stream, not just the last week's and the unfinished ones")
+    p.add_argument("--json", action="store_true", help="the same as JSON (the Claude container reads it)")
     p.set_defaults(fn=cmd_status)
 
     p = sub.add_parser("checkup", help="what the alerts don't catch: stuck streams, quiet services, late uploads, "
@@ -1905,6 +1933,32 @@ def add_setup(sub) -> None:
 
     p = sub.add_parser("shows", help="list the [shows] profiles and which streams belong to each")
     p.set_defaults(fn=cmd_shows)
+
+    p = sub.add_parser("streams", help="disk: what each stream folder takes, and pruning the source and audio "
+                                       "of streams that are done with")
+    ssub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_streams)
+    r = ssub.add_parser("list", help="size per stream (source, audio, cuts, previews), and whether prune would take it")
+    r.add_argument("--all", action="store_true", help="small streams too (default: 1 GB and over, or prunable)")
+    r.add_argument("--older-than", type=float, metavar="DAYS",
+                   help="the age prune would use (default [streams] keep_source_days, else 30)")
+    r.add_argument("--json", action="store_true", help="as JSON")
+    r = ssub.add_parser("prune", help="remove source and audio of old streams whose items are all decided and "
+                                      "none waits on an upload; keeps every JSON (says what, without --yes)")
+    r.add_argument("--older-than", type=float, metavar="DAYS",
+                   help="only streams older than this (default [streams] keep_source_days, else 30)")
+    r.add_argument("--cuts", action="store_true",
+                   help="also the segment and compilation videos and review previews of uploaded or rejected items")
+    r.add_argument("--stream", dest="only", action="append", metavar="ID",
+                   help="only this stream (repeatable); says why when it's left alone")
+    r.add_argument("--yes", action="store_true", help="remove them (without it, only list what would go)")
+
+    p = sub.add_parser("backup", help="a dated zip of the taste layer: config, schedule, faces, voices, layouts, "
+                                      "cast photos, each stream's config and review state")
+    p.add_argument("--to", metavar="DIR", help="where the zip goes (default [backup] folder)")
+    p.add_argument("--with-secrets", action="store_true", help="secrets/ too")
+    p.add_argument("--dry-run", action="store_true", help="what would go in, with sizes; nothing written")
+    p.set_defaults(fn=cmd_backup)
 
     p = sub.add_parser("cookies", help="YouTube sign-in cookies for yt-dlp's signed-in retries")
     ksub = p.add_subparsers(dest="action", required=True, metavar="<action>")

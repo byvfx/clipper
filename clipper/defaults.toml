@@ -604,12 +604,26 @@ words = ["hosts", "co-host", "co-hosts"]   # never in a title, description or th
 # AUDIT_MONTHDAY in its env.local).
 window_days = 7              # how far back the digest looks
 stale_pr_days = 14           # an open PR untouched this long is a thing to do
-backup_folder = ""           # where backups land (relative: beside schedule.json); "" = none set up,
-                             # which the digest says every week
-backup_max_days = 8          # the newest file there older than this is a thing to do
-deep_weeks = 5               # how many saved weeks the monthly deep audit reads
+deep_weeks = 5              # how many saved weeks the monthly deep audit reads
 reminders = []               # dated things to come back to, "2026-11-16 compare v8 with v7": shown
                              # from a week before the date until you take the line out
+
+[backup]
+# `clipper backup` (#204): a dated zip of the taste layer (the config, hand-edit backups, schedule,
+# people, faces, voices, layouts, cast photos, each stream's config.toml and review state). Copy
+# the zips off the NAS now and then; the Kitsu database is its own step (wiki Backups).
+folder = "backups/taste"     # where the zips land, relative to the config file's folder; "" = none set up
+keep = 8                     # how many zips to keep; older ones are removed (0 = keep every one)
+every_days = 7               # serve makes one this often; 0 = only by hand
+with_secrets = false         # secrets/ in serve's zips too (by hand: --with-secrets)
+max_age_days = 8             # `clipper audit` and doctor: the newest zip older than this is a thing to do
+
+[streams]
+# `clipper streams list|prune` (#204): what each stream folder takes, and removing the source
+# recording and audio of streams that are done with (every item decided, none waiting on an upload).
+keep_source_days = 0         # serve prunes source and audio this many days after a stream, daily;
+                             # 0 = only by hand (`clipper streams prune`, 30 days unless --older-than)
+never_prune = []             # stream ids prune always leaves whole (a test stream you re-cut)
 
 [serve]
 # `clipper serve`: the always-on process (the war room, the hourly replan and upload,

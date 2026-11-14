@@ -12,6 +12,7 @@
 - [Costs](Costs)
 - [Checkup](Checkup)
 - [Audit](Audit)
+- [Backups](Backups)
 
 **Install**
 - [Install](Install)
