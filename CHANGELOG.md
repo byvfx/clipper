@@ -8,6 +8,13 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-13: `clipper backup` zips the taste layer (config, hand-edit backups, schedule, people, faces,
+  voices, layouts, cast photos, each stream's config and review state; secrets only when asked) into
+  `[backup] folder`, and serve makes one every `[backup] every_days` (7). `clipper streams list` shows
+  what each stream takes; `clipper streams prune` removes the source and audio of streams done with
+  (`--cuts` also the long cuts of uploaded or rejected items), and serve does it daily with
+  `[streams] keep_source_days`. `[audit] backup_folder` and `backup_max_days` moved to `[backup]`
+  (#204; wiki Backups).
 - 11-13: `clipper status` opens with what needs you (items waiting or held, checkup's findings on
   services, runs and late releases), shows each stream's show and date, leaves out week-old streams
   with nothing waiting (`--all`), and has `--json`. It counts reviews from review.json instead of
