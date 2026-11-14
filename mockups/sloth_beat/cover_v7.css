@@ -25,6 +25,8 @@ html,body{width:1280px;height:720px;overflow:hidden;background:#222}
 .mainphoto{object-fit:contain;object-position:bottom center;filter:drop-shadow(0 0 2px rgba(0,0,0,.35))}
 .frame{border:7px solid #fff;outline:2px solid #1a1a1a;overflow:hidden;box-shadow:4px 5px 0 rgba(0,0,0,.25)}
 .frame img{position:absolute;left:0;bottom:-2px;width:100%;height:104%;object-fit:cover;object-position:top center}
+.sticker{object-fit:contain;object-position:bottom center}
+.nametag{z-index:9;background:#e8102e;color:#fff;border:3px solid #fff;border-radius:4px;padding:4px 10px;font:700 18px/1 "Archivo Narrow";letter-spacing:1px;text-transform:uppercase;transform:rotate(-4deg);white-space:nowrap}
 .pname{font:700 20px/1 "Archivo Narrow";letter-spacing:1px;text-transform:uppercase;text-align:center;color:#1a1a1a}
 /* coverlines */
 .cl .head{font:700 44px/.92 "Oswald";text-transform:uppercase;letter-spacing:-.5px}

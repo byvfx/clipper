@@ -418,7 +418,8 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   condensed coverlines with bullet dots, slab-serif masthead); **v6** = the 'Teen grammar (flat diagonal panels, framed photos, condensed coverlines with bullet
   dots, mailing label), same stand-in photos, `*_v6.*`. References stored in `mockups/sloth_beat/refs/`
   (two of the 'Teen scans did not arrive as files; notes only). User chose v6 and asked for a mix: **v7** = v6 layout with gradient panels and two-ink crossover halftones on the wedges (user's reference in
-  `refs/halftone_gradient_ref.*`; text never on a face or on dots) (`*_v7.*`),
+  `refs/halftone_gradient_ref.*`; text never on a face or on dots; small portraits as stickers with red name
+  bars; `refs/halftone_swatches.*` = the palette's ink pairs; `*_v5hp.*` = v5 with halftone instead of mosaic) (`*_v7.*`),
   **the current direction**. Next: real frames from the user, Illustrator master, `[thumbnail] style = "fanmag"`.
   Waiting on the user's reaction; then Illustrator master, `style = "fanmag"`, `clipper intro`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS

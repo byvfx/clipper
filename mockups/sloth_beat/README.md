@@ -41,7 +41,12 @@ on a 45-degree screen whose radius grows from 0 to past the merge point, so one 
 with tiny A dots, the middle a checker, the far end solid A with tiny B holes. Bottom-right wedge:
 c into d toward the corner; top-right wedge: d into c from the top edge; left column: tone on
 tone (the column colour and a darker shade), dark behind the masthead and solid by the date line,
-so no coverline sits on dots. Also: coverlines keep off the faces
+so no coverline sits on dots.
+**Small portraits are stickers again** (user, same day): cutouts with the white outline, hard shadow,
+a slight tilt and a red name bar inside the lower-left corner; the main photo stays borderless.
+**`*_v5hp.*`** is the v5 pop-art version with the mosaic tiles replaced by the same crossover halftone
+(a diagonal band and three ringed patches), for comparison. `refs/halftone_swatches.*` shows six ink
+pairs from the palette as crossover halftones. Also: coverlines keep off the faces
 (the Ben Avery cover's two lines moved to the panels either side). **Current direction.**
 
 ## v6: the 'Teen grammar (user sent three 'Teen covers, 1986-1989; see `refs/README.md`)
