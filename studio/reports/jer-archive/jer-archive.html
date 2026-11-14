@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jer archive</title>
+<style>
+  :root {
+    --color-fg: #1c1f24; --color-fg-muted: #5c636e; --color-bg: #ffffff; --color-panel: #f6f7f9;
+    --color-border-line: #dfe2e7; --color-ok: #1f7a4a; --color-warn: #9a6100; --color-bad: #b42318;
+    --cds-chart-grid: #e7e9ed; --cds-chart-axis: #b9bec7; --cds-text-secondary: #5c636e;
+    --cds-surface-popover: #ffffff; --cds-border: #dfe2e7; --cds-shadow-popover: none;
+    --font-anthropic-sans: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    --font-anthropic-serif: Georgia, "Times New Roman", serif;
+    --cds-font-size-caption: 11px; --cds-font-size-body: 13px; --cds-font-size-heading: 15px; --cds-font-size-title: 26px;
+    --cds-font-weight-medium: 600;
+    --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 12px; --cds-gap-lg: 16px; --cds-gap-xl: 22px;
+    --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 14px;
+    --cds-radius: 8px; --cds-dur-slow: 0s; --cds-ease-out: ease-out;
+  }
+  @page { size: letter; margin: 0.45in; }
+  html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #dash-root { padding: 0; }
+  .ja-card, .ja-tile, .ja-table tr { break-inside: avoid; }
+  .ja-section { break-inside: auto; }
+  .ja-foot { margin-top: 18px; font: 10px var(--font-anthropic-sans); color: var(--color-fg-muted); }
+  .ja-grow { animation: none !important; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+  window.__DATA__ = {"summary": [{"videos": "11571", "hours": "2731.0", "words": "24863734", "windows": "277351", "channels": "4", "first": "2017-07-14", "last": "2026-10-22", "undated": "0"}], "monthly": [{"month": "2017-07", "channel": "TheQuartering", "videos": "3", "hours": "0.66"}, {"month": "2017-08", "channel": "TheQuartering", "videos": "7", "hours": "1.28"}, {"month": "2017-09", "channel": "TheQuartering", "videos": "25", "hours": "5.21"}, {"month": "2017-10", "channel": "TheQuartering", "videos": "26", "hours": "7.01"}, {"month": "2017-11", "channel": "TheQuartering", "videos": "23", "hours": "6.41"}, {"month": "2017-12", "channel": "TheQuartering", "videos": "18", "hours": "4.79"}, {"month": "2018-01", "channel": "TheQuartering", "videos": "10", "hours": "3.66"}, {"month": "2018-02", "channel": "TheQuartering", "videos": "16", "hours": "3.47"}, {"month": "2018-03", "channel": "TheQuartering", "videos": "15", "hours": "2.79"}, {"month": "2018-04", "channel": "TheQuartering", "videos": "15", "hours": "3.06"}, {"month": "2018-05", "channel": "TheQuartering", "videos": "26", "hours": "5.6"}, {"month": "2018-06", "channel": "TheQuartering", "videos": "34", "hours": "6.39"}, {"month": "2018-07", "channel": "TheQuartering", "videos": "50", "hours": "10.37"}, {"month": "2018-08", "channel": "TheQuartering", "videos": "33", "hours": "7.26"}, {"month": "2018-09", "channel": "TheQuartering", "videos": "35", "hours": "7.16"}, {"month": "2018-10", "channel": "TheQuartering", "videos": "40", "hours": "8.54"}, {"month": "2018-11", "channel": "TheQuartering", "videos": "43", "hours": "7.76"}, {"month": "2018-12", "channel": "TheQuartering", "videos": "50", "hours": "9.78"}, {"month": "2019-01", "channel": "TheQuartering", "videos": "67", "hours": "13.28"}, {"month": "2019-02", "channel": "TheQuartering", "videos": "59", "hours": "13.24"}, {"month": "2019-03", "channel": "TheQuartering", "videos": "62", "hours": "14.68"}, {"month": "2019-04", "channel": "TheQuartering", "videos": "61", "hours": "14.73"}, {"month": "2019-05", "channel": "TheQuartering", "videos": "70", "hours": "16.04"}, {"month": "2019-06", "channel": "TheQuartering", "videos": "65", "hours": "15.02"}, {"month": "2019-07", "channel": "TheQuartering", "videos": "78", "hours": "17.21"}, {"month": "2019-08", "channel": "TheQuartering", "videos": "82", "hours": "18.72"}, {"month": "2019-09", "channel": "TheQuartering", "videos": "82", "hours": "20.32"}, {"month": "2019-10", "channel": "TheQuartering", "videos": "84", "hours": "19.0"}, {"month": "2019-11", "channel": "TheQuartering", "videos": "85", "hours": "20.49"}, {"month": "2019-12", "channel": "TheQuartering", "videos": "82", "hours": "18.6"}, {"month": "2020-01", "channel": "TheQuartering", "videos": "81", "hours": "18.15"}, {"month": "2020-02", "channel": "TheQuartering", "videos": "84", "hours": "19.34"}, {"month": "2020-03", "channel": "TheQuartering", "videos": "96", "hours": "20.57"}, {"month": "2020-04", "channel": "TheQuartering", "videos": "105", "hours": "23.44"}, {"month": "2020-05", "channel": "TheQuartering", "videos": "140", "hours": "29.72"}, {"month": "2020-06", "channel": "TheQuartering", "videos": "134", "hours": "26.9"}, {"month": "2020-07", "channel": "TheQuartering", "videos": "142", "hours": "28.97"}, {"month": "2020-08", "channel": "TheQuartering", "videos": "96", "hours": "19.22"}, {"month": "2020-09", "channel": "TheQuartering", "videos": "110", "hours": "19.99"}, {"month": "2020-10", "channel": "TheQuartering", "videos": "114", "hours": "20.35"}, {"month": "2020-11", "channel": "TheQuartering", "videos": "129", "hours": "24.75"}, {"month": "2020-12", "channel": "TheQuartering", "videos": "111", "hours": "22.66"}, {"month": "2021-01", "channel": "TheQuartering", "videos": "104", "hours": "20.17"}, {"month": "2021-02", "channel": "TheQuartering", "videos": "94", "hours": "18.86"}, {"month": "2021-03", "channel": "TheQuartering", "videos": "111", "hours": "22.27"}, {"month": "2021-04", "channel": "TheQuartering", "videos": "99", "hours": "18.77"}, {"month": "2021-05", "channel": "TheQuartering", "videos": "88", "hours": "17.41"}, {"month": "2021-06", "channel": "TheQuartering", "videos": "107", "hours": "20.44"}, {"month": "2021-07", "channel": "TheQuartering", "videos": "118", "hours": "22.63"}, {"month": "2021-08", "channel": "TheQuartering", "videos": "121", "hours": "22.72"}, {"month": "2021-09", "channel": "TheQuartering", "videos": "117", "hours": "21.99"}, {"month": "2021-10", "channel": "TheQuartering", "videos": "108", "hours": "20.49"}, {"month": "2021-11", "channel": "TheQuartering", "videos": "124", "hours": "23.19"}, {"month": "2021-12", "channel": "TheQuartering", "videos": "97", "hours": "18.34"}, {"month": "2022-01", "channel": "TheQuartering", "videos": "115", "hours": "23.11"}, {"month": "2022-02", "channel": "TheQuartering", "videos": "116", "hours": "23.44"}, {"month": "2022-03", "channel": "TheQuartering", "videos": "131", "hours": "27.73"}, {"month": "2022-04", "channel": "TheQuartering", "videos": "126", "hours": "25.7"}, {"month": "2022-05", "channel": "TheQuartering", "videos": "144", "hours": "28.1"}, {"month": "2022-06", "channel": "TheQuartering", "videos": "116", "hours": "22.89"}, {"month": "2022-07", "channel": "TheQuartering", "videos": "108", "hours": "20.88"}, {"month": "2022-08", "channel": "TheQuartering", "videos": "116", "hours": "22.04"}, {"month": "2022-09", "channel": "TheQuartering", "videos": "111", "hours": "22.37"}, {"month": "2022-10", "channel": "TheQuartering", "videos": "116", "hours": "23.35"}, {"month": "2022-11", "channel": "TheQuartering", "videos": "135", "hours": "27.11"}, {"month": "2022-12", "channel": "TheQuartering", "videos": "114", "hours": "24.04"}, {"month": "2023-01", "channel": "TheQuartering", "videos": "104", "hours": "21.6"}, {"month": "2023-02", "channel": "TheQuartering", "videos": "98", "hours": "19.58"}, {"month": "2023-03", "channel": "TheQuartering", "videos": "117", "hours": "23.2"}, {"month": "2023-04", "channel": "TheQuartering", "videos": "102", "hours": "20.85"}, {"month": "2023-05", "channel": "TheQuartering", "videos": "123", "hours": "24.64"}, {"month": "2023-06", "channel": "TheQuartering", "videos": "109", "hours": "21.91"}, {"month": "2023-07", "channel": "TheQuartering", "videos": "98", "hours": "20.96"}, {"month": "2023-08", "channel": "TheQuartering", "videos": "108", "hours": "23.49"}, {"month": "2023-09", "channel": "TheQuartering", "videos": "95", "hours": "20.98"}, {"month": "2023-10", "channel": "TheQuartering", "videos": "108", "hours": "21.79"}, {"month": "2023-11", "channel": "TheQuartering", "videos": "104", "hours": "21.2"}, {"month": "2023-12", "channel": "TheQuartering", "videos": "90", "hours": "19.22"}, {"month": "2024-01", "channel": "TheQuartering", "videos": "109", "hours": "22.45"}, {"month": "2024-02", "channel": "TheQuartering", "videos": "105", "hours": "22.05"}, {"month": "2024-03", "channel": "TheQuartering", "videos": "108", "hours": "23.07"}, {"month": "2024-04", "channel": "Jeremy Hambly", "videos": "33", "hours": "6.55"}, {"month": "2024-04", "channel": "TheQuartering", "videos": "98", "hours": "20.26"}, {"month": "2024-05", "channel": "Jeremy Hambly", "videos": "60", "hours": "11.56"}, {"month": "2024-05", "channel": "TheQuartering", "videos": "102", "hours": "21.25"}, {"month": "2024-06", "channel": "Jeremy Hambly", "videos": "52", "hours": "9.41"}, {"month": "2024-06", "channel": "TheQuartering", "videos": "100", "hours": "21.06"}, {"month": "2024-07", "channel": "Jeremy Hambly", "videos": "30", "hours": "5.74"}, {"month": "2024-07", "channel": "TheQuartering", "videos": "105", "hours": "21.98"}, {"month": "2024-08", "channel": "Jeremy Hambly", "videos": "52", "hours": "9.94"}, {"month": "2024-08", "channel": "TheQuartering", "videos": "111", "hours": "23.93"}, {"month": "2024-09", "channel": "Jeremy Hambly", "videos": "1", "hours": "0.05"}, {"month": "2024-09", "channel": "TheQuartering", "videos": "114", "hours": "24.38"}, {"month": "2024-10", "channel": "TheQuartering", "videos": "104", "hours": "24.1"}, {"month": "2024-11", "channel": "TheQuartering", "videos": "104", "hours": "22.65"}, {"month": "2024-12", "channel": "TheQuartering", "videos": "90", "hours": "19.38"}, {"month": "2025-01", "channel": "Jeremy Hambly", "videos": "45", "hours": "9.64"}, {"month": "2025-01", "channel": "TheQuartering", "videos": "101", "hours": "21.43"}, {"month": "2025-02", "channel": "Jeremy Hambly", "videos": "86", "hours": "18.35"}, {"month": "2025-02", "channel": "TheQuartering", "videos": "90", "hours": "18.95"}, {"month": "2025-03", "channel": "Jeremy Hambly", "videos": "86", "hours": "17.87"}, {"month": "2025-03", "channel": "TheQuartering", "videos": "101", "hours": "21.67"}, {"month": "2025-04", "channel": "Jeremy Hambly", "videos": "90", "hours": "17.55"}, {"month": "2025-04", "channel": "TheQuartering", "videos": "88", "hours": "19.1"}, {"month": "2025-05", "channel": "Jeremy Hambly", "videos": "63", "hours": "13.45"}, {"month": "2025-05", "channel": "TheQuartering", "videos": "84", "hours": "17.77"}, {"month": "2025-06", "channel": "Jeremy Hambly", "videos": "53", "hours": "11.33"}, {"month": "2025-06", "channel": "TheQuartering", "videos": "87", "hours": "17.92"}, {"month": "2025-07", "channel": "Jeremy Hambly", "videos": "31", "hours": "6.82"}, {"month": "2025-07", "channel": "QuarteringLive", "videos": "37", "hours": "30.17"}, {"month": "2025-07", "channel": "TheQuartering", "videos": "107", "hours": "21.91"}, {"month": "2025-08", "channel": "QuarteringLive", "videos": "74", "hours": "63.35"}, {"month": "2025-08", "channel": "TheQuartering", "videos": "88", "hours": "18.54"}, {"month": "2025-09", "channel": "Jeremy Hambly", "videos": "60", "hours": "12.19"}, {"month": "2025-09", "channel": "QuarteringLive", "videos": "30", "hours": "42.76"}, {"month": "2025-09", "channel": "TheQuartering", "videos": "100", "hours": "21.09"}, {"month": "2025-10", "channel": "Jeremy Hambly", "videos": "25", "hours": "4.67"}, {"month": "2025-10", "channel": "QuarteringLive", "videos": "20", "hours": "31.58"}, {"month": "2025-10", "channel": "TheQuartering", "videos": "93", "hours": "20.23"}, {"month": "2025-11", "channel": "Jeremy Hambly", "videos": "14", "hours": "2.67"}, {"month": "2025-11", "channel": "QuarteringLive", "videos": "23", "hours": "33.88"}, {"month": "2025-11", "channel": "TheQuartering", "videos": "85", "hours": "17.83"}, {"month": "2025-12", "channel": "Jeremy Hambly", "videos": "21", "hours": "4.17"}, {"month": "2025-12", "channel": "QuarteringLive", "videos": "24", "hours": "28.88"}, {"month": "2025-12", "channel": "TheQuartering", "videos": "83", "hours": "17.3"}, {"month": "2026-01", "channel": "Jeremy Hambly", "videos": "52", "hours": "9.91"}, {"month": "2026-01", "channel": "QuarteringLive", "videos": "27", "hours": "44.55"}, {"month": "2026-01", "channel": "TheQuartering", "videos": "87", "hours": "18.73"}, {"month": "2026-02", "channel": "Jeremy Hambly", "videos": "38", "hours": "7.23"}, {"month": "2026-02", "channel": "QuarteringLive", "videos": "24", "hours": "38.95"}, {"month": "2026-02", "channel": "TheQuartering", "videos": "81", "hours": "16.8"}, {"month": "2026-03", "channel": "Jeremy Hambly", "videos": "72", "hours": "12.97"}, {"month": "2026-03", "channel": "QuarteringLive", "videos": "37", "hours": "37.79"}, {"month": "2026-03", "channel": "TheQuartering", "videos": "90", "hours": "18.74"}, {"month": "2026-04", "channel": "Jeremy Hambly", "videos": "74", "hours": "14.01"}, {"month": "2026-04", "channel": "QuarteringLive", "videos": "41", "hours": "26.36"}, {"month": "2026-04", "channel": "TheQuartering", "videos": "73", "hours": "15.14"}, {"month": "2026-05", "channel": "Jeremy Hambly", "videos": "67", "hours": "13.52"}, {"month": "2026-05", "channel": "QuarteringLive", "videos": "58", "hours": "19.2"}, {"month": "2026-05", "channel": "TheQuartering", "videos": "71", "hours": "16.83"}, {"month": "2026-06", "channel": "Jeremy Hambly", "videos": "55", "hours": "12.1"}, {"month": "2026-06", "channel": "QuarteringLive", "videos": "32", "hours": "6.83"}, {"month": "2026-06", "channel": "TheQuartering", "videos": "79", "hours": "23.86"}, {"month": "2026-07", "channel": "Jeremy Hambly", "videos": "38", "hours": "8.72"}, {"month": "2026-07", "channel": "QuarteringLive", "videos": "25", "hours": "10.99"}, {"month": "2026-07", "channel": "QuarteringVlogs", "videos": "8", "hours": "3.6"}, {"month": "2026-07", "channel": "TheQuartering", "videos": "70", "hours": "17.52"}, {"month": "2026-08", "channel": "Jeremy Hambly", "videos": "40", "hours": "8.02"}, {"month": "2026-08", "channel": "QuarteringLive", "videos": "1", "hours": "0.08"}, {"month": "2026-08", "channel": "QuarteringVlogs", "videos": "1", "hours": "0.72"}, {"month": "2026-08", "channel": "TheQuartering", "videos": "72", "hours": "17.92"}, {"month": "2026-09", "channel": "Jeremy Hambly", "videos": "52", "hours": "10.26"}, {"month": "2026-09", "channel": "TheQuartering", "videos": "70", "hours": "15.27"}, {"month": "2026-10", "channel": "Jeremy Hambly", "videos": "31", "hours": "5.85"}, {"month": "2026-10", "channel": "TheQuartering", "videos": "58", "hours": "11.55"}], "topics": [{"topic": "Woke", "year": "2017", "mentions": "6", "hours": "25.4", "per_100h": "23.67", "query": "woke"}, {"topic": "Woke", "year": "2018", "mentions": "139", "hours": "75.8", "per_100h": "183.31", "query": "woke"}, {"topic": "Woke", "year": "2019", "mentions": "321", "hours": "201.3", "per_100h": "159.45", "query": "woke"}, {"topic": "Woke", "year": "2020", "mentions": "445", "hours": "274.1", "per_100h": "162.37", "query": "woke"}, {"topic": "Woke", "year": "2021", "mentions": "568", "hours": "247.3", "per_100h": "229.7", "query": "woke"}, {"topic": "Woke", "year": "2022", "mentions": "612", "hours": "290.8", "per_100h": "210.48", "query": "woke"}, {"topic": "Woke", "year": "2023", "mentions": "934", "hours": "259.4", "per_100h": "360.02", "query": "woke"}, {"topic": "Woke", "year": "2024", "mentions": "811", "hours": "309.8", "per_100h": "261.76", "query": "woke"}, {"topic": "Woke", "year": "2025", "mentions": "772", "hours": "583.1", "per_100h": "132.4", "query": "woke"}, {"topic": "Woke", "year": "2026", "mentions": "769", "hours": "464.1", "per_100h": "165.71", "query": "woke"}, {"topic": "Trump", "year": "2017", "mentions": "48", "hours": "25.4", "per_100h": "189.32", "query": "trump"}, {"topic": "Trump", "year": "2018", "mentions": "134", "hours": "75.8", "per_100h": "176.72", "query": "trump"}, {"topic": "Trump", "year": "2019", "mentions": "108", "hours": "201.3", "per_100h": "53.65", "query": "trump"}, {"topic": "Trump", "year": "2020", "mentions": "615", "hours": "274.1", "per_100h": "224.39", "query": "trump"}, {"topic": "Trump", "year": "2021", "mentions": "499", "hours": "247.3", "per_100h": "201.8", "query": "trump"}, {"topic": "Trump", "year": "2022", "mentions": "713", "hours": "290.8", "per_100h": "245.22", "query": "trump"}, {"topic": "Trump", "year": "2023", "mentions": "650", "hours": "259.4", "per_100h": "250.55", "query": "trump"}, {"topic": "Trump", "year": "2024", "mentions": "4845", "hours": "309.8", "per_100h": "1563.79", "query": "trump"}, {"topic": "Trump", "year": "2025", "mentions": "6920", "hours": "583.1", "per_100h": "1186.83", "query": "trump"}, {"topic": "Trump", "year": "2026", "mentions": "3459", "hours": "464.1", "per_100h": "745.39", "query": "trump"}, {"topic": "Elon Musk", "year": "2017", "mentions": "1", "hours": "25.4", "per_100h": "3.94", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2018", "mentions": "23", "hours": "75.8", "per_100h": "30.33", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2019", "mentions": "2", "hours": "201.3", "per_100h": "0.99", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2020", "mentions": "143", "hours": "274.1", "per_100h": "52.18", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2021", "mentions": "121", "hours": "247.3", "per_100h": "48.93", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2022", "mentions": "3090", "hours": "290.8", "per_100h": "1062.73", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2023", "mentions": "883", "hours": "259.4", "per_100h": "340.36", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2024", "mentions": "615", "hours": "309.8", "per_100h": "198.5", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2025", "mentions": "1065", "hours": "583.1", "per_100h": "182.65", "query": "elon OR musk"}, {"topic": "Elon Musk", "year": "2026", "mentions": "243", "hours": "464.1", "per_100h": "52.36", "query": "elon OR musk"}, {"topic": "Disney / Star Wars", "year": "2017", "mentions": "10", "hours": "25.4", "per_100h": "39.44", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2018", "mentions": "189", "hours": "75.8", "per_100h": "249.25", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2019", "mentions": "1201", "hours": "201.3", "per_100h": "596.56", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2020", "mentions": "1432", "hours": "274.1", "per_100h": "522.49", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2021", "mentions": "1872", "hours": "247.3", "per_100h": "757.04", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2022", "mentions": "993", "hours": "290.8", "per_100h": "341.52", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2023", "mentions": "1392", "hours": "259.4", "per_100h": "536.56", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2024", "mentions": "1077", "hours": "309.8", "per_100h": "347.62", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2025", "mentions": "798", "hours": "583.1", "per_100h": "136.86", "query": "disney OR \"star wars\""}, {"topic": "Disney / Star Wars", "year": "2026", "mentions": "460", "hours": "464.1", "per_100h": "99.13", "query": "disney OR \"star wars\""}, {"topic": "YouTube Shorts", "year": "2017", "mentions": "16", "hours": "25.4", "per_100h": "63.11", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2018", "mentions": "63", "hours": "75.8", "per_100h": "83.08", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2019", "mentions": "234", "hours": "201.3", "per_100h": "116.23", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2020", "mentions": "272", "hours": "274.1", "per_100h": "99.24", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2021", "mentions": "277", "hours": "247.3", "per_100h": "112.02", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2022", "mentions": "418", "hours": "290.8", "per_100h": "143.76", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2023", "mentions": "392", "hours": "259.4", "per_100h": "151.1", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2024", "mentions": "367", "hours": "309.8", "per_100h": "118.45", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2025", "mentions": "640", "hours": "583.1", "per_100h": "109.76", "query": "\"youtube shorts\" OR shorts"}, {"topic": "YouTube Shorts", "year": "2026", "mentions": "478", "hours": "464.1", "per_100h": "103.01", "query": "\"youtube shorts\" OR shorts"}, {"topic": "Rumble", "year": "2017", "mentions": "0", "hours": "25.4", "per_100h": "0.0", "query": "rumble"}, {"topic": "Rumble", "year": "2018", "mentions": "0", "hours": "75.8", "per_100h": "0.0", "query": "rumble"}, {"topic": "Rumble", "year": "2019", "mentions": "6", "hours": "201.3", "per_100h": "2.98", "query": "rumble"}, {"topic": "Rumble", "year": "2020", "mentions": "59", "hours": "274.1", "per_100h": "21.53", "query": "rumble"}, {"topic": "Rumble", "year": "2021", "mentions": "68", "hours": "247.3", "per_100h": "27.5", "query": "rumble"}, {"topic": "Rumble", "year": "2022", "mentions": "231", "hours": "290.8", "per_100h": "79.45", "query": "rumble"}, {"topic": "Rumble", "year": "2023", "mentions": "804", "hours": "259.4", "per_100h": "309.91", "query": "rumble"}, {"topic": "Rumble", "year": "2024", "mentions": "858", "hours": "309.8", "per_100h": "276.93", "query": "rumble"}, {"topic": "Rumble", "year": "2025", "mentions": "1278", "hours": "583.1", "per_100h": "219.19", "query": "rumble"}, {"topic": "Rumble", "year": "2026", "mentions": "732", "hours": "464.1", "per_100h": "157.74", "query": "rumble"}, {"topic": "His coffee brand", "year": "2017", "mentions": "3", "hours": "25.4", "per_100h": "11.83", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2018", "mentions": "1", "hours": "75.8", "per_100h": "1.32", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2019", "mentions": "2", "hours": "201.3", "per_100h": "0.99", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2020", "mentions": "4", "hours": "274.1", "per_100h": "1.46", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2021", "mentions": "16", "hours": "247.3", "per_100h": "6.47", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2022", "mentions": "385", "hours": "290.8", "per_100h": "132.41", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2023", "mentions": "652", "hours": "259.4", "per_100h": "251.32", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2024", "mentions": "346", "hours": "309.8", "per_100h": "111.68", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2025", "mentions": "475", "hours": "583.1", "per_100h": "81.47", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "His coffee brand", "year": "2026", "mentions": "340", "hours": "464.1", "per_100h": "73.27", "query": "\"coffee brand\" OR \"my coffee\" OR \"our coffee\" OR \"coffee company\""}, {"topic": "Super chats & donations", "year": "2017", "mentions": "11", "hours": "25.4", "per_100h": "43.39", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2018", "mentions": "83", "hours": "75.8", "per_100h": "109.46", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2019", "mentions": "120", "hours": "201.3", "per_100h": "59.61", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2020", "mentions": "272", "hours": "274.1", "per_100h": "99.24", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2021", "mentions": "242", "hours": "247.3", "per_100h": "97.87", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2022", "mentions": "281", "hours": "290.8", "per_100h": "96.64", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2023", "mentions": "219", "hours": "259.4", "per_100h": "84.42", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2024", "mentions": "257", "hours": "309.8", "per_100h": "82.95", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2025", "mentions": "546", "hours": "583.1", "per_100h": "93.64", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Super chats & donations", "year": "2026", "mentions": "417", "hours": "464.1", "per_100h": "89.86", "query": "\"super chat\" OR superchat OR superchats OR donation OR donations"}, {"topic": "Costco", "year": "2017", "mentions": "0", "hours": "25.4", "per_100h": "0.0", "query": "costco"}, {"topic": "Costco", "year": "2018", "mentions": "0", "hours": "75.8", "per_100h": "0.0", "query": "costco"}, {"topic": "Costco", "year": "2019", "mentions": "0", "hours": "201.3", "per_100h": "0.0", "query": "costco"}, {"topic": "Costco", "year": "2020", "mentions": "3", "hours": "274.1", "per_100h": "1.09", "query": "costco"}, {"topic": "Costco", "year": "2021", "mentions": "1", "hours": "247.3", "per_100h": "0.4", "query": "costco"}, {"topic": "Costco", "year": "2022", "mentions": "0", "hours": "290.8", "per_100h": "0.0", "query": "costco"}, {"topic": "Costco", "year": "2023", "mentions": "12", "hours": "259.4", "per_100h": "4.63", "query": "costco"}, {"topic": "Costco", "year": "2024", "mentions": "19", "hours": "309.8", "per_100h": "6.13", "query": "costco"}, {"topic": "Costco", "year": "2025", "mentions": "81", "hours": "583.1", "per_100h": "13.89", "query": "costco"}, {"topic": "Costco", "year": "2026", "mentions": "62", "hours": "464.1", "per_100h": "13.36", "query": "costco"}, {"topic": "Lolcow / Kino Casino", "year": "2017", "mentions": "1", "hours": "25.4", "per_100h": "3.94", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2018", "mentions": "0", "hours": "75.8", "per_100h": "0.0", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2019", "mentions": "1", "hours": "201.3", "per_100h": "0.5", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2020", "mentions": "3", "hours": "274.1", "per_100h": "1.09", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2021", "mentions": "2", "hours": "247.3", "per_100h": "0.81", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2022", "mentions": "1", "hours": "290.8", "per_100h": "0.34", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2023", "mentions": "1", "hours": "259.4", "per_100h": "0.39", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2024", "mentions": "3", "hours": "309.8", "per_100h": "0.97", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2025", "mentions": "4", "hours": "583.1", "per_100h": "0.69", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}, {"topic": "Lolcow / Kino Casino", "year": "2026", "mentions": "7", "hours": "464.1", "per_100h": "1.51", "query": "lolcow OR \"kino casino\" OR \"lolcow cinema\""}], "lengths": [{"order": "0", "length": "Under 10 min", "videos": "701", "hours": "97.9"}, {"order": "1", "length": "10-20 min", "videos": "10534", "hours": "2213.0"}, {"order": "2", "length": "20-30 min", "videos": "95", "hours": "35.8"}, {"order": "3", "length": "30-60 min", "videos": "24", "hours": "18.0"}, {"order": "4", "length": "1-2 h", "videos": "183", "hours": "282.3"}, {"order": "5", "length": "2-4 h", "videos": "33", "hours": "79.4"}, {"order": "6", "length": "4 h +", "videos": "1", "hours": "4.6"}], "title_words": [{"word": "MELTDOWN", "titles": "380", "share": "0.0328"}, {"word": "DESTROYED", "titles": "319", "share": "0.0276"}, {"word": "WOKE", "titles": "301", "share": "0.026"}, {"word": "INSANE", "titles": "286", "share": "0.0247"}, {"word": "BLASTED", "titles": "278", "share": "0.024"}, {"word": "BUSTED", "titles": "251", "share": "0.0217"}, {"word": "BLASTS", "titles": "196", "share": "0.0169"}, {"word": "HUGE", "titles": "190", "share": "0.0164"}, {"word": "MASSIVE", "titles": "183", "share": "0.0158"}, {"word": "BOMBSHELL", "titles": "173", "share": "0.015"}, {"word": "FIRED", "titles": "173", "share": "0.015"}, {"word": "SJW", "titles": "165", "share": "0.0143"}, {"word": "NUCLEAR", "titles": "158", "share": "0.0137"}, {"word": "ICE", "titles": "147", "share": "0.0127"}, {"word": "ROASTED", "titles": "147", "share": "0.0127"}, {"word": "DESTROYS", "titles": "144", "share": "0.0124"}, {"word": "BANNED", "titles": "143", "share": "0.0124"}, {"word": "BRUTAL", "titles": "141", "share": "0.0122"}, {"word": "DOWN", "titles": "114", "share": "0.0099"}, {"word": "DEMOLISHED", "titles": "111", "share": "0.0096"}], "receipts": [{"story": "Costco and his dog", "date": "2026-08-26", "channel": "TheQuartering", "title": "I WAS TERRIFIED", "quote": "It's my opinion that Costco pharmacy gave him bad pills.", "fit": "strong", "link": "https://www.youtube.com/watch?v=BZCS-Azx_iE&t=474s", "key": "yt-BZCS-Azx_iE@474"}, {"story": "Costco and his dog", "date": "2026-08-26", "channel": "TheQuartering", "title": "I WAS TERRIFIED", "quote": "I will be suing both Costco and the manufacturer of these pills.", "fit": "strong", "link": "https://www.youtube.com/watch?v=BZCS-Azx_iE&t=861s", "key": "yt-BZCS-Azx_iE@861"}, {"story": "Costco and his dog", "date": "2025-12-02", "channel": "TheQuartering", "title": "COSTCO Enrages Customers With Wildly Greedy & Unamerican Move", "quote": "I have five big dogs and their dog food is great and comparatively inexpensive.", "fit": "strong", "link": "https://www.youtube.com/watch?v=waF76PwdlS8&t=389s", "key": "yt-waF76PwdlS8@389"}, {"story": "YouTube Shorts", "date": "2025-10-30", "channel": "TheQuartering", "title": "Youtube Collapses! All Staff Offered Buyouts Or Layoffs As AI Has Decimated Entire Platform!", "quote": "If you try to go to shorts, it's full of AI garbage.", "fit": "strong", "link": "https://www.youtube.com/watch?v=G9jfiWY5PTY&t=35s", "key": "yt-G9jfiWY5PTY@35"}, {"story": "YouTube Shorts", "date": "2025-10-31", "channel": "QuarteringLive", "title": "Food Wars Begin!  Terror Plot Foiled & Much More!", "quote": "Shorts are getting prioritized over long form video, which I see in my ad revenue.", "fit": "strong", "link": "https://www.youtube.com/watch?v=Ouq9xAMYQ9U&t=1163s", "key": "yt-Ouq9xAMYQ9U@1163"}, {"story": "YouTube Shorts", "date": "2026-03-18", "channel": "Jeremy Hambly", "title": "YOUTUBE IS TRASH NOW!", "quote": "I'll do millions of YouTube short views this month. It will translate to be about 200 to $500.", "fit": "strong", "link": "https://www.youtube.com/watch?v=zaw6jClZ5u0&t=244s", "key": "yt-zaw6jClZ5u0@244"}, {"story": "Coffee gift boxes", "date": "2023-04-26", "channel": "TheQuartering", "title": "Tucker Carlson Firing Takes A DARK Turn! Fox Has Blackmail Material On Him & Ratings& Stock Plummet!", "quote": "We put together some amazing gift boxes for Mother's Day.", "fit": "strong", "link": "https://www.youtube.com/watch?v=05_0u8aEjDo&t=64s", "key": "yt-05_0u8aEjDo@64"}, {"story": "Coffee gift boxes", "date": "2024-02-08", "channel": "TheQuartering", "title": "Tucker Carlson ATTACKS Go NUCLEAR! MSM, Hillary Clinton & More In FULL BLOWN PANIC For Putin Tonight", "quote": "We have a limited quantity available of our pre-made Valentine's Day gift box.", "fit": "strong", "link": "https://www.youtube.com/watch?v=P-mPsjhOQmM&t=209s", "key": "yt-P-mPsjhOQmM@209"}, {"story": "Coffee gift boxes", "date": "2025-05-03", "channel": "TheQuartering", "title": "Woke Professor CONFRONTED After VANDALIZING Cybertruck & HILARITY Ensues!", "quote": "So I promise I'll never shill another gift box on Amazon again, but I really need your help too.", "fit": "strong", "link": "https://www.youtube.com/watch?v=Z3JtEbsmodA&t=69s", "key": "yt-Z3JtEbsmodA@69"}, {"story": "Rumble", "date": "2023-09-21", "channel": "TheQuartering", "title": "Google BUSTED Hiding Youtube Competitors Hit With Multi-Billion Dollar Lawsuit & The DOJ!", "quote": "I would never tell people to leave YouTube and come to Rumble, but I would encourage people to give it a try", "fit": "maybe", "link": "https://www.youtube.com/watch?v=Opdl8XIwtwk&t=699s", "key": "yt-Opdl8XIwtwk@699"}]};
+  window.dash = {
+    colors: ["#2f6fb2", "#d0782a", "#3f9a6b", "#8a5cc2", "#c2456b", "#6b7a8f", "#b59a2f", "#2aa3b5"],
+    data: (id) => ({ status: "ok", data: window.__DATA__[id] || [], columns: Object.keys((window.__DATA__[id] || [{}])[0] || {}) }),
+    onData: (fn) => { const run = () => fn(); if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run); else run(); },
+  };
+</script>
+</head><body><div id="dash-root">
+<style>
+  .ja { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); color: var(--color-fg); }
+  .ja-head { display: flex; flex-direction: column; gap: var(--cds-gap-xs); }
+  .ja-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .ja-lede { color: var(--color-fg-muted); font-size: var(--cds-font-size-body); margin: 0; max-width: 70ch; }
+  .ja-lede b { font-weight: 500; color: var(--color-fg); }
+  .ja-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--cds-gap-md); }
+  .ja-tile { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-xs); min-width: 0; }
+  .ja-tile-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .ja-tile-value { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+  .ja-tile-note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); min-height: 1.3em; }
+  .ja-section { display: flex; flex-direction: column; gap: var(--cds-gap-md); }
+  .ja-h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+  .ja-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cds-gap-md); }
+  .ja-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
+  .ja-card h3 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+  .ja-note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0; }
+  .ja-chart { position: relative; min-width: 0; }
+  .ja-chart svg { display: block; overflow: visible; }
+  .ja-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm) var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .ja-legend span { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); }
+  .ja-legend i { width: 0.6rem; height: 0.6rem; border-radius: 2px; display: inline-block; }
+  .ja-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); max-width: min(24rem, 92%); z-index: 2; }
+  .ja-tip .t { color: var(--cds-text-secondary); margin-bottom: 2px; }
+  .ja-tip .r { display: flex; align-items: center; gap: var(--cds-gap-xs); font-variant-numeric: tabular-nums; }
+  .ja-tip i { width: 0.5rem; height: 0.5rem; border-radius: 2px; display: inline-block; }
+  .ja-bars { display: flex; flex-direction: column; gap: var(--cds-gap-xs); min-height: 12rem; }
+  .ja-bar { display: grid; grid-template-columns: minmax(5.5rem, 8rem) minmax(0, 1fr) 7.5rem; align-items: center; gap: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); }
+  .ja-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ja-bar-track { height: 0.85rem; }
+  .ja-bar-fill { height: 100%; border-radius: 4px; min-width: 2px; }
+  .ja-bar-val { text-align: right; font-variant-numeric: tabular-nums; color: var(--color-fg-muted); }
+  .ja-fail { display: flex; align-items: center; justify-content: center; gap: var(--cds-gap-xs); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); min-height: inherit; height: 100%; }
+  .ja-fail::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--color-bad); }
+  .ja-table-wrap { overflow-x: auto; }
+  .ja-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); }
+  .ja-table th { text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .ja-table td { padding: var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+  .ja-table td.q { min-width: 16rem; font-size: var(--cds-font-size-body); }
+  .ja-table td.nowrap { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ja-table td.vid { color: var(--color-fg-muted); min-width: 10rem; }
+  .ja-pill { display: inline-block; padding: 0 var(--cds-pad-xs); border-radius: 999px; border: 1px solid currentColor; font-size: var(--cds-font-size-caption); }
+  .ja-pill.strong { color: var(--color-ok); }
+  .ja-pill.maybe { color: var(--color-warn); }
+  .ja-table a { color: inherit; }
+  [data-dash-source-state=empty] { color: transparent; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+  @media (prefers-reduced-motion: no-preference) {
+    .ja-grow { animation: ja-grow var(--cds-dur-slow) var(--cds-ease-out) both; transform-origin: left center; }
+    @keyframes ja-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  }
+</style>
+
+<div class="ja">
+  <header class="ja-head">
+    <h1 class="ja-title" id="top">Jer archive</h1>
+    <p class="ja-lede" id="lede">
+      <b class="dash-skeleton" data-source="summary" data-field="videos" data-row="0">—</b> long-form videos,
+      <b class="dash-skeleton" data-source="summary" data-field="hours" data-row="0">—</b> hours from
+      <b class="dash-skeleton" data-source="summary" data-field="first" data-row="0">—</b> to
+      <b class="dash-skeleton" data-source="summary" data-field="last" data-row="0">—</b>, transcribed word by word
+      and searchable to the second with <code>clipper archive search</code> and <code>ask</code>.
+    </p>
+  </header>
+
+  <div class="ja-tiles">
+    <div class="ja-tile"><span class="ja-tile-label">Videos</span>
+      <span class="ja-tile-value dash-skeleton" id="t-videos" data-source="summary" data-field="videos" data-row="0">—</span>
+      <span class="ja-tile-note">TheQuartering, QuarteringLive, Jeremy Hambly, vlogs</span></div>
+    <div class="ja-tile"><span class="ja-tile-label">Hours</span>
+      <span class="ja-tile-value dash-skeleton" id="t-hours" data-source="summary" data-field="hours" data-row="0">—</span>
+      <span class="ja-tile-note">YouTube only; Rumble isn't in the archive yet</span></div>
+    <div class="ja-tile"><span class="ja-tile-label">Words transcribed</span>
+      <span class="ja-tile-value dash-skeleton" id="t-words" data-source="summary" data-field="words" data-row="0">—</span>
+      <span class="ja-tile-note">WhisperX large-v3 on Modal</span></div>
+    <div class="ja-tile"><span class="ja-tile-label">Searchable windows</span>
+      <span class="ja-tile-value dash-skeleton" id="t-windows" data-source="summary" data-field="windows" data-row="0">—</span>
+      <span class="ja-tile-note">~30 s each, every one a link to the moment</span></div>
+  </div>
+
+  <section class="ja-section" id="output">
+    <h2 class="ja-h2">How much he puts out</h2>
+    <div class="ja-card">
+      <h3>Hours uploaded per month</h3>
+      <p class="ja-note">Long-form only, by channel. Shorts were left out of the archive.</p>
+      <div class="ja-legend" id="month-legend" data-source="monthly"></div>
+      <div class="ja-chart" id="months" data-source="monthly" style="min-height: 260px"></div>
+    </div>
+  </section>
+
+  <section class="ja-section" id="topics-section">
+    <h2 class="ja-h2">When he talks about what</h2>
+    <div class="ja-card">
+      <h3>Mentions per 100 hours of video, by year</h3>
+      <p class="ja-note">Transcript windows that match each search, divided by that year's hours, so busy years don't win by volume. Each row is shaded on its own scale; hover a cell for the count and the search behind it.</p>
+      <div class="ja-chart" id="heat" data-source="topics" style="min-height: 360px"></div>
+    </div>
+  </section>
+
+  <section class="ja-section" id="shape">
+    <h2 class="ja-h2">The shape of a Quartering video</h2>
+    <div class="ja-grid">
+      <div class="ja-card">
+        <h3>Video length</h3>
+        <p class="ja-note">Videos per length band, then the hours that band adds up to.</p>
+        <div class="ja-bars" id="lengths" data-source="lengths"></div>
+      </div>
+      <div class="ja-card">
+        <h3>Title words in capitals</h3>
+        <p class="ja-note">Titles using each ALL-CAPS word, then their share of all titles (acronyms left out).</p>
+        <div class="ja-bars" id="words" data-source="title_words"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ja-section" id="receipts-section">
+    <h2 class="ja-h2">Receipts found so far</h2>
+    <div class="ja-card">
+      <h3>From the first <code>archive ask</code> tests</h3>
+      <p class="ja-note">Picked by Haiku from the index, not yet checked in context. The time opens the video a few seconds early.</p>
+      <div class="ja-table-wrap">
+        <table class="ja-table" id="receipts" data-source="receipts" data-row-key="key">
+          <thead><tr>
+            <th data-field="story">Story</th><th data-field="date">Date</th><th data-field="quote">What he said</th>
+            <th data-field="fit">Fit</th><th data-field="link">At</th><th data-field="title">Video</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const fmt = d3.format(',');
+  const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+  const fmtDate = (s) => d3.utcFormat('%b %Y')(new Date(s + 'T00:00:00Z'));
+  const fmtDay = (s) => d3.utcFormat('%b %-d, %Y')(new Date(s + 'T00:00:00Z'));
+  const CHANNELS = ['TheQuartering', 'QuarteringLive', 'Jeremy Hambly', 'QuarteringVlogs'];
+  let animated = {};
+
+  function placeholder(el, d, skeleton) {
+    el.classList.remove('dash-skeleton');
+    if (d.status === 'error' || d.status === 'connect' || d.status === 'declined') {
+      el.innerHTML = '';
+      const f = document.createElement('div');
+      f.className = 'ja-fail';
+      f.textContent = 'Failed to load';
+      el.appendChild(f);
+    } else {
+      el.innerHTML = '';
+      if (skeleton) el.classList.add('dash-skeleton');
+    }
+  }
+
+  function tipIn(box) {
+    let tip = box.querySelector('.ja-tip');
+    if (!tip) { tip = document.createElement('div'); tip.className = 'ja-tip'; tip.hidden = true; box.appendChild(tip); }
+    return tip;
+  }
+  function placeTip(box, tip, x, y) {
+    tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight, bw = box.clientWidth;
+    let left = x + 12; if (left + w > bw) left = Math.max(0, x - w - 12);
+    tip.style.left = left + 'px'; tip.style.top = Math.max(0, y - h - 8) + 'px';
+  }
+  function tipLine(tip, color, text) {
+    const r = document.createElement('div'); r.className = 'r';
+    if (color) { const i = document.createElement('i'); i.style.background = color; r.appendChild(i); }
+    const s = document.createElement('span'); s.textContent = text; r.appendChild(s); tip.appendChild(r);
+  }
+  function tipTitle(tip, text) {
+    tip.innerHTML = ''; const t = document.createElement('div'); t.className = 't'; t.textContent = text; tip.appendChild(t);
+  }
+  function resolveColor(css) {  // a token's computed rgb, for d3.interpolateRgb
+    const s = document.createElement('span'); s.style.color = css; s.hidden = false;
+    document.getElementById('dash-root').appendChild(s);
+    const c = getComputedStyle(s).color; s.remove(); return c;
+  }
+
+  // ---------- header and tiles ----------
+  function drawSummary() {
+    const d = dash.data('summary');
+    const marks = document.querySelectorAll('[data-source="summary"]');
+    if (d.status !== 'ok' || !d.data.length) {
+      marks.forEach((el) => { el.textContent = d.status === 'error' ? 'Failed to load' : '—'; });
+      return;
+    }
+    const r = d.data[0];
+    marks.forEach((el) => {
+      el.classList.remove('dash-skeleton');
+      const f = el.dataset.field, v = r[f];
+      if (f === 'first' || f === 'last') el.textContent = fmtDate(v);
+      else if (el.classList.contains('ja-tile-value') && (f === 'words' || f === 'windows')) el.textContent = compact.format(Number(v));
+      else el.textContent = fmt(Math.round(Number(v)));
+    });
+  }
+
+  // ---------- monthly stacked bars ----------
+  function drawMonths() {
+    const box = document.getElementById('months');
+    const legend = document.getElementById('month-legend');
+    const d = dash.data('monthly');
+    if (d.status !== 'ok') { placeholder(box, d, true); legend.innerHTML = ''; return; }
+    box.classList.remove('dash-skeleton');
+    const rows = d.data.map((r) => ({ month: r.month, channel: r.channel, hours: Number(r.hours), videos: Number(r.videos) }));
+    const channels = CHANNELS.filter((c) => rows.some((r) => r.channel === c))
+      .concat([...new Set(rows.map((r) => r.channel))].filter((c) => !CHANNELS.includes(c)));
+    const color = (c) => dash.colors[channels.indexOf(c) % dash.colors.length];
+    // every month from the first to the last, so gaps show as gaps
+    const ms = rows.map((r) => r.month).sort();
+    const months = d3.utcMonth.range(new Date(ms[0] + '-01T00:00:00Z'), d3.utcMonth.offset(new Date(ms[ms.length - 1] + '-01T00:00:00Z'), 1))
+      .map(d3.utcFormat('%Y-%m'));
+    const by = d3.rollup(rows, (v) => v[0], (r) => r.month, (r) => r.channel);
+    const table = months.map((m) => Object.assign({ month: m }, ...channels.map((c) => ({ [c]: by.get(m)?.get(c)?.hours || 0 }))));
+    const series = d3.stack().keys(channels)(table);
+
+    legend.innerHTML = '';
+    channels.forEach((c) => {
+      const s = document.createElement('span'); const i = document.createElement('i');
+      i.style.background = color(c); s.appendChild(i); s.appendChild(document.createTextNode(c)); legend.appendChild(s);
+    });
+
+    const W = box.clientWidth, H = 260;
+    box.innerHTML = '';
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const ymax = d3.max(table, (t) => d3.sum(channels, (c) => t[c])) || 1;
+    const y = d3.scaleLinear([0, ymax], [H - 22, 6]).nice();
+    // measure the widest y tick to set the left margin
+    const probe = svg.append('text').attr('font-size', 'var(--cds-font-size-caption)').text(fmt(y.ticks(4).slice(-1)[0]));
+    const ml = Math.ceil(probe.node().getComputedTextLength()) + 8; probe.remove();
+    const x = d3.scaleBand(months, [ml, W - 4]).paddingInner(0.18);
+    svg.append('g').selectAll('line').data(y.ticks(4)).join('line')
+      .attr('x1', ml).attr('x2', W - 4).attr('y1', (t) => y(t)).attr('y2', (t) => y(t))
+      .attr('stroke', 'var(--cds-chart-grid)').attr('stroke-width', 1);
+    svg.append('g').selectAll('text').data(y.ticks(4)).join('text')
+      .attr('x', ml - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+      .attr('fill', 'var(--color-fg-muted)').attr('font-size', 'var(--cds-font-size-caption)').text((t) => fmt(t));
+    const years = months.filter((m) => m.endsWith('-01'));
+    const step = Math.max(1, Math.ceil(years.length / Math.max(1, Math.floor((W - ml) / 46))));
+    svg.append('g').selectAll('text').data(years.filter((_, i) => i % step === 0)).join('text')
+      .attr('x', (m) => x(m)).attr('y', H - 4).attr('fill', 'var(--color-fg-muted)')
+      .attr('font-size', 'var(--cds-font-size-caption)').text((m) => m.slice(0, 4));
+    svg.append('line').attr('x1', ml).attr('x2', W - 4).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-axis)');
+    const g = svg.append('g');
+    g.selectAll('g').data(series).join('g').attr('fill', (s) => color(s.key))
+      .selectAll('rect').data((s) => s).join('rect')
+      .attr('x', (p) => x(p.data.month)).attr('width', x.bandwidth())
+      .attr('y', (p) => y(p[1])).attr('height', (p) => Math.max(0, y(p[0]) - y(p[1]))).attr('rx', Math.min(2, x.bandwidth() / 2));
+    // hover: one invisible column per month
+    const tip = tipIn(box);
+    svg.append('g').selectAll('rect').data(table).join('rect')
+      .attr('x', (t) => x(t.month) - x.step() * x.paddingInner() / 2).attr('width', x.step())
+      .attr('y', 0).attr('height', H - 22).attr('fill', 'transparent')
+      .on('mousemove', (ev, t) => {
+        tipTitle(tip, fmtDate(t.month + '-01'));
+        channels.filter((c) => t[c] > 0).forEach((c) => {
+          const v = by.get(t.month)?.get(c);
+          tipLine(tip, color(c), `${c}: ${d3.format(',.1f')(t[c])} h, ${fmt(v.videos)} videos`);
+        });
+        if (!channels.some((c) => t[c] > 0)) tipLine(tip, null, 'No uploads');
+        const [mx, my] = d3.pointer(ev, box); placeTip(box, tip, mx, my);
+      })
+      .on('mouseleave', () => { tip.hidden = true; });
+  }
+
+  // ---------- topic heatmap ----------
+  function drawHeat() {
+    const box = document.getElementById('heat');
+    const d = dash.data('topics');
+    if (d.status !== 'ok') { placeholder(box, d, true); return; }
+    box.classList.remove('dash-skeleton');
+    const rows = d.data.map((r) => ({ topic: r.topic, year: r.year, per: Number(r.per_100h), n: Number(r.mentions), hours: Number(r.hours), query: r.query }));
+    const topics = [...new Set(rows.map((r) => r.topic))];
+    const years = [...new Set(rows.map((r) => r.year))].sort();
+    const W = box.clientWidth, rowH = 32, top = 22, H = top + topics.length * rowH + 4;
+    box.innerHTML = '';
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const probe = svg.append('g');
+    topics.forEach((t) => probe.append('text').attr('font-size', 'var(--cds-font-size-caption)').text(t));
+    const lw = Math.min(W * 0.42, d3.max(probe.selectAll('text').nodes(), (n) => n.getComputedTextLength()) + 12);
+    probe.remove();
+    const x = d3.scaleBand(years, [lw, W]).paddingInner(0.06);
+    const yb = d3.scaleBand(topics, [top, top + topics.length * rowH]).paddingInner(0.12);
+    const lo = resolveColor('var(--color-panel)'), hi = resolveColor(dash.colors[0]);
+    const ramp = d3.interpolateRgb(lo, hi);
+    const ystep = Math.max(1, Math.ceil(years.length / Math.max(1, Math.floor((W - lw) / 34))));
+    svg.append('g').selectAll('text').data(years.filter((_, i) => i % ystep === 0)).join('text')
+      .attr('x', (yr) => x(yr) + x.bandwidth() / 2).attr('y', 12).attr('text-anchor', 'middle')
+      .attr('fill', 'var(--color-fg-muted)').attr('font-size', 'var(--cds-font-size-caption)').text((yr) => yr);
+    svg.append('g').selectAll('text').data(topics).join('text')
+      .attr('x', 0).attr('y', (t) => yb(t) + yb.bandwidth() / 2).attr('dy', '0.32em')
+      .attr('fill', 'var(--color-fg)').attr('font-size', 'var(--cds-font-size-caption)').text((t) => t);
+    const maxBy = d3.rollup(rows, (v) => d3.max(v, (r) => r.per) || 1, (r) => r.topic);
+    const tip = tipIn(box);
+    const cells = svg.append('g').selectAll('g').data(rows).join('g')
+      .attr('transform', (r) => `translate(${x(r.year)},${yb(r.topic)})`);
+    cells.append('rect').attr('width', x.bandwidth()).attr('height', yb.bandwidth()).attr('rx', 4)
+      .attr('fill', (r) => ramp(0.08 + 0.92 * (r.per / maxBy.get(r.topic))))
+      .attr('stroke', 'var(--color-border-line)').attr('stroke-width', 0.5);
+    if (x.bandwidth() >= 26) {
+      cells.append('text').attr('x', x.bandwidth() / 2).attr('y', yb.bandwidth() / 2).attr('dy', '0.32em')
+        .attr('text-anchor', 'middle').attr('font-size', 'var(--cds-font-size-caption)')
+        .attr('fill', (r) => (r.per / maxBy.get(r.topic) > 0.55 ? 'var(--color-bg)' : 'var(--color-fg-muted)'))
+        .style('font-variant-numeric', 'tabular-nums').attr('pointer-events', 'none')
+        .text((r) => (r.per === 0 ? '' : r.per < 10 ? d3.format('.1f')(r.per) : fmt(Math.round(r.per))));
+    }
+    cells.on('mousemove', (ev, r) => {
+      tipTitle(tip, `${r.topic}, ${r.year}`);
+      tipLine(tip, null, `${d3.format(',.1f')(r.per)} per 100 h`);
+      tipLine(tip, null, `${fmt(r.n)} windows in ${fmt(Math.round(r.hours))} h of video`);
+      tipLine(tip, null, `Search: ${r.query}`);
+      const [mx, my] = d3.pointer(ev, box); placeTip(box, tip, mx, my);
+    }).on('mouseleave', () => { tip.hidden = true; });
+  }
+
+  // ---------- HTML bar lists ----------
+  function barList(id, source, label, value, valueText, color, sideText) {
+    const box = document.getElementById(id);
+    const d = dash.data(source);
+    if (d.status !== 'ok') { placeholder(box, d, true); return; }
+    box.classList.remove('dash-skeleton');
+    const rows = d.data.slice();
+    const max = d3.max(rows, (r) => value(r)) || 1;
+    box.innerHTML = '';
+    rows.forEach((r) => {
+      const row = document.createElement('div'); row.className = 'ja-bar';
+      const l = document.createElement('span'); l.className = 'ja-bar-label'; l.textContent = label(r);
+      const track = document.createElement('div'); track.className = 'ja-bar-track';
+      const fill = document.createElement('div'); fill.className = 'ja-bar-fill' + (animated[id] ? '' : ' ja-grow');
+      fill.style.width = (100 * value(r) / max) + '%'; fill.style.background = color;
+      track.appendChild(fill);
+      const v = document.createElement('span'); v.className = 'ja-bar-val';
+      v.textContent = `${valueText(r)} · ${sideText(r)}`;
+      row.append(l, track, v); box.appendChild(row);
+    });
+    animated[id] = true;
+  }
+
+  // ---------- receipts table ----------
+  function drawReceipts() {
+    const table = document.getElementById('receipts');
+    const body = table.querySelector('tbody');
+    const d = dash.data('receipts');
+    body.innerHTML = '';
+    if (d.status !== 'ok') {
+      const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 6;
+      td.style.minHeight = '6rem';
+      if (d.status === 'error') { const f = document.createElement('div'); f.className = 'ja-fail'; f.textContent = 'Failed to load'; td.appendChild(f); }
+      else td.className = 'dash-skeleton';
+      tr.appendChild(td); body.appendChild(tr); return;
+    }
+    d.data.forEach((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      const cell = (text, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = text; tr.appendChild(td); return td; };
+      cell(r.story, 'nowrap');
+      cell(fmtDay(r.date), 'nowrap');
+      cell('“' + r.quote + '”', 'q');
+      const fit = cell('', 'nowrap'); const p = document.createElement('span'); p.className = 'ja-pill ' + (r.fit === 'strong' ? 'strong' : 'maybe'); p.textContent = r.fit; fit.appendChild(p);
+      const at = cell('', 'nowrap'); const a = document.createElement('a');
+      const t = Number((r.link.match(/[?&]t=(\d+)s/) || [])[1] || 0);
+      a.href = r.link; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; at.appendChild(a);
+      cell(r.title, 'vid');
+      body.appendChild(tr);
+    });
+  }
+
+  dash.onData(() => {
+    drawSummary();
+    drawMonths();
+    drawHeat();
+    barList('lengths', 'lengths', (r) => r.length, (r) => Number(r.videos),
+      (r) => fmt(Number(r.videos)), dash.colors[0], (r) => `${fmt(Math.round(Number(r.hours)))} h`);
+    barList('words', 'title_words', (r) => r.word, (r) => Number(r.share),
+      (r) => fmt(Number(r.titles)), dash.colors[1], (r) => d3.format('.1%')(Number(r.share)));
+    drawReceipts();
+  });
+})();
+</script>
+
+<p class="ja-foot">Snapshot of 2026-10-25 from clipper's archive/jer/index.sqlite (YouTube long-form only).
+Receipts are model picks from `clipper archive ask`, not yet checked in context.</p>
+</div></body></html>

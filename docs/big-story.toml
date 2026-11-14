@@ -1,0 +1,26 @@
+# Big-story night: copy to streams/<id>/config.toml the night a story breaks (October check-in,
+# #42: the H3 night, kick-133940023 on 2026-10-23, was 72% of the month's views). Keys here
+# replace the show's whole value (config.for_stream), so stream_budget and stream_context are
+# given in full. `clipper config get schedule.stream_budget --stream <id>` shows what took.
+# Then `CLIPPER_SCHEDULE_START=<today> clipper schedule --reshuffle` if items are already approved.
+
+[signals]
+top_n = 45                 # chat windows sent to Pass A (default 30)
+
+[scoring]
+max_picks = 20             # more picks than a normal night
+scan_max_per_block = 5     # own-voice moments per 15-minute block (default 3)
+# Copy the show's own stream_context ([shows.<key>.scoring] in clipper.toml), then add the story:
+# who, what happened, the names people search for, and that each new detail, joke or take on it
+# is its own moment (the 2-per-category and 2-per-30-minutes limits don't apply to it).
+# stream_context = """... the show's text ...
+#
+# TONIGHT IS A BREAKING-NEWS NIGHT: ... Name <the people> in titles so the clips are found in search."""
+# known_figures = "... the show's list ..., <the people in the story>"
+
+[schedule]
+priority = true            # this night's items go ahead of every other stream's
+kick_first_hours = 0       # out as soon as approved, no Kick-first wait
+# Normal nights make no compilation (stream_budget compilation = 0); this one gets one, and more
+# Shorts. A Channel 404 night: segment = 6 (Don's usual).
+stream_budget = { segment = 10, short = 14, compilation = 1 }

@@ -15,14 +15,20 @@ notify.py) and a few slash commands, for [discord] allowed_user_ids only.
 
 Every [discord] refresh_minutes the bot also re-reads Kitsu for streams with posted cards
 and edits cards whose status, hold, pin, title or schedule changed outside Discord
-(clipper/cardsync.py). It logs to paths.bot_log as well as the console, and only one bot
-runs per streams folder (a lock file). deploy/discord/bot-task.ps1 runs it at logon.
-Every [preshow] poll_minutes it runs `clipper preshow check --run`: new pre-shows on the
-shows' YouTube channels are grabbed and put through the pipeline (clipper/preshow.py).
+(clipper/cardsync.py). Every minute it DMs the notifications other processes queued
+(clipper/alerts.py), and every few minutes it posts the stories `clipper news check`
+found. It logs to paths.bot_log as well as the console, only one bot runs per streams
+folder (a lock file), and it writes a heartbeat (clipper/daemon.py) that the war room's
+Health panel and `clipper services status` read. deploy/hub runs it as a container.
 
-There is no bulk approve and no upload from Discord: every release needs its own
-Approve, and `clipper upload` stays a separate job. Slash commands are registered on
-[discord] guild_id only. The bot needs no privileged intents.
+Everything that isn't Discord is `clipper serve` (clipper/serve.py): the war room, the
+hourly replan and upload, pre-show grabs, retakes and the daily jobs. The bot asks it over
+its API ([serve] url) to replan after a decision ([discord] replan) and to start a retake
+after "Changes": when serve isn't up, the decision is still in Kitsu and serve's next
+hourly run picks it up.
+
+There is no bulk approve: every release needs its own Approve. Slash commands are
+registered on [discord] guild_id only. The bot needs no privileged intents.
 """
 
 from __future__ import annotations
@@ -31,18 +37,17 @@ import asyncio
 import contextlib
 import io
 import logging
-import logging.handlers
 import os
-import sys
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import discord
 from discord import app_commands
 
-from . import actions, alerts, cardsync, notify, preshow, retake, schedule
-from .config import _root
+from . import actions, alerts, cardsync, daemon, digest, news, notify, schedule, serve
+from .errors import ClipperError
+from .timefmt import length
 
 log = logging.getLogger("clipper.bot")
 
@@ -52,6 +57,7 @@ FORMS = {  # action: (modal title, field label, required, max length, multiline)
     "pin": ("Pin release time", "YYYY-MM-DD HH:MM, or a date; empty unpins", False, 16, False),
     "thumbtext": ("Thumbnail text", "2-4 words on the thumbnail", True, 40, False),
 }
+NEWS_POST_S = 300  # how often the bot posts what `clipper news check` (a serve job) found
 DONE = {"approve": "Approved", "reject": "Rejected", "changes": "Changes requested for",
         "reopen": "Reopened", "hold": "Hold toggled on", "pin": "Pinned",
         "thumbtext": "New thumbnail text for"}
@@ -159,16 +165,8 @@ class Bot(discord.Client):
         self.allowed = notify.user_ids(dc)
         self.guild_id = int(dc["guild_id"]) if dc["guild_id"] else None
         self.tree = app_commands.CommandTree(self)
-        self.lock = asyncio.Lock()  # one Kitsu/schedule job at a time
-        self.retake_proc: asyncio.subprocess.Process | None = None
-        self.retake_again = False
-        self.upload_proc: asyncio.subprocess.Process | None = None
-        self.last_upload = 0.0
-        self.analytics_proc: asyncio.subprocess.Process | None = None
-        self.preshow_proc: asyncio.subprocess.Process | None = None
-        self.last_analytics = 0.0
-        self.tiktok_proc: asyncio.subprocess.Process | None = None
-        self.last_tiktok = 0.0
+        self.lock = asyncio.Lock()  # one Kitsu job at a time
+        self.started_at = datetime.now(UTC).isoformat(timespec="seconds")
         register_commands(self)
 
     async def setup_hook(self) -> None:
@@ -178,10 +176,11 @@ class Bot(discord.Client):
         await self.tree.sync(guild=guild)
         if self.cfg["discord"]["refresh_minutes"] > 0:
             self.loop.create_task(self.refresh_cards())
-        if preshow.watched(self.cfg) and self.cfg["preshow"]["poll_minutes"] > 0:
-            self.loop.create_task(self.preshow_loop())
+        if self.cfg["news"]["check_minutes"] > 0:
+            self.loop.create_task(self.news_loop())
         if self.cfg["notify"]["enabled"]:
             self.loop.create_task(self.notify_loop())
+        self.loop.create_task(self.beat_loop())
 
     async def on_ready(self) -> None:
         log.info(f"clipper bot ready as {self.user} in guild {self.guild_id}; "
@@ -200,43 +199,31 @@ class Bot(discord.Client):
                         edited += await self.blocking(cardsync.refresh_stream, self.cfg, d)
                     except UserError as e:
                         log.warning(f"card refresh {d.name}: {e}")
-            except Exception:
+            except (Exception, SystemExit):
                 log.exception("card refresh failed")
             if edited:
                 log.info(f"card refresh: {edited} card(s) updated")
-            every_up = self.cfg["youtube"]["auto_upload_minutes"] * 60
-            if every_up > 0 and time.monotonic() - self.last_upload >= every_up \
-                    and not (self.upload_proc and self.upload_proc.returncode is None):
-                self.last_upload = time.monotonic()
-                self.loop.create_task(self._auto_upload())
-            every_tt = self.cfg["tiktok"]["auto_send_minutes"] * 60
-            if every_tt > 0 and time.monotonic() - self.last_tiktok >= every_tt \
-                    and self.cfg["paths"]["tiktok_token"].exists() \
-                    and not (self.tiktok_proc and self.tiktok_proc.returncode is None):
-                self.last_tiktok = time.monotonic()
-                self.loop.create_task(self._clipper_bg("tiktok", ["tiktok", "--auto"]))
-            every_an =self.cfg["analytics"]["auto_hours"] * 3600
-            if every_an > 0 and time.monotonic() - self.last_analytics >= every_an \
-                    and self.cfg["paths"]["youtube_token"].exists() \
-                    and '"uploaded"' in (self.cfg["paths"]["schedule"].read_text(encoding="utf-8")
-                                         if self.cfg["paths"]["schedule"].exists() else ""):
-                self.last_analytics = time.monotonic()
-                self.loop.create_task(self._clipper_bg("analytics", ["analytics"]))
-            try:  # retake notes made in Kitsu since the last pass (review.json just synced)
-                if self.cfg["retake"]["auto"] and await asyncio.to_thread(retake.pending, self.cfg):
-                    self.start_retake()
-            except Exception:
-                log.exception("retake check failed")
             await asyncio.sleep(every)
 
-    async def preshow_loop(self) -> None:
-        """Grab new pre-shows from the shows' YouTube feeds and run them, every poll_minutes."""
+    async def beat_loop(self) -> None:
+        """The heartbeat `clipper services status` and the war room's Health panel read."""
         await self.wait_until_ready()
-        every = self.cfg["preshow"]["poll_minutes"] * 60
         while not self.is_closed():
-            if not (self.preshow_proc and self.preshow_proc.returncode is None):
-                self.loop.create_task(self._clipper_bg("preshow", ["preshow", "check", "--run"]))
-            await asyncio.sleep(every)
+            await asyncio.to_thread(daemon.beat, self.cfg, "bot", self.started_at,
+                                    user=str(self.user), guild=self.guild_id)
+            await asyncio.sleep(daemon.BEAT_S)
+
+    async def news_loop(self) -> None:
+        """Post the stories `clipper news check` (a serve job) found, every few minutes."""
+        await self.wait_until_ready()
+        await asyncio.sleep(90)  # after serve's first check
+        while not self.is_closed():
+            if news.watchlist(self.cfg):
+                try:
+                    await self.post_news()
+                except (Exception, SystemExit):
+                    log.exception("news: posting failed")
+            await asyncio.sleep(NEWS_POST_S)
 
     async def notify_loop(self) -> None:
         """DM the queued notifications (#22, clipper/alerts.py) every minute."""
@@ -246,15 +233,13 @@ class Bot(discord.Client):
         if not uid:
             log.warning("notify: no [notify] user_id or [discord] allowed_user_ids; no DMs")
             return
-        link = ""
-        if self.cfg["warroom"]["tailnet"]:
-            from . import warroom
-
-            link = (await asyncio.to_thread(warroom.tailnet_status, self.cfg))["served"]
+        link = ""  # the war room's tailnet URL for the DMs; serve knows it (and may not be up yet)
         share_down = 0.0
         while not self.is_closed():
             try:
-                msgs, files, st = await asyncio.to_thread(alerts.pending, self.cfg, link)
+                if not link and self.cfg["warroom"]["tailnet"]:
+                    link = await asyncio.to_thread(serve.tailnet_link, self.cfg)
+                msgs, files, st = await asyncio.to_thread(alerts.pending, self.cfg, link, digest.text)
                 if msgs:
                     user = self.get_user(uid) or await self.fetch_user(uid)
                     for m in msgs:
@@ -269,60 +254,128 @@ class Bot(discord.Client):
                     share_down = time.monotonic()
                     try:
                         user = self.get_user(uid) or await self.fetch_user(uid)
-                        await user.send(f"❌ clipper bot can't read the streams share: {e}")
+                        await user.send(f"❌ The Clippa bot can't read the streams share: {e}")
                     except Exception:
                         log.exception("notify: DM failed")
-            except Exception:
+            except (Exception, SystemExit):  # SystemExit would stop the event loop, and the bot
                 log.exception("notify pass failed")
             await asyncio.sleep(60)
 
-    def start_retake(self) -> None:
-        """`clipper retake` in the background: act on retake notes, republish for review.
-        A request while one runs makes it run once more when it ends."""
-        if not self.cfg["retake"]["auto"]:
-            return
-        if self.retake_proc and self.retake_proc.returncode is None:
-            self.retake_again = True
-            return
-        self.loop.create_task(self._retake())
+    async def news_channel(self):
+        """[news] channel_id; else the text channel named [news] channel, made if missing; else
+        the review channel. In a forum, one "News" post kept for it."""
+        nc, dc = self.cfg["news"], self.cfg["discord"]
+        name = str(nc["channel"]).strip().lstrip("#").lower()
+        if not nc["channel_id"] and name:
+            return await self.named_channel(name, "Headlines about the shows' people (clipper news): "
+                                                  "Dismiss what isn't news, Tonight's context for the next stream")
+        cid = int(nc["channel_id"] or dc["review_channel_id"] or 0)
+        if not cid:
+            raise ClipperError("set [news] channel (a name), channel_id or [discord] review_channel_id")
+        channel = self.get_channel(cid) or await self.fetch_channel(cid)
+        if not isinstance(channel, discord.ForumChannel):
+            return channel
+        path = news.home(self.cfg) / "discord.json"
+        state = await asyncio.to_thread(news.jsonstate.read, path, {})
+        if state.get("channel_id") == str(cid) and state.get("thread_id"):
+            with contextlib.suppress(discord.NotFound):
+                return self.get_channel(int(state["thread_id"])) or await self.fetch_channel(int(state["thread_id"]))
+        made = await channel.create_thread(name="News", content="📰 Headlines about the shows' people "
+                                           "(`clipper news`). Dismiss what isn't news; Tonight's context "
+                                           "adds a story to the show's next stream.")
+        await asyncio.to_thread(news.jsonstate.write, path, {"channel_id": str(cid), "thread_id": str(made.thread.id)})
+        return made.thread
 
-    async def _clipper_bg(self, name: str, args: list[str]) -> int | None:
-        """Run `clipper <args>` as a child process, its output into the bot log."""
-        cmd = [sys.executable, "-m", "clipper.cli"]
-        if _root(self.cfg).get("_file"):
-            cmd += ["--config", str(_root(self.cfg)["_file"])]
-        log.info(f"{name}: starting")
+    async def named_channel(self, name: str, topic: str) -> discord.TextChannel:
+        """The guild's text channel called name, made (with topic) if there is none."""
+        guild = self.get_guild(self.guild_id) or await self.fetch_guild(self.guild_id)
+        channel = discord.utils.get(guild.text_channels, name=name)
+        if channel:
+            return channel
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-                env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
-            setattr(self, f"{name}_proc", proc)
-            out, _ = await proc.communicate()
-            for line in out.decode("utf-8", "replace").splitlines():
-                if line.strip() and not line.startswith("["):  # skip ffmpeg decoder noise
-                    log.info(f"{name}: {line}")
-            log.info(f"{name}: done (exit {proc.returncode})")
-            if proc.returncode:  # #22: a background job failing is worth a DM (once per cooldown)
-                last = next((x.strip() for x in reversed(out.decode("utf-8", "replace").splitlines())
-                             if x.strip() and not x.startswith("[")), "")
-                alerts.send(self.cfg, "upload" if name in ("upload", "tiktok") else "failure",
-                            f"`clipper {' '.join(args)}` failed (exit {proc.returncode}): {last[:400]}",
-                            key=f"bg:{' '.join(args)}")
-            return proc.returncode
-        except Exception:
-            log.exception(f"{name} run failed")
-            return None
+            channel = await guild.create_text_channel(name, topic=topic[:1024], reason="clipper news")
+        except discord.Forbidden:
+            raise ClipperError(f"couldn't make #{name}: give the bot Manage Channels, or make the channel "
+                               "by hand") from None
+        log.info(f"news: made #{name}")
+        return channel
 
-    async def _auto_upload(self) -> None:
-        """Replan first (slots that passed get new ones), then upload what's due."""
-        if await self._clipper_bg("upload", ["schedule"]) == 0:
-            await self._clipper_bg("upload", ["upload"])
+    async def post_news(self) -> None:
+        cfg = self.cfg
+        todo = await asyncio.to_thread(news.unposted, cfg)
+        due = await asyncio.to_thread(news.due_suggestions, cfg) if cfg["news"]["preshow_minutes"] > 0 else []
+        if not todo and not due:
+            return
+        channel = await self.news_channel()
+        quiet = discord.AllowedMentions.none()  # headlines are outside text: never a ping
+        for s in todo:
+            view = discord.ui.View(timeout=None)
+            view.add_item(CardButton("newsctx", str(s["id"]), "Tonight's context", discord.ButtonStyle.primary))
+            view.add_item(CardButton("newsdismiss", str(s["id"]), "Dismiss"))
+            msg = await channel.send(news.post_text(cfg, s), view=view, allowed_mentions=quiet)
+            await asyncio.to_thread(news.mark, cfg, s["id"], posted_at=news.iso(news.now()), message_id=str(msg.id))
+        for d in due:
+            # The button carries the suggestion's number; its stories are kept with it.
+            n = await asyncio.to_thread(news.mark_suggested, cfg, d["slot"], d["show"], d["stories"])
+            view = discord.ui.View(timeout=None)
+            view.add_item(CardButton("newsctx", f"s{n}", f"Context for {d['show_name']}"[:80],
+                                     discord.ButtonStyle.primary))
+            start = datetime.fromisoformat(d["start"])
+            text = (f"🗞️ **{d['show_name']}** usually starts <t:{int(start.timestamp())}:R>. In the news today "
+                    "about its people:\n" + "\n".join(f"- #{i} {h}" for i, h in zip(d["stories"], d["headlines"])))
+            await channel.send(text[:1990], view=view, allowed_mentions=quiet)
+        log.info(f"news: posted {len(todo)} story(ies), {len(due)} pre-show suggestion(s)")
 
-    async def _retake(self) -> None:
-        await self._clipper_bg("retake", ["retake"])
-        if self.retake_again:
-            self.retake_again = False
-            self.start_retake()
+    async def news_button(self, interaction: discord.Interaction, action: str, ref: str) -> None:
+        """newsdismiss <id>; newsctx <id> (a story) or s<n> (a pre-show suggestion) shows the
+        context text exactly as it would be queued, with an Add button (newsadd <show>.<id> or
+        s<n>) that queues it for the show's next stream."""
+        cfg, quiet = self.cfg, discord.AllowedMentions.none()
+        show = ""
+        try:
+            if ref.startswith("s"):
+                show, ids = await asyncio.to_thread(news.suggestion, cfg, int(ref[1:]))
+            else:
+                show, _, ids_text = ref.rpartition(".")
+                ids = [int(x) for x in ids_text.split("-")]
+        except ValueError:
+            await interaction.response.send_message(f"Bad news button {ref}", ephemeral=True)
+            return
+        except ClipperError as e:
+            await interaction.response.send_message(f"Nothing changed: {e}", ephemeral=True)
+            return
+        show = "" if show == "-" else show
+        who = self.who(interaction)
+        try:
+            if action == "newsdismiss":
+                await asyncio.to_thread(news.dismiss, cfg, ids)
+                log.info(f"{who}: news dismiss {ids}")
+                await interaction.response.edit_message(
+                    content=f"~~{interaction.message.content[:1900]}~~\nDismissed by {interaction.user.name}.",
+                    view=None, allowed_mentions=quiet)
+            elif action == "newsctx":
+                found = await asyncio.to_thread(news.stories, cfg, 3, ids)
+                found.sort(key=lambda s: ids.index(s["id"]))
+                text, used = news.context_block(found)  # what Add queues, whole (at most CONTEXT_MAX)
+                show = show or (await asyncio.to_thread(news.story_show, cfg, found[0]) if found else "")
+                view = discord.ui.View(timeout=None)
+                add_ref = ref if ref.startswith("s") else f"{show or '-'}.{'-'.join(map(str, used))}"
+                view.add_item(CardButton("newsadd", add_ref, "Add it", discord.ButtonStyle.success))
+                await interaction.response.send_message(
+                    f"For {news.show_names(cfg).get(show, show) or 'which show? (`clipper news context --show`)'}'s "
+                    f"next stream, [scoring] stream_context gets:\n> {text}"[:2000],
+                    view=view if show and used else None, ephemeral=True, allowed_mentions=quiet)
+            elif action == "newsadd":
+                e = await asyncio.to_thread(news.set_context, cfg, ids, show, who)
+                log.info(f"{who}: news context {e['stories']} for {e['show']}")
+                await interaction.response.edit_message(
+                    content=f"Added to {news.show_names(cfg).get(e['show'], e['show'])}'s next stream: "
+                            f"the worker puts it in that stream's config.toml before scoring.", view=None)
+        except ClipperError as e:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"Nothing changed: {e}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Nothing changed: {e}", ephemeral=True)
 
     async def check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id in self.allowed and interaction.guild_id == self.guild_id:
@@ -336,13 +389,13 @@ class Bot(discord.Client):
         return False
 
     async def blocking(self, fn, *args, **kwargs):
-        """Run clipper code (sync, may print or raise SystemExit) off the event loop."""
+        """Run clipper code (sync, may print or raise ClipperError) off the event loop."""
         def run():
             out = io.StringIO()
             try:
                 with contextlib.redirect_stdout(out):
                     return fn(*args, **kwargs)
-            except SystemExit as e:
+            except (ClipperError, SystemExit) as e:
                 raise UserError(str(e)) from None
             finally:
                 if out.getvalue().strip():
@@ -356,11 +409,14 @@ class Bot(discord.Client):
     # ---------- buttons ----------
 
     async def on_button(self, interaction: discord.Interaction, action: str, ref: str) -> None:
+        if action.startswith("news"):
+            await self.news_button(interaction, action, ref)
+            return
         if action == "retitle":
             try:
                 item = actions.resolve(self.cfg, ref)
                 row = actions.describe(self.cfg, item.stream_dir)[item.key]
-            except (SystemExit, KeyError) as e:
+            except (ClipperError, KeyError) as e:
                 await interaction.response.send_message(f"Can't edit {ref}: {e}", ephemeral=True)
                 return
             await interaction.response.send_modal(Details(self, ref, row))
@@ -372,7 +428,7 @@ class Bot(discord.Client):
                     item = actions.resolve(self.cfg, ref)
                     row = actions.describe(self.cfg, item.stream_dir)[item.key]
                     default = row[{"pin": "publish_at", "thumbtext": "thumb_text"}[action]]
-                except (SystemExit, KeyError):
+                except (ClipperError, KeyError):
                     pass
             await interaction.response.send_modal(Form(self, action, ref, default[:100]))
             return
@@ -381,31 +437,13 @@ class Bot(discord.Client):
 
     def do(self, action: str, ref: str, text, who: str) -> tuple[dict, str]:
         """text: what the form said; for "details", {Kitsu column: new value}."""
-        cfg = self.cfg
-        item = actions.resolve(cfg, ref)
-        if action == "hold":
-            on = not actions.refresh(cfg, item)["hold"]
-            row = actions.hold(cfg, item, on, who)
-        else:
-            fn = {"approve": lambda: actions.approve(cfg, item, "", who),
-                  "reject": lambda: actions.reject(cfg, item, text, who),
-                  "changes": lambda: actions.changes(cfg, item, text, who),
-                  "reopen": lambda: actions.reopen(cfg, item, who),
-                  "pin": lambda: actions.pin(cfg, item, text, who),
-                  "details": lambda: actions.edit_meta(cfg, item, text, who),
-                  "thumbtext": lambda: actions.thumbtext(cfg, item, text, who)}.get(action)
-            if not fn:
-                raise SystemExit(f"unknown action {action!r}")
-            row = fn()
-        note = ""
-        if cfg["discord"]["replan"]:
-            schedule.run(cfg, sync_first=False)
-            row = actions.describe(cfg, item.stream_dir)[item.key]
-        if row["scheduled"]:
-            note = f"; scheduled {row['scheduled'][:16].replace('T', ' ')}"
-        elif row["decision"] == "approved" and cfg["discord"]["replan"]:
-            note = "; no free slot yet" if not row["hold"] else "; held, not scheduled"
-        return row, note
+        item = actions.resolve(self.cfg, ref)
+        if action == "details":  # the bot's name for an edit; its form gives {column: value}
+            row = actions.decide(self.cfg, item, "edit", who, values=text)
+        else:  # hold flips (on=None), as the card's one Hold button does
+            row = actions.decide(self.cfg, item, action, who, text=text)
+        row, note = actions.replan(self.cfg, item, action, row, via=serve.replan)
+        return row, f"; {note}" if note else ""
 
     async def apply(self, interaction: discord.Interaction, action: str, ref: str, text) -> None:
         who = self.who(interaction)
@@ -435,12 +473,15 @@ class Bot(discord.Client):
         if action == "pin" and not row["publish_at"]:
             verb = "Unpinned"
         if action == "changes" and self.cfg["retake"]["auto"]:
-            note += "; clipper is working on it and will post the new version here"
-            self.start_retake()
+            try:
+                await asyncio.to_thread(serve.start_retake, self.cfg)
+                note += "; Clippa is working on it and will post the new version here"
+            except ClipperError as e:
+                note += f"; retake not started ({e}); serve's next check will"
         await interaction.followup.send(f"{verb} `{row['short']}` in Kitsu{note}.", ephemeral=True)
 
 
-def register_commands(bot: Bot) -> None:
+def register_commands(bot: Bot) -> None:  # noqa: C901
     tree, cfg = bot.tree, bot.cfg
 
     async def streams(interaction: discord.Interaction, current: str):
@@ -480,7 +521,7 @@ def register_commands(bot: Bot) -> None:
                      + (f"\nNext: {nxt['publish_at'][:16].replace('T', ' ')} · {nxt['title']}"
                         if nxt else ""))
         await interaction.followup.send(embed=discord.Embed(
-            title="clipper status", description="\n".join(lines)[:4096], color=0x5865F2))
+            title="Clippa status", description="\n".join(lines)[:4096], color=0x5865F2))
 
     @tree.command(description="Items waiting on a decision, with Kitsu links")
     @app_commands.describe(stream="only this stream", all="every item, decided or not")
@@ -493,7 +534,7 @@ def register_commands(bot: Bot) -> None:
             return await fail(interaction, e)
         if not rows:
             return await interaction.followup.send("Nothing waiting for review.")
-        lines = [f"`{r['short']}` {actions.mmss(r['duration_s'])} "
+        lines = [f"`{r['short']}` {length(r['duration_s'])} "
                  f"[{r['title'][:80]}]({r['kitsu_url']}) · {actions.decision_text(r)}"
                  for r in rows]
         pages = chunks(lines)
@@ -527,7 +568,7 @@ def register_commands(bot: Bot) -> None:
         await interaction.response.defer(thinking=True)
         try:
             if replan:
-                await bot.blocking(schedule.run, cfg)
+                await bot.blocking(serve.replan, cfg, True)
             entries = await bot.blocking(schedule.upcoming, cfg, days)
         except UserError as e:
             return await fail(interaction, e)
@@ -553,65 +594,20 @@ def register_commands(bot: Bot) -> None:
         await interaction.followup.send(f"Posted {n} cards for `{stream}`.", ephemeral=True)
 
 
-def setup_logging(path) -> None:
-    """Console plus paths.bot_log (rotated at 5 MB, 5 kept); empty bot_log = console only."""
-    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S")
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
-    if path and not path.is_dir():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.handlers.RotatingFileHandler(
-            path, maxBytes=5_000_000, backupCount=5, encoding="utf-8"))
-    root = logging.getLogger()
-    root.setLevel(logging.INFO)
-    for h in handlers:
-        h.setFormatter(fmt)
-        root.addHandler(h)
-
-
-def single_instance(cfg: dict):
-    """Hold a lock on <streams>/.bot.lock for the process's life; refuse a second bot
-    (two would race to answer every button)."""
-    path = cfg["paths"]["streams"] / ".bot.lock"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    f = open(path, "a+")  # noqa: SIM115 (held for the process's life)
-    try:
-        if os.name == "nt":
-            import msvcrt
-            f.seek(0)
-            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        f.close()
-        raise SystemExit(f"another clipper bot is already running (lock {path})") from None
-    return f
-
-
 def run(cfg: dict) -> None:
     dc = cfg["discord"]
     if not notify.user_ids(dc):
-        raise SystemExit("set [discord] allowed_user_ids (your Discord user id) in clipper.toml")
+        raise ClipperError("set [discord] allowed_user_ids (your Discord user id) in clipper.toml")
     if not dc["guild_id"]:
-        raise SystemExit("set [discord] guild_id (your server's id) in clipper.toml")
-    setup_logging(cfg["paths"]["bot_log"])
+        raise ClipperError("set [discord] guild_id (your server's id) in clipper.toml")
+    daemon.setup_logging(cfg["paths"]["bot_log"])
     try:
-        lock = single_instance(cfg)
-    except SystemExit as e:
+        lock = daemon.single_instance(cfg, "bot")
+    except ClipperError as e:
         log.error(str(e))
         raise
     log.info(f"clipper bot starting (pid {os.getpid()}); card refresh every "
-             f"{dc['refresh_minutes']} min")
-    if cfg["warroom"]["with_bot"]:  # the dashboard rides along, so it's up whenever the bot is
-        import threading
-
-        from . import warroom
-        try:
-            srv = warroom.server(cfg)
-            threading.Thread(target=srv.serve_forever, daemon=True, name="warroom").start()
-            log.info(f"war room on {warroom.url(cfg, with_key=False)}")  # no token in the log
-        except OSError as e:
-            log.warning(f"war room not started: {e}")
+             f"{dc['refresh_minutes']} min; clipper serve at {serve.url(cfg)}")
     try:
         Bot(cfg).run(notify.token(cfg), log_handler=None)
     except BaseException as e:

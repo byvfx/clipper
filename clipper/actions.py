@@ -27,15 +27,18 @@ that item.
 
 from __future__ import annotations
 
-import json
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import review
-from .config import for_stream, stream_dir
+from . import jsonstate, review
+from .config import base, for_stream, stream_dir
+from .errors import ClipperError
+from .schedule import truthy
+from .timefmt import length
 
 OPEN = ("pending", "changes_requested")  # decisions still waiting on you
 
@@ -61,24 +64,20 @@ def review_dirs(cfg: dict) -> list[Path]:
     return sorted(p.parent for p in cfg["paths"]["streams"].glob("*/review_state.json"))
 
 
-def load_json(path: Path, default=None):
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
-
-
 def resolve(cfg: dict, ref: str, stream: str | None = None) -> Item:
     if "/" in ref:
         stream, ref = ref.rsplit("/", 1)
     dirs = [stream_dir(cfg, stream)] if stream else review_dirs(cfg)
     hits = []
     for d in dirs:
-        state = load_json(d / "review_state.json", {})
+        state = jsonstate.read(d / "review_state.json", {})
         keys = ([k for k in state if k == ref] or [k for k in state if k.split("_")[0] == ref]
                 or [k for k in state if k.startswith(ref)])
         hits += [Item(d, k, state[k]) for k in keys]
     if not hits:
-        raise SystemExit(f"no review item {ref!r}" + (f" in {stream}" if stream else ""))
+        raise ClipperError(f"no review item {ref!r}" + (f" in {stream}" if stream else ""))
     if len(hits) > 1:
-        raise SystemExit(f"{ref!r} matches {len(hits)} items: "
+        raise ClipperError(f"{ref!r} matches {len(hits)} items: "
                          + ", ".join(h.ref for h in hits[:8]) + "; give more of the name")
     return hits[0]
 
@@ -96,13 +95,8 @@ def _set_columns(gazu, cfg: dict, item: Item, values: dict[str, str]) -> None:
     cfg = for_stream(cfg, item.stream_dir)
     proj = gazu.project.get_project_by_name(review.project_name(cfg))
     fmap = review.column_fields(gazu, proj)
-    etype = review.ENTITY[item.state["kind"]]
-    missing = [n for n in values if (etype, n) not in fmap]
-    if missing:
-        raise SystemExit(f"Kitsu has no {etype} column {missing}; run clipper review publish")
-    update = (gazu.shot.update_sequence_data if etype == "Sequence"
-              else gazu.shot.update_shot_data)
-    update(item.state["entity_id"], {fmap[(etype, n)]: v for n, v in values.items()})
+    review.set_columns(gazu, fmap, review.ENTITY[item.state["kind"]], item.state["entity_id"], values,
+                       strict=True)
 
 
 def _status(cfg: dict, item: Item, short: str, text: str) -> None:
@@ -128,20 +122,28 @@ def approve(cfg: dict, item: Item, comment: str = "", who: str = "") -> dict:
 
 def reject(cfg: dict, item: Item, reason: str, who: str = "") -> dict:
     if not reason.strip():
-        raise SystemExit("reject needs a reason (it becomes a scoring example)")
+        raise ClipperError("reject needs a reason (it becomes a scoring example)")
     _status(cfg, item, "rejected", reason.strip())
     return refresh(cfg, item)
 
 
 def changes(cfg: dict, item: Item, what: str, who: str = "") -> dict:
     if not what.strip():
-        raise SystemExit("say what to change")
+        raise ClipperError("say what to change")
     _status(cfg, item, "retake", what.strip())
     return refresh(cfg, item)
 
 
 def reopen(cfg: dict, item: Item, who: str = "") -> dict:
     _status(cfg, item, "wfa", f"Reopened for review{_by(who)}")
+    return refresh(cfg, item)
+
+
+def restore(cfg: dict, item: Item, status_short: str, who: str = "") -> dict:
+    """Put the task back to an earlier status (the war room's undo). The comment is a
+    clipper note, so the decision's reason stays the earlier comment (a retake isn't
+    planned again, a reject keeps its scoring example)."""
+    _status(cfg, item, status_short, f"{review.NOTE_PREFIX} Undo: back to {status_short}{_by(who)}")
     return refresh(cfg, item)
 
 
@@ -158,7 +160,7 @@ def pin(cfg: dict, item: Item, when: str, who: str = "") -> dict:
     when = (when or "").strip()
     sc = cfg["schedule"]
     if when and not parse_when(when, ZoneInfo(sc["timezone"]), "00:00"):
-        raise SystemExit(f"Publish at must be YYYY-MM-DD HH:MM or YYYY-MM-DD, not {when!r}")
+        raise ClipperError(f"Publish at must be YYYY-MM-DD HH:MM or YYYY-MM-DD, not {when!r}")
     _columns(cfg, item, {"Publish at": when},
              (f"Publish at {when}" if when else "Unpinned") + _by(who))
     return refresh(cfg, item)
@@ -167,14 +169,10 @@ def pin(cfg: dict, item: Item, when: str, who: str = "") -> dict:
 def check_title(title: str) -> str:
     title = " ".join((title or "").split())
     if not title:
-        raise SystemExit("title is empty")
+        raise ClipperError("title is empty")
     if len(title) > 100:
-        raise SystemExit(f"YouTube titles are at most 100 characters ({len(title)} given)")
+        raise ClipperError(f"YouTube titles are at most 100 characters ({len(title)} given)")
     return title
-
-
-def retitle(cfg: dict, item: Item, title: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"YouTube title": title}, who)
 
 
 TAG_BUDGET = 480  # what clipper/youtube.py keeps of YouTube's ~500-character tag limit
@@ -182,7 +180,7 @@ TAG_BUDGET = 480  # what clipper/youtube.py keeps of YouTube's ~500-character ta
 
 def _no_empty(name: str, value: str) -> str:
     if not value:  # publish refills an empty column, and upload falls back to the draft
-        raise SystemExit(f"{name} is empty; an empty column falls back to the generated one")
+        raise ClipperError(f"{name} is empty; an empty column falls back to the generated one")
     return value
 
 
@@ -195,7 +193,7 @@ def check_description(text: str) -> str:
     text = "\n".join(line.rstrip() for line in (text or "").strip().splitlines())
     size = _yt_bytes(text)
     if size > 5000:
-        raise SystemExit(f"YouTube descriptions are at most 5000 bytes ({size} given)")
+        raise ClipperError(f"YouTube descriptions are at most 5000 bytes ({size} given)")
     return _no_empty("description", text)
 
 
@@ -208,10 +206,10 @@ def check_tags(text: str) -> str:
     tags = [t for t in tags if t]
     long = [t for t in tags if len(t) > 100]
     if long:
-        raise SystemExit(f"a tag is at most 100 characters: {long[0][:40]!r}…")
+        raise ClipperError(f"a tag is at most 100 characters: {long[0][:40]!r}…")
     total = sum(len(t) + 1 for t in tags)
     if total > TAG_BUDGET:
-        raise SystemExit(f"tags come to {total} characters; YouTube allows about 500 and "
+        raise ClipperError(f"tags come to {total} characters; YouTube allows about 500 and "
                          f"upload keeps the first {TAG_BUDGET}, so drop some")
     return _no_empty("tags", ", ".join(tags))
 
@@ -274,14 +272,14 @@ def edit_meta(cfg: dict, item: Item, values: dict[str, str], who: str = "") -> d
     cfg = for_stream(cfg, item.stream_dir)
     values = {name: META[name][0](v) for name, v in values.items()}
     if not values:
-        raise SystemExit("nothing to change")
+        raise ClipperError("nothing to change")
     if "YouTube description" in values or "Hashtags" in values:
         row = describe(cfg, item.stream_dir)[item.key]
         desc = values.get("YouTube description", row["description"])
         tags_line = values.get("Hashtags", row["hashtags"])
         size = _yt_bytes(f"{desc}\n\n{tags_line}")
         if size > 5000:  # upload adds the hashtag line to the description
-            raise SystemExit(f"description plus hashtag line is {size} bytes; "
+            raise ClipperError(f"description plus hashtag line is {size} bytes; "
                              "YouTube allows 5000")
     notes = []
     for name, v in values.items():
@@ -291,31 +289,15 @@ def edit_meta(cfg: dict, item: Item, values: dict[str, str], who: str = "") -> d
     return refresh(cfg, item)
 
 
-def description(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"YouTube description": text}, who)
-
-
-def hashtags(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"Hashtags": text}, who)
-
-
-def tags(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"Tags": text}, who)
-
-
-def playlist(cfg: dict, item: Item, text: str, who: str = "") -> dict:
-    return edit_meta(cfg, item, {"Playlist": text}, who)
-
-
 def thumbtext(cfg: dict, item: Item, text: str, who: str = "") -> dict:
     """The refresh's sync sees the new column value and re-renders the thumbnail."""
     cfg = for_stream(cfg, item.stream_dir)
     from .thumbs import check_text, video_key
 
     text = check_text(cfg, " ".join(text.split()))
-    thumbs = load_json(item.stream_dir / "thumbnails.json", {})
+    thumbs = jsonstate.read(item.stream_dir / "thumbnails.json", {})
     if video_key(item.stream_dir / item.state["file"].replace("\\", "/")) not in thumbs:
-        raise SystemExit(f"{item.ref} has no thumbnail yet; run clipper thumbs first")
+        raise ClipperError(f"{item.ref} has no thumbnail yet; run clipper thumbs first")
     _columns(cfg, item, {review.THUMB_COL: text}, f"Thumbnail text: {text}{_by(who)}")
     return refresh(cfg, item)
 
@@ -327,25 +309,119 @@ def refresh(cfg: dict, item: Item) -> dict:
     return describe(cfg, item.stream_dir)[item.key]
 
 
+# ---------- one entry point for the bot and the war room ----------
+
+ACTIONS = ("approve", "reject", "changes", "reopen", "hold", "pin", "edit", "thumbtext")
+REPLANS = ("approve", "reject", "changes", "reopen", "hold", "pin")  # these move the schedule
+
+
+# The review verbs that change one YouTube column, and the column each one edits. The CLI's
+# `clipper review <verb>`, the bot's forms and the war room all go through decide().
+EDITS = {"retitle": "YouTube title", "description": "YouTube description", "hashtags": "Hashtags",
+         "tags": "Tags", "playlist": "Playlist"}
+
+
+def decide(cfg: dict, item: Item, action: str, who: str, text: str = "", on: bool | None = None,
+           values: dict[str, str] | None = None) -> dict:
+    """One review action on one item; returns its card data. text: the note, reason, pin,
+    thumbnail text or (for an EDITS verb) the column's new value; on: hold or release (None
+    flips it); values: {Kitsu column: new value} for "edit"."""
+    if action == "hold":
+        return hold(cfg, item, (not refresh(cfg, item)["hold"]) if on is None else on, who)
+    if action in EDITS:
+        return edit_meta(cfg, item, {EDITS[action]: text}, who)
+    fn = {"approve": lambda: approve(cfg, item, text, who),
+          "reject": lambda: reject(cfg, item, text, who),
+          "changes": lambda: changes(cfg, item, text, who),
+          "reopen": lambda: reopen(cfg, item, who),
+          "pin": lambda: pin(cfg, item, text, who),
+          "edit": lambda: edit_meta(cfg, item, values or {}, who),
+          "thumbtext": lambda: thumbtext(cfg, item, text, who)}.get(action)
+    if not fn:
+        raise ClipperError(f"unknown action {action!r}")
+    return fn()
+
+
+def replan(cfg: dict, item: Item, action: str, row: dict, via=None) -> tuple[dict, str]:
+    """After an action that moves the schedule ([discord] replan on): `clipper schedule`
+    without a Kitsu sync, then the item's card data again and a note on where it landed.
+    via(cfg): how to run it. The bot passes serve.replan (`clipper serve` owns schedule.json);
+    a serve that isn't up leaves a note instead of failing the decision."""
+    from . import schedule
+
+    if not (cfg["discord"]["replan"] and action in REPLANS):
+        return row, ""
+    if via is None:
+        schedule.run(cfg, sync_first=False)
+    else:
+        try:
+            via(cfg)
+        except ClipperError as e:
+            return row, f"not replanned ({e}); the next hourly run will"
+    row = describe(cfg, item.stream_dir)[item.key]
+    if row["scheduled"]:
+        return row, f"scheduled {row['scheduled'][:16].replace('T', ' ')}"
+    if row["decision"] == "approved":
+        if row["hold"]:
+            return row, "held, not scheduled"
+        return row, f"not going out: {row['dropped']}" if row.get("dropped") else "no free slot yet"
+    return row, ""
+
+
+def clipper_cmd(cfg: dict) -> list[str]:
+    """The command line for a background `clipper` run with this config."""
+    cmd = [sys.executable, "-m", "clipper.cli"]
+    if base(cfg).get("_file"):
+        cmd += ["--config", str(base(cfg)["_file"])]
+    return cmd
+
+
 # ---------- reading ----------
 
 def schedule_entries(cfg: dict) -> dict[str, dict]:
-    data = load_json(cfg["paths"]["schedule"], {}) or {}
+    data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
     return {e["key"]: e for e in data.get("entries", [])}
 
 
-def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
+def schedule_dropped(cfg: dict) -> dict[str, str]:
+    """Approved items the scheduler let go (stale, over the stream's budget): key -> reason."""
+    from .schedule import DROPPED
+
+    data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
+    return {u["key"]: u["reason"] for u in data.get("unscheduled", [])
+            if u["reason"].startswith(DROPPED)}
+
+
+def other_voices(seconds, limit: float) -> str:
+    """A Short's other voices as a card shows them, only when over the limit:
+    "22 s of other voices (limit 5 s)"."""
+    try:
+        s = float(seconds)
+    except (TypeError, ValueError):
+        return ""
+    return f"{s:.0f} s of other voices (limit {limit:g} s)" if s > limit else ""
+
+
+def is_held(fields: dict) -> bool:
+    """The Hold column as Kitsu stores it (a checkbox: true, or text a person typed), read the
+    way the scheduler reads it."""
+    return truthy(fields.get("Hold") or "")
+
+
+def describe(cfg: dict, sdir: Path, gazu=None, links: bool = True) -> dict[str, dict]:
     """Everything a card or list row shows, per item, from local files (review.json is
-    as of the last sync). Kitsu is only asked for links older publishes didn't save."""
+    as of the last sync). Kitsu is only asked for links older publishes didn't save, and not
+    even that with links=False (`clipper status`: files only)."""
     cfg = for_stream(cfg, sdir)
-    state = review.ensure_links(sdir, cfg, gazu)
-    decisions = load_json(sdir / "review.json", {})
+    state = review.ensure_links(sdir, cfg, gazu) if links else jsonstate.load(sdir / "review_state.json")
+    decisions = jsonstate.read(sdir / "review.json", {})
     sched = schedule_entries(cfg)
+    dropped = schedule_dropped(cfg)
     try:
         outputs = {it["key"]: it for it in review.items(sdir, cfg["review"]["include"], cfg)}
     except FileNotFoundError:
         outputs = {}
-    meta = load_json(sdir / "meta.json", {})
+    meta = jsonstate.read(sdir / "meta.json", {})
     ls = review.Listing()
     out = {}
     for key, st in state.items():
@@ -368,19 +444,22 @@ def describe(cfg: dict, sdir: Path, gazu=None) -> dict[str, dict]:
             "duration_s": it.get("duration_s"),
             "decision": r.get("decision", "pending"), "status": r.get("status", "wfa"),
             "comment": r.get("comment", ""),
-            "hold": str(fields.get("Hold") or "").lower() in ("true", "1", "yes", "on"),
+            "hold": is_held(fields),
+            "other_voices": other_voices(fields.get("Other voices") or proposed.get("Other voices"),
+                                         cfg["scoring"]["max_source_audio_s"]),
             "publish_at": fields.get("Publish at") or "",
             "scheduled": entry["publish_at"] if entry else "",
             "uploaded": bool(entry and entry.get("status") == "uploaded"),
+            "dropped": "" if entry else dropped.get(f"{sdir.name}/{key}", ""),
             "youtube_url": fields.get("YouTube URL") or "",
-            "kitsu_url": st["kitsu_url"], "episode_url": st["episode_url"],
+            "kitsu_url": st.get("kitsu_url", ""), "episode_url": st.get("episode_url", ""),
             "thumb_text": fields.get(review.THUMB_COL) or proposed.get(review.THUMB_COL) or "",
             **{k: fields.get(n) or proposed.get(n) or "" for k, n in
                (("description", "YouTube description"), ("hashtags", "Hashtags"),
                 ("tags", "Tags"), ("playlist", "Playlist"))},
             "thumbnail": jpg if ls.exists(jpg) else None,
             "thumb_mtime": ls.mtime(jpg),
-            "file": sdir / st["file"], "preview": sdir / "review" / f"{key}.mp4",
+            "file": sdir / st["file"].replace("\\", "/"), "preview": sdir / "review" / f"{key}.mp4",
             "revision": st.get("revision"), "synced_at": r.get("updated_at"),
         }
     return out
@@ -398,22 +477,57 @@ def list_items(cfg: dict, stream: str | None = None, everything: bool = False,
     return rows
 
 
-def status(cfg: dict, sync: bool = False) -> dict:
-    """Per stream: decision counts; plus what schedule.json has coming up."""
+def stale_at(cfg: dict, sdir: Path, meta: dict) -> datetime | None:
+    """When a stream's approved items stop being scheduled (schedule.release_window, with the
+    stream's own show and config.toml); None: never, or when its meta can't say."""
+    from .schedule import release_window
+
+    try:
+        return release_window(cfg, sdir, {**meta, "duration_s": meta.get("duration_s") or 0})[1]
+    except (ClipperError, KeyError, TypeError, ValueError):   # a broken config.toml too
+        return None
+
+
+def hold_waiting(fields: dict, stale: datetime | None, now: datetime) -> bool:
+    """A held item that could still go out once released: pinned (Publish at, which the
+    scheduler never lets go stale), or its stream not stale yet."""
+    return is_held(fields) and (bool(fields.get("Publish at")) or stale is None or now <= stale)
+
+
+def stream_counts(cfg: dict, sdir: Path, links: bool = False, now: datetime | None = None) -> dict:
+    """One stream's decision counts from review_state.json and review.json alone: three small
+    reads, where describe() opens every item's sidecar (1,913 reads over SMB for 41 streams made
+    `clipper status` take a minute, #199). links=True asks Kitsu for links older publishes lack."""
+    state = review.ensure_links(sdir, cfg) if links else jsonstate.load(sdir / "review_state.json")
+    decisions = jsonstate.read(sdir / "review.json", {})
+    meta = jsonstate.read(sdir / "meta.json", {})
+    stale = stale_at(cfg, sdir, meta)
+    now = now or datetime.now(ZoneInfo("UTC"))
+    counts: dict[str, int] = {}
+    held = waiting = 0
+    for key in state:
+        r = decisions.get(key, {})
+        counts[r.get("decision", "pending")] = counts.get(r.get("decision", "pending"), 0) + 1
+        # only an approved item waits on its hold: a rejected one that arrived held is done with
+        if r.get("decision") == "approved":
+            fields = r.get("fields") or {}
+            held += is_held(fields)
+            waiting += hold_waiting(fields, stale, now)
+    first = next(iter(state.values()), {})
+    return {"stream": sdir.name, "date": meta.get("started_at", "")[:10], "title": meta.get("title", ""),
+            "counts": counts, "held": held, "held_waiting": waiting,
+            "open": sum(counts.get(k, 0) for k in OPEN), "episode_url": first.get("episode_url", "")}
+
+
+def status(cfg: dict, sync: bool = False, links: bool = True, now: datetime | None = None) -> dict:
+    """Per stream: decision counts; plus what schedule.json has coming up. links=False never
+    asks Kitsu, not even for an old item's missing link."""
     streams = []
     for d in review_dirs(cfg):
         if sync:
             review.sync(d, cfg, quiet=True)
-        rows = describe(cfg, d).values()
-        counts: dict[str, int] = {}
-        for r in rows:
-            counts[r["decision"]] = counts.get(r["decision"], 0) + 1
-        meta = load_json(d / "meta.json", {})
-        streams.append({"stream": d.name, "date": meta.get("started_at", "")[:10],
-                        "title": meta.get("title", ""), "counts": counts,
-                        "held": sum(r["hold"] for r in rows),
-                        "episode_url": next(iter(rows))["episode_url"] if rows else ""})
-    data = load_json(cfg["paths"]["schedule"], {}) or {}
+        streams.append(stream_counts(cfg, d, links=links, now=now))
+    data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     now = datetime.now(tz)
     upcoming = [e for e in data.get("entries", [])
@@ -426,13 +540,6 @@ def status(cfg: dict, sync: bool = False) -> dict:
 
 # ---------- text for the CLI (and Discord's lists) ----------
 
-def mmss(s: float | None) -> str:
-    if s is None:
-        return "?"
-    s = round(s)
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
-
-
 def decision_text(r: dict) -> str:
     out = r["decision"].replace("_", " ")
     if r["hold"]:
@@ -444,7 +551,7 @@ def decision_text(r: dict) -> str:
 
 def row_line(r: dict) -> str:
     extra = f" | hook: {r['hook']}" if r["hook"] else ""
-    return (f"{r['short']:<22} {r['kind']:<7} {mmss(r['duration_s']):>7}  "
+    return (f"{r['short']:<22} {r['kind']:<7} {length(r['duration_s']):>7}  "
             f"[{decision_text(r)}] {r['title']}{extra}")
 
 

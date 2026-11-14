@@ -4,17 +4,18 @@ version = "0.1.0"
 description = "Stream clipping pipeline: ingest, transcribe, score, render, review, publish"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "yt-dlp[default,deno]>=2026.10.10",  # deno: YouTube needs a JS runtime (clipper preshow)
+    "yt-dlp[default,deno]>=2026.11.4.232659.dev0",  # deno: YouTube needs a JS runtime (clipper preshow)
     "numpy>=2.0",
     "scipy>=1.13",
-    "pyarrow>=17",
-    "anthropic>=1.0",
+    "pyarrow>=26.0.1",
+    "anthropic>=2.7.0",
     "gazu>=1.3",
     "google-api-python-client>=2.150",
     "google-auth-oauthlib>=1.2",
     "requests>=2.32",
-    "websockets>=13",   # live chat (clipper record)
-    "pillow>=11",
+    "websockets>=17.4",   # live chat (clipper record)
+    "pillow>=13.0.0",
+    "tzdata>=2026.6; sys_platform == 'win32'",  # Windows has no time zone database ([schedule] timezone)
 ]
 
 [project.optional-dependencies]
@@ -31,7 +32,11 @@ mac = [
 ]
 # Transcribe on a Modal cloud GPU ([transcribe] backend = "modal", issue #11).
 modal = [
-    "modal>=1.6",
+    "modal>=1.6.3",
+]
+# Who is on screen, by face (`clipper faces`, #54): OpenCV runs two small ONNX models on the CPU.
+faces = [
+    "opencv-python-headless>=5.0",
 ]
 # Discord review bot (`clipper bot`).
 discord = [
@@ -41,9 +46,47 @@ discord = [
 [project.scripts]
 clipper = "clipper.cli:main"
 
+# Tests and lint (`uv sync` installs this group; CI runs both, .github/workflows/check.yml).
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff==0.17.3",
+]
+
+# The rule set is pinned to this ruff version (the dev group pins it too), so it is the
+# same on every machine and in CI. Change both pins together, then fix what the new
+# version reports.
+[tool.ruff]
+required-version = "==0.17.3"
+target-version = "py312"
+
+[tool.ruff.lint]
+# The defaults (E4, E7, E9, F) plus import order, bugbear, pyupgrade, blind excepts, stale
+# noqa comments, and McCabe complexity over 15. A deliberate `except Exception` that swallows
+# the error carries `# noqa: BLE001` with its reason; one that re-raises (as a ClipperError,
+# say) needs none: BLE001 skips it, and RUF100 would flag the noqa as unused. The functions
+# already over complexity 15 carry `# noqa: C901`: split them when touched, don't add to them.
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "BLE", "RUF100", "C901"]
+# B905: zip(strict=) on every call site would be noise (lengths are checked where they matter).
+# E731/E741: ruff's defaults leave these stylistic two out; selecting "E7" would bring them in.
+ignore = ["B905", "E731", "E741"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# A source distribution carries the code (prompts included) and docs, not the studio's working files.
+[tool.hatch.build.targets.sdist]
+exclude = ["studio/"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["clipper"]   # defaults.toml and clipper/prompts/*.md ship with the code
 
 # PyPI's Windows torch wheels are CPU-only; pull the CUDA 12.8 builds instead.
 [tool.uv.sources]

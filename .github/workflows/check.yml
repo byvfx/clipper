@@ -1,0 +1,51 @@
+# Lint and tests on every push to main and every pull request, except one that changes only
+# notes no test reads (the two paths lists below; keep them the same). The same two commands
+# run locally (see CLAUDE.md "Checks").
+#
+# The lists read in order and the last match wins: everything, minus the notes ("!"), plus
+# studio/research_notes/streamers.json again, the one file under studio/ a test reads ([paths]
+# streamers, through tests/test_investigate.py). paths-ignore can't make that exception.
+# Never excluded, because a test reads them: docs/wiki/ (tests/test_wiki.py checks the links
+# and the sidebar), docs/big-story.toml and clipper.example.toml (tests/test_config.py), and
+# clipper/prompts/*.md. "*.md" is the repo root only: `*` doesn't cross a `/`.
+name: check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**"
+      - "!*.md"
+      - "!LICENSE"
+      - "!docs/log/**"
+      - "!docs/archive/**"
+      - "!reports/**"
+      - "!studio/**"
+      - "studio/research_notes/streamers.json"
+  pull_request:
+    paths:
+      - "**"
+      - "!*.md"
+      - "!LICENSE"
+      - "!docs/log/**"
+      - "!docs/archive/**"
+      - "!reports/**"
+      - "!studio/**"
+      - "studio/research_notes/streamers.json"
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]   # developed on Windows, deployed on Linux: both stay green
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3   # no floating major tags since v8: pin a release
+      - name: Install (base dependencies + dev group + the discord extra for the bot's tests; no GPU extras)
+        run: uv sync --locked --extra discord
+      - name: Ruff
+        run: uv run ruff check clipper tests
+      - name: Tests
+        run: uv run pytest -q

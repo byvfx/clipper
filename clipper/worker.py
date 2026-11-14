@@ -24,8 +24,8 @@ so nothing is copied. It also runs pre-shows the bot grabbed from YouTube
 
 from __future__ import annotations
 
+import copy
 import ctypes
-import json
 import logging
 import os
 import socket
@@ -33,47 +33,25 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
-from . import preshow
-from .config import for_stream, show_of_channel
+from . import jsonstate, stages
+from .config import for_stream, show_args, show_of_channel
+from .errors import ClipperError
+from .states import PRESHOW_PREFIX, is_preshow
+from .timefmt import age_s, now_iso
 
 log = logging.getLogger("clipper.worker")
 
-STAGES = ["signals", "transcribe", "score", "segments",
-          "clips", "clips_meta", "clips_thumbs", "shorts", "clips_review",
-          "cut", "meta", "thumbs", "review"]
-FAST_LANE = STAGES[:STAGES.index("clips_review") + 1]
-# The fast-lane twin of each slow stage ([worker] stages lists the slow names).
-FAST_TWIN = {"cut": "clips", "meta": "clips_meta", "thumbs": "clips_thumbs",
-             "review": "clips_review"}
-# Stages that only have work when the cut before them made videos, and which cut that is
-# (without the fast lane, "cut" cuts everything and the clips stages don't run).
-AFTER_CUT = {"clips_meta": "clips", "clips_thumbs": "clips", "clips_review": "clips",
-             "meta": "cut", "thumbs": "cut", "shorts": "cut", "review": "cut"}
-
-# Output that shows a stage already ran (for streams processed before run.json): any of
-# these paths, globs allowed.
-DONE_MARKERS = {
-    "signals": ["windows.json"],
-    "transcribe": ["words.jsonl"],
-    "score": ["candidates.json"],
-    "segments": ["segments.json"],
-    "clips": ["clips"],
-    "clips_meta": ["metadata/clips"],
-    "clips_thumbs": ["clips/*.jpg"],
-    "shorts": ["shorts.json"],
-    "clips_review": ["review_state.json"],
-    "cut": ["segments"],
-    "meta": ["metadata/segments"],
-    "thumbs": ["segments/*.jpg"],
-    "review": ["review/s[0-9]*.mp4"],
-}
+# The stage table lives in clipper/stages.py; these names stay for the war room and cli.
+STAGES = stages.NAMES
+FAST_LANE = stages.FAST_LANE
+FAST_TWIN = stages.FAST_TWIN
 
 
 def output_found(stream_dir: Path, stage: str) -> bool:
-    return any(next(stream_dir.glob(m), None) is not None for m in DONE_MARKERS[stage])
+    return any(next(stream_dir.glob(m), None) is not None for m in stages.BY_NAME[stage].done)
 
 
 def setup_logging() -> None:
@@ -85,48 +63,25 @@ def cut_videos(stream_dir: Path, subs=("segments", "clips", "compilations")) -> 
     return [v for sub in subs for v in (stream_dir / sub).glob("*.mp4")]
 
 
-def now_iso() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-def age_s(iso: str | None) -> float:
-    if not iso:
-        return float("inf")
-    return time.time() - datetime.fromisoformat(iso).timestamp()
-
-
-def read_json(path: Path) -> dict:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-
-
 def write_json(path: Path, data: dict) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    for attempt in range(10):
+    from . import jsonstate
+
+    jsonstate.write(path, data)
+
+
+def snapshot(data: dict) -> dict:
+    """A copy of run.data to write. The heartbeat thread saves while the main thread
+    edits run.data without the lock, so a copy can meet a dict changing size: retry."""
+    for _ in range(4):
         try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:  # a reader (war room, bot) has it open on the NAS share
-            if attempt == 9:
-                raise
-            time.sleep(0.2 * (attempt + 1))
+            return copy.deepcopy(data)
+        except RuntimeError:
+            time.sleep(0.01)
+    return copy.deepcopy(data)
 
 
-def stage_args(stage: str, stream: str, wc: dict) -> list[str]:
-    if stage in ("review", "clips_review"):
-        return ["review", "publish", stream] + ([] if wc["notify"] else ["--no-notify"])
-    if stage == "clips":
-        return ["cut", stream, "picks"]
-    if wc["fast_lane"]:
-        if stage == "cut":
-            return ["cut", stream, "segments", "compilations"]
-        if stage in ("meta", "thumbs", "clips_meta", "clips_thumbs"):
-            # Only what has no draft/cover yet: the clips in review keep theirs.
-            return [stage.removeprefix("clips_"), stream, "--missing"]
-    return [stage.removeprefix("clips_"), stream]
+def stage_args(stage: str, stream: str, wc: dict, force: bool = False) -> list[str]:
+    return stages.argv(stage, stream, wc, force)
 
 
 def keep_awake(on: bool) -> None:
@@ -149,56 +104,92 @@ class Run:
         self.wc = wc
         self.path = stream_dir / "run.json"
         self.lock = stream_dir / ".run.lock"
-        self.data = read_json(self.path)
+        self.data = jsonstate.read_or(self.path, {})
         self.data.setdefault("stream", stream_dir.name)
         self.data.setdefault("stages", {})
         self._stop = threading.Event()
         self._mu = threading.Lock()
         self._beat: threading.Thread | None = None
+        self.me = f"{socket.gethostname()}:{os.getpid()}"
+        self.lost = False
 
-    def save(self) -> None:
-        with self._mu:
+    def save(self, beat: bool = False) -> bool:
+        """Write run.json, unless the lock was taken over (then False and lost is set).
+        The ownership check and the write happen under the takeover lock, so a worker that
+        lost the stream can't write over its new holder's run.json."""
+        with self._mu, jsonstate.locked(self.lock):
+            if not self.holds():
+                self.lost = True
+                return False
+            if beat:
+                self.data["heartbeat"] = now_iso()
             self.data["updated"] = now_iso()
-            write_json(self.path, self.data)
+            write_json(self.path, snapshot(self.data))
+            return True
+
+    def holds(self) -> bool:
+        """Whether the lock is still this run's. A worker that finds our heartbeat stale
+        takes the lock over; a read error (NAS blip) isn't taken for that."""
+        try:
+            return self.lock.read_text(encoding="utf-8").strip() == self.me
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
 
     def acquire(self) -> None:
-        me = f"{socket.gethostname()}:{os.getpid()}"
-        try:
-            fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            # Taken over only when its holder stopped writing heartbeats.
-            held = read_json(self.path)
-            stale = age_s(held.get("heartbeat")) > self.wc["stale_minutes"] * 60
-            if not stale:
-                raise Busy(f"{self.d.name}: running on {held.get('worker', '?')}")
-            log.warning("%s: taking over a stale lock from %s", self.d.name, held.get("worker"))
-            self.lock.unlink(missing_ok=True)
-            fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(fd, me.encode())
-        os.close(fd)
-        self.data = read_json(self.path) or self.data
-        self.data.setdefault("stages", {})
-        self.data.update(worker=me, status="running", heartbeat=now_iso(), error="")
-        self.data["attempts"] = self.data.get("attempts", 0) + 1
-        self.save()
+        # The stale check, the takeover and the first heartbeat all happen under the
+        # takeover lock (<lock>.lock): a second taker waits, then finds a fresh heartbeat.
+        with jsonstate.locked(self.lock):
+            try:
+                fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                # Taken over only when its holder stopped writing heartbeats.
+                held = jsonstate.read_or(self.path, {})
+                stale = age_s(held.get("heartbeat")) > self.wc["stale_minutes"] * 60
+                if not stale:
+                    raise Busy(f"{self.d.name}: running on {held.get('worker', '?')}") from None
+                log.warning("%s: taking over a stale lock from %s", self.d.name, held.get("worker"))
+                self.lock.unlink(missing_ok=True)
+                fd = os.open(self.lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, self.me.encode())
+            os.close(fd)
+            self.data = jsonstate.read_or(self.path, {}) or self.data
+            self.data.setdefault("stages", {})
+            self.data.update(worker=self.me, status="running", heartbeat=now_iso(), error="")
+            self.data["attempts"] = self.data.get("attempts", 0) + 1
+            self.save()
         self._beat = threading.Thread(target=self._heartbeat, daemon=True)
         self._beat.start()
 
     def _heartbeat(self) -> None:
         while not self._stop.wait(60):
-            self.data["heartbeat"] = now_iso()
-            try:
-                self.save()
-            except OSError as e:  # NAS blip; the next beat retries
-                log.warning("%s: heartbeat not written: %s", self.d.name, e)
+            self.beat()
+
+    def beat(self) -> bool:
+        """Write one heartbeat; False once the lock is someone else's. Never raises: a
+        dead heartbeat thread looks stale and hands the stream to a second worker."""
+        try:
+            if not self.save(beat=True):
+                log.error("%s: another worker took the lock over; heartbeat stopped", self.d.name)
+                self._stop.set()
+                return False
+        except Exception as e:  # noqa: BLE001  # NAS blip or anything else; the next beat retries
+            log.warning("%s: heartbeat not written: %s", self.d.name, e)
+        return True
 
     def release(self) -> None:
         self._stop.set()
         if self._beat:
             self._beat.join(timeout=5)
         self.data.pop("worker", None)
-        self.save()
-        self.lock.unlink(missing_ok=True)
+        with jsonstate.locked(self.lock):
+            if self.save():
+                self.lock.unlink(missing_ok=True)
+                return
+        # Taken over: run.json and the lock are the new holder's now.
+        log.warning("%s: lock was taken over; leaving run.json to %s", self.d.name,
+                    jsonstate.read_or(self.path, {}).get("worker", "?"))
 
     def done(self, stage: str) -> bool:
         status = self.data["stages"].get(stage, {}).get("status")
@@ -212,7 +203,7 @@ class Run:
 def default_stages(cfg: dict, stream_dir: Path) -> list[str]:
     """A pre-show (one whole video, no chat) skips signals, scoring and Shorts. With the
     fast lane, a scored stream also gets the clips twins of cut, meta, thumbs, review."""
-    if preshow.is_preshow(stream_dir):
+    if is_preshow(stream_dir):
         return for_stream(cfg, stream_dir)["preshow"]["stages"]
     wanted = list(cfg["worker"]["stages"])
     if cfg["worker"]["fast_lane"] and "score" in wanted:
@@ -220,24 +211,31 @@ def default_stages(cfg: dict, stream_dir: Path) -> list[str]:
     return wanted
 
 
-def plan(cfg: dict, stream_dir: Path, stages: list[str] | None = None,
+def plan(cfg: dict, stream_dir: Path, names: list[str] | None = None,
          lane: str | None = None) -> list[str]:
-    """The stages to run, in order: `stages` as given, or the stream's defaults; lane
+    """The stages to run, in order: `names` as given, or the stream's defaults; lane
     "fast" or "slow" keeps one side of FAST_LANE."""
-    order = [s for s in STAGES if s in (stages or default_stages(cfg, stream_dir))]
+    order = stages.order(names or default_stages(cfg, stream_dir), cfg["worker"])
     if lane:
         order = [s for s in order if (s in FAST_LANE) == (lane == "fast")]
     return order
 
 
+def shorts_after_faces(cfg: dict, stream_dir: Path, wanted: list[str], order: list[str]) -> bool:
+    """Render the Shorts again right after `faces` when a layout frames a panel on the face
+    (focus = "face") and the Shorts came first: the fast lane's, or "shorts" before "faces"
+    in this run. Only what the found faces move is re-rendered (the signature)."""
+    if "faces" not in order or "shorts" not in wanted:
+        return False
+    if "shorts" in order and order.index("shorts") > order.index("faces"):
+        return False
+    from .shorts import layouts_of, wants_faces
+
+    return wants_faces(layouts_of(for_stream(cfg, stream_dir)["shorts"]))
+
+
 def cut_before(stage: str, wc: dict) -> tuple[str, tuple[str, ...]] | None:
-    """The cut stage `stage` waits on, and the folders that cut fills."""
-    cut = "clips" if stage == "shorts" and wc["fast_lane"] else AFTER_CUT.get(stage)
-    if not cut:
-        return None
-    if cut == "clips":
-        return cut, ("clips",)
-    return cut, ("segments", "compilations") + (() if wc["fast_lane"] else ("clips",))
+    return stages.cut_before(stage, wc)
 
 
 def waiting(cfg: dict, stream_dir: Path, lane: str | None = None) -> bool:
@@ -246,7 +244,7 @@ def waiting(cfg: dict, stream_dir: Path, lane: str | None = None) -> bool:
     return any(not run.done(s) for s in plan(cfg, stream_dir, lane=lane))
 
 
-def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
+def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,  # noqa: C901
                stages: list[str] | None = None, force: bool = False, lane: str | None = None,
                step_aside=None) -> bool:
     """Run the stages that aren't done yet. False when a stage failed (run.json has why).
@@ -261,8 +259,24 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
     name = stream_dir.name
     ok = False
     try:
-        for stage in order:
-            if not force and run.done(stage):
+        try:  # #110: news context queued for this show's next stream, before scoring reads it
+            from . import news
+
+            if "score" in order and (force or not run.done("score")):  # only a run that will score
+                news.apply_pending(cfg, stream_dir, say=lambda m: log.info("%s: %s", name, m))
+        except (ClipperError, OSError, ValueError, KeyError) as e:  # never worth failing a stream over
+            log.warning("%s: news context not applied: %s", name, e)
+        again = shorts_after_faces(cfg, stream_dir, wanted, order)
+        if again:
+            order = order[:order.index("faces") + 1] + ["shorts"] + order[order.index("faces") + 1:]
+        ran = set()
+        for i, stage in enumerate(order):
+            if run.lost:  # the heartbeat found the lock taken over
+                raise Busy(f"{name}: another worker took the stream over")
+            rerun = again and stage == "shorts" and i > order.index("faces")
+            if rerun and ("faces" not in ran or not run.done("shorts")):
+                continue  # the scan didn't run now, or there are no Shorts to frame yet
+            if not force and not rerun and run.done(stage):
                 run.data["stages"].setdefault(stage, {"status": "done", "note": "output found"})
                 continue
             before = cut_before(stage, wc)
@@ -279,11 +293,11 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
             cmd = [sys.executable, "-m", "clipper.cli"]
             if config_path:
                 cmd += ["--config", str(config_path)]
-            cmd += stage_args(stage, str(stream_dir), wc)
+            cmd += show_args(cfg) + stage_args(stage, str(stream_dir), wc, force)  # --show carries over
             st = run.data["stages"][stage] = {"status": "running", "started": now_iso(),
                                               "log": log_path.name}
             run.save()
-            log.info("%s: %s", name, stage)
+            log.info("%s: %s (stage %d of %d)", name, stage, i + 1, len(order))  # #205
             t = time.time()
             env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
             with open(log_path, "a", encoding="utf-8") as out:
@@ -302,6 +316,7 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
             st["status"] = "done"
             log.info("%s: %s done in %ds", name, stage, st["seconds"])
             run.save()
+            ran.add(stage)
         else:
             run.data.pop("paused", None)
         complete = all(run.done(s) for s in STAGES if s in wanted)
@@ -324,6 +339,14 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,
             log.info("%s: run %s", name, run.data["status"])
 
 
+def takes(cfg: dict, channel: str) -> bool:
+    """Whether the worker clips this channel's recordings ([worker] channels, a show for it)."""
+    wc = cfg["worker"]
+    if wc["channels"] and channel not in wc["channels"]:
+        return False
+    return not cfg["shows"] or bool(show_of_channel(cfg, channel))
+
+
 def pending(cfg: dict) -> list[Path]:
     """Finished recordings whose run isn't done, oldest first, minus ones to wait on."""
     wc = cfg["worker"]
@@ -331,19 +354,17 @@ def pending(cfg: dict) -> list[Path]:
     ready = []
     for state_path in sorted(root.glob("*/live/state.json")):
         d = state_path.parent.parent
-        state = read_json(state_path)
+        state = jsonstate.read_or(state_path, {})
         if state.get("status") != "done":
             continue
-        if wc["channels"] and state.get("channel") not in wc["channels"]:
-            continue
-        if cfg["shows"] and not show_of_channel(cfg, state.get("channel", "")):
+        if not takes(cfg, state.get("channel", "")):
             continue  # recorded only: add a [shows.<key>] profile for the channel to clip it
         ready.append(d)
     # Grabbed pre-shows: meta.json is written once the download is complete.
-    ready += [m.parent for m in sorted(root.glob(f"{preshow.PREFIX}*/meta.json"))]
+    ready += [m.parent for m in sorted(root.glob(f"{PRESHOW_PREFIX}*/meta.json"))]
     out = []
     for d in ready:
-        run = read_json(d / "run.json")
+        run = jsonstate.read_or(d / "run.json", {})
         if run.get("status") in ("done", "skip"):
             continue
         if run.get("status") == "running" and age_s(run.get("heartbeat")) < wc["stale_minutes"] * 60:
@@ -367,7 +388,7 @@ def clips_waiting(cfg: dict) -> str | None:
 
 
 def since_end(stream_dir: Path, t: float) -> str:
-    ended = read_json(stream_dir / "meta.json").get("ended_at")
+    ended = jsonstate.read_or(stream_dir / "meta.json", {}).get("ended_at")
     if ended:
         return f"{age_s(ended) / 60:.0f} min after the stream ended"
     return f"{(time.time() - t) / 60:.0f} min"
@@ -377,22 +398,21 @@ def ready_text(cfg: dict, d: Path, what: str) -> str:
     """'Kino Casino 10/22: 31 items ready for review' for the DM."""
     from zoneinfo import ZoneInfo
 
-    meta = read_json(d / "meta.json")
+    meta = jsonstate.read_or(d / "meta.json", {})
     show = for_stream(cfg, d)["meta"]["show_name"] or meta.get("channel", d.name)
     when = ""
     if meta.get("started_at"):
         t = datetime.fromisoformat(meta["started_at"]).astimezone(ZoneInfo(cfg["schedule"]["timezone"]))
         when = f" {t.month}/{t.day}"
-    n = len(read_json(d / "review_state.json"))
+    n = len(jsonstate.read_or(d / "review_state.json", {}))
     return f"{show}{when}: {what}" + (f" ({n} items in Kitsu)" if n else "") + f", {d.name}"
 
 
-def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None:
+def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None:  # noqa: C901
     from . import alerts
-    from .record import Alerts
 
     wc = cfg["worker"]
-    alert = Alerts(cfg)
+    alert = alerts.Alerts(cfg)
     root: Path = cfg["paths"]["streams"]
     log.info("worker on %s: watching %s every %ss", socket.gethostname(), root, wc["poll_s"])
 
@@ -401,7 +421,7 @@ def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None
             t = time.time()
             run_stream(cfg, d, config_path, lane=lane, step_aside=step_aside)
             # (> 60 s: not just a stream processed earlier being marked done)
-            run = read_json(d / "run.json")
+            run = jsonstate.read_or(d / "run.json", {})
             if time.time() - t <= 60:
                 pass
             elif run.get("status") == "done":
@@ -421,7 +441,7 @@ def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None
         except Exception as e:
             log.exception("%s: run crashed", d.name)
             alert(f"clipper worker: {d.name} crashed: {e}", kind="failure", key=f"crash:{d.name}")
-        run = read_json(d / "run.json")
+        run = jsonstate.read_or(d / "run.json", {})
         if run.get("status") == "failed":
             left = wc["max_attempts"] - run.get("attempts", 0)
             alert(f"clipper worker: {d.name} failed: {run.get('error', '')[:600]}"
@@ -460,14 +480,50 @@ def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None
             time.sleep(wc["poll_s"])
 
 
-def status(cfg: dict) -> None:
+DONE = ("done", "skip")
+
+
+def stream_rows(cfg: dict, recent_days: float | None = None) -> list[dict]:
+    """A row per stream the worker has touched or the recorder is writing, with its show and
+    date. recent_days: leave out runs that are done (or skipped) and older than that, which is
+    most of the folder after a month (`clipper status`, #199); None keeps every one."""
     root: Path = cfg["paths"]["streams"]
-    for d in sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir()):
-        run = read_json(d / "run.json")
-        rec = read_json(d / "live" / "state.json").get("status", "-")
-        stages = run.get("stages", {})
-        last = next((s for s in reversed(STAGES) if stages.get(s, {}).get("status")), "")
-        print(f"{d.name:<18} rec={rec:<10} run={run.get('status', 'new'):<8} "
-              f"last={last}:{stages.get(last, {}).get('status', '')} "
-              + (f"clips in review {run['clips_ready'][5:16]} " if run.get("clips_ready") else "")
-              + f"{run.get('error') or run.get('paused', '')}"[:80])
+    dirs = sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir()) \
+        if root.is_dir() else []
+    old = recent_days * 86400 if recent_days is not None else None
+    out = []
+    for d in dirs:
+        run = jsonstate.read_or(d / "run.json", {})
+        if old is not None and run.get("status") in DONE and age_s(run.get("updated")) > old:
+            continue   # an old run without "updated" is old too: age_s says inf
+        live = jsonstate.read_or(d / "live" / "state.json", {}) if (d / "live").is_dir() else {}
+        if old is not None and not run and time.time() - float(live.get("last_seen") or 0) > old \
+                and (live.get("status") == "failed"
+                     or (live.get("status") == "done" and not takes(cfg, live.get("channel", "")))):
+            continue   # long over, and the worker never takes it (no show for its channel)
+        meta = jsonstate.read_or(d / "meta.json", {})
+        stages_ = run.get("stages", {})
+        last = next((s for s in reversed(STAGES) if stages_.get(s, {}).get("status")), "")
+        out.append({"stream": d.name, "show": show_of_channel(cfg, meta.get("channel") or live.get("channel", "")),
+                    "date": (meta.get("started_at") or live.get("stream_started_at") or "")[:10],
+                    "rec": live.get("status", "-"), "run": run.get("status", "new"),
+                    "last": last, "last_status": stages_.get(last, {}).get("status", ""),
+                    "clips_ready": run.get("clips_ready", ""), "attempts": run.get("attempts", 0),
+                    "note": f"{run.get('error') or run.get('paused', '')}"[:80]})
+    return out
+
+
+def row_line(r: dict) -> str:
+    return (f"{r['stream']:<18} {r['show'] or '-':<6} {r['date'][5:] or '-':<5} rec={r['rec']:<10} "
+            f"run={r['run']:<8} last={r['last']}:{r['last_status']} "
+            + (f"clips in review {r['clips_ready'][5:16]} " if r["clips_ready"] else "") + r["note"])
+
+
+def status_lines(cfg: dict, recent_days: float | None = None) -> list[str]:
+    """`worker --status` (every stream) and `clipper status` (recent ones)."""
+    return [row_line(r) for r in stream_rows(cfg, recent_days)]
+
+
+def status(cfg: dict) -> None:
+    for line in status_lines(cfg):
+        print(line)

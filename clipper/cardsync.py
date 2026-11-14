@@ -22,8 +22,9 @@ import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import actions, notify, review
+from . import actions, jsonstate, notify, review
 from .config import for_stream
+from .errors import ClipperError
 
 log = logging.getLogger("clipper.cardsync")
 STATE = "discord_cards.json"
@@ -42,7 +43,7 @@ def stream_dirs(cfg: dict) -> list[Path]:
     for d in actions.review_dirs(cfg):
         if not (d / "discord.json").exists():
             continue
-        started = (actions.load_json(d / "meta.json", {}) or {}).get("started_at", "")
+        started = (jsonstate.read(d / "meta.json", {}) or {}).get("started_at", "")
         if cutoff and started:
             try:
                 when = datetime.fromisoformat(started)
@@ -57,10 +58,8 @@ def stream_dirs(cfg: dict) -> list[Path]:
 
 
 def remember(sdir: Path, message_id: str, sig: str | float) -> None:
-    path = sdir / STATE
-    seen = actions.load_json(path, {}) or {}
-    seen[str(message_id)] = sig
-    path.write_text(json.dumps(seen, indent=2), encoding="utf-8")
+    with jsonstate.update(sdir / STATE, {}) as seen:
+        seen[str(message_id)] = sig
 
 
 def remember_row(row: dict, message_id: int | str, thumb: bool = False) -> None:
@@ -77,14 +76,15 @@ def refresh_stream(cfg: dict, sdir: Path, api: notify.Rest | None = None,
                    dry_run: bool = False) -> int:
     """Sync one stream from Kitsu and edit its cards that changed; returns edits made."""
     cfg = for_stream(cfg, sdir)
-    dstate = actions.load_json(sdir / "discord.json", {}) or {}
+    dstate = jsonstate.read(sdir / "discord.json", {}) or {}
     thread_id, messages = dstate.get("thread_id"), dstate.get("messages") or {}
     if not thread_id or not messages:
         return 0
     review.sync(sdir, cfg, quiet=True)
     rows = actions.describe(cfg, sdir)
     path = sdir / STATE
-    seen = actions.load_json(path, {}) or {}
+    seen = jsonstate.read(path, {}) or {}
+    before = dict(seen)
     edited = 0
     for key, m in messages.items():
         row = rows.get(key)
@@ -109,7 +109,7 @@ def refresh_stream(cfg: dict, sdir: Path, api: notify.Rest | None = None,
             if new_thumb:
                 notify.replace_thumb(api, thread_id, mid, row)
                 seen[f"{mid}/thumb"] = row["thumb_mtime"]
-        except SystemExit as e:  # deleted message, archived/locked thread...
+        except ClipperError as e:  # deleted message, archived/locked thread...
             log.warning("could not refresh %s card: %s", row["short"], e)
             if "Unknown Message" in str(e) or " 404 " in str(e):
                 seen[mid] = sig  # gone for good; stop trying
@@ -117,6 +117,6 @@ def refresh_stream(cfg: dict, sdir: Path, api: notify.Rest | None = None,
         seen[mid] = sig
         edited += 1
         log.info("refreshed %s card: %s", row["short"], actions.decision_text(row))
-    if not dry_run:
-        path.write_text(json.dumps(seen, indent=2), encoding="utf-8")
+    if not dry_run:  # only what this pass changed: remember() may have written meanwhile
+        jsonstate.merge(path, seen, [k for k in seen if before.get(k) != seen[k]])
     return edited

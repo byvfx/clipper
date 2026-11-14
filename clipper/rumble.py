@@ -33,7 +33,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import youtube
+from . import jsonstate, schedule, youtube
+from .errors import ClipperError
+from .states import split_key
 
 LICENSE_NOTES = {
     "Rumble Only": "non-exclusive, monetized on Rumble only; the YouTube copy is unaffected",
@@ -48,8 +50,8 @@ LICENSE_NOTES = {
 def load_schedule(cfg: dict) -> dict:
     path: Path = cfg["paths"]["schedule"]
     if not path.exists():
-        raise SystemExit("no schedule.json; run: clipper schedule")
-    return json.loads(path.read_text(encoding="utf-8"))
+        raise ClipperError("no schedule.json; run: clipper schedule")
+    return jsonstate.load(path)
 
 
 def save_platform(cfg: dict, updates: dict[str, dict | None], platform: str = "rumble") -> None:
@@ -57,17 +59,16 @@ def save_platform(cfg: dict, updates: dict[str, dict | None], platform: str = "r
     before writing so a concurrent `clipper schedule` or `clipper upload` isn't overwritten.
     None clears."""
     path: Path = cfg["paths"]["schedule"]
-    sched = json.loads(path.read_text(encoding="utf-8"))
-    for e in sched["entries"] + sched.get("unscheduled", []):
-        if e["key"] in updates:
-            plats = e.setdefault("platforms", {})
-            if updates[e["key"]] is None:
-                plats.pop(platform, None)
-            else:
-                plats[platform] = updates[e["key"]]
-            if not plats:
-                e.pop("platforms")
-    path.write_text(json.dumps(sched, indent=2, ensure_ascii=False), encoding="utf-8")
+    with jsonstate.update(path) as sched:
+        for e in sched["entries"] + sched.get("unscheduled", []):
+            if e["key"] in updates:
+                plats = e.setdefault("platforms", {})
+                if updates[e["key"]] is None:
+                    plats.pop(platform, None)
+                else:
+                    plats[platform] = updates[e["key"]]
+                if not plats:
+                    e.pop("platforms")
 
 
 def rumble_of(e: dict) -> dict:
@@ -75,7 +76,7 @@ def rumble_of(e: dict) -> dict:
 
 
 def short_key(e: dict) -> str:
-    return e["key"].split("/", 1)[1]
+    return split_key(e["key"])[1]
 
 
 def resolve(sched: dict, ref: str) -> dict:
@@ -89,9 +90,9 @@ def resolve(sched: dict, ref: str) -> dict:
             or [e for e in pool if short_key(e).split("_")[0] == ref]
             or [e for e in pool if short_key(e).startswith(ref)])
     if not hits:
-        raise SystemExit(f"no schedule.json entry {ref!r}; only scheduled items can be sent")
+        raise ClipperError(f"no schedule.json entry {ref!r}; only scheduled items can be sent")
     if len(hits) > 1:
-        raise SystemExit(f"{ref!r} matches {', '.join(e['key'] for e in hits[:8])}; give more of it")
+        raise ClipperError(f"{ref!r} matches {', '.join(e['key'] for e in hits[:8])}; give more of it")
     return hits[0]
 
 
@@ -100,9 +101,9 @@ def resolve(sched: dict, ref: str) -> dict:
 def text_for(e: dict, cfg: dict) -> dict:
     rc = cfg["rumble"]
     m = youtube.metadata(e, cfg)
-    video = Path(e["file"])
+    video = schedule.video(cfg, e)
     draft_path = m["stream_dir"] / "metadata" / video.parent.name / f"{video.stem}.json"
-    draft = json.loads(draft_path.read_text(encoding="utf-8")) if draft_path.exists() else {}
+    draft = jsonstate.read(draft_path, {})
     desc = m["description"]
     credit = draft.get("credit", "")
     if credit and credit not in desc:  # a Kitsu edit dropped it
@@ -114,6 +115,29 @@ def text_for(e: dict, cfg: dict) -> dict:
     return {"title": youtube.clean(m["title"], rc["max_title_chars"]),
             "description": youtube.clean(desc, rc["max_description_chars"]),
             "tags": tags, "review_key": m["review_key"], "stream_dir": m["stream_dir"]}
+
+
+def title_and_tags(e: dict, cfg: dict, section: str) -> tuple[str, list[str]]:
+    """A Short's title for another platform (banned words masked like the rest of the show's
+    text) and its hashtags: Kitsu's Hashtags column, else the draft's, then [<section>]
+    hashtags, without YouTube's #shorts."""
+    from .bleep import Bleeper
+    from .config import for_stream
+    from .review import draft_fields, hashtag_line
+
+    sdir = cfg["paths"]["streams"] / e["stream"]
+    scfg = for_stream(cfg, sdir)
+    m = youtube.metadata(e, cfg)
+    video = schedule.video(cfg, e)
+    draft = jsonstate.read(sdir / "metadata" / video.parent.name / f"{video.stem}.json", {})
+    review_path = sdir / "review.json"
+    fields = (jsonstate.load(review_path).get(m["review_key"], {})
+              .get("fields", {}) if review_path.exists() else {})
+    tags = (fields.get("Hashtags") or (draft_fields(draft).get("Hashtags") if draft else "") or "")
+    tags = [t for t in dict.fromkeys(hashtag_line(tags).split()
+                                     + hashtag_line(list(scfg[section]["hashtags"])).split())
+            if t.lower() != "#shorts"]
+    return Bleeper(scfg["bleep"]).mask(m["title"]), tags
 
 
 def release_time(e: dict, cfg: dict) -> str:
@@ -169,7 +193,7 @@ def upload_txt(e: dict, t: dict, cfg: dict, thumb: bool, video_name: str) -> str
 
 def prepare(cfg: dict, e: dict, kitsu: list) -> dict:
     rc = cfg["rumble"]
-    video = Path(e["file"])
+    video = schedule.video(cfg, e)
     if not video.exists():
         raise FileNotFoundError(video)
     folder = cfg["paths"]["rumble"] / e["stream"] / short_key(e)
@@ -219,17 +243,12 @@ def push_kitsu(cfg: dict, updates: list[tuple[dict, dict]]) -> None:
             fmap = fmaps[name]
             if sdir not in states:
                 p = sdir / "review_state.json"
-                states[sdir] = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+                states[sdir] = jsonstate.read(p, {})
             st = states[sdir].get(short_key(e))
             if not st:
                 continue  # compilations have no Kitsu entity
-            etype = review.ENTITY[st["kind"]]
-            data = {fmap[(etype, n)]: v for n, v in values.items() if (etype, n) in fmap}
-            update = (gazu.shot.update_sequence_data if etype == "Sequence"
-                      else gazu.shot.update_shot_data)
-            if data:
-                update(st["entity_id"], data)
-    except (SystemExit, Exception) as ex:  # noqa: BLE001  # schedule.json is the record; Kitsu is a view
+            review.set_columns(gazu, fmap, review.ENTITY[st["kind"]], st["entity_id"], values)
+    except Exception as ex:  # noqa: BLE001  # schedule.json is the record; Kitsu is a view
         print(f"  warning: Kitsu not updated: {ex}")
 
 
@@ -238,7 +257,7 @@ def done_in_kitsu(cfg: dict, e: dict) -> str | None:
     p = cfg["paths"]["streams"] / e["stream"] / "review.json"
     if not p.exists():
         return None
-    f = json.loads(p.read_text(encoding="utf-8")).get(short_key(e), {}).get("fields", {})
+    f = jsonstate.load(p).get(short_key(e), {}).get("fields", {})
     url = (f.get("Rumble URL") or "").strip()
     return url or ("" if f.get("Rumble") == "uploaded" else None)
 
@@ -274,7 +293,7 @@ def run(cfg: dict, stream: str | None = None, items: list[str] | None = None,
         todo = [e for e in sched["entries"] if (not stream or e["stream"] == stream)
                 and e["kind"] in rc["kinds"]]
     if not todo:
-        raise SystemExit(f"nothing scheduled{' for ' + stream if stream else ''}; "
+        raise ClipperError(f"nothing scheduled{' for ' + stream if stream else ''}; "
                          "approve items in Kitsu and run: clipper schedule")
     updates, kitsu, made = {}, [], []
     for e in todo:
@@ -291,7 +310,7 @@ def run(cfg: dict, stream: str | None = None, items: list[str] | None = None,
         if dry_run:
             t = text_for(e, cfg)
             print(f"  {e['key']}: {t['title']}  ({len(t['tags'])} tags, "
-                  f"thumbnail {'yes' if Path(e['file']).with_suffix('.jpg').exists() else 'no'}, "
+                  f"thumbnail {'yes' if schedule.video(cfg, e).with_suffix('.jpg').exists() else 'no'}, "
                   f"{release_time(e, cfg)})")
             continue
         try:

@@ -1,7 +1,7 @@
 {
-  "name": "Clipper War Room",
+  "name": "Clippa War Room",
   "short_name": "War Room",
-  "description": "Review, schedule and live shows for clipper",
+  "description": "Review, schedule and live shows for Clippa",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

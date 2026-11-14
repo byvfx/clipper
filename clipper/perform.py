@@ -1,7 +1,7 @@
 """`clipper perform`: a lip-sync take to a script read, cut for the character model (#58).
 
 Usage:
-    clipper perform prepare <recording> --read <read.mp3> [--take N] [--out DIR]
+    clipper perform prepare <recording> --read <read.wav> [--take N] [--out DIR]
     clipper perform status <dir>
     clipper perform stitch <dir>
     clipper perform lipsync <dir> [--engine latentsync|sync|both]   (--deploy: the Modal app)
@@ -37,6 +37,9 @@ from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
+
+from . import jsonstate, media
+from .errors import ClipperError
 
 SR = 8000  # analysis sample rate for take detection
 
@@ -87,25 +90,19 @@ def cut_points(sil: list[tuple[float, float]], end: float, pc: dict) -> list[flo
     return cuts + [round(end, 3)]
 
 
-def duration(path: Path) -> float:
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
-                          str(path)], capture_output=True, text=True, check=True).stdout
-    return float(out.strip())
-
-
 def prepare(recording: Path, read: Path, pc: dict, take: int = 1, out: Path | None = None) -> Path:
     out = out or recording.with_name(f"{recording.stem}.perform")
     out.mkdir(parents=True, exist_ok=True)
     rd = pcm(read)
     takes = find_takes(pcm(recording), rd)
     if not takes:
-        raise SystemExit(f"the read isn't audible in {recording.name}: play it out loud while filming")
+        raise ClipperError(f"the read isn't audible in {recording.name}: play it out loud while filming")
     for k, (t, s) in enumerate(takes, 1):
         print(f"take {k}: starts at {t:.2f} s (match {s:.2f})")
     if not 1 <= take <= len(takes):
-        raise SystemExit(f"--take {take}: the recording has {len(takes)} take(s)")
+        raise ClipperError(f"--take {take}: the recording has {len(takes)} take(s)")
     t0 = takes[take - 1][0]
-    end = min(len(rd) / SR + pc["tail_s"], duration(recording) - t0)
+    end = min(len(rd) / SR + pc["tail_s"], media.duration(recording) - t0)
     cuts = cut_points(pauses(read, pc), end, pc)
     pieces = []
     for i, (a, b) in enumerate(pairwise(cuts), 1):
@@ -120,17 +117,17 @@ def prepare(recording: Path, read: Path, pc: dict, take: int = 1, out: Path | No
               + ("  <- over the 30 MB single upload" if mb > 30 else ""))
     manifest = {"recording": str(recording.resolve()), "read": str(read.resolve()), "take": take,
                 "take_start": round(t0, 3), "end": round(end, 3), "pieces": pieces}
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    jsonstate.write(out / "manifest.json", manifest)
     print(f"{out}: {len(pieces)} pieces; render each with the character model and save it as renderN.mp4,"
           f" then: clipper perform stitch {out}")
     return out
 
 
 def status(d: Path) -> dict:
-    m = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+    m = jsonstate.load(d / "manifest.json")
     for p in m["pieces"]:
         r = d / p["render"]
-        got = f"{duration(r):.2f} s rendered" if r.exists() else "not rendered yet"
+        got = f"{media.duration(r):.2f} s rendered" if r.exists() else "not rendered yet"
         print(f"{p['piece']}: read {p['start']:.2f}-{p['end']:.2f} s -> {p['render']}: {got}")
     return m
 
@@ -139,7 +136,7 @@ def stitch(d: Path, pc: dict) -> Path:
     m = status(d)
     missing = [p["render"] for p in m["pieces"] if not (d / p["render"]).exists()]
     if missing:
-        raise SystemExit(f"not rendered yet: {', '.join(missing)}")
+        raise ClipperError(f"not rendered yet: {', '.join(missing)}")
     inputs, chains = [], []
     for i, p in enumerate(m["pieces"]):
         slot = p["end"] - p["start"]
@@ -159,7 +156,7 @@ def stitch(d: Path, pc: dict) -> Path:
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(final), "-vf", "scale=-2:720", "-c:v", "libx264",
                     "-crf", "24", "-preset", "slow", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
                     str(phone)], check=True)
-    print(f"{final} ({duration(final):.1f} s), {phone.name} ({phone.stat().st_size / 2**20:.0f} MB)")
+    print(f"{final} ({media.duration(final):.1f} s), {phone.name} ({phone.stat().st_size / 2**20:.0f} MB)")
     return final
 
 
@@ -173,7 +170,7 @@ def sync_key(pc: dict) -> str:
     if not k and path.exists():
         k = path.read_text(encoding="utf-8-sig").strip()
     if not k:
-        raise SystemExit(f"no Sync API key: set ${pc['sync_key_env']} or put it in {path}")
+        raise ClipperError(f"no Sync API key: set ${pc['sync_key_env']} or put it in {path}")
     return k
 
 
@@ -197,17 +194,27 @@ def lipsync_sync(video: Path, audio_wav: Path, pc: dict) -> bytes:
                           data={"model": pc["sync_model"], "options": json.dumps({"sync_mode": "cut_off"})},
                           files={"video": (video.name, v, "video/mp4"), "audio": (audio_wav.name, a, "audio/wav")})
     if not r.ok:
-        raise SystemExit(f"Sync: HTTP {r.status_code}: {r.text[:300]}")
+        raise ClipperError(f"Sync: HTTP {r.status_code}: {r.text[:300]}")
     gid = r.json()["id"]
     t0 = time.time()
-    while True:
+    errors = 0
+    while True:  # #77 M13: a network blip doesn't lose the paid job; it's never polled forever
         time.sleep(10)
-        s = requests.get(f"https://api.sync.so/v2/generate/{gid}", headers=h, timeout=60).json()
+        if time.time() - t0 > 3600:
+            raise ClipperError(f"Sync job {gid} still not done after an hour; check sync.so")
+        try:
+            s = requests.get(f"https://api.sync.so/v2/generate/{gid}", headers=h, timeout=60).json()
+        except (requests.RequestException, ValueError) as e:
+            errors += 1
+            if errors >= 10:
+                raise ClipperError(f"Sync job {gid}: polling failed 10 times ({e}); check sync.so") from None
+            continue
+        errors = 0
         if s.get("status") == "COMPLETED":
             print(f"Sync {pc['sync_model']}: {time.time() - t0:.0f} s")
             return requests.get(s["outputUrl"], timeout=600).content
-        if s.get("status") in ("FAILED", "REJECTED"):
-            raise SystemExit(f"Sync {s.get('status')}: {s.get('errorCode')} {s.get('error')}")
+        if s.get("status") in ("FAILED", "REJECTED", "CANCELED", "CANCELLED"):
+            raise ClipperError(f"Sync {s.get('status')}: {s.get('errorCode')} {s.get('error')}")
 
 
 def lipsync(target: Path, pc: dict, engine: str, audio: Path | None = None) -> Path:
@@ -218,20 +225,20 @@ def lipsync(target: Path, pc: dict, engine: str, audio: Path | None = None) -> P
 
     video = target / "final.mp4" if target.is_dir() else target
     if audio is None:
-        audio = Path(json.loads((target / "manifest.json").read_text(encoding="utf-8"))["read"])
+        audio = Path(jsonstate.load(target / "manifest.json")["read"])
     out = video.with_name(f"{video.stem}.lipsync-{engine}.mp4")
     with tempfile.TemporaryDirectory() as td:
         wav = Path(td) / "read.wav"
         # Padded to the video's length: the models stop where the audio stops (the final hold).
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(audio), "-af", f"apad=whole_dur={duration(video):.3f}",
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(audio), "-af", f"apad=whole_dur={media.duration(video):.3f}",
                         "-ac", "1", "-ar", "16000", str(wav)], check=True)
         raw = Path(td) / "raw.mp4"
         raw.write_bytes((lipsync_latentsync if engine == "latentsync" else lipsync_sync)(video, wav, pc))
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-i", str(audio), "-map", "0:v", "-map", "1:a",
-                        "-af", f"apad=whole_dur={duration(raw):.3f}", "-c:v", "libx264", "-crf", "16", "-preset",
-                        "medium", "-c:a", "aac", "-b:a", "192k", "-t", f"{duration(raw):.3f}", "-movflags", "+faststart",
+                        "-af", f"apad=whole_dur={media.duration(raw):.3f}", "-c:v", "libx264", "-crf", "16", "-preset",
+                        "medium", "-c:a", "aac", "-b:a", "192k", "-t", f"{media.duration(raw):.3f}", "-movflags", "+faststart",
                         str(out)], check=True)
-    print(f"{out} ({duration(out):.1f} s)")
+    print(f"{out} ({media.duration(out):.1f} s)")
     return out
 
 

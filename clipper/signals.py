@@ -24,7 +24,9 @@ import numpy as np
 from scipy.ndimage import median_filter, uniform_filter1d
 from scipy.signal import find_peaks
 
+from . import jsonstate
 from .kick import CHAT_CHUNK_S
+from .timefmt import hms
 
 EMOTE = re.compile(r"\[emote:\d+:([^\]]+)\]")
 
@@ -194,13 +196,8 @@ def pick_windows(heat: np.ndarray, sc: dict) -> list[dict]:
     return windows
 
 
-def hms(s: float) -> str:
-    s = int(s)
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
-
-
 def run(stream_dir: Path, sc: dict) -> list[dict]:
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(stream_dir / "meta.json")
     n = math.ceil(meta["duration_s"])
     lag = sc["chat_lag_s"]
 
@@ -250,10 +247,9 @@ def run(stream_dir: Path, sc: dict) -> list[dict]:
         w["transcript_peak"] = " ".join(x["word"] for x in words[lo:hi])
         a, b = np.searchsorted(mt, [p + lag - 5, p + lag + 15])
         w["chat_sample"] = [" ".join(EMOTE.sub(r" \1 ", m["content"]).split()) for m in msgs[a:b]][:10]
-    (stream_dir / "windows.json").write_text(
-        json.dumps({"stream_id": stream_dir.name, "chat_coverage": round(float(covered.mean()), 3),
-                    "params": sc, "windows": windows}, indent=2, ensure_ascii=False),
-        encoding="utf-8")
+    jsonstate.write(stream_dir / "windows.json",
+                    {"stream_id": stream_dir.name, "chat_coverage": round(float(covered.mean()), 3),
+                     "params": sc, "windows": windows})
 
     print(f"{len(msgs)} chat msgs, coverage {covered.mean():.0%}; {len(windows)} windows")
     for w in windows:

@@ -1,7 +1,7 @@
 """Vertical Shorts: each Pass B pick's short window as a 1080x1920 video.
 
 Usage:
-    clipper shorts <stream> [--ids t33,w19] [--layout watch] [--force] [--rescene] [--check]
+    clipper shorts <stream> [--items t33,w19] [--layout watch] [--force] [--rescene] [--check]
 
 For every pick in candidates.json (pass_b) this renders shorts/v<NN>_<id>_<slug>.mp4:
   1. the clip's window (in_s..out_s; [shorts] window = "short" uses scoring's 15-60 s
@@ -30,16 +30,23 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import statistics
 import subprocess
 import time
 from itertools import pairwise
 from pathlib import Path
 
+from . import jsonstate, media, tighten
 from .bleep import Bleeper
 from .config import for_stream
-from .cut import encode_args, ffmpeg_cut, keyframe_before, source_file
-from .scoring import Claude, load_words
+from .cut import encode_args, ffmpeg_cut, keyframe_before
+from .errors import ClipperError
+from .llm import Claude
+from .media import source_file
+from .prompts import Prompts
 from .segments import slug
+from .states import numbered_picks
+from .transcript import load_words, outside_voice_s
 
 CENTER = {"description": "anything else: the middle of the frame",
           "panels": [{"src": [0.0, 0.0, 1.0, 1.0]}], "caption_y": 0.72}
@@ -119,6 +126,25 @@ def end_on_sentence(words: list[dict], a: float, b: float, min_s: float, max_s: 
     return b
 
 
+def short_window(c: dict, sc: dict, words: list[dict], segs: list[dict],
+                 end_of_stream: float) -> tuple[float, float]:
+    """A pick's Short window (step 1 above): its clip or short window, grown inside its
+    topic segment, ended on a sentence, snapped to word gaps, at most max_s."""
+    if sc["window"] == "short":
+        a, b = c.get("short_in_s", c["in_s"]), c.get("short_out_s", c["out_s"])
+    else:
+        a, b = c["in_s"], c["out_s"]
+    topic = next((s for s in segs if s["start_s"] <= c["in_s"] < s["end_s"]), None)
+    lo, hi = (topic["start_s"], topic["end_s"]) if topic else (0.0, end_of_stream)
+    a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
+                       min(lo, a), max(hi, b))
+    if sc["window"] == "short" and sc["end_pause_s"] > 0:  # don't stop mid-sentence
+        b = end_on_sentence(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
+                            max(hi, b), sc["end_pause_s"])
+    a, b = snap_window(words, a, b, sc["pad_s"])
+    return a, min(b, a + sc["max_s"])
+
+
 # ---------- layout ----------
 
 def layouts_of(sc: dict) -> dict[str, dict]:
@@ -134,33 +160,76 @@ def pickable(layouts: dict) -> dict[str, dict]:
     return {n: lay for n, lay in layouts.items() if lay.get("pick", True)}
 
 
-def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int) -> list[tuple]:
+def panel_crops(layout: dict, W: int, H: int, out_w: int, out_h: int,
+                faces: dict[int, tuple[float, float]] | None = None) -> list[tuple]:
     """(x, y, w, h, panel_h) per panel: the panel's src box (fractions of the frame),
     cut down to the aspect of its slot (out_w x panel_h) around its focus point. Panels
-    without an "h" share what's left of out_h."""
+    without an "h" share what's left of out_h. faces: panel index -> where the face sits
+    in that panel's box (0-1 of the box, from face_centers); the window is centred on it."""
     panels = layout["panels"]
     fixed = sum(p.get("h", 0) for p in panels)
     free = [p for p in panels if not p.get("h")]
     rest = (out_h - fixed) // max(1, len(free))
+    heights = [p.get("h") or rest for p in panels]
+    if sum(heights) != out_h:
+        raise ClipperError(f"layout panels add up to {sum(heights)} px, not {out_h}")
+    # Even heights, the last panel taking the difference: vstack of odd-height 4:2:0
+    # panels writes a chroma row past its frame (ffmpeg 7.1 aborts, malloc corrupted).
+    heights = [h // 2 * 2 for h in heights[:-1]]
+    heights.append(out_h - sum(heights))
     crops = []
-    for p in panels:
-        ph = p.get("h") or rest
+    for i, (p, ph) in enumerate(zip(panels, heights)):
         x, y, w, h = (p["src"][0] * W, p["src"][1] * H, p["src"][2] * W, p["src"][3] * H)
-        fx, fy = p.get("focus", [0.5, 0.5])
+        focus = p.get("focus", [0.5, 0.5])
+        fx, fy = focus if isinstance(focus, list) else (0.5, 0.5)
+        face = (faces or {}).get(i)
         aspect = out_w / ph
         if w / h > aspect:  # too wide: keep the height, narrow around the focus
             nw = h * aspect
+            if face:  # the window centred on the face, kept inside the box
+                fx = min(max((face[0] * w - nw / 2) / max(w - nw, 1e-9), 0.0), 1.0)
             x += (w - nw) * fx
             w = nw
         else:
             nh = w / aspect
+            if face:
+                fy = min(max((face[1] * h - nh / 2) / max(h - nh, 1e-9), 0.0), 1.0)
             y += (h - nh) * fy
             h = nh
         even = lambda v: int(v) // 2 * 2
         crops.append((even(x), even(y), even(w), even(h), ph))
-    if sum(c[4] for c in crops) != out_h:
-        raise SystemExit(f"layout panels add up to {sum(c[4] for c in crops)} px, not {out_h}")
     return crops
+
+
+def wants_faces(layouts: dict) -> bool:
+    return any(p.get("focus") == "face" for lay in layouts.values() for p in lay.get("panels", []))
+
+
+def face_centers(layout: dict, faces: list[dict], a: float, b: float) -> dict[int, tuple[float, float]]:
+    """Panel index -> the median centre (0-1 of the panel's box) of the faces found in that
+    box during a..b of stream time, for panels with focus = "face". A face elsewhere
+    in the frame (the video being watched) doesn't count. Nothing in the window (the
+    streamer stepped out, a still) falls back to the whole stream: where they usually sit.
+    faces: faces.json "faces" (box = [x, y, w, h] as fractions of the frame)."""
+    out = {}
+    for i, p in enumerate(layout["panels"]):
+        if p.get("focus") != "face":
+            continue
+        bx, by, bw, bh = p["src"]
+        inside = [((f["box"][0] + f["box"][2] / 2 - bx) / bw, (f["box"][1] + f["box"][3] / 2 - by) / bh, f["t"])
+                  for f in faces]
+        inside = [(x, y, t) for x, y, t in inside if 0 <= x <= 1 and 0 <= y <= 1]
+        here = [(x, y) for x, y, t in inside if a <= t < b] or [(x, y) for x, y, _ in inside]
+        if here:
+            mid = statistics.median
+            out[i] = (round(mid([x for x, _ in here]), 2), round(mid([y for _, y in here]), 2))
+    return out
+
+
+def scene_faces(layouts: dict, scenes: list[list], faces: list[dict] | None, a: float) -> list[dict]:
+    """Per scene of a Short starting at a (stream time), the face centres of its layout's
+    face panels (face_centers), or {} when the stream has no faces.json."""
+    return [face_centers(layouts[n], faces, a + s, a + e) if faces else {} for s, e, n in scenes]
 
 
 def sample_frames(src: Path, a: float, dur: float, step: float, out_dir: Path,
@@ -176,22 +245,23 @@ def sample_frames(src: Path, a: float, dur: float, step: float, out_dir: Path,
     return [(k * step, f) for k, f in enumerate(frames)]
 
 
-def label_frames(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[float, Path]]
-                 ) -> list[str] | None:
+def label_frames(claude: Claude, prompts: Prompts, sc: dict, layouts: dict,
+                 frames: list[tuple[float, Path]]) -> list[str] | None:
     """One layout name per frame, scene_batch frames per vision call (with 25-45 frames in
     one call the labels drifted from run to run), or None if a batch doesn't come back."""
     n = max(1, sc["scene_batch"])
     labels: list[str] = []
     for k in range(0, len(frames), n):
-        got = label_batch(claude, sc, layouts, frames[k:k + n])
+        got = label_batch(claude, prompts, sc, layouts, frames[k:k + n])
         if got is None:
             return None
         labels += got
     return labels
 
 
-def label_batch(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[float, Path]]
-                ) -> list[str] | None:
+def label_batch(claude: Claude, prompts: Prompts, sc: dict, layouts: dict,
+                frames: list[tuple[float, Path]]) -> list[str] | None:
+    """prompts: version set to [shorts] layout_prompt_version (prompts/shorts_layout_<v>.md)."""
     import base64
 
     names = list(layouts)
@@ -199,14 +269,8 @@ def label_batch(claude: Claude, sc: dict, layouts: dict, frames: list[tuple[floa
     # mistakes: a zoomed or busy screen box got called center.
     if all(layouts[n].get("example") for n in names if n != "center") and len(names) > 2:
         names = [n for n in names if n != "center"]
-    system = ("You classify frames from a livestream by which screen layout they show. "
-              "Layouts:\n" + "\n".join(f"- {n}: {layouts[n].get('description', '')}" for n in names)
-              + "\nThe frames are in time order, a few seconds apart; the stream can switch "
-              "layout between any two. Give the layout of every frame, in order. Judge the "
-              "arrangement of the frame (where the boxes and webcams are), not what is playing "
-              "inside them: a screen box showing a tall phone video with black bars, a dark "
-              "page or a paused video is still the same layout. Pick the most specific layout "
-              "that fits; use center only when none of the others does.")
+    prompts.vars["layouts"] = "\n".join(f"- {n}: {layouts[n].get('description', '')}" for n in names)
+    system = prompts.get("shorts_layout").rstrip()
     # A screenshot per layout ("example") anchors the labels: without them the model
     # judged by what played in the screen box (a zoomed-in face read as "center").
     content = []
@@ -281,8 +345,8 @@ def find_cut(src: Path, a: float, t0: float, t1: float, fps: int = 20) -> float:
     return round(min(t1, t0 + k / fps), 3)
 
 
-def detect_scenes(need_claude, sc: dict, layouts: dict, src: Path, a: float, dur: float,
-                  work: Path, stem: str) -> tuple[list[list] | None, str]:
+def detect_scenes(need_claude, prompts: Prompts, sc: dict, layouts: dict, src: Path, a: float,
+                  dur: float, work: Path, stem: str) -> tuple[list[list] | None, str]:
     """([start, end, layout] stretches covering 0..dur, or None if labelling failed; how).
     A vision model labels a frame every scene_step_s, with the show's reference
     screenshots (layouts/<show>/<layout>.jpg) as anchors. Matching frames to those
@@ -291,7 +355,7 @@ def detect_scenes(need_claude, sc: dict, layouts: dict, src: Path, a: float, dur
     step = sc["scene_step_s"]
     frames = sample_frames(src, a, dur, step, work, stem)
     try:
-        labels = label_frames(need_claude(), sc, layouts, frames) if frames else None
+        labels = label_frames(need_claude(), prompts, sc, layouts, frames) if frames else None
     finally:
         for _, f in frames:
             f.unlink(missing_ok=True)
@@ -325,7 +389,7 @@ def save_example(stream_dir: Path, cfg: dict, name: str, at: float) -> Path:
     """The source frame at `at` s as the reference screenshot of layout `name`."""
     cfg = for_stream(cfg, stream_dir)
     if name not in layouts_of(cfg["shorts"]):
-        raise SystemExit(f"no layout {name!r}; this show has {', '.join(layouts_of(cfg['shorts']))}")
+        raise ClipperError(f"no layout {name!r}; this show has {', '.join(layouts_of(cfg['shorts']))}")
     out = example_dir(cfg) / f"{name}.jpg"
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{at:.3f}",
@@ -340,6 +404,53 @@ def scenes_label(scenes: list[list]) -> str:
     if len(scenes) == 1:
         return scenes[0][2]
     return " > ".join(f"{n} {int(s) // 60}:{int(s) % 60:02d}" for s, _, n in scenes)
+
+
+def choose_layout(layout: str | None, rv: dict, prev: dict, layouts: dict, a: float, b: float,
+                  again: bool) -> tuple[list[list] | None, str]:
+    """(scenes, how) for the window a..b, or (None, "") when the frames have to be
+    labelled (detect_scenes). Layout: --layout, then a changed Kitsu "Layout" column, then
+    one set earlier by hand (shorts.json "layout", a retake): one layout for the whole
+    Short. Otherwise each scene keeps the layout it got (shorts.json "scenes") while the
+    window is the same. again (--rescene, --check): label what the model chose again.
+    rv: the item in review.json; prev: its shorts.json entry."""
+    dur = round(b - a, 3)
+    # The column only counts once someone changed it from what clipper last proposed.
+    kitsu_layout = ((rv.get("fields") or {}).get("Layout") or ""
+                    if "Layout" in rv.get("edited", []) else "")
+    by_model = prev.get("layout_by", "model") in ("model", "only")
+    same_window = [prev.get("in_s"), prev.get("out_s")] == [a, b]
+    if layout:
+        return [[0.0, dur, layout]], "cli"
+    if kitsu_layout in layouts and kitsu_layout != prev.get("layout"):
+        return [[0.0, dur, kitsu_layout]], "kitsu"
+    if prev.get("layout") in layouts and not (by_model and again):
+        return [[0.0, dur, prev["layout"]]], prev.get("layout_by", "model")
+    if prev.get("scenes") and same_window and not again:
+        return prev["scenes"], prev.get("layout_by", "model")
+    if len(pickable(layouts)) == 1:
+        return [[0.0, dur, next(iter(pickable(layouts)))]], "only"
+    return None, ""
+
+
+def short_signature(sc: dict, codec: str, a: float, b: float, scenes: list[list],
+                    layouts: dict, faces: list[dict] | None = None, tight: dict | None = None) -> str:
+    """What a Short is made from; the file is rendered again when it changes. faces: per
+    scene, the face centres its crop follows (scene_faces); left out when there are none,
+    so Shorts made before face framing keep their signature. tight: the [edit] tighten
+    settings when its pauses are cut, likewise left out when they aren't."""
+    sig_base = {"a": a, "b": b, "captions": sc["captions"], "codec": codec,
+                "style": {k: v for k, v in sc.items() if k.startswith("caption_")},
+                "lufs": sc["lufs"], "w": sc["width"], "h": sc["height"]}
+    if faces and any(faces):
+        sig_base["faces"] = [{str(i): list(c) for i, c in f.items()} for f in faces]
+    if tight:
+        sig_base["tighten"] = tight
+    # One scene keeps the signature it always had, so Shorts made before scene
+    # detection aren't re-rendered when it finds the same single layout.
+    return signature({**sig_base, "layout": layouts[scenes[0][2]], "name": scenes[0][2]}
+                     if len(scenes) == 1 else
+                     {**sig_base, "scenes": [[s, e, n, layouts[n]] for s, e, n in scenes]})
 
 
 # ---------- captions ----------
@@ -426,14 +537,6 @@ def write_ass(words: list[dict], t0: float, dur: float, sc: dict, scenes: list[t
 
 # ---------- render ----------
 
-def probe_size(video: Path) -> tuple[int, int]:
-    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
-                          "stream=width,height", "-of", "csv=p=0", str(video)],
-                         check=True, capture_output=True, text=True).stdout.strip()
-    w, h = out.split(",")[:2]
-    return int(w), int(h)
-
-
 def measure_loudness(video: Path, sc: dict) -> dict:
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-vn", "-af",
                         (f"loudnorm=I={sc['lufs']}:TP={sc['true_peak']}:LRA={sc['lra']}"
@@ -442,7 +545,7 @@ def measure_loudness(video: Path, sc: dict) -> dict:
                        check=False)
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr)
     if not m:
-        raise SystemExit(f"loudnorm measurement failed for {video.name}")
+        raise ClipperError(f"loudnorm measurement failed for {video.name}")
     return json.loads(m.group(0))
 
 
@@ -463,13 +566,17 @@ def stack(graph: list[str], src: str, crops: list[tuple], W: int, tag: str) -> s
 
 
 def render(src_cut: Path, dst: Path, parts: list[tuple], ass: Path | None, dur: float,
-           sc: dict, codec: str) -> dict:
-    """parts: (start, end, crops) per scene stretch of the Short, in order."""
+           sc: dict, codec: str, keep: str = "") -> dict:
+    """parts: (start, end, crops) per scene stretch of the Short, in order, on its own
+    clock. keep: the stretches of src_cut to keep (tighten.Timeline.select); empty = all."""
     W = sc["width"]
     loud = measure_loudness(src_cut, sc)
     k = len(parts)
-    graph = [f"[0:v]fps={sc['fps']}" + (f",split={k}" + "".join(f"[v{j}]" for j in range(k))
-                                        if k > 1 else "[v0]")]
+    # After fps the time base is one frame, so N lines the kept frames up exactly; STARTPTS
+    # keeps the cut's first frame where it was against the sound (often a frame in).
+    pick = f",select='{keep}',setpts=STARTPTS+N" if keep else ""
+    graph = [f"[0:v]fps={sc['fps']}{pick}" + (f",split={k}" + "".join(f"[v{j}]" for j in range(k))
+                                               if k > 1 else "[v0]")]
     outs = []
     for j, (s, e, crops) in enumerate(parts):
         src = f"v{j}"
@@ -486,8 +593,12 @@ def render(src_cut: Path, dst: Path, parts: list[tuple], ass: Path | None, dur: 
         tail += ",format=nv12"
     graph.append(tail + "[vout]")
     fo = min(sc["fade_out_s"], dur / 4)
+    # The sound in frames one video frame long, so aselect keeps the same stretches select does.
+    per_frame = round(48000 / sc["fps"])
     graph.append(
-        f"[0:a]loudnorm=I={sc['lufs']}:TP={sc['true_peak']}:LRA={sc['lra']}"
+        "[0:a]" + (f"aresample=48000,asetnsamples=n={per_frame}:p=0,aselect='{keep}',asetpts=STARTPTS+N/SR/TB,"
+                   if keep else "")
+        + f"loudnorm=I={sc['lufs']}:TP={sc['true_peak']}:LRA={sc['lra']}"
         f":measured_I={loud['input_i']}:measured_TP={loud['input_tp']}"
         f":measured_LRA={loud['input_lra']}:measured_thresh={loud['input_thresh']}"
         f":offset={loud['target_offset']}:linear=true,aresample=48000,"
@@ -506,6 +617,46 @@ def render(src_cut: Path, dst: Path, parts: list[tuple], ass: Path | None, dur: 
     return {"input_lufs": float(loud["input_i"]), "lufs": sc["lufs"]}
 
 
+def cut_and_render(stream_dir: Path, cfg: dict, src: Path, words: list[dict], bleepers: tuple,
+                   layouts: dict, scenes: list[list], a: float, b: float, work: Path,
+                   key: str, dst: Path, codec: str,
+                   faces: list[dict] | None = None,
+                   tight: bool = False) -> tuple[int, int, dict, list[dict], float]:
+    """Cut a..b from the source (audio bleeped), crop each scene to its layout (its face
+    panels framed on the face: faces, per scene, from scene_faces), burn in the captions
+    and render dst. bleepers: (audio, captions). tight: cut the dead air out ([edit]
+    tighten). Returns (bleeps, captions, loudness, the pauses cut, the Short's length)."""
+    sc, edit = cfg["shorts"], cfg["edit"]
+    audio_bleeper, bleeper = bleepers
+    dur = round(b - a, 3)
+    work.mkdir(parents=True, exist_ok=True)
+    cut = work / f"{key}.cut.mp4"
+    n_bleeps = ffmpeg_cut(src, cut, a, b, sc["cut_codec"] or cfg["cut"]["clip_codec"], sc["cut_crf"],
+                          keyframe=keyframe_before(stream_dir, src, a),
+                          bleep=(audio_bleeper, words))
+    pauses = tighten.cuts(words, a, b, tighten.quiet_spans(cut, edit), edit,
+                          audio_bleeper.pad if audio_bleeper.on else 0.0,
+                          max(0.0, dur - sc["min_s"]), sc["fps"]) if tight else []
+    tl = tighten.Timeline(pauses, dur)
+    if pauses:  # the scenes and captions move onto the tightened clock; a scene that was all pause goes
+        faces = faces or [{}] * len(scenes)
+        kept = [(s, f) for s, f in zip(tl.scenes(scenes), faces) if s[1] > s[0]]
+        scenes, faces = [s for s, _ in kept], [f for _, f in kept]
+        words = tl.words([w for w in words if a - 1 <= w["start"] <= b + 1], a)
+    W, H = media.size(cut)
+    parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"], (faces or [{}] * len(scenes))[j]))
+             for j, (s, e, n) in enumerate(scenes)]
+    ass = work / f"{key}.ass" if sc["captions"] else None
+    n_caps = write_ass(words, a, tl.length, sc, [(s, e, layouts[n]) for s, e, n in scenes],
+                       bleeper, ass) if ass else 0
+    loud = render(cut, dst, parts, ass, tl.length, sc, codec, tl.select(sc["fps"]) if pauses else "")
+    if not sc["keep_work"]:
+        cut.unlink(missing_ok=True)
+        if ass:
+            ass.unlink(missing_ok=True)
+    return n_bleeps, n_caps, loud, pauses, tl.length
+
+
 # ---------- metadata ----------
 
 def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dict,
@@ -513,7 +664,7 @@ def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dic
     """The clip's upload draft with the Shorts hashtag first (YouTube files any vertical
     video under 3 minutes as a Short; the tag helps it surface there)."""
     src = stream_dir / "metadata" / "clips" / f"{clip_video.stem}.json"
-    draft = json.loads(src.read_text(encoding="utf-8")) if src.exists() else {
+    draft = jsonstate.load(src) if src.exists() else {
         "title": pick["title"], "description": pick.get("reason", ""), "hashtags": [], "tags": []}
     tag = sc["hashtag"].lstrip("#")
     old_line = " ".join(f"#{h.lstrip('#')}" for h in draft.get("hashtags", []))
@@ -527,28 +678,56 @@ def write_draft(stream_dir: Path, clip_video: Path, short_video: Path, pick: dic
     draft["chapters"] = []
     out = stream_dir / "metadata" / "shorts" / f"{short_video.stem}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(draft, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(out, draft)
+
+
+def save_short(stream_dir: Path, state_path: Path, dst: Path, side: dict, clip_video: Path,
+               pick: dict, sc: dict, sig: str) -> None:
+    """A rendered Short's sidecar, upload draft and shorts.json entry; the files of an
+    earlier title go."""
+    key = side["key"]
+    for old in dst.parent.glob(f"{key}_*.mp4"):  # a retitled pick leaves its old file
+        if old != dst:
+            old.unlink(missing_ok=True)
+            old.with_suffix(".json").unlink(missing_ok=True)
+            old.with_suffix(".jpg").unlink(missing_ok=True)
+    jsonstate.write(dst.with_suffix(".json"), side)
+    write_draft(stream_dir, clip_video, dst, pick, sc)
+    multi = {"scenes": side["scenes"]} if "scenes" in side else {}
+    # The pauses cut, in stream seconds: a retake reads them to place a note's times.
+    pauses = [[round(side["in_s"] + c["from"], 3), round(side["in_s"] + c["to"], 3)]
+              for c in side.get("tightened", {}).get("pauses", [])]
+    with jsonstate.update(state_path, {}) as state:
+        old = state.get(key) or {}  # as the file has it now
+        state[key] = {"file": f"shorts/{dst.name}", "layout": side["layout"], **multi,
+                      "layout_by": side["layout_by"], "in_s": side["in_s"], "out_s": side["out_s"],
+                      **{k: old[k] for k in ("window_override", "tighten") if old.get(k) is not None},
+                      **({"pauses_cut": pauses} if pauses else {}),
+                      "sig": sig}
 
 
 # ---------- stage ----------
 
-def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str | None = None,
-        force: bool = False, rescene: bool = False, check: bool = False) -> list[dict]:
+def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str | None = None,  # noqa: C901
+        force: bool = False, rescene: bool = False, check: bool = False,
+        tight: bool | None = None) -> list[dict]:
     """rescene: label the scenes again for Shorts whose layout the model chose (re-renders
-    the ones that come out different). check: print each Short's scenes, render nothing."""
+    the ones that come out different). check: print each Short's scenes, render nothing.
+    tight: False keeps the chosen Shorts' pauses from now on ([edit] tighten), True lifts
+    that again; None leaves it as it is."""
     cfg = for_stream(cfg, stream_dir)
     sc = cfg["shorts"]
     codec = sc["codec"] or cfg["cut"]["clip_codec"]
     layouts = layouts_of(sc)
     if sc["default_layout"] not in layouts:
-        raise SystemExit(f"shorts.default_layout {sc['default_layout']!r} isn't one of {list(layouts)}")
+        raise ClipperError(f"shorts.default_layout {sc['default_layout']!r} isn't one of {list(layouts)}")
     if layout and layout not in layouts:
-        raise SystemExit(f"no layout {layout!r}; this show has {', '.join(layouts)}")
-    cands = json.loads((stream_dir / "candidates.json").read_text(encoding="utf-8"))
+        raise ClipperError(f"no layout {layout!r}; this show has {', '.join(layouts)}")
+    cands = jsonstate.load(stream_dir / "candidates.json")
     segs = []
     if (stream_dir / "segments.json").exists():
-        segs = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))["segments"]
-    end_of_stream = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))["duration_s"]
+        segs = jsonstate.load(stream_dir / "segments.json")["segments"]
+    end_of_stream = jsonstate.load(stream_dir / "meta.json")["duration_s"]
     by_id = {r["id"]: r for r in cands["pass_a"]}
     picks = cands["pass_b"].get("picks", [])
     words = load_words(stream_dir)
@@ -556,74 +735,56 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
     bleeper = Bleeper({**cfg["bleep"], "patterns": cfg["bleep"]["patterns"]
                        if cfg["bleep"]["mode"] != "off" else []})
     audio_bleeper = Bleeper(cfg["bleep"])
+    # shorts.json is re-read per Short and changed under its lock: a retake can set a
+    # window_override while this runs, and a whole-file write would drop it.
     state_path = stream_dir / "shorts.json"
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
-    review = {}
-    if (stream_dir / "review.json").exists():
-        review = json.loads((stream_dir / "review.json").read_text(encoding="utf-8"))
-    uploaded = set()  # on YouTube already: their files stay what was uploaded
-    if cfg["paths"]["schedule"].exists():
-        sched = json.loads(cfg["paths"]["schedule"].read_text(encoding="utf-8"))
-        uploaded = {e["key"] for e in sched["entries"] if e.get("status") == "uploaded"}
+    review = jsonstate.read(stream_dir / "review.json", {})
+    sched = jsonstate.read(cfg["paths"]["schedule"], {})
+    uploaded = {e["key"] for e in sched.get("entries", [])  # on YouTube already: their files
+                if e.get("status") == "uploaded"}          # stay what was uploaded
     out_dir, work = stream_dir / "shorts", stream_dir / "shorts" / "work"
     out_dir.mkdir(exist_ok=True)
     layouts = with_examples(layouts, cfg)
+    # Panels with focus = "face" follow the face found in their box (clipper faces).
+    faces = (jsonstate.read(stream_dir / "faces.json", {}).get("faces") or None) if wants_faces(layouts) else None
+    if wants_faces(layouts) and not faces:
+        print(f"  no faces.json in {stream_dir.name}: face panels keep their middle (clipper faces {stream_dir.name})")
+    layout_prompts = Prompts(cfg)
     claude = None
 
     def need_claude() -> Claude:
         nonlocal claude
-        claude = claude or Claude(cfg["scoring"]["workspace_id"])
+        claude = claude or Claude(cfg)
         return claude
 
     done = []
-    for i, p in enumerate(picks, 1):
+    for i, p in numbered_picks(picks):
         if ids and p["id"] not in ids and f"v{i:02d}" not in ids:
             continue
         c = by_id[p["id"]]
         key = f"v{i:02d}_{p['id']}"
         if f"{stream_dir.name}/{key}" in uploaded and not force:
             continue
-        if sc["window"] == "short":
-            a, b = c.get("short_in_s", c["in_s"]), c.get("short_out_s", c["out_s"])
-        else:
-            a, b = c["in_s"], c["out_s"]
-        topic = next((s for s in segs if s["start_s"] <= c["in_s"] < s["end_s"]), None)
-        lo, hi = (topic["start_s"], topic["end_s"]) if topic else (0.0, end_of_stream)
-        a, b = grow_window(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
-                           min(lo, a), max(hi, b))
-        if sc["window"] == "short" and sc["end_pause_s"] > 0:  # don't stop mid-sentence
-            b = end_on_sentence(words, a, b, sc["min_s"], sc["max_s"] - 2 * sc["pad_s"],
-                                max(hi, b), sc["end_pause_s"])
-        a, b = snap_window(words, a, b, sc["pad_s"])
-        b = min(b, a + sc["max_s"])
-        dur = round(b - a, 3)
+        a, b = short_window(c, sc, words, segs, end_of_stream)
         dst = out_dir / f"{key}_{slug(p['title'])}.mp4"
-        prev = state.get(key, {})
+        if tight is not None and not check:  # --no-tighten keeps this Short's pauses; --tighten lifts that
+            with jsonstate.update(state_path, {}) as state:
+                entry = state.setdefault(key, {})
+                if tight:
+                    entry.pop("tighten", None)
+                else:
+                    entry["tighten"] = False
+        prev = jsonstate.read(state_path, {}).get(key, {})
         if prev.get("window_override"):  # set by a retake: used as it is
             a, b = prev["window_override"]
-            dur = round(b - a, 3)
-        # Layout: --layout, then a changed Kitsu "Layout" column, then one set earlier by
-        # hand (shorts.json "layout", a retake): one layout for the whole Short. Otherwise
-        # frames through the window are labelled (detect_scenes) and each scene gets its
-        # own layout (kept in shorts.json "scenes"; --rescene labels again). --force keeps them.
-        # The column only counts once someone changed it from what clipper last proposed.
-        kitsu_layout = ((review.get(key, {}).get("fields") or {}).get("Layout") or ""
-                        if "Layout" in review.get(key, {}).get("edited", []) else "")
-        by_model = prev.get("layout_by", "model") in ("model", "only")
-        same_window = [prev.get("in_s"), prev.get("out_s")] == [a, b]
-        scenes = None
-        if layout:
-            scenes, how = [[0.0, dur, layout]], "cli"
-        elif kitsu_layout in layouts and kitsu_layout != prev.get("layout"):
-            scenes, how = [[0.0, dur, kitsu_layout]], "kitsu"
-        elif prev.get("layout") in layouts and not (by_model and (rescene or check)):
-            scenes, how = [[0.0, dur, prev["layout"]]], prev.get("layout_by", "model")
-        elif prev.get("scenes") and same_window and not (rescene or check):
-            scenes, how = prev["scenes"], prev.get("layout_by", "model")
-        elif len(pickable(layouts)) == 1:
-            scenes, how = [[0.0, dur, next(iter(pickable(layouts)))]], "only"
+        dur = round(b - a, 3)
+        # One layout for the whole Short, or else frames through the window are labelled
+        # (detect_scenes) and each scene gets its own layout. --force keeps them.
+        scenes, how = choose_layout(layout, review.get(key, {}), prev, layouts, a, b,
+                                    rescene or check)
         if scenes is None:
-            scenes, how = detect_scenes(need_claude, sc, pickable(layouts), src, a, dur, work, key)
+            scenes, how = detect_scenes(need_claude, layout_prompts, sc, pickable(layouts), src, a,
+                                        dur, work, key)
             if scenes is None:
                 print(f"  {key}: frame labels didn't come back whole; using {sc['default_layout']}")
                 scenes = [[0.0, dur, sc["default_layout"]]]
@@ -634,61 +795,42 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, layout: str |
                   flush=True)
             continue
         t = time.time()
-        clips = sorted((stream_dir / "clips").glob(f"{i:02d}_{p['id']}_*.mp4"))
-        clip_video = clips[0] if clips else dst
-        sig_base = {"a": a, "b": b, "captions": sc["captions"], "codec": codec,
-                    "style": {k: v for k, v in sc.items() if k.startswith("caption_")},
-                    "lufs": sc["lufs"], "w": sc["width"], "h": sc["height"]}
-        # One scene keeps the signature it always had, so Shorts made before scene
-        # detection aren't re-rendered when it finds the same single layout.
-        sig = signature({**sig_base, "layout": layouts[scenes[0][2]], "name": scenes[0][2]}
-                        if len(scenes) == 1 else
-                        {**sig_base, "scenes": [[s, e, n, layouts[n]] for s, e, n in scenes]})
+        in_scenes = scene_faces(layouts, scenes, faces, a)
+        cut_tight = cfg["edit"]["tighten"] and prev.get("tighten") is not False  # --no-tighten
+        sig = short_signature(sc, codec, a, b, scenes, layouts, in_scenes,
+                              {**{k: cfg["edit"][k] for k in tighten.KEYS}, "min_s": sc["min_s"],
+                               "fps": sc["fps"], "bleep_pad": audio_bleeper.pad if audio_bleeper.on else 0.0}
+                              if cut_tight else None)
         if not force and dst.exists() and prev.get("sig") == sig:
             continue
-        work.mkdir(parents=True, exist_ok=True)
-        cut = work / f"{key}.cut.mp4"
-        n_bleeps = ffmpeg_cut(src, cut, a, b, sc["cut_codec"] or cfg["cut"]["clip_codec"], sc["cut_crf"],
-                              keyframe=keyframe_before(stream_dir, src, a),
-                              bleep=(audio_bleeper, words))
-        W, H = probe_size(cut)
-        parts = [(s, e, panel_crops(layouts[n], W, H, sc["width"], sc["height"])) for s, e, n in scenes]
-        ass = work / f"{key}.ass" if sc["captions"] else None
-        n_caps = write_ass(words, a, dur, sc, [(s, e, layouts[n]) for s, e, n in scenes],
-                           bleeper, ass) if ass else 0
-        loud = render(cut, dst, parts, ass, dur, sc, codec)
-        if not sc["keep_work"]:
-            cut.unlink(missing_ok=True)
-            if ass:
-                ass.unlink(missing_ok=True)
-        for old in out_dir.glob(f"{key}_*.mp4"):  # a retitled pick leaves its old file
-            if old != dst:
-                old.unlink(missing_ok=True)
-                old.with_suffix(".json").unlink(missing_ok=True)
-                old.with_suffix(".jpg").unlink(missing_ok=True)
+        if dur < sc["min_s"]:  # grow_window found no whole lines to add (#77 L16)
+            print(f"  {key}: {dur:.1f} s is under [shorts] min_s ({sc['min_s']} s)", flush=True)
+        n_bleeps, n_caps, loud, pauses, length = cut_and_render(
+            stream_dir, cfg, src, words, (audio_bleeper, bleeper), layouts, scenes,
+            a, b, work, key, dst, codec, in_scenes, cut_tight)
+        if pauses:  # the review card's scene times as the tightened Short plays them
+            label = scenes_label([s for s in tighten.Timeline(pauses, dur).scenes(scenes) if s[1] > s[0]])
+        clips = sorted((stream_dir / "clips").glob(f"{i:02d}_{p['id']}_*.mp4"))
+        clip_video = clips[0] if clips else dst
         multi = {"scenes": scenes} if len(scenes) > 1 else {}
-        side = {**p, "key": key, "in_s": a, "out_s": b, "duration_s": dur, "layout": label,
+        side = {**p, "key": key, "in_s": a, "out_s": b, "duration_s": length, "layout": label,
                 **multi, "layout_by": how, "bleeps": n_bleeps, "captions": n_caps, **loud,
                 "category": c.get("category"), "score_a": c.get("score"),
-                "clip": clip_video.name if clip_video != dst else ""}
-        dst.with_suffix(".json").write_text(json.dumps(side, indent=2, ensure_ascii=False),
-                                            encoding="utf-8")
-        write_draft(stream_dir, clip_video, dst, p, sc)
-        state[key] = {"file": f"shorts/{dst.name}", "layout": label, **multi, "layout_by": how,
-                      "in_s": a, "out_s": b,
-                      **({"window_override": prev["window_override"]}
-                         if prev.get("window_override") else {}),
-                      "sig": sig}
-        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+                "source_audio_s": outside_voice_s(words, a, b, cfg["meta"]["cast"]),
+                "clip": clip_video.name if clip_video != dst else "",
+                **({"tightened": {"removed_s": round(dur - length, 3), "pauses": pauses}} if pauses else {})}
+        save_short(stream_dir, state_path, dst, side, clip_video, p, sc, sig)
         done.append(side)
-        print(f"{key}  {dur:5.1f}s  {label:<8} ({how})  {n_caps} captions, {n_bleeps} bleeps, "
+        tightened = f", {tighten.label(pauses)} cut" if pauses else ""
+        print(f"{key}  {length:5.1f}s  {label:<8} ({how})  {n_caps} captions, {n_bleeps} bleeps{tightened}, "
               f"{loud['input_lufs']:.1f} -> {sc['lufs']} LUFS  -> {dst.name} ({time.time() - t:.0f}s)",
               flush=True)
     if claude and claude.cost:
         print(f"layout picks cost ${claude.cost:.4f}")
     if check:
         return []
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")  # marks the stage done
+    with jsonstate.update(state_path, {}):  # marks the stage done
+        pass
     print(f"{len(done)} shorts rendered, {len(picks) - len(done)} unchanged or skipped")
     if done:  # their vertical covers, from the clips' thumbnail choices (no model calls)
         from . import thumbs

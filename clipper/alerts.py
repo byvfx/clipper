@@ -3,6 +3,7 @@
 Usage:
     clipper alert test            queue a test DM (the bot sends it within a minute)
     clipper alert digest          print today's digest (--send: DM it now)
+    clipper alert send TEXT       queue TEXT ('-': stdin) as a DM, kind --kind (default checkup)
 
 Any clipper process (the worker, the NAS recorder, uploads, the bot) calls
 `alerts.send(cfg, kind, text)`, which drops one small JSON file into
@@ -12,7 +13,9 @@ process that is always up and has the Discord token, picks them up every minute 
 - only the kinds in [notify] kinds: ready (a stream is in review), upload (upload or TikTok
   failed, YouTube limits, sign-in expired), failure (a stage failed after its retries, a
   crash, a background job failing), recorder (stalls, crashes, finalize failures), disk
-  (the streams share filling up), digest (daily summary at digest_time);
+  (the streams share filling up), digest (daily summary at digest_time), spend (Modal's
+  month passing each [modal] alert_every_usd, checked hourly), checkup (the nightly
+  `clipper checkup` report, deploy/claude/checkup.sh);
 - the same problem (same key) at most once per cooldown_hours;
 - nothing during quiet_hours: held, then sent together when they end.
 The bot itself adds the disk check, the digest and "can't read the streams share" (which
@@ -33,11 +36,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import requests
+
+from . import jsonstate
+from .errors import ClipperError
+
 log = logging.getLogger("clipper.alerts")
 
 _SEQ = itertools.count()
 ICON = {"ready": "🎬", "upload": "📤", "failure": "❌", "recorder": "🔴", "disk": "💾",
-        "digest": "📰", "test": "🔔"}
+        "digest": "📰", "spend": "💸", "checkup": "🩺", "test": "🔔"}
 
 
 def outbox(cfg: dict) -> Path:
@@ -63,6 +71,38 @@ def send(cfg: dict, kind: str, text: str, key: str = "") -> None:
         log.warning("notification not queued (%s): %s", e, text)
 
 
+class Alerts:
+    """Log every alert; also post to Discord through a webhook URL (env var named by
+    [record] alert_webhook_env) or the review bot's token into alert_channel_id. The recorder,
+    the worker and TikTok captions use it; warnings also go to the bot's outbox (send)."""
+
+    def __init__(self, cfg: dict):
+        rc = cfg["record"]
+        self.webhook = os.environ.get(rc["alert_webhook_env"], "").strip()
+        self.channel = str(rc["alert_channel_id"] or "")
+        self.cfg = cfg
+        self.mention = rc["alert_mention"]
+
+    def __call__(self, text: str, level: int = logging.WARNING, kind: str | None = "auto",
+                 key: str = "") -> None:
+        log.log(level, "ALERT %s", text)
+        if kind == "auto":  # the recorder's: warnings are DMs (#22), news like "is live" isn't
+            kind = "recorder" if level >= logging.WARNING else None
+        if kind:
+            send(self.cfg, kind, text, key)
+        body = f"{self.mention} {text}".strip() if level >= logging.WARNING else text
+        try:
+            if self.webhook:
+                requests.post(self.webhook, json={"content": body[:1900]}, timeout=20)
+            elif self.channel:
+                from . import notify
+
+                notify.Rest(self.cfg)("POST", f"/channels/{self.channel}/messages",
+                                      {"content": body[:1900]})
+        except (requests.RequestException, ClipperError) as e:
+            log.error("alert not delivered: %s", e)
+
+
 # ---------- the bot's side ----------
 
 def _tz(cfg: dict) -> ZoneInfo:
@@ -70,8 +110,16 @@ def _tz(cfg: dict) -> ZoneInfo:
 
 
 def _hm(s: str) -> tuple[int, int]:
-    h, m = s.strip().split(":")
-    return int(h), int(m)
+    """"HH:MM" -> (h, m); a ClipperError names the setting (config.problems warns at load,
+    doctor fails, and the bot's notify loop logs the reason instead of a traceback)."""
+    try:
+        h, m = s.strip().split(":")
+        h, m = int(h), int(m)
+        if not (0 <= h < 24 and 0 <= m < 60):
+            raise ValueError
+    except ValueError:
+        raise ClipperError(f"[notify] quiet_hours / digest_time: {s.strip()!r} isn't HH:MM") from None
+    return h, m
 
 
 def quiet(cfg: dict, now: datetime) -> bool:
@@ -89,7 +137,7 @@ def _state_path(cfg: dict) -> Path:
 
 def load_state(cfg: dict) -> dict:
     try:
-        st = json.loads(_state_path(cfg).read_text(encoding="utf-8"))
+        st = jsonstate.load(_state_path(cfg))
     except (OSError, ValueError):
         st = {}
     return {"sent": {}, "digest": "", "disk_at": 0.0, **st}
@@ -100,14 +148,14 @@ def save_state(cfg: dict, st: dict) -> None:
     keep = timedelta(days=7)  # cooldowns are hours; don't let the file grow forever
     st["sent"] = {k: v for k, v in st["sent"].items() if now - datetime.fromisoformat(v) < keep}
     p = _state_path(cfg)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(st, indent=1), encoding="utf-8")
-    tmp.replace(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    jsonstate.write(p, st, indent=1)
 
 
-def checks(cfg: dict, st: dict, now: datetime) -> None:
+def checks(cfg: dict, st: dict, now: datetime, digest=None) -> None:
     """The bot's own checks, queued like any other alert: the disk once an hour, the
-    digest once a day at digest_time."""
+    digest once a day at digest_time. digest: (cfg, now) -> the text (the bot passes
+    clipper.digest.text); None queues no digest, so this module never reads the war room."""
     nc = cfg["notify"]
     if time.time() - st["disk_at"] >= 3600 and nc["disk_free_gb"]:
         st["disk_at"] = time.time()
@@ -116,19 +164,32 @@ def checks(cfg: dict, st: dict, now: datetime) -> None:
         if free < nc["disk_free_gb"]:
             send(cfg, "disk", f"the streams share ({root}) has {free:.0f} GB free "
                               f"(warning under {nc['disk_free_gb']} GB)", key="disk")
-    if nc["digest_time"] and st["digest"] != now.date().isoformat() \
+    if digest and nc["digest_time"] and st["digest"] != now.date().isoformat() \
             and (now.hour, now.minute) >= _hm(nc["digest_time"]):
         st["digest"] = now.date().isoformat()
-        send(cfg, "digest", digest(cfg, now), key=f"digest:{now.date()}")
+        try:
+            text = digest(cfg, now)
+        except Exception as e:  # noqa: BLE001  # say so once, rather than every pass
+            log.warning("digest: %s: %s", type(e).__name__, e)
+            text = f"Daily digest failed: {type(e).__name__}: {e}"[:1900]
+        send(cfg, "digest", text, key=f"digest:{now.date()}")
+    if "spend" in nc["kinds"]:
+        try:  # #49: once an hour, Modal's billing for the month
+            from .modalmon import spend_alert
+
+            spend_alert(cfg, st)
+        except Exception as e:  # noqa: BLE001  # no modal extra, signed out, Modal down
+            log.debug("modal spend check: %s", e)
 
 
-def pending(cfg: dict, link: str = "") -> tuple[list[str], list[Path], dict]:
+def pending(cfg: dict, link: str = "", digest=None) -> tuple[list[str], list[Path], dict]:
     """What to DM now: the messages (each under Discord's 2000 characters), the outbox files
-    they cover and the state to save once they're sent. Nothing during quiet hours."""
+    they cover and the state to save once they're sent. Nothing during quiet hours.
+    digest: see checks()."""
     nc, tz = cfg["notify"], _tz(cfg)
     now = datetime.now(tz)
     st = load_state(cfg)
-    checks(cfg, st, now)
+    checks(cfg, st, now, digest)
     d = outbox(cfg)
     files = sorted(d.glob("*.json")) if d.is_dir() else []
     if not files or quiet(cfg, now):
@@ -137,7 +198,7 @@ def pending(cfg: dict, link: str = "") -> tuple[list[str], list[Path], dict]:
     lines, linked = [], False
     for f in files:
         try:
-            ev = json.loads(f.read_text(encoding="utf-8"))
+            ev = jsonstate.load(f)
         except (OSError, ValueError):
             continue
         if ev["kind"] not in nc["kinds"] and ev["kind"] != "test":
@@ -170,38 +231,3 @@ def done(cfg: dict, files: list[Path], st: dict) -> None:
     for f in files:
         f.unlink(missing_ok=True)
     save_state(cfg, st)
-
-
-# ---------- the daily digest ----------
-
-def digest(cfg: dict, now: datetime | None = None) -> str:
-    from . import warroom
-
-    tz = _tz(cfg)
-    now = now or datetime.now(tz)
-    ov = warroom.overview(cfg)
-    day = lambda e: datetime.fromisoformat(e["publish_at"]).astimezone(tz).date()
-    today = [e for e in ov["schedule"] if day(e) == now.date()]
-    out = [e for e in today if e.get("status") == "uploaded"
-           and datetime.fromisoformat(e["publish_at"]) <= now]
-    tomorrow = sorted((e for e in ov["schedule"] if day(e) == now.date() + timedelta(days=1)),
-                      key=lambda e: e["publish_at"])
-
-    def by_show(es: list[dict]) -> str:
-        n: dict[str, int] = {}
-        for e in es:
-            n[e["show_name"] or "?"] = n.get(e["show_name"] or "?", 0) + 1
-        return ", ".join(f"{k} {v}" for k, v in sorted(n.items(), key=lambda kv: -kv[1]))
-
-    c = ov["counts"]
-    lines = [f"Daily digest, {now:%a %b %d}",
-             f"Out today: {len(out)} of {len(today)}" + (f" ({by_show(out)})" if out else ""),
-             f"Tomorrow: {len(tomorrow)} scheduled" + (
-                 f", first {datetime.fromisoformat(tomorrow[0]['publish_at']).astimezone(tz):%H:%M}: "
-                 f"{tomorrow[0]['title'][:80]}" if tomorrow else ""),
-             (f"Waiting for review: {c['pending']} · changes asked: {c.get('changes', 0)} · "
-              f"approved, no slot yet: {c['approved_unscheduled']}")]
-    failed = [s["id"] for s in ov["streams"] if s["run_status"] == "failed"]
-    if failed:
-        lines.append(f"Streams stuck on a failed stage: {', '.join(failed)}")
-    return "\n".join(lines)

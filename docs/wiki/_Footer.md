@@ -1,0 +1,1 @@
+<sub>[Home](Home) · [Getting started](Getting-started) · `clipper doctor` · These pages are built from `docs/wiki/` in the repo, so edits made here are overwritten: [how to edit them](Developing#editing-these-docs)</sub>

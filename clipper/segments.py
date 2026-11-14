@@ -12,13 +12,18 @@ missing compilation text without paying for a new split (--force re-splits).
 
 from __future__ import annotations
 
-import json
 import re
 from itertools import pairwise
 from pathlib import Path
 
+from . import jsonstate
 from .config import for_stream
-from .scoring import Claude, Prompts, load_words, preflight, snap, transcript_lines
+from .errors import ClipperError
+from .llm import Claude, estimate_lines, preflight, tokens
+from .prompts import Prompts
+from .states import is_preshow
+from .timefmt import hms
+from .transcript import load_words, snap, transcript_lines
 
 KINDS = ["intro", "commentary", "reaction", "call", "gambling", "ad_read", "break",
          "outro", "other"]
@@ -60,11 +65,6 @@ COMPILATION_SCHEMA = {
 }
 
 
-def hms(s: float) -> str:
-    s = int(s)
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
-
-
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:50]
 
@@ -92,7 +92,7 @@ def split(stream_dir: Path, cfg: dict, claude: Claude, prompts: Prompts) -> dict
     out, meta = claude.json_call(seg_cfg["model"], prompts.get("segments"), transcript, SCHEMA,
                                  seg_cfg["effort"], fallback=True, stream=True)
     if out is None:
-        raise SystemExit(f"segments: model refused ({meta.get('refusal')})")
+        raise ClipperError(f"segments: model refused ({meta.get('refusal')})")
     segs = sorted(out["segments"], key=lambda s: s["start_s"])
     for i, s in enumerate(segs, 1):
         s["id"] = f"s{i:02d}"
@@ -103,7 +103,7 @@ def split(stream_dir: Path, cfg: dict, claude: Claude, prompts: Prompts) -> dict
     gaps = [(a["id"], b["id"], round(b["start_s"] - a["end_s"], 1))
             for a, b in pairwise(segs) if abs(b["start_s"] - a["end_s"]) > 30]
     return {"stream_id": stream_dir.name, "model": seg_cfg["model"],
-            "prompt_version": prompts.version, "api": meta, "gaps": gaps, "segments": segs}
+            "prompt_version": prompts.version_of("segments"), "api": meta, "gaps": gaps, "segments": segs}
 
 
 def compilations(data: dict, cfg: dict, claude: Claude, prompts: Prompts) -> list[dict]:
@@ -133,21 +133,39 @@ def compilations(data: dict, cfg: dict, claude: Claude, prompts: Prompts) -> lis
     return out
 
 
-def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
+def estimate(stream_dir: Path, cfg: dict, prompts: Prompts, split: bool) -> list[str]:
+    """`--dry-run`: the split call priced with [llm] prices, nothing called. The compilation
+    calls come after the split (one per topic with enough segments) and are small."""
+    seg_cfg = cfg["segments"]
+    tail = f"  plus one small call (~$0.02) per topic with {seg_cfg['compile_min_segments']}+ segments to cut"
+    if not split:
+        return ["  segments.json is kept (no --force): no split call", tail]
+    words = load_words(stream_dir)
+    transcript = "\n".join(transcript_lines(words, 0, words[-1]["end"] + 1))
+    rows = [("split", seg_cfg["model"], 1, tokens(prompts.get("segments") + transcript), 4000)]
+    return estimate_lines(cfg, rows) + [tail]
+
+
+def run(stream_dir: Path, cfg: dict, force: bool = False, dry_run: bool = False) -> list[dict]:
     from . import preshow
 
-    if preshow.is_preshow(stream_dir):  # one whole-video segment, no split
+    if is_preshow(stream_dir):  # one whole-video segment, no split
+        if dry_run:
+            print("estimate: a pre-show is one whole-video segment, no model call")
+            return []
         return preshow.write_segments(stream_dir, cfg, force=force)
     cfg = for_stream(cfg, stream_dir)
     seg_cfg = cfg["segments"]
     prompts = Prompts(cfg)
-    prompts.version = seg_cfg["prompt_version"]
     prompts.vars["min_aside_s"] = seg_cfg["min_aside_s"]
     path = stream_dir / "segments.json"
-    claude = Claude(cfg["scoring"]["workspace_id"])
+    if dry_run:
+        print("\n".join(["estimate:"] + estimate(stream_dir, cfg, prompts, split=force or not path.exists())))
+        return []
+    claude = Claude(cfg)
 
     if path.exists() and not force:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = jsonstate.load(path)
     else:
         preflight(claude, seg_cfg["model"])
         data = split(stream_dir, cfg, claude, prompts)
@@ -155,7 +173,7 @@ def run(stream_dir: Path, cfg: dict, force: bool = False) -> list[dict]:
     apply_filters(segs, seg_cfg)
     data["compilations"] = compilations(data, cfg, claude, prompts)
     data["cost_usd"] = round(data.get("cost_usd", 0) + claude.cost, 4)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    jsonstate.write(path, data)
 
     print(f"{len(segs)} segments, {sum(s['cut'] for s in segs)} to cut; "
           f"this run ${claude.cost:.3f}")

@@ -45,22 +45,25 @@ create projects, shots and tasks (Admin, or Studio Manager on an existing projec
 from __future__ import annotations
 
 import bisect
-import json
 import os
 import subprocess
 import time
 from pathlib import Path
 
+from . import jsonstate, tighten
 from .config import for_stream
+from .errors import ClipperError
 from .segments import slug
+from .states import ENTITY, Decision
 
 TASK_TYPES = {"Segment": ("#48bfe3", "Sequence"), "Horizontal": ("#5e60ce", "Shot"),
               "Compilation": ("#f77f00", "Sequence"), "Vertical": ("#ef476f", "Shot")}
 FOLDERS = {"pick": "clips", "segment": "segments", "compilation": "compilations",
            "short": "shorts"}
 OTHER_SEQUENCE = "s00_other"
-DECISIONS = {"approved": "approved", "done": "approved", "retake": "changes_requested",
-             "rejected": "rejected", "wfa": "pending"}
+# Kitsu task status (short name) -> review.json decision; any other status is pending.
+DECISIONS = {"approved": Decision.APPROVED, "done": Decision.APPROVED, "retake": Decision.CHANGES,
+             "rejected": Decision.REJECTED, "wfa": Decision.PENDING}
 
 # The "Clipping" project template: production settings, task types, statuses and the
 # custom columns (metadata descriptors) every clipping production gets.
@@ -94,6 +97,11 @@ COLUMNS = [
     ("Shot", "Found by", "list", ["chat", "transcript"]),
     # Shorts: the crop layout (a name from [shorts] layouts); edit it and rerun clipper shorts.
     ("Shot", "Layout", "string", None),
+    # Shorts: seconds of voices that aren't the show's own people (speaker tags); over
+    # [scoring] max_source_audio_s the Short is proposed held ([shorts] hold_source_audio).
+    ("Shot", "Other voices", "number", None),
+    # Shorts: the pauses [edit] tighten cut out ("4 pauses, 3.2 s"); empty when none were.
+    ("Shot", "Tightened", "string", None),
     # Scheduling (clipper schedule): Publish at and Hold are yours to set; Scheduled is
     # written by clipper with the slot it assigned.
     ("Sequence", "Publish at", "string", None),
@@ -116,7 +124,6 @@ COLUMNS = [
     ("Shot", "Thumbnail text", "string", None),
 ]
 THUMB_COL = "Thumbnail text"
-ENTITY = {"segment": "Sequence", "pick": "Shot", "compilation": "Sequence", "short": "Shot"}
 SEQUENCE_KINDS = ("segment", "compilation")
 # Comments clipper adds to record a column change (Hold, Publish at, title); sync never
 # takes one of these as the reason for a decision.
@@ -152,15 +159,15 @@ def connect(rc: dict):
     import gazu
 
     if not rc["host"] or "<" in rc["host"]:
-        raise SystemExit("set [review] host to your Kitsu API URL (Kitsu URL + /api) in clipper.toml")
+        raise ClipperError("set [review] host to your Kitsu API URL (Kitsu URL + /api) in clipper.toml")
     token = os.environ.get(rc["token_env"], "")
     if not token:
-        raise SystemExit(f"set ${rc['token_env']} to a Kitsu bot token (Kitsu > Bots)")
+        raise ClipperError(f"set ${rc['token_env']} to a Kitsu bot token (Kitsu > Bots)")
     gazu.cache.disable()  # cached "not found" lookups would hide what we just created
     gazu.set_host(rc["host"])
     gazu.set_token(token)
     if not gazu.client.host_is_up():
-        raise SystemExit(f"Kitsu not reachable at {rc['host']}")
+        raise ClipperError(f"Kitsu not reachable at {rc['host']}")
     return gazu
 
 
@@ -179,6 +186,18 @@ def full_title(cfg: dict | None, title: str) -> str:
         return title
     out = fmt.format(show=show, SHOW=show.upper(), title=title)
     return out if len(out) <= 100 else title
+
+
+def bare_title(cfg: dict | None, title: str) -> str:
+    """The title without [meta] title_format's show prefix ("KINO CASINO | "), for feeds
+    that show only the first few words."""
+    title = " ".join((title or "").split())
+    mc = (cfg or {}).get("meta", {})
+    show, fmt = mc.get("show_name") or "", mc.get("title_format") or "{title}"
+    prefix = fmt.split("{title}")[0].format(show=show, SHOW=show.upper()).strip()
+    if show and prefix and title.lower().startswith(prefix.lower()):
+        return title[len(prefix):].strip() or title
+    return title
 
 
 def hashtag_line(text: str | list[str]) -> str:
@@ -202,7 +221,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
     """Every reviewable output of a stream that has been cut: segments, then clips. cfg
     gives titles the show name ([meta] title_format)."""
     cfg = for_stream(cfg, stream_dir) if cfg else cfg
-    seg_data = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))
+    seg_data = jsonstate.load(stream_dir / "segments.json")
     cut_segs = sorted((s for s in seg_data["segments"] if s["cut"]), key=lambda s: s["start_s"])
     starts = [s["start_s"] for s in cut_segs]
 
@@ -213,7 +232,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
     out = []
     if "segments" in include:
         for side in sorted((stream_dir / "segments").glob("*.json")):
-            d = json.loads(side.read_text(encoding="utf-8"))
+            d = jsonstate.load(side)
             out.append({"kind": "segment", "key": sequence_name(d), "seq": sequence_name(d),
                         "seq_title": d["title"], "type": "Segment",
                         "file": side.with_suffix(".mp4"), "title": d["title"],
@@ -222,10 +241,11 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "fields": {"Topic": d["topic"], "Source audio": d["source_share"]},
                         "meta": d})
     if "picks" in include:
-        for i, side in enumerate(sorted((stream_dir / "clips").glob("*.json")), 1):
-            d = json.loads(side.read_text(encoding="utf-8"))
+        for side in sorted((stream_dir / "clips").glob("*.json")):
+            d = jsonstate.load(side)
             seg = segment_of(d["in_s"])
-            out.append({"kind": "pick", "key": f"c{i:02d}_{d['id']}", "shot": f"c{i:02d}_{d['id']}",
+            n = side.name.split("_", 1)[0]  # clips/03_t12_<slug>.json: the pick's number (#77 L13)
+            out.append({"kind": "pick", "key": f"c{n}_{d['id']}", "shot": f"c{n}_{d['id']}",
                         "seq": sequence_name(seg) if seg else OTHER_SEQUENCE,
                         "seq_title": seg["title"] if seg else "Clips outside a segment",
                         "type": "Horizontal", "file": side.with_suffix(".mp4"),
@@ -233,11 +253,11 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "duration_s": d["out_s"] - d["in_s"],
                         "fields": {"Hook": d["hook"], "Category": d.get("category"),
                                    "Score": d.get("score_a"),
-                                   "Found by": "transcript" if d["id"].startswith("t") else "chat"},
+                                   "Found by": found_by(d["id"])},
                         "meta": d})
     if "shorts" in include:
         for side in sorted((stream_dir / "shorts").glob("v*.json")):
-            d = json.loads(side.read_text(encoding="utf-8"))
+            d = jsonstate.load(side)
             seg = segment_of(d["in_s"])
             out.append({"kind": "short", "key": d["key"], "shot": d["key"],
                         "seq": sequence_name(seg) if seg else OTHER_SEQUENCE,
@@ -247,11 +267,12 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
                         "duration_s": d["duration_s"],
                         "fields": {"Hook": d.get("hook"), "Category": d.get("category"),
                                    "Score": d.get("score_a"), "Layout": d["layout"],
-                                   "Found by": "transcript" if d["id"].startswith("t") else "chat"},
+                                   "Tightened": tighten.label(d.get("tightened", {}).get("pauses", [])),
+                                   "Found by": found_by(d["id"]), **source_hold(d, cfg)},
                         "meta": d})
     if "compilations" in include:
         for side in sorted((stream_dir / "compilations").glob("*.json")):
-            d = json.loads(side.read_text(encoding="utf-8"))
+            d = jsonstate.load(side)
             key = f"comp-{side.stem}"
             out.append({"kind": "compilation", "key": key, "seq": key,
                         "seq_title": d["title"], "type": "Compilation",
@@ -262,7 +283,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
     ls = Listing()
     out = [it for it in out if ls.exists(it["file"])]
     thumbs_path = stream_dir / "thumbnails.json"
-    thumbs = json.loads(thumbs_path.read_text(encoding="utf-8")) if thumbs_path.exists() else {}
+    thumbs = jsonstate.read(thumbs_path, {})
     for it in out:
         it["thumb_key"] = f"{it['file'].parent.name}/{it['file'].stem}"
         if it["thumb_key"] in thumbs:
@@ -270,7 +291,7 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
         # Prefer the upload metadata draft for what reviewers read and edit.
         draft = stream_dir / "metadata" / FOLDERS[it["kind"]] / f"{it['file'].stem}.json"
         if ls.exists(draft):
-            upload = draft_fields(json.loads(draft.read_text(encoding="utf-8")))
+            upload = draft_fields(jsonstate.load(draft))
         else:
             upload = {"YouTube title": it["title"], "YouTube description": it["description"]}
         upload["YouTube title"] = full_title(cfg, upload["YouTube title"])
@@ -278,6 +299,20 @@ def items(stream_dir: Path, include: list[str], cfg: dict | None = None) -> list
         tags = upload.get("Hashtags")
         it["text"] = f"{it['title']}\n\n{it['description']}" + (f"\n\n{tags}" if tags else "")
         it["fields"] = {**upload, **{k: v for k, v in it["fields"].items() if v is not None}}
+    return out
+
+
+def source_hold(short: dict, cfg: dict | None) -> dict:
+    """A Short's Other voices column and proposed Hold: held while its other voices
+    (shorts.json source_audio_s) run over [scoring] max_source_audio_s. A proposal only:
+    fill_columns never overwrites a Hold set or released by hand, and a re-cut under the
+    limit releases a hold clipper set."""
+    s = short.get("source_audio_s")
+    if s is None or not cfg:
+        return {}
+    out = {"Other voices": s}
+    if cfg["shorts"]["hold_source_audio"]:
+        out["Hold"] = "true" if s > cfg["scoring"]["max_source_audio_s"] else "false"
     return out
 
 
@@ -291,10 +326,16 @@ def episode_name(stream_dir: Path, rc: dict, tz: str = "America/Los_Angeles") ->
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
-    meta = json.loads((stream_dir / "meta.json").read_text(encoding="utf-8"))
+    meta = jsonstate.load(stream_dir / "meta.json")
     aired = datetime.fromisoformat(meta["started_at"]).astimezone(ZoneInfo(tz))
+    if meta.get("kind") == "story":  # its own episode, not the show's that day (#84)
+        return f"{aired:%Y-%m-%d} {stream_dir.name}"
     return rc["episode_name"].format(date=f"{aired:%Y-%m-%d}", stream_id=stream_dir.name,
                                      title=meta.get("title", ""))
+
+
+def found_by(pick_id: str) -> str:
+    return {"t": "transcript", "h": "hand"}.get(pick_id[:1], "chat")
 
 
 def render_preview(src: Path, dst: Path, rc: dict, codec: str) -> Path:
@@ -387,6 +428,35 @@ def column_fields(gazu, proj: dict) -> dict[tuple[str, str], str]:
             for d in gazu.project.all_metadata_descriptors(proj)}
 
 
+# A review item is a Kitsu Shot (picks, Shorts) or Sequence (segments, compilations):
+# ENTITY[kind]. These read and write its custom columns, keyed by field id (column_fields).
+
+def entity_data(gazu, etype: str, eid: str) -> dict:
+    """The item's custom columns as {field id: value}."""
+    get = gazu.shot.get_sequence if etype == "Sequence" else gazu.shot.get_shot
+    return get(eid).get("data") or {}
+
+
+def write_data(gazu, etype: str, eid: str, data: dict) -> None:
+    """Set some of the item's custom columns ({field id: value}); the others are kept."""
+    update = gazu.shot.update_sequence_data if etype == "Sequence" else gazu.shot.update_shot_data
+    update(eid, data)
+
+
+def set_columns(gazu, fmap: dict, etype: str, eid: str, values: dict[str, str],
+                strict: bool = False) -> dict:
+    """Set columns by name ({"YouTube URL": url}). A column the production doesn't have is
+    skipped, or with strict refused (run `clipper review publish` to add it). Returns
+    what was written, by field id."""
+    missing = [n for n in values if (etype, n) not in fmap]
+    if missing and strict:
+        raise ClipperError(f"Kitsu has no {etype} column {missing}; run clipper review publish")
+    data = {fmap[(etype, n)]: v for n, v in values.items() if (etype, n) in fmap}
+    if data:
+        write_data(gazu, etype, eid, data)
+    return data
+
+
 def ensure_project(gazu, name: str) -> tuple[dict, dict]:
     """The show's production, built from the Clipping template. An existing production
     without our columns gets the template applied once (it only adds what's missing).
@@ -439,19 +509,14 @@ def ensure_playlist(gazu, proj: dict, ep: dict, name: str, for_entity: str,
     return pl
 
 
-def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = True,
-            only: list[str] | None = None) -> None:
-    """only: publish just these kinds of [review] include (e.g. re-cut Shorts without
-    sending re-cut segments back for review too)."""
-    cfg = for_stream(cfg, stream_dir)
+def render_previews(stream_dir: Path, cfg: dict, todo: list[dict]) -> None:
+    """Each item's low-res preview (it["preview"]), rendered before any upload (the local,
+    slow part). A compilation's preview is its segments' previews joined (no re-encode),
+    when they are all there."""
     rc = cfg["review"]
     codec = rc["preview_codec"] or cfg["cut"]["clip_codec"]
-    todo = items(stream_dir, [k for k in rc["include"] if not only or k in only], cfg)
     prev_dir = stream_dir / "review"
     prev_dir.mkdir(exist_ok=True)
-
-    # Render previews first (local, slow part), then upload. A compilation's preview is
-    # its segments' previews joined (no re-encode), when they are all there.
     seg_previews = {it["meta"]["id"]: prev_dir / f"{it['key']}.mp4"
                     for it in items(stream_dir, ["segments"], cfg)}
     for it in sorted(todo, key=lambda it: it["kind"] == "compilation"):
@@ -467,12 +532,12 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         print(f"preview {it['key']}: {it['preview'].stat().st_size / 1e6:.0f} MB "
               f"({time.time() - t:.0f}s)", flush=True)
 
-    gazu = connect(rc)
-    proj, types = ensure_project(gazu, project_name(cfg))
-    wfa = gazu.task.get_task_status_by_short_name("wfa")
-    ep_name = episode_name(stream_dir, rc, cfg["schedule"]["timezone"])
-    ep = gazu.shot.get_episode_by_name(proj, ep_name) or gazu.shot.new_episode(proj, ep_name)
 
+def push_previews(gazu, stream_dir: Path, rc: dict, proj: dict, ep: dict, types: dict,
+                  wfa: dict, todo: list[dict], force: bool) -> tuple[dict, list[str]]:
+    """Each item whose preview changed (or all, with force) as a new revision of its
+    task, with status wfa (waiting for approval); its ids in review_state.json. Returns
+    (that state, the keys published)."""
     seqs: dict[str, dict] = {}
 
     def sequence(name: str, title: str) -> dict:
@@ -486,7 +551,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         return seqs[name]
 
     state_path = stream_dir / "review_state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    state = jsonstate.read(state_path, {})
     published: list[str] = []
     for it in todo:
         seq = sequence(it["seq"], it["seq_title"])
@@ -505,21 +570,57 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
                                                preview_file_path=str(it["preview"]),
                                                normalize_movie=rc["normalize"],
                                                set_thumbnail=True)
-        old = state.get(it["key"], {})  # keep what we last proposed, for the columns below
+        old = state.get(it["key"], {})  # keep what we last proposed, for the columns
         state[it["key"]] = {**{k: old[k] for k in ("fields", "thumbnail_text") if k in old},
                             "kind": it["kind"], "id": it["meta"]["id"],
-                            "file": str(it["file"].relative_to(stream_dir)),
+                            "file": it["file"].relative_to(stream_dir).as_posix(),
                             "sequence": it["seq"], "entity_id": entity["id"],
                             "task_id": task["id"], "preview_id": preview["id"],
                             "revision": preview.get("revision"), "preview_mtime": mtime,
                             **links(rc, proj["id"], ep["id"], it["kind"], task["id"])}
         published.append(it["key"])
-        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        state = jsonstate.merge(state_path, state, [it["key"]])  # a retake may write it too
         print(f"published {it['seq']}/{it.get('shot', '')} rev {preview.get('revision')} "
               f"({time.time() - t:.0f}s)", flush=True)
+    return state, published
 
-    # Custom columns: fill the empty ones, and update those still showing what we last
-    # proposed (st["fields"]); a value edited in Kitsu or Discord is never overwritten.
+
+def columns_to_fill(values: dict, before: dict, current: dict, tf: str | None,
+                    last_thumb: str | None) -> dict:
+    """The columns (field id -> value) to write: the empty ones, and those still showing
+    what we last proposed (before) when the proposal changed; a value edited in Kitsu or
+    Discord is never overwritten. Thumbnail text (field tf) also follows a re-picked
+    thumbnail while the column still shows what clipper last wrote there (last_thumb)."""
+    empty = (None, "")
+    missing = {k: v for k, v in values.items()  # an empty value onto an empty column is no change
+               if (current.get(k) in empty and v not in empty)
+               or (k in before and current.get(k) == before[k] != v)}
+    if tf in values and current.get(tf) == last_thumb != values[tf]:
+        missing[tf] = values[tf]
+    return missing
+
+
+OWNED = ("Hold",)  # columns where only a value clipper wrote counts as its proposal
+
+
+def proposals_to_keep(fields: dict, before: dict, written: set[str]) -> dict:
+    """What review_state.json keeps as our proposals (columns_to_fill's `before`): every
+    field as proposed, except an OWNED column whose new proposal wasn't written and wasn't
+    ours already. There the earlier proposal stays, so a value set by hand (a Hold put on a
+    clean Short) is never taken for ours and released by a later proposal."""
+    out = {n: str(v) for n, v in fields.items()}
+    for n in OWNED:
+        if n in out and n not in written and before.get(n) != out[n]:
+            if n in before:
+                out[n] = before[n]
+            else:
+                del out[n]
+    return out
+
+
+def fill_columns(gazu, proj: dict, todo: list[dict], state: dict, state_path: Path) -> dict:
+    """Custom columns of the published items (columns_to_fill); what was proposed is kept
+    in review_state.json (st["fields"]). Returns the state."""
     fmap = column_fields(gazu, proj)
     filled = 0
     for it in todo:
@@ -527,29 +628,27 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
         if not st:
             continue
         etype = ENTITY[it["kind"]]
-        get, update = ((gazu.shot.get_sequence, gazu.shot.update_sequence_data)
-                       if etype == "Sequence" else (gazu.shot.get_shot, gazu.shot.update_shot_data))
-        current = get(st["entity_id"]).get("data") or {}
+        current = entity_data(gazu, etype, st["entity_id"])
         values = {fmap[(etype, n)]: str(v) for n, v in it["fields"].items() if (etype, n) in fmap}
         before = {fmap[(etype, n)]: str(v) for n, v in st.get("fields", {}).items()
                   if (etype, n) in fmap}
-        missing = {k: v for k, v in values.items()
-                   if current.get(k) in (None, "") or current.get(k) == before.get(k) != v}
-        # Thumbnail text also follows a re-picked thumbnail while the column still shows
-        # what clipper last wrote there (st["thumbnail_text"]); a reviewer's edit stays.
         tf = fmap.get((etype, THUMB_COL))
-        if tf in values and current.get(tf) == st.get("thumbnail_text") != values[tf]:
-            missing[tf] = values[tf]
+        missing = columns_to_fill(values, before, current, tf, st.get("thumbnail_text"))
         if tf in missing:
             st["thumbnail_text"] = missing[tf]
         if missing:
-            update(st["entity_id"], missing)
+            write_data(gazu, etype, st["entity_id"], missing)
             filled += 1
-        st["fields"] = {n: str(v) for n, v in it["fields"].items()}  # what we proposed
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        written = {n for (e, n), fid in fmap.items() if e == etype and fid in missing}
+        st["fields"] = proposals_to_keep(it["fields"], st.get("fields", {}), written)
+    state = jsonstate.merge(state_path, state, [it["key"] for it in todo if it["key"] in state])
     print(f"custom columns filled on {filled} items")
+    return state
 
-    # Playlists: every clip, and each compilation as its segments in stream order.
+
+def make_playlists(gazu, stream_dir: Path, proj: dict, ep: dict, state: dict) -> None:
+    """Playlists: every clip, every Short, and each compilation as its segments in
+    stream order."""
     clips = [(gazu.shot.get_shot(st["entity_id"]), st["preview_id"])
              for key, st in sorted(state.items()) if st["kind"] == "pick"]
     if clips:
@@ -558,7 +657,7 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
               for key, st in sorted(state.items()) if st["kind"] == "short"]
     if shorts:
         ensure_playlist(gazu, proj, ep, "Shorts", "shot", shorts)
-    seg_data = json.loads((stream_dir / "segments.json").read_text(encoding="utf-8"))
+    seg_data = jsonstate.load(stream_dir / "segments.json")
     by_id = {st["id"]: st for st in state.values() if st["kind"] == "segment"}
     for comp in seg_data.get("compilations", []):
         if all(s in by_id for s in comp["segments"]):
@@ -566,13 +665,33 @@ def publish(stream_dir: Path, cfg: dict, force: bool = False, notify: bool = Tru
                        for s in comp["segments"]]
             ensure_playlist(gazu, proj, ep, f"Compilation: {comp['topic']}", "sequence", entries)
             print(f"playlist Compilation: {comp['topic']} ({len(entries)} segments)")
+
+
+def publish(stream_dir: Path, cfg: dict, force: bool = False,
+            only: list[str] | None = None) -> list[str]:
+    """only: publish just these kinds of [review] include (e.g. re-cut Shorts without
+    sending re-cut segments back for review too). Returns the keys that got a new revision
+    in Kitsu; their Discord cards are the caller's business (notify.publish_and_post), so
+    this module never imports Discord."""
+    cfg = for_stream(cfg, stream_dir)
+    rc = cfg["review"]
+    todo = items(stream_dir, [k for k in rc["include"] if not only or k in only], cfg)
+    render_previews(stream_dir, cfg, todo)
+
+    gazu = connect(rc)
+    proj, types = ensure_project(gazu, project_name(cfg))
+    wfa = gazu.task.get_task_status_by_short_name("wfa")
+    ep_name = episode_name(stream_dir, rc, cfg["schedule"]["timezone"])
+    ep = gazu.shot.get_episode_by_name(proj, ep_name) or gazu.shot.new_episode(proj, ep_name)
+    state_path = stream_dir / "review_state.json"
+    state, published = push_previews(gazu, stream_dir, rc, proj, ep, types, wfa, todo, force)
+    state = fill_columns(gazu, proj, todo, state, state_path)
+    make_playlists(gazu, stream_dir, proj, ep, state)
     print(f"{len(todo)} items in Kitsu: {rc['host'].removesuffix('/api')} "
           f"({project_name(cfg)} / {ep_name})")
     if cfg["thumbnail"]["kitsu"]:
         attach_thumbnails(stream_dir, cfg, gazu, keys=[it["key"] for it in todo] if only else None)
-    if notify and published and cfg["discord"]["enabled"]:
-        from . import notify as discord_notify
-        discord_notify.post(stream_dir, cfg, keys=published)
+    return list(published)
 
 
 def attach_thumbnails(stream_dir: Path, cfg: dict, gazu=None, keys: list[str] | None = None) -> int:
@@ -581,7 +700,7 @@ def attach_thumbnails(stream_dir: Path, cfg: dict, gazu=None, keys: list[str] | 
     whose thumbnail and revision haven't changed; replaces our own earlier upload."""
     cfg = for_stream(cfg, stream_dir)
     state_path = stream_dir / "review_state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state = jsonstate.load(state_path)
     todo = []
     for key, st in state.items():
         if keys is not None and key not in keys:
@@ -609,12 +728,10 @@ def attach_thumbnails(stream_dir: Path, cfg: dict, gazu=None, keys: list[str] | 
         gazu.task.set_main_preview(pf)
         done[key] = {"preview_id": pf["id"], "movie_preview_id": st["preview_id"],
                      "mtime": jpg.stat().st_mtime}
-    # Re-read before writing: a publish may be updating this file at the same time.
-    state = json.loads(state_path.read_text(encoding="utf-8"))
-    for key, th in done.items():
-        if key in state:
-            state[key]["thumbnail"] = th
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    with jsonstate.update(state_path, {}) as state:  # a publish may be writing it too
+        for key, th in done.items():
+            if key in state:
+                state[key]["thumbnail"] = th
     print(f"thumbnails attached in Kitsu: {len(done)}")
     return len(done)
 
@@ -635,7 +752,7 @@ def ensure_links(stream_dir: Path, cfg: dict, gazu=None) -> dict:
     """review_state.json with kitsu_url/episode_url on every item (older publishes lack them)."""
     cfg = for_stream(cfg, stream_dir)
     state_path = stream_dir / "review_state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state = jsonstate.load(state_path)
     missing = [st for st in state.values() if "kitsu_url" not in st]
     if missing:
         gazu = gazu or connect(cfg["review"])
@@ -649,11 +766,10 @@ def ensure_links(stream_dir: Path, cfg: dict, gazu=None) -> dict:
         # Re-read before writing: a publish may be updating this file at the same time.
         found = {k: {f: st[f] for f in ("kitsu_url", "episode_url")}
                  for k, st in state.items() if "kitsu_url" in st}
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-        for k, st in state.items():
-            if "kitsu_url" not in st and k in found:
-                st.update(found[k])
-        state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        with jsonstate.update(state_path, {}) as state:
+            for k, st in state.items():
+                if "kitsu_url" not in st and k in found:
+                    st.update(found[k])
     return state
 
 
@@ -686,7 +802,7 @@ def apply_thumbnail_text(stream_dir: Path, cfg: dict, gazu, fmap: dict,
     from . import thumbs
 
     tpath = stream_dir / "thumbnails.json"
-    tstate = json.loads(tpath.read_text(encoding="utf-8")) if tpath.exists() else {}
+    tstate = jsonstate.read(tpath, {})
     texts, applied = {}, {}
     for key, (st, task, fields) in edits.items():
         raw = fields[THUMB_COL]
@@ -696,7 +812,7 @@ def apply_thumbnail_text(stream_dir: Path, cfg: dict, gazu, fmap: dict,
             continue
         try:
             text = thumbs.check_text(cfg, raw)
-        except SystemExit as e:
+        except ClipperError as e:
             text = tstate[tkey]["text"]
             note = f"{NOTE_PREFIX} Thumbnail text not used: {e}. Kept {text!r}"
             gazu.task.add_comment(task, gazu.task.get_task_status(task["task_status_id"]), note)
@@ -705,20 +821,16 @@ def apply_thumbnail_text(stream_dir: Path, cfg: dict, gazu, fmap: dict,
             texts[tkey] = text
         if text != raw:
             etype = ENTITY[st["kind"]]
-            update = (gazu.shot.update_sequence_data if etype == "Sequence"
-                      else gazu.shot.update_shot_data)
-            update(st["entity_id"], {fmap[(etype, THUMB_COL)]: text})
+            write_data(gazu, etype, st["entity_id"], {fmap[(etype, THUMB_COL)]: text})
             fields[THUMB_COL] = text
         applied[key] = text
     for tkey, text in thumbs.set_texts(stream_dir, cfg, texts).items():
         print(f"  thumbnail {tkey}: {text}")
     # Re-read before writing: the re-render (attach_thumbnails) just wrote this file.
-    state_path = stream_dir / "review_state.json"
-    state = json.loads(state_path.read_text(encoding="utf-8"))
-    for key, text in applied.items():
-        if key in state:
-            state[key]["thumbnail_text"] = text
-    state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    with jsonstate.update(stream_dir / "review_state.json", {}) as state:
+        for key, text in applied.items():
+            if key in state:
+                state[key]["thumbnail_text"] = text
 
 
 def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
@@ -727,14 +839,12 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
     items and keep the rest of review.json as it was."""
     cfg = for_stream(cfg, stream_dir)
     rc = cfg["review"]
-    state = json.loads((stream_dir / "review_state.json").read_text(encoding="utf-8"))
+    state = jsonstate.load(stream_dir / "review_state.json")
     review_path = stream_dir / "review.json"
     gazu = connect(rc)
     fmap = column_fields(gazu, gazu.project.get_project_by_name(project_name(cfg)))
     statuses = {s["id"]: s["short_name"] for s in gazu.task.all_task_statuses()}
     out = {}
-    if keys is not None and review_path.exists():
-        out = json.loads(review_path.read_text(encoding="utf-8"))
     thumb_edits = {}
     for key, st in state.items():
         if keys is not None and key not in keys:
@@ -742,8 +852,7 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
         task = gazu.task.get_task(st["task_id"])
         status = statuses[task["task_status_id"]]
         etype = ENTITY[st["kind"]]
-        get = gazu.shot.get_sequence if etype == "Sequence" else gazu.shot.get_shot
-        data = get(st["entity_id"]).get("data") or {}
+        data = entity_data(gazu, etype, st["entity_id"])
         fields = {n: data.get(f) for (e, n), f in fmap.items() if e == etype}
         if fields.get(THUMB_COL) and fields[THUMB_COL] != st.get("thumbnail_text"):
             thumb_edits[key] = (st, task, fields)
@@ -751,7 +860,7 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
         cid, comment = (decision_comment_entry(gazu, task) if status in ("retake", "rejected")
                         else ("", ""))
         out[key] = {"kind": st["kind"], "id": st["id"], "file": st["file"],
-                    "status": status, "decision": DECISIONS.get(status, status),
+                    "status": status, "decision": str(DECISIONS.get(status, Decision.PENDING)),
                     "comment": comment, "comment_id": cid,
                     "fields": fields,
                     "edited": sorted(n for n, v in fields.items()
@@ -759,8 +868,18 @@ def sync(stream_dir: Path, cfg: dict, keys: list[str] | None = None,
                     "updated_at": task.get("updated_at")}
     if thumb_edits:
         apply_thumbnail_text(stream_dir, cfg, gazu, fmap, thumb_edits)
-    out = {k: out[k] for k in state if k in out}  # state order; drops items no longer published
-    review_path.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Merged under the lock: the bot and the war room both sync single items at once.
+    with jsonstate.locked(review_path):
+        have = jsonstate.read(review_path, {})
+        if keys is not None:
+            out = {**have, **out}
+        # A whole-stream sync reads Kitsu for a while; a decision made meanwhile (the war
+        # room, a button) already synced its item with a newer Kitsu updated_at: keep that.
+        for k, cur in have.items():
+            if k in out and (cur.get("updated_at") or "") > (out[k].get("updated_at") or ""):
+                out[k] = cur
+        out = {k: out[k] for k in state if k in out}  # state order; drops items no longer published
+        jsonstate.write(review_path, out)
     if quiet:
         return out
     counts: dict[str, int] = {}

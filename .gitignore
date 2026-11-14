@@ -6,7 +6,12 @@ __pycache__/
 # data: streams live on the NAS share or a local folder, never in git
 streams/
 layouts/
+/weekly/
+studio/mockups/weekly/youtube_post/
+voices/
+faces/
 archive/
+lt/
 rumble/
 smoke/
 logs/
@@ -19,15 +24,35 @@ clipper.*.toml
 secrets/
 deploy/kitsu/env.local
 deploy/record/env.local
+deploy/hub/env.local
+deploy/claude/env.local
 
-# run state (upload schedule, analytics)
+# run state (upload schedule, analytics, `clipper setup` progress)
+setup_state.json
 schedule*.json
+people.json
 analytics.json
+analytics_channel.json
 
-# Udder Truth performance takes (large phone video)
-mockups/udder_truth/takes/
+# The old mockups/ folder: ignored leftovers (takes, voice tests) that a running Fusion kept the
+# move from taking along; merge them into studio/mockups/ by hand, then this line goes.
+/mockups/
+
+# Udder Truth performance takes (large phone video), under studio/
+studio/mockups/udder_truth/takes/
 *.mov
-mockups/udder_truth/mother_moo/*.png
-mockups/udder_truth/voice/
-mockups/udder_truth/storyboards/**/*.png
-mockups/udder_truth/storyboards/**/*.mp4
+studio/mockups/udder_truth/mother_moo/*.png
+studio/mockups/udder_truth/voice/
+studio/mockups/udder_truth/storyboards/**/*.png
+studio/mockups/udder_truth/storyboards/**/*.mp4
+
+# hand-made copies before an edit (schedule.json, clipper.toml): backups/<file>.before_<what>_<date>
+backups/
+
+# video never goes in git (demo clips, renders)
+*.mp4
+news/
+
+# Resolve export media for the 8-Bit Guy explainer prototype
+studio/reports/8bitguy-explainer/resolve/media/
+studio/reports/8bitguy-explainer/resolve/roomtone/

@@ -5,13 +5,78 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
 
-from . import config
+from . import __version__, config, jsonstate
 from .config import stream_dir
+from .errors import ClipperError, did_you_mean
+
+STREAM_HELP = "stream id under paths.streams (or latest, latest:<show>, a unique start of an id), or a stream dir"
+
+
+class Parser(argparse.ArgumentParser):
+    """A mistyped command or stage name gets a suggestion, not all 51 choices (#205). Subparsers
+    inherit this class."""
+
+    def _check_value(self, action, value):
+        if action.choices is None or value in action.choices:
+            return
+        names = [str(c) for c in action.choices]
+        hint = (did_you_mean(value, names)
+                or (f"choose from {', '.join(names)}" if len(names) <= 10 else "see --help"))
+        raise argparse.ArgumentError(action, f"invalid choice: {value!r}; {hint}")
+
+
+class Items(argparse.Action):
+    """--items s02,c03 (or repeated, or space-separated where nargs allows): one list."""
+
+    def __call__(self, parser, ns, values, option_string=None):
+        got = getattr(ns, self.dest) or []
+        values = values if isinstance(values, list) else [values]
+        setattr(ns, self.dest, got + [x.strip() for v in values for x in v.split(",") if x.strip()])
+
+
+def add_stream(p, optional: bool = False, help: str = STREAM_HELP) -> None:
+    p.add_argument("stream", nargs="?" if optional else None, help=help)
+
+
+def add_subject(p, optional: bool = False) -> None:
+    p.add_argument("subject", nargs="?" if optional else None,
+                   help="the archive subject: the short name given to `clipper archive add`")
+
+
+def add_slug(p, optional: bool = False) -> None:
+    p.add_argument("slug", nargs="?" if optional else None,
+                   help="the story's slug, as `clipper story status` lists them")
+
+
+def add_items(p, help: str, old: tuple[str, ...] = (), many: bool = False) -> None:
+    """The one flag that picks items. Spellings it replaced (--ids, --keys, ...) still work,
+    unlisted: scripts, notes and an older NAS image may still pass them."""
+    nargs = "+" if many else None
+    p.add_argument("--items", action=Items, nargs=nargs, metavar="ITEMS", help=help)
+    for flag in old:
+        p.add_argument(flag, dest="items", action=Items, nargs=nargs, help=argparse.SUPPRESS)
+
+
+def time_arg(s: str) -> float:
+    """Every time flag reads the same way: H:MM:SS, H:MM, 4h13m or seconds."""
+    from .timefmt import parse_time
+
+    try:
+        return parse_time(s)
+    except (ClipperError, ValueError) as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
+def refuse(args: argparse.Namespace, mode: str, *others: str) -> None:
+    """Refuse `others` next to the mode flag `mode`, for combinations argparse's exclusive
+    groups can't express (--photo with --teaser-photo is fine, neither with --shorts)."""
+    given = [o for o in others if getattr(args, o.lstrip("-").replace("-", "_")) not in (None, False)]
+    if given:
+        raise ClipperError(f"{mode} doesn't combine with {', '.join(given)}")
 
 
 def cmd_fetch(cfg: dict, args: argparse.Namespace) -> None:
@@ -20,7 +85,11 @@ def cmd_fetch(cfg: dict, args: argparse.Namespace) -> None:
     meta = kick.resolve(args.url, cfg)
     d = cfg["paths"]["streams"] / meta["stream_id"]
     d.mkdir(parents=True, exist_ok=True)
-    (d / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    # a rerun (for the chat, say) keeps what the first download found, as long as that video stays
+    old = jsonstate.read(d / "meta.json", {})
+    if "skipped_fragments" in old and (d / "source.ts").exists():
+        meta["skipped_fragments"] = old["skipped_fragments"]
+    jsonstate.write(d / "meta.json", meta)
     print(f"{meta['stream_id']}: {meta['title']} ({meta['duration_s'] / 3600:.2f} h)")
     if not args.no_chat:
         kick.fetch_chat(d, meta, cfg)
@@ -31,6 +100,10 @@ def cmd_fetch(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_record(cfg: dict, args: argparse.Namespace) -> None:
     from . import record
 
+    if args.action == "status":
+        from . import services
+
+        return services.record_status(cfg)
     record.setup_logging()
     if args.action == "finalize":
         record.finalize(stream_dir(cfg, args.stream), cfg)
@@ -44,7 +117,7 @@ def cmd_record(cfg: dict, args: argparse.Namespace) -> None:
     elif args.channel:
         chans = [c for c in chans if c["slug"] in args.channel]
     if not chans:
-        raise SystemExit("record: no channels; set [record] channels in clipper.toml")
+        raise ClipperError("record: no channels; set [record] channels in clipper.toml")
     once = args.action == "now"
     record.Watcher(cfg, chans, max_s=getattr(args, "max_s", None), once=once).run(until_done=once)
 
@@ -64,8 +137,14 @@ def cmd_preshow(cfg: dict, args: argparse.Namespace) -> None:
         keys = [k for k, _ in preshow.watched(cfg)]
         key = cfg["show"]["key"] or (keys[0] if len(keys) == 1 else "")
         if not key:
-            raise SystemExit(f"preshow fetch: say which show with --show ({', '.join(cfg['shows'])})")
-        d = preshow.fetch(cfg, args.url, key)
+            raise ClipperError(f"preshow fetch: say which show with --show ({', '.join(cfg['shows'])})")
+        window = None
+        if args.start or args.end or args.about:
+            from .timefmt import parse_time
+
+            window = {"start_s": parse_time(args.start) if args.start else 0.0,
+                      "end_s": parse_time(args.end) if args.end else None, "about": args.about}
+        d = preshow.fetch(cfg, args.url, key, window)
         print(f"{d.name}: grabbed; the worker runs it, or: clipper run {d.name}")
 
 
@@ -77,7 +156,7 @@ def cmd_narrate(cfg: dict, args: argparse.Namespace) -> None:
         narrate.voice(Path(args.take), nc, args.voice_id or "", Path(args.out) if args.out else None)
     elif args.action == "speak":
         src = Path(args.script)
-        ext = nc["output_format"].split("_")[0]
+        ext = narrate.ext(nc["output_format"])
         overrides = {k: v for k, v in (("stability", args.stability), ("style", args.style),
                                        ("speed", args.speed)) if v is not None}
         narrate.speak(src.read_text(encoding="utf-8").strip(), nc,
@@ -97,7 +176,7 @@ def cmd_perform(cfg: dict, args: argparse.Namespace) -> None:
         if args.deploy:
             return perform.deploy_lipsync()
         if not args.target:
-            raise SystemExit("clipper perform lipsync <dir or video> [--engine ...], or --deploy")
+            raise ClipperError("clipper perform lipsync <dir or video> [--engine ...], or --deploy")
         chosen = args.engine or pc["lipsync_engine"]
         for engine in (["latentsync", "sync"] if chosen == "both" else [chosen]):
             perform.lipsync(Path(args.target), pc, engine, Path(args.audio) if args.audio else None)
@@ -114,13 +193,211 @@ def cmd_archive(cfg: dict, args: argparse.Namespace) -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     if args.action == "add":
-        archive.add(cfg, args.subject, args.url)
+        archive.add(cfg, args.subject, args.url, args.match)
+    elif args.action == "video":
+        ac = cfg["archive"]
+        archive.run_videos(cfg, args.subject, args.items, args.limit, args.oldest,
+                           args.parallel or ac["video_parallel"], args.dry_run)
+    elif args.action == "posts":
+        archive.save_posts(cfg, args.subject, args.url)
+    elif args.action == "speakers":
+        archive.relabel(cfg, args.subject)
     elif args.action == "transcribe":
         ac = cfg["archive"]
+        ac["diarize"] = ac["diarize"] or args.diarize
         archive.run_transcribe(cfg, args.subject, args.limit, args.oldest, args.gpu or ac["gpu"],
                                args.parallel or ac["parallel"], args.dry_run)
+    elif args.action == "check":
+        archive.check_links(cfg, args.subject, args.items, args.all, args.limit)
+    elif args.action == "links":
+        archive.list_links(cfg, args.subject, args.status)
+    elif args.action == "index":
+        from . import archive_index
+
+        archive_index.build(cfg, args.subject, args.rebuild)
+    elif args.action == "search":
+        from . import archive_index
+
+        archive_index.search(cfg, args.subject, args.query, args.limit, args.since, args.before,
+                             args.by, args.years)
+    elif args.action == "ask":
+        from . import archive_index
+
+        archive_index.ask(cfg, args.subject, args.question, args.since, args.before, args.limit)
     else:
         archive.status(cfg, args.subject)
+
+
+def cmd_modal(cfg: dict, args: argparse.Namespace) -> None:
+    from . import modalmon
+
+    if args.backfill:
+        modalmon.backfill(cfg)
+    else:
+        modalmon.print_status(cfg)
+
+
+def cmd_people(cfg: dict, args: argparse.Namespace) -> None:
+    from . import people
+
+    a = args.action
+    if a == "list":
+        return people.show_list(cfg)
+    if a == "show":
+        return people.show_person(cfg, args.name)
+    if a == "import":
+        return people.import_all(cfg, args.dry_run)
+    if a == "merge":
+        return people.show_person(cfg, people.merge_people(cfg, args.keep, args.other))
+    pid = people.set_person(cfg, args.name, args.new_name, args.alias, args.unalias, args.channel,
+                            args.unchannel, args.subject, args.cast, args.notes)
+    people.show_person(cfg, pid)
+
+
+def cmd_cast(cfg: dict, args: argparse.Namespace) -> None:
+    from . import cast
+
+    a = args.action
+    if a == "list":
+        return cast.show_list(cfg)
+    if a in ("keep", "drop"):
+        return cast.set_status(cfg, args.person, args.ids, a)
+    if a == "label":
+        return cast.set_label(cfg, args.person, args.id, args.label)
+    if a == "set":
+        return cast.set_info(cfg, args.person, args.alias, args.channel)
+    if a == "grab":  # the stream's show may set its own [cast] (label_model, target)
+        sdir = stream_dir(cfg, args.stream)
+        cfg = config.for_stream(cfg, sdir)
+    claude = None
+    if cfg["cast"]["label_model"] and not args.no_label:
+        from .llm import Claude
+
+        claude = Claude(cfg)
+    if a == "add":
+        cast.add_file(cfg, args.person, args.src, claude)
+    elif a == "grab":
+        print(f"{cast.grab(cfg, sdir, args.person, args.n, claude, needed=args.needed)} new photo(s)")
+    elif a == "auto":
+        print(f"{cast.auto(cfg, claude)} new photo(s)")
+    elif a == "find":
+        print(f"{cast.find(cfg, args.person, args.source or list(cast.SOURCES), claude)} new photo(s)")
+    if claude and claude.cost:
+        print(f"labels: ${claude.cost:.3f}")
+    return None
+
+
+def cmd_broll(cfg: dict, args: argparse.Namespace) -> None:
+    from . import broll
+
+    a = args.action
+    if a == "list":
+        return broll.show_list(cfg, args.tag or "", args.source or "", args.status or "", args.json)
+    if a in ("keep", "drop"):
+        return broll.set_status(cfg, args.ids, a)
+    if a == "find":
+        print(f"{broll.find(cfg, args.query, args.source or list(cfg['broll']['sources']), args.n)} clip(s) added")
+    elif a == "add":
+        broll.add(cfg, args.target, args.start, args.end, args.tag or [], args.credit or "", args.licence)
+    return None
+
+
+def cmd_doc(cfg: dict, args: argparse.Namespace) -> None:
+    from . import doc
+
+    a = args.action
+    if a == "new":
+        doc.new(cfg, args.slug, args.title or "")
+    elif a == "voice":
+        doc.voice(cfg, args.slug, args.dry_run)
+    elif a == "build":
+        doc.build(cfg, args.slug, args.dry_run)
+    elif a == "master":
+        doc.master(cfg, args.slug, args.file, args.timeline or "", not args.no_leak)
+    elif a == "leak":
+        doc.leak(cfg, args.slug, args.file, args.dry_run)
+    elif a == "kit":
+        doc.kit(cfg, args.slug)
+
+
+def cmd_news(cfg: dict, args: argparse.Namespace) -> None:
+    from . import news
+
+    a = args.news_cmd
+    if a == "check":
+        ids = news.check(cfg, judge=bool(cfg["news"]["judge_model"]) and not args.no_judge)
+        print(f"{len(ids)} story(ies) to post" + (f": {', '.join(map(str, ids))}" if ids else ""))
+    elif a == "list":
+        news.show_list(cfg, args.days, args.person or "", args.all)
+    elif a == "search":
+        for x in news.search(cfg, args.query, args.days):
+            print(f"{(x['published'] or '')[:16]} {x['source']}: {x['title']}\n    {x['url']}")
+    elif a == "feeds":
+        for f in news.feeds(cfg):
+            print(f"{f['name']}: {f['items']} item(s), fetched {f['fetched_at'] or 'never'}"
+                  + (f", {f['error']}" if f["error"] else ""))
+    elif a == "watch":
+        if not news.watchlist(cfg):
+            print("nothing to watch: add terms to [news] watch (or turn on [news] auto_watch)")
+        for w in sorted(news.watchlist(cfg).values(), key=lambda w: w.name.lower()):
+            print(f"{w.name}: {', '.join(w.terms)}" + (f" [{', '.join(w.shows)}]" if w.shows else "")
+                  + (" (Google News)" if w.search and cfg["news"]["google_news"] else ""))
+    elif a == "dismiss":
+        news.dismiss(cfg, args.ids)
+        print(f"dismissed {', '.join(map(str, args.ids))}")
+    elif a == "context":
+        e = news.set_context(cfg, args.ids, args.context_show or "", who="cli")
+        print(f"for {e['show']}'s next stream: {e['text']}")
+
+
+def cmd_compare(cfg: dict, args: argparse.Namespace) -> None:
+    from . import compare
+
+    if args.action == "list":
+        compare.list_reports(stream_dir(cfg, args.stream))
+        return
+    compare.compare_score(stream_dir(cfg, args.stream), cfg, args.model, args.which, args.budget, args.dry_run,
+                          args.model_b, args.effort, args.prompt_version, args.repeat)
+
+
+def cmd_models(cfg: dict, args: argparse.Namespace) -> None:
+    from . import models
+
+    if args.action == "list":
+        models.list_tests(cfg)
+        return
+    if args.action == "gold":
+        from . import gold
+
+        if args.gold_action == "propose":
+            gold.propose(cfg, args.streams)
+        elif args.gold_action == "confirm":
+            gold.confirm(cfg, jsonstate.load(Path(args.file)))
+        else:
+            gold.run(cfg, args.model, args.effort, args.prompt_version, args.budget, args.dry_run)
+        return
+    models.test_model(cfg, args.model, args.effort, args.budget, not args.no_long, args.dry_run)
+
+
+def cmd_costs(cfg: dict, args: argparse.Namespace) -> None:
+    from . import costs
+
+    if args.backfill:
+        costs.backfill(cfg, args.dry_run)
+        return
+    if args.providers:
+        from . import usage
+
+        if args.json:
+            print(json.dumps(usage.status(cfg), indent=2))
+        else:
+            usage.print_status(cfg)
+        return
+    rep = costs.report(cfg, args.month or "")
+    if args.json:
+        print(json.dumps(rep, indent=2))
+    else:
+        costs.print_report(rep)
 
 
 def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
@@ -129,8 +406,106 @@ def cmd_transcribe(cfg: dict, args: argparse.Namespace) -> None:
     if args.deploy:
         return transcribe.deploy()
     if not args.stream:
-        raise SystemExit("clipper transcribe <stream>, or --deploy")
-    transcribe.run(stream_dir(cfg, args.stream), cfg["transcribe"])
+        raise ClipperError("clipper transcribe <stream>, or --deploy")
+    sdir = stream_dir(cfg, args.stream)
+    scfg = config.for_stream(cfg, sdir)
+    if (sdir / "words.jsonl").exists() and not args.force:  # #75: a GPU or Modal job already paid for
+        raise ClipperError(f"{sdir.name} is transcribed already (words.jsonl); --force to do it again")
+    transcribe.run(sdir, scfg["transcribe"], cfg["paths"]["modal_runs"])
+    if (sdir / "diarization.json").exists():
+        from . import speakers
+        speakers.apply(sdir, scfg)
+
+
+def cmd_speakers(cfg: dict, args: argparse.Namespace) -> None:
+    from . import speakers, transcribe
+
+    sdir = stream_dir(cfg, args.stream)
+    scfg = config.for_stream(cfg, sdir)
+    from . import archive
+
+    if archive.is_item(cfg, sdir):  # an archive item: its subject's voices, never the base show's
+        scfg = archive.item_cfg(scfg, sdir)
+    if args.diarize:
+        transcribe.diarize(sdir, scfg["transcribe"], cfg["paths"]["modal_runs"])
+    elif not (sdir / "diarization.json").exists():
+        raise ClipperError(f"no diarization.json in {sdir}: clipper speakers {args.stream} --diarize")
+    if args.name:
+        names = dict(n.split("=", 1) for n in args.name if "=" in n)
+        if len(names) != len(args.name):
+            raise ClipperError("--name takes SPEAKER_xx=Name")
+        speakers.apply(sdir, scfg)  # speakers.json must exist before naming
+        speakers.set_names(sdir, names)
+    found = speakers.apply(sdir, scfg)
+    if args.enroll:
+        speakers.enroll(sdir, scfg, [k for k, v in names.items() if v] if args.name else
+                        [k for k, v in found.items() if v.get("by") == "hand"])
+    speakers.show(sdir, scfg, found)
+
+
+def cmd_faces(cfg: dict, args: argparse.Namespace) -> None:
+    from . import faces
+
+    if not args.stream:
+        if args.forget:
+            print(f"forgot {args.forget} ({faces.forget(cfg, args.forget)} sample(s))")
+        if args.enroll_photos:
+            return faces.enroll_photos(cfg)
+        if not args.forget:
+            raise ClipperError("clipper faces <stream>, --enroll-photos or --forget Name")
+        return None
+    sdir = stream_dir(cfg, args.stream)
+    scfg = config.for_stream(cfg, sdir)  # its show's [thumbnail] photos and [paths] faces
+    if args.forget:
+        print(f"forgot {args.forget} ({faces.forget(scfg, args.forget)} sample(s))")
+    if args.enroll_photos:
+        faces.enroll_photos(scfg)
+    if args.box or args.at or args.person:
+        return _face_box(sdir, scfg, args)
+    if args.rescan or not (sdir / "faces.json").exists():
+        faces.scan(sdir, scfg)
+    names = {}
+    if args.name:
+        names = dict(n.split("=", 1) for n in args.name if "=" in n)
+        if len(names) != len(args.name):
+            raise ClipperError("--name takes F03=Name")
+        faces.set_names(sdir, names)
+    found = faces.apply(sdir, scfg)
+    if args.enroll:
+        faces.enroll(sdir, scfg, [k for k, v in names.items() if v] if args.name else
+                     [k for k, v in found.items() if v.get("by") == "hand"])
+        found = faces.apply(sdir, scfg)  # the new samples may name other groups
+    faces.show(sdir, scfg, found)
+
+
+def _face_box(sdir: Path, cfg: dict, args: argparse.Namespace) -> None:
+    """clipper faces <stream> --at T --box x,y,w,h [--person Name]."""
+    import tempfile
+
+    from . import faces
+    from .media import source_file
+    from .timefmt import parse_time
+
+    if not (args.box and args.at):
+        raise ClipperError("a face by hand takes --at <stream time> and --box x,y,w,h")
+    try:
+        box = [float(v) for v in args.box.split(",")]
+    except ValueError:
+        box = []
+    if len(box) != 4 or not all(0 <= v <= 1 for v in box) or box[2] <= 0 or box[3] <= 0:
+        raise ClipperError("--box takes x,y,width,height as fractions of the frame (0-1)")
+    with tempfile.TemporaryDirectory(prefix="clipper-face-") as tmp:
+        try:
+            t = parse_time(args.at)
+        except ValueError as e:
+            raise ClipperError(str(e)) from None
+        frame = faces.grab(source_file(sdir), t, Path(tmp) / "frame.jpg")
+        found = faces.pick(frame, box, cfg)
+    who = f"looks like {found['closest']} ({found['match']:.2f})" if found["closest"] else "nobody known yet"
+    print(f"face at {found['box']}, {found['px']} px: {who}")
+    if args.person:
+        n = faces.enroll_pick(sdir, cfg, args.person, found["embedding"])
+        print(f"enrolled {args.person} ({n} sample(s)); {sdir.name}'s groups named again")
 
 
 def cmd_signals(cfg: dict, args: argparse.Namespace) -> None:
@@ -143,13 +518,13 @@ def cmd_signals(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_score(cfg: dict, args: argparse.Namespace) -> None:
     from . import scoring
 
-    scoring.run(stream_dir(cfg, args.stream), cfg, dry_run=args.dry_run)
+    scoring.run(stream_dir(cfg, args.stream), cfg, dry_run=args.dry_run, force=args.force)
 
 
 def cmd_segments(cfg: dict, args: argparse.Namespace) -> None:
     from . import segments
 
-    segments.run(stream_dir(cfg, args.stream), cfg, force=args.force)
+    segments.run(stream_dir(cfg, args.stream), cfg, force=args.force, dry_run=args.dry_run)
 
 
 def cmd_cut(cfg: dict, args: argparse.Namespace) -> None:
@@ -159,40 +534,65 @@ def cmd_cut(cfg: dict, args: argparse.Namespace) -> None:
     what = args.what or ["segments", "compilations", "picks"]
     bad = set(what) - {"segments", "compilations", "picks"}
     if bad:
-        raise SystemExit(f"cut: unknown {sorted(bad)}; use segments, compilations, picks")
+        raise ClipperError(f"cut: unknown {sorted(bad)}; use segments, compilations, picks")
+    if config.for_stream(cfg, d)["cut"]["backend"] == "nas" and {"segments", "compilations"} & set(what):
+        # the copies run beside the source; picks re-encode a few minutes each, so stay here
+        # --ids, not --items: the NAS image may be older than this checkout (both spellings work)
+        cut.on_nas(d, cfg, [w for w in what if w != "picks"] + (["--ids", ",".join(args.items)] if args.items else []))
+        what = [w for w in what if w == "picks"]
     if "segments" in what:
-        cut.cut_segments(d, cfg, args.ids.split(",") if args.ids else None)
+        cut.cut_segments(d, cfg, args.items)
     if "compilations" in what:
         cut.cut_compilations(d, cfg)
     if "picks" in what:
-        cut.cut_picks(d, cfg)
+        cut.cut_picks(d, cfg, args.items, force=args.force)
 
 
 def cmd_meta(cfg: dict, args: argparse.Namespace) -> None:
     from . import meta
 
     d = stream_dir(cfg, args.stream)
-    meta.captions_only(d, cfg) if args.captions_only else meta.run(d, cfg, missing=args.missing)
+    if args.captions_only:
+        refuse(args, "--captions-only", "--dry-run")
+        meta.captions_only(d, cfg)
+    else:
+        meta.run(d, cfg, missing=args.missing, dry_run=args.dry_run)
 
 
 def cmd_thumbs(cfg: dict, args: argparse.Namespace) -> None:
     from . import thumbs
 
     if args.photo is not None or args.teaser_photo is not None:
-        if not args.ids:
-            raise SystemExit("--photo/--teaser-photo need --ids")
-        changed = thumbs.set_photos(stream_dir(cfg, args.stream), cfg, args.ids.split(","),
+        refuse(args, "--photo/--teaser-photo", "--shorts", "--compose-only", "--missing", "--force", "--dry-run")
+        if not args.items:
+            raise ClipperError("--photo/--teaser-photo need --items")
+        changed = thumbs.set_photos(stream_dir(cfg, args.stream), cfg, args.items,
                                     photo=args.photo, teaser_photo=args.teaser_photo,
                                     kitsu=not args.no_kitsu)
         print(f"{len(changed)} changed: {', '.join(changed)}" if changed else "nothing to change")
         return
     if args.shorts:
+        refuse(args, "--shorts", "--items", "--compose-only", "--missing", "--force", "--dry-run")
         n = thumbs.shorts_only(stream_dir(cfg, args.stream), cfg, kitsu=not args.no_kitsu)
         print(f"{n} Short covers")
         return
-    thumbs.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
+    if args.dry_run:
+        refuse(args, "--dry-run", "--compose-only")
+    thumbs.run(stream_dir(cfg, args.stream), cfg, ids=args.items,
                force=args.force, compose_only=args.compose_only, kitsu=not args.no_kitsu,
-               missing=args.missing)
+               missing=args.missing, dry_run=args.dry_run)
+
+
+def cmd_pick(cfg: dict, args: argparse.Namespace) -> None:
+    from . import pick
+
+    d = stream_dir(cfg, args.stream)
+    if args.find:
+        pick.find(d, cfg, args.find, args.clock)
+        return
+    pick.run(d, cfg, about=args.about, start=args.start, end=args.end, at=args.at,
+             clock_use=args.clock, dry_run=args.dry_run, make=not args.no_run,
+             notify=not args.no_notify, allow_overlap=args.allow_overlap)
 
 
 def cmd_shorts(cfg: dict, args: argparse.Namespace) -> None:
@@ -200,40 +600,53 @@ def cmd_shorts(cfg: dict, args: argparse.Namespace) -> None:
 
     if args.save_example:
         if args.at is None:
-            raise SystemExit("--save-example needs --at <seconds into the stream>")
+            raise ClipperError("--save-example needs --at <time into the stream>")
         shorts.save_example(stream_dir(cfg, args.stream), cfg, args.save_example, args.at)
         return
-    shorts.run(stream_dir(cfg, args.stream), cfg, ids=args.ids.split(",") if args.ids else None,
-               layout=args.layout, force=args.force, rescene=args.rescene, check=args.check)
+    shorts.run(stream_dir(cfg, args.stream), cfg, ids=args.items,
+               layout=args.layout, force=args.force, rescene=args.rescene, check=args.check,
+               tight=args.tighten)
 
 
 def cmd_retake(cfg: dict, args: argparse.Namespace) -> None:
     from . import retake
 
-    retake.run(cfg, args.stream, item=args.item, comment=args.comment, dry_run=args.dry_run,
-               sync=not args.no_sync)
+    items = args.items or [None]
+    if args.comment and len(items) != 1:
+        raise ClipperError("--comment needs exactly one item in --items")
+    for n, item in enumerate(items):  # one Kitsu sync is enough
+        retake.run(cfg, args.stream, item=item, comment=args.comment, dry_run=args.dry_run,
+                   sync=not args.no_sync and n == 0)
 
 
 def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
-    from . import actions, review
+    from . import actions, notify, review
 
     if args.action in ("publish", "sync", "notify"):
         d = stream_dir(cfg, args.stream)
         if args.action == "publish":
-            review.publish(d, cfg, force=args.force, notify=not args.no_notify, only=args.only)
+            notify.publish_and_post(d, cfg, force=args.force, only=args.only, post_cards=not args.no_notify)
         elif args.action == "sync":
             review.sync(d, cfg)
         else:
-            from . import notify
-            notify.post(d, cfg, keys=args.keys.split(",") if args.keys else None,
-                        force=args.force)
+            notify.post(d, cfg, keys=args.items, force=args.force)
         return
     if args.action == "status":
         print("\n".join(actions.status_lines(actions.status(cfg, sync=args.sync))))
         return
+    if args.action == "invite":
+        ids, added = notify.invite(cfg, args.user_id)
+        print(f"{args.user_id} {'added' if added else 'was already there'}: [discord] allowed_user_ids = {ids}"
+              + ("; restart the bot (clipper services restart bot) for it to count" if added else ""))
+        return
     if args.action == "list":
-        actions.print_rows(actions.list_items(cfg, args.stream, everything=args.all,
-                                              sync=not args.no_sync))
+        if args.json:
+            with to_stderr():   # a sync's notes (thumbnail text, ...): stdout is the JSON alone
+                rows = actions.list_items(cfg, args.stream, everything=args.all, sync=not args.no_sync)
+            print_json(rows)
+        else:
+            actions.print_rows(actions.list_items(cfg, args.stream, everything=args.all,
+                                                  sync=not args.no_sync))
         return
     item = actions.resolve(cfg, args.item)
     text = " ".join(getattr(args, "text", None) or [])
@@ -241,29 +654,25 @@ def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
         text = (sys.stdin.read() if args.file == "-"
                 else Path(args.file).read_text(encoding="utf-8-sig"))
     who = "clipper CLI"
-    r = {"approve": lambda: actions.approve(cfg, item, text, who),
-         "reject": lambda: actions.reject(cfg, item, text, who),
-         "changes": lambda: actions.changes(cfg, item, text, who),
-         "reopen": lambda: actions.reopen(cfg, item, who),
-         "hold": lambda: actions.hold(cfg, item, not args.off, who),
-         "pin": lambda: actions.pin(cfg, item, "" if args.clear else text, who),
-         "retitle": lambda: actions.retitle(cfg, item, text, who),
-         "thumbtext": lambda: actions.thumbtext(cfg, item, text, who),
-         "description": lambda: actions.description(cfg, item, text, who),
-         "hashtags": lambda: actions.hashtags(cfg, item, text, who),
-         "tags": lambda: actions.tags(cfg, item, text, who),
-         "playlist": lambda: actions.playlist(cfg, item, text, who)}[args.action]()
-    actions.print_rows([r])
+    on = (not args.off) if args.action == "hold" else None
+    if args.action == "pin" and args.clear:
+        text = ""
+    actions.print_rows([actions.decide(cfg, item, args.action, who, text=text, on=on)])
 
 
 def cmd_schedule(cfg: dict, args: argparse.Namespace) -> None:
     from . import schedule
 
     if args.list_only:
-        schedule.show(cfg, args.days)
+        if args.json:
+            print_json(schedule.upcoming(cfg, args.days))
+        else:
+            schedule.show(cfg, args.days)
         return
+    if args.json:
+        raise ClipperError("schedule: --json goes with --list")
     schedule.run(cfg, sync_first=not args.no_sync, write_kitsu=not args.no_kitsu,
-                 dry_run=args.dry_run, reshuffle=args.reshuffle)
+                 dry_run=args.dry_run, reshuffle=args.reshuffle, kitsu_all=args.kitsu_all)
 
 
 def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
@@ -275,31 +684,40 @@ def cmd_upload(cfg: dict, args: argparse.Namespace) -> None:
     if args.attach:
         youtube.attach(cfg, args.attach[0], args.attach[1], dry_run=args.dry_run)
         return
-    youtube.run(cfg, sign_in=args.sign_in, dry_run=args.dry_run, limit=args.max,
+    if args.related is not None:
+        youtube.related(cfg, args.related)
+        return
+    youtube.run(cfg, sign_in=args.sign_in, dry_run=args.dry_run, limit=args.limit,
                 thumbnails_only=args.thumbnails, playlists_only=args.playlists,
-                links_only=args.links)
+                links_only=args.links, captions_only=args.captions)
 
 
 def cmd_rumble(cfg: dict, args: argparse.Namespace) -> None:
     from . import rumble
 
+    if args.url and not args.done:
+        raise ClipperError("--url goes with --done ITEM")
     if args.done or args.undo:
+        refuse(args, "--done/--undo", "--items", "--open", "--dry-run")
         rumble.mark_done(cfg, args.done or args.undo, args.url or "", undo=bool(args.undo))
     elif args.status:
+        refuse(args, "--status", "--items", "--open", "--dry-run")
         rumble.status(cfg, args.stream)
     else:
-        rumble.run(cfg, args.stream, args.items.split(",") if args.items else None,
+        rumble.run(cfg, args.stream, args.items,
                    open_after=args.open, dry_run=args.dry_run)
 
 
 def cmd_tiktok(cfg: dict, args: argparse.Namespace) -> None:
     from . import tiktok
 
+    if args.resend and not args.items:
+        raise ClipperError("--resend goes with --items")
     if args.sign_in:
         tiktok.sign_in(cfg)
         print(f"signed in to TikTok as {tiktok.whoami(cfg)}")
     if args.items:
-        tiktok.send(cfg, args.items.split(","), args.stream, dry_run=args.dry_run)
+        tiktok.send(cfg, args.items, args.stream, dry_run=args.dry_run, resend=args.resend)
     elif args.auto:
         tiktok.auto(cfg, dry_run=args.dry_run)
     elif args.caption:
@@ -309,25 +727,148 @@ def cmd_tiktok(cfg: dict, args: argparse.Namespace) -> None:
         tiktok.status(cfg, args.stream, check=not args.dry_run)
 
 
+def cmd_x(cfg: dict, args: argparse.Namespace) -> None:
+    from . import xpost
+
+    if args.sign_in:
+        xpost.sign_in(cfg)
+        print(f"signed in to X as @{xpost.whoami(cfg)}")
+    if args.items:
+        xpost.post(cfg, args.items, args.stream, dry_run=args.dry_run)
+    elif args.mark:
+        xpost.mark(cfg, *args.mark)
+    elif args.issue:
+        xpost.post_issue(cfg, None if args.issue == "latest" else args.issue, dry_run=args.dry_run)
+    elif args.auto:
+        xpost.auto(cfg, dry_run=args.dry_run)
+    elif not args.sign_in:
+        xpost.status(cfg, args.stream)
+
+
+def cmd_receipts(cfg: dict, args: argparse.Namespace) -> None:
+    from . import receipts
+
+    d = stream_dir(cfg, args.stream)
+    if args.action == "find":
+        receipts.find(d, cfg, args.items)
+    elif args.action == "script":
+        receipts.script(d, cfg)
+    elif args.action == "cut":
+        receipts.cut(d, cfg)
+    elif args.action == "upload":
+        receipts.upload(d, cfg, args.again)
+    else:
+        receipts.show(d)
+
+
+def cmd_investigate(cfg: dict, args: argparse.Namespace) -> None:
+    from . import costs, investigate
+
+    costs.set_context(f"investigate {args.action}", f"investigate-{args.subject}")
+    a = args.action
+    if a == "facts":
+        investigate.run_facts(cfg, args.subject, args.since, args.before, args.limit, args.new, args.dry_run)
+    elif a == "leads":
+        investigate.run_leads(cfg, args.subject, args.about, args.since, args.before, args.max, args.confirm)
+    elif a == "confirm":
+        investigate.run_confirm(cfg, args.subject, args.lead)
+    elif a == "check" and args.trail:
+        investigate.show_trail(cfg, args.subject, args.lead)
+    elif a == "check":
+        investigate.run_check(cfg, args.subject, args.lead)
+    elif a == "show":
+        investigate.show_lead(cfg, args.subject, args.lead)
+    elif a == "post":
+        investigate.post_discord(cfg, args.subject, args.new_thread)
+    elif a == "run":
+        investigate.run_all(cfg, args.subject, args.since, args.before, args.about, args.max)
+    else:
+        investigate.show_list(cfg, args.subject)
+
+
+def cmd_story(cfg: dict, args: argparse.Namespace) -> None:
+    from . import costs, story
+
+    a = args.action
+    if a in ("new", "run"):
+        over = {k: v for k, v in (("max_videos", args.max_videos), ("max_hours", args.max_hours)) if v is not None}
+        cfg = {**cfg, "story": {**cfg["story"], **over}}
+    if a == "new":
+        if args.days is not None and args.since:
+            raise ClipperError("--days or --since, not both")
+        slug = story.new(cfg, args.brief, args.slug, args.days, args.since, args.before, args.person, args.url)
+        costs.set_context("story new", f"story-{slug}")
+        story.run(cfg, slug, dry_run=args.dry_run)
+        return
+    if a == "status":
+        story.status(cfg, args.slug)
+        return
+    costs.set_context(f"story {a}", f"story-{args.slug}")
+    if a == "run":
+        story.run(cfg, args.slug, args.start, args.dry_run)
+    elif a == "add":
+        story.add(cfg, args.slug, args.urls)
+    elif a == "trail":
+        story.trail(cfg, args.slug)
+    elif a == "plan":
+        from . import story_edit
+
+        story_edit.plan(cfg, args.slug, args.force)
+    elif a == "cut":
+        from . import story_edit
+
+        story_edit.cut(cfg, args.slug, args.force, review=not args.no_review)
+    else:
+        story.show(cfg, args.slug)
+
+
+def cmd_weekly(cfg: dict, args: argparse.Namespace) -> None:
+    from . import weekly
+
+    if args.discord:
+        from . import notify
+
+        if any([args.headline, args.gather, args.draft, args.render, args.only, args.write, args.format]):
+            raise ClipperError("--discord posts the pages already rendered; build the issue first, "
+                               "then run --discord on its own (with --week for an older issue)")
+
+        notify.post_issue(cfg, args.week)
+        return
+    weekly.run(cfg, day=args.week, headline=args.headline or "", gather_only=args.gather,
+               redraft=args.draft, render_only=args.render, only=args.only or "", write=args.write or "",
+               fmt=args.format or "")
+
+
 def config_path(args: argparse.Namespace) -> str:
-    return str(Path(args.config or os.environ.get("CLIPPER_CONFIG") or "clipper.toml").resolve())
+    return str(config.find(args.config).resolve())
+
+
+def near_stage(names, stages) -> str:
+    """The end of an unknown-stage error: the nearest stage to each bad name, or all of them (#205)."""
+    hints = [f"{n}: {h}" for n in sorted(names) if (h := did_you_mean(n, stages))]
+    return "; ".join(hints) if hints else f"stages: {', '.join(stages)}"
 
 
 def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
+    from . import stages as stage_table
     from . import worker
 
     worker.setup_logging()
     stages = None
     if args.only or args.from_:
-        stages = args.only.split(",") if args.only else worker.STAGES[worker.STAGES.index(args.from_):]
+        if args.from_ and args.from_ not in worker.STAGES:  # #77 L14
+            raise ClipperError(f"run: unknown stage {args.from_!r}; {near_stage([args.from_], worker.STAGES)}")
+        if args.only and args.from_:
+            raise ClipperError("run: --only or --from, not both")
+        stages = args.only.split(",") if args.only else stage_table.from_stage(args.from_, cfg["worker"])
         bad = set(stages) - set(worker.STAGES)
         if bad:
-            raise SystemExit(f"run: unknown stage {sorted(bad)}; stages: {', '.join(worker.STAGES)}")
+            raise ClipperError(f"run: unknown stage {sorted(bad)}; {near_stage(bad, worker.STAGES)}")
     try:
         ok = worker.run_stream(cfg, stream_dir(cfg, args.stream), config_path(args), stages,
                                force=args.force or bool(args.from_))
     except worker.Busy as e:
-        raise SystemExit(str(e))
+        raise ClipperError(str(e)) from e
     if not ok:
         raise SystemExit(1)
 
@@ -346,25 +887,53 @@ def cmd_shows(cfg: dict, args: argparse.Namespace) -> None:
     from .review import project_name
 
     by_show: dict[str, list[str]] = {}
+    no_show: dict[str, list[str]] = {}  # by channel
     streams = cfg["paths"]["streams"]
     for meta in sorted(streams.glob("*/meta.json")) if streams.is_dir() else []:
         ch = config.stream_channel(meta.parent)
-        by_show.setdefault(config.show_of_channel(cfg, ch) or f"(none: {ch or '?'})", []).append(
-            meta.parent.name)
+        key = config.show_of_channel(cfg, ch)
+        (by_show.setdefault(key, []) if key else no_show.setdefault(ch, [])).append(meta.parent.name)
+    rows = []
     for key, show in cfg["shows"].items():
         sc = config.for_show(cfg, key)
-        ids = by_show.pop(key, [])
-        print(f"{key:12} {sc['meta']['show_name'] or '(no show_name)':24} "
-              f"channels {', '.join(show['channels']) or '-'}; Kitsu {project_name(sc)!r}; "
-              f"{len(ids)} streams")
-    for key, ids in by_show.items():
-        print(f"{key:12} {len(ids)} streams: {', '.join(ids)}")
+        rows.append({"show": key, "show_name": sc["meta"]["show_name"], "channels": show["channels"],
+                     "kitsu": project_name(sc), "streams": by_show.pop(key, [])})
+    # streams whose channel no show has: show "" and the channel
+    rows += [{"show": "", "show_name": "", "channels": [ch] if ch else [], "kitsu": "", "streams": ids}
+             for ch, ids in no_show.items()]
+    if args.json:
+        print_json(rows)
+        return
+    for r in rows:
+        if r["show"]:
+            print(f"{r['show']:12} {r['show_name'] or '(no show_name)':24} "
+                  f"channels {', '.join(r['channels']) or '-'}; Kitsu {r['kitsu']!r}; "
+                  f"{len(r['streams'])} streams")
+        else:
+            label = f"(none: {r['channels'][0] if r['channels'] else '?'})"
+            print(f"{label:12} {len(r['streams'])} streams: {', '.join(r['streams'])}")
+
+
+def cmd_completion(cfg: dict, args: argparse.Namespace) -> None:
+    from . import completion
+
+    text = completion.script(args.shell, build_parser(), list(config.base(cfg)["shows"]))
+    sys.stdout.flush()
+    sys.stdout.buffer.write(text.encode("utf-8"))  # bytes: \n stays \n on Windows, which bash needs
+    sys.stdout.buffer.flush()
 
 
 def cmd_analytics(cfg: dict, args: argparse.Namespace) -> None:
     from . import analytics
 
-    analytics.show(cfg) if args.list_only else analytics.run(cfg, sign_in=args.sign_in)
+    if args.report:
+        if args.refresh:
+            analytics.run(cfg)
+        rep = analytics.report(cfg, args.month or "")
+        print(analytics.report_markdown(rep))
+        print(f"-> {analytics.write_report(cfg, rep)}")
+    else:
+        analytics.show(cfg) if args.list_only else analytics.run(cfg, sign_in=args.sign_in)
 
 
 def cmd_warroom(cfg: dict, args: argparse.Namespace) -> None:
@@ -377,18 +946,81 @@ def cmd_warroom(cfg: dict, args: argparse.Namespace) -> None:
 
 
 def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
-    from . import alerts
+    from . import alerts, digest
 
     if args.what == "test":
         alerts.send(cfg, "test", "Test from `clipper alert test`: clipper's DMs reach you.")
         print(f"queued in {alerts.outbox(cfg)}; the bot DMs it within a minute "
               f"(not during quiet hours {cfg['notify']['quiet_hours'] or 'none'})")
+    elif args.what == "send":
+        # stdin as bytes: a pipe cut mid-character mustn't lose the whole message
+        text = (sys.stdin.buffer.read().decode("utf-8", "replace") if args.text in (None, "-")
+                else args.text).strip()
+        if not text:
+            raise ClipperError("alert send: no text (give it, or '-' to read stdin)")
+        if args.kind not in alerts.ICON:
+            raise ClipperError(f"alert send: --kind {args.kind!r} isn't one of {', '.join(sorted(alerts.ICON))}")
+        if len(text) > 1900:
+            print(f"note: {len(text)} characters; Discord takes 1900, the rest is cut", file=sys.stderr)
+            text = text[:1899].rstrip() + "…"
+        alerts.send(cfg, args.kind, text, key=f"{args.kind}-send:{time.time_ns()}")
+        on = args.kind in cfg["notify"]["kinds"] or args.kind == "test"
+        print("queued; the bot DMs it within a minute (not during quiet hours)" if on
+              else f"queued, but [notify] kinds has no {args.kind!r}: the bot won't send it")
     else:
-        text = alerts.digest(cfg)
+        text = digest.text(cfg)
         print(text)
         if args.send:
             alerts.send(cfg, "digest", text, key=f"digest-now:{time.time():.0f}")
             print("\nqueued; the bot DMs it within a minute")
+
+
+def to_stderr():
+    """For --json: whatever runs inside prints to stderr, so stdout holds the document alone."""
+    import contextlib
+
+    return contextlib.redirect_stdout(sys.stderr)
+
+
+def print_json(obj) -> None:
+    """--json output: paths and datetimes as strings, non-ASCII titles as they are."""
+    print(json.dumps(obj, indent=1, default=str, ensure_ascii=False))
+
+
+def short_json(value, width: int = 90) -> str:
+    text = json.dumps(value, default=str, ensure_ascii=False)
+    return text if len(text) <= width else text[:width - 3] + "..."
+
+
+def cmd_config(cfg: dict, args: argparse.Namespace) -> None:
+    if args.action == "diff":
+        rows = config.diff(cfg, args.show_key or (cfg["show"]["key"] if cfg.get("_pinned") else ""))
+        if args.json:
+            print_json([{"layer": la, "name": n, "default": d, "value": v} for la, n, d, v in rows])
+            return
+        if not rows:
+            print("nothing differs from clipper/defaults.toml")
+        layer = None
+        for la, name, default, value in rows:
+            if la != layer:
+                print(la)
+                layer = la
+            print(f"  {name:<36} {short_json(value)}    (default {short_json(default)})")
+        return
+    sdir = config.find_stream(cfg, args.for_stream) if args.for_stream else None
+    e = config.explain(cfg, args.name, sdir)
+    show = f"show {e['show']}" if e["show"] else "base config, no show"
+    where = f"stream {sdir.name}, {show}" if sdir else show
+    print(f"{e['name']} = {json.dumps(e['value'], default=str)}    ({where})")
+    for i, (layer, value) in enumerate(e["layers"]):
+        last = i == len(e["layers"]) - 1
+        print(f"  {'->' if last else '  '} {layer:<28} {json.dumps(value, default=str)}")
+
+
+def cmd_codereview(cfg: dict, args: argparse.Namespace) -> None:
+    from . import codereview
+
+    codereview.run(cfg, args.base, args.head, args.pr, args.repo or "", args.dry_run)
 
 
 def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
@@ -397,188 +1029,319 @@ def cmd_doctor(cfg: dict, args: argparse.Namespace) -> None:
     raise SystemExit(doctor.main(cfg, offline=args.offline, role=args.role))
 
 
+def cmd_cookies(cfg: dict, args: argparse.Namespace) -> None:
+    from . import wiki, ytdl
+
+    spec = args.browser or ytdl.browser(cfg)
+    if not spec:
+        raise ClipperError("no browser profile: set [youtube] cookies_from_browser or pass --browser; "
+                           + wiki.page("Archives", "keeping-the-nas-hubs-cookies-fresh"))
+    out = cfg["_dir"] / Path(args.to).expanduser() if args.to else cfg["paths"]["youtube_cookies"]  # as [paths]
+    n = ytdl.export_browser_cookies(spec, out)
+    print(f"{n} YouTube cookies from {spec} -> {out}")
+
+
+def cmd_setup(cfg: dict, args: argparse.Namespace) -> None:
+    from . import setup
+
+    raise SystemExit(setup.main(args.config, step=args.step, answers=args.answers, check_only=args.check,
+                                print_sync=args.sync_args, offline=args.offline))
+
+
+def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
+    from . import services
+
+    if args.action == "status" and args.force:
+        raise ClipperError("--force goes with stop/restart recorder")
+    if args.action != "status" and not args.which:
+        raise ClipperError(f"services {args.action}: say which: bot, worker, all (bot and worker) or recorder")
+    status = services.run(cfg, args.action, args.which or "all", force=args.force)
+    if status:
+        raise ClipperError("", status=status)
+
+
+def cmd_status(cfg: dict, args: argparse.Namespace) -> None:
+    from . import status
+
+    if args.json:
+        import contextlib
+
+        with contextlib.redirect_stdout(sys.stderr):  # a sync's notes; stdout is the JSON alone
+            s = status.collect(cfg, days=args.days, sync=args.sync, everything=args.all)
+        print(json.dumps(s, indent=1, ensure_ascii=False, default=str))
+        return
+    print("\n".join(status.render(status.collect(cfg, days=args.days, sync=args.sync,
+                                                 everything=args.all), cfg)))
+
+
+def cmd_checkup(cfg: dict, args: argparse.Namespace) -> None:
+    from zoneinfo import ZoneInfo
+
+    from . import checkup
+
+    report = checkup.run(cfg, only=args.only, mark=args.mark)
+    if args.json:
+        print(json.dumps(report, indent=1, ensure_ascii=False))
+    else:
+        print("\n".join(checkup.lines(report, ZoneInfo(cfg["schedule"]["timezone"]))))
+    raise SystemExit(1 if report["findings"] else 0)
+
+
+def cmd_audit(cfg: dict, args: argparse.Namespace) -> None:
+    from zoneinfo import ZoneInfo
+
+    from . import audit
+
+    if args.keep_deep:
+        print(audit.keep_deep(cfg, Path(args.keep_deep)))
+    elif args.brief:
+        print(audit.brief(cfg, args.weeks) or "no weekly digests saved yet (clipper audit --save)")
+    else:
+        tz = ZoneInfo(cfg["schedule"]["timezone"])
+        snap = audit.collect(cfg)
+        print(audit.text(snap, tz, limit=0 if args.all else audit.TOP))
+        if args.save:
+            audit.save(cfg, snap, tz)
+
+
+def cmd_serve(cfg: dict, args: argparse.Namespace) -> None:
+    from . import serve
+
+    serve.run(cfg, port=args.port)
+
+
 def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
     from . import bot
 
     bot.run(cfg)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(prog="clipper")
-    ap.add_argument("--config", help="path to clipper.toml (default: $CLIPPER_CONFIG or ./clipper.toml)")
-    ap.add_argument("--show", help="use this [shows.<key>] profile (default: the stream's, by Kick channel)")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+def cmd_streams(cfg: dict, args: argparse.Namespace) -> None:
+    from . import streams
 
+    if args.action == "list":
+        s = streams.listing(cfg, everything=args.all, older_than_days=args.older_than)
+        print(json.dumps(s, indent=1, default=str) if args.json else "\n".join(streams.listing_lines(s)))
+    else:
+        print("\n".join(streams.prune(cfg, older_than_days=args.older_than, cuts=args.cuts,
+                                      only=args.only, yes=args.yes)))
+
+
+def cmd_backup(cfg: dict, args: argparse.Namespace) -> None:
+    from . import backup
+
+    print("\n".join(backup.run(cfg, to=args.to, with_secrets=args.with_secrets or None, dry_run=args.dry_run)))
+
+
+COMMAND_GROUPS = [
+    ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
+    ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
+    ('Services (long-running)', ['services', 'status', 'checkup', 'audit', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
+    ('Extras', ['weekly', 'cast', 'broll', 'doc', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
+                'costs', 'compare', 'models']),
+    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'streams', 'backup', 'completion', 'cookies', 'codereview']),
+]
+
+
+def command_list() -> str:
+    """`clipper -h`'s list of commands by group (argparse prints one flat list)."""
+    return "\n\n".join(f"{title}:\n  " + " ".join(names) for title, names in COMMAND_GROUPS)
+
+
+def add_pipeline(sub) -> None:
+    """Pipeline: a stream from recording to review, in run order."""
     p = sub.add_parser("fetch", help="resolve a Kick VOD url, pull chat and video")
-    p.add_argument("url")
-    p.add_argument("--no-video", action="store_true")
-    p.add_argument("--no-chat", action="store_true")
+    p.add_argument("url", help="the Kick VOD url (kick.com/<channel>/videos/<id>)")
+    p.add_argument("--no-video", action="store_true", help="chat and meta only; no video download")
+    p.add_argument("--no-chat", action="store_true", help="video and meta only; no chat replay")
     p.set_defaults(fn=cmd_fetch)
 
-    p = sub.add_parser("record", help="record live streams with real-time chat (NAS service)")
-    rsub = p.add_subparsers(dest="action", required=True)
-    p.set_defaults(fn=cmd_record)
-    r = rsub.add_parser("watch", help="watch [record] channels; record each stream they go live with")
-    r.add_argument("--channel", action="append", help="only this channel (repeatable)")
-    r = rsub.add_parser("now", help="record one channel's current (or next) stream, then exit")
-    r.add_argument("channel", help="Kick channel slug")
-    r.add_argument("--max-s", type=float, help="stop after this many seconds and finalize")
-    r = rsub.add_parser("finalize", help="join an interrupted recording's parts and write its files")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-
     p = sub.add_parser("preshow", help="grab a show's pre-show from its YouTube channel, as one whole video")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_preshow)
     r = rsub.add_parser("check", help="grab new uploads matching [preshow] title_pattern (the bot does this)")
     r.add_argument("--run", action="store_true", help="then run the pipeline on grabbed pre-shows not done yet")
     rsub.add_parser("list", help="recent pre-shows in the feeds, and which are grabbed")
-    r = rsub.add_parser("fetch", help="grab one video by url, any age")
-    r.add_argument("url")
+    r = rsub.add_parser("fetch", help="grab one video by url, any age; --from/--to/--about: a one-off, "
+                                      "one long segment out of that stretch")
+    r.add_argument("url", help="the YouTube video url, any age")
+    r.add_argument("--from", dest="start", metavar="TIME", help="one-off: the stretch starts about here (1:30:00)")
+    r.add_argument("--to", dest="end", metavar="TIME", help="one-off: ...and ends about here (default: the end)")
+    r.add_argument("--about", default="", help="one-off: what the stretch is (the model finds the exact bounds)")
 
     p = sub.add_parser("transcribe", help="WhisperX -> words.jsonl")
-    p.add_argument("stream", nargs="?", help="stream id under paths.streams, or a stream dir")
+    add_stream(p, optional=True)
     p.add_argument("--deploy", action="store_true",
                    help="deploy the Modal app for [transcribe] backend = \"modal\"")
+    p.add_argument("--force", action="store_true", help="transcribe again over an existing words.jsonl")
     p.set_defaults(fn=cmd_transcribe)
 
-    p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
-    rsub = p.add_subparsers(dest="action", required=True)
-    p.set_defaults(fn=cmd_narrate)
-    r = rsub.add_parser("speak", help="script text file -> <script>.read.mp3 in [narrate] voice_id (perform to it)")
-    r.add_argument("script", help="UTF-8 text; eleven_v3 tags like [sighs] [pause] allowed")
-    r.add_argument("--voice-id", help="override [narrate] voice_id")
-    r.add_argument("-o", "--out", help="output path")
-    r.add_argument("--stability", type=float, help="0 creative | 0.5 natural | 1 steadiest (eleven_v3)")
-    r.add_argument("--style", type=float, help="0-1 style exaggeration")
-    r.add_argument("--speed", type=float, help="0.7-1.2")
-    r = rsub.add_parser("voice", help="take (video or audio) -> <take>.voiced.mp4/.mp3 in [narrate] voice_id")
-    r.add_argument("take")
-    r.add_argument("--voice-id", help="override [narrate] voice_id")
-    r.add_argument("-o", "--out", help="output path")
-    r = rsub.add_parser("voices", help="list your voices and the shared library; --add one")
-    r.add_argument("--search")
-    r.add_argument("--accent", help="e.g. british")
-    r.add_argument("--gender", help="male | female | neutral")
-    r.add_argument("--age", help="young | middle_aged | old")
-    r.add_argument("--add", metavar="OWNER:VOICE_ID", help="add a library voice to your account")
-    r.add_argument("--name", default="Mother Moo", help="name for --add")
+    p = sub.add_parser("speakers", help="name the diarized speakers (enrolled voices), fill words.jsonl speaker")
+    add_stream(p)
+    p.add_argument("--diarize", action="store_true",
+                   help="diarize first (a stream transcribed without [transcribe] diarize; one GPU call)")
+    p.add_argument("--name", action="append", metavar="SPEAKER_xx=Name",
+                   help="name a speaker by hand (repeatable; SPEAKER_xx= clears)")
+    p.add_argument("--enroll", action="store_true",
+                   help="keep the named voices (these --name ones, else every hand-named one) for the show")
+    p.set_defaults(fn=cmd_speakers)
 
-    p = sub.add_parser("perform", help="lip-sync take to a read: find takes, cut at pauses, stitch the renders")
-    rsub = p.add_subparsers(dest="action", required=True)
-    p.set_defaults(fn=cmd_perform)
-    r = rsub.add_parser("prepare", help="find the takes, cut take N at the read's pauses -> DIR/pieceN.mp4")
-    r.add_argument("recording", help="the phone/webcam video, the read playing out loud in it")
-    r.add_argument("--read", required=True, help="the read the takes follow (clipper narrate speak)")
-    r.add_argument("--take", type=int, default=1, help="which take (default 1)")
-    r.add_argument("--out", help="output folder (default <recording>.perform)")
-    r = rsub.add_parser("status", help="which pieces are rendered")
-    r.add_argument("dir")
-    r = rsub.add_parser("stitch", help="renderN.mp4 at their read times + the read -> final.mp4")
-    r.add_argument("dir")
-    r = rsub.add_parser("lipsync", help="redraw the mouth to match the read (LatentSync on Modal, or Sync)")
-    r.add_argument("target", nargs="?", help="a perform dir (uses final.mp4 + its read) or a video")
-    r.add_argument("--engine", choices=["latentsync", "sync", "both"],
-                   help="default [perform] lipsync_engine")
-    r.add_argument("--audio", help="the audio to sync to (default: the dir's read)")
-    r.add_argument("--deploy", action="store_true", help="deploy the LatentSync Modal app")
-
-    p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee): list, transcribe on Modal")
-    rsub = p.add_subparsers(dest="action", required=True)
-    p.set_defaults(fn=cmd_archive)
-    r = rsub.add_parser("add", help="list a channel's long-form videos into a subject's catalog")
-    r.add_argument("subject", help="short name, e.g. jer")
-    r.add_argument("url", nargs="+", help="YouTube channel/tab or Odysee channel url")
-    r = rsub.add_parser("transcribe", help="transcribe catalog items not done yet, on Modal")
-    r.add_argument("subject")
-    r.add_argument("--limit", type=int, help="at most this many items")
-    r.add_argument("--oldest", action="store_true", help="oldest first (default newest first)")
-    r.add_argument("--gpu", help="Modal GPU (default [archive] gpu)")
-    r.add_argument("--parallel", type=int, help="items at once (default [archive] parallel)")
-    r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
-    r = rsub.add_parser("status", help="items, hours transcribed, errors, cost")
-    r.add_argument("subject", nargs="?")
+    p = sub.add_parser("faces", help="who is on screen: group the keyframes' faces, name them -> faces.json")
+    add_stream(p, optional=True)
+    p.add_argument("--rescan", action="store_true", help="scan the keyframes again (the first run always scans)")
+    p.add_argument("--name", action="append", metavar="F03=Name",
+                   help="name a group by hand (repeatable; F03= clears); see faces/F03.jpg")
+    p.add_argument("--enroll", action="store_true",
+                   help="keep the named faces (these --name ones, else every hand-named one) for every show")
+    p.add_argument("--enroll-photos", action="store_true", help="add the [thumbnail] photos portraits to the known faces")
+    p.add_argument("--at", metavar="H:MM:SS", help="with --box: the stream time of the frame")
+    p.add_argument("--box", metavar="X,Y,W,H", help="a face by hand: its box in the source frame, 0-1")
+    p.add_argument("--person", metavar="NAME", help="with --box: keep that face as NAME's")
+    p.add_argument("--forget", metavar="NAME", help="drop NAME from the known faces")
+    p.set_defaults(fn=cmd_faces)
 
     p = sub.add_parser("signals", help="chat + loudness heat curve -> windows.json")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.set_defaults(fn=cmd_signals)
 
     p = sub.add_parser("score", help="Claude Pass A + Pass B -> candidates.json")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("--dry-run", action="store_true", help="write Pass A requests, no API calls")
+    p.add_argument("--force", action="store_true", help="score again although candidates.json exists (pays Pass A again)")
     p.set_defaults(fn=cmd_score)
 
     p = sub.add_parser("segments", help="split the stream into topic segments -> segments.json")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("--force", action="store_true", help="re-split instead of reusing segments.json")
+    p.add_argument("--dry-run", action="store_true", help="print the estimate (what a run would send, times "
+                                                          "[llm] prices); call nothing")
     p.set_defaults(fn=cmd_segments)
 
     p = sub.add_parser("cut", help="cut segments, topic compilations and Pass B picks")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("what", nargs="*", help="segments, compilations and/or picks (default: all)")
-    p.add_argument("--ids", help="only these segment ids, e.g. s03,s07")
+    add_items(p, "only these segments or picks, e.g. s03,s07 or t03", old=("--ids",))
+    p.add_argument("--force", action="store_true", help="re-cut picks whose in/out points haven't changed")
     p.set_defaults(fn=cmd_cut)
 
     p = sub.add_parser("meta", help="upload metadata (SEO title, description, chapters, tags) + SRT")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(p)
     p.add_argument("--captions-only", action="store_true",
                    help="rewrite .srt and re-mask metadata text, no model calls")
     p.add_argument("--missing", action="store_true",
                    help="only videos with no draft yet; existing drafts stay as they are")
+    p.add_argument("--dry-run", action="store_true", help="print the estimate (what a run would send, times "
+                                                          "[llm] prices); call nothing")
     p.set_defaults(fn=cmd_meta)
 
     p = sub.add_parser("thumbs", help="thumbnails: pick a frame, write the text -> <video>.jpg")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-    p.add_argument("--ids", help="only these assets, e.g. t20,s02,comp-the-quartering")
+    add_stream(p)
+    add_items(p, "only these videos, e.g. t20,s02,comp-<topic>", old=("--ids",))
     p.add_argument("--force", action="store_true", help="pick again even if the video is unchanged")
     p.add_argument("--compose-only", action="store_true",
                    help="re-render from thumbnails.json (brand or hand edits), no model calls")
     p.add_argument("--no-kitsu", action="store_true", help="don't attach them in Kitsu")
     p.add_argument("--missing", action="store_true",
                    help="only videos with no thumbnail yet; leave the others' covers alone")
+    p.add_argument("--dry-run", action="store_true", help="print the estimate (the picks a run would make, "
+                                                          "frames as images, times [llm] prices); call nothing")
     p.add_argument("--shorts", action="store_true",
                    help="only the Shorts' 9:16 covers, from their clips' choices (no model calls)")
     p.add_argument("--photo", metavar="PERSON",
-                   help="enquirer: use [thumbnail] photos/<PERSON> as the --ids covers' face "
+                   help="enquirer, fanmag: use [thumbnail] photos/<PERSON> as the --items covers' face "
                         "(\"\" = back to the frame); re-renders, no model calls")
     p.add_argument("--teaser-photo", metavar="PERSON",
-                   help="enquirer: show that photo beside the --ids videos' teasers on the other covers")
+                   help="enquirer, fanmag: show that photo beside the --items videos' teasers on the other covers")
     p.set_defaults(fn=cmd_thumbs)
 
     p = sub.add_parser("shorts", help="vertical Shorts of the picks: layout crop, captions, loudness -> shorts/")
-    p.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-    p.add_argument("--ids", help="only these picks, e.g. t33,w19 or v01")
+    add_stream(p)
+    add_items(p, "only these picks, e.g. t33,w19 or v01", old=("--ids",))
     p.add_argument("--layout", help="use this layout (from [shorts] layouts) for the chosen picks")
     p.add_argument("--force", action="store_true", help="re-render even if unchanged (keeps layouts)")
     p.add_argument("--rescene", action="store_true",
                    help="label scene layouts again where the model chose them; re-render what changes")
     p.add_argument("--check", action="store_true",
                    help="print each Short's scene layouts (labels frames again), render nothing")
+    t = p.add_mutually_exclusive_group()
+    t.add_argument("--no-tighten", dest="tighten", action="store_false", default=None,
+                   help="keep these Shorts' pauses from now on, re-rendering any that were tightened "
+                        "([edit] tighten)")
+    t.add_argument("--tighten", dest="tighten", action="store_true", default=None,
+                   help="undo --no-tighten for these Shorts")
     p.add_argument("--save-example", metavar="LAYOUT",
                    help="save the stream's frame at --at as LAYOUT's reference screenshot (scene matching)")
-    p.add_argument("--at", type=float, help="with --save-example: seconds into the stream")
+    p.add_argument("--at", type=time_arg, metavar="TIME",
+                   help="with --save-example: time into the recording (H:MM:SS, H:MM or seconds)")
     p.set_defaults(fn=cmd_shorts)
 
+    p = sub.add_parser("pick", help="Shorts from a stretch you name: find, cut, render, send to review")
+    add_stream(p)
+    p.add_argument("--from", dest="start", metavar="TIME", help="start, e.g. 4:05:00 or 4:05 (H:MM)")
+    p.add_argument("--to", dest="end", metavar="TIME", help="end, e.g. 4:25:00")
+    p.add_argument("--at", metavar="TIME", help="a [pick] span_s stretch around this time")
+    p.add_argument("--about", default="", help="what to look for (without a time: located "
+                                               "in the stream summary first)")
+    p.add_argument("--find", metavar="TEXT", help="list transcript lines with TEXT, no model calls")
+    p.add_argument("--clock", choices=["stream", "video"], default="stream",
+                   help="times as Kick's VOD shows them (default) or the recording's own")
+    p.add_argument("--dry-run", action="store_true", help="show the moments found, save nothing")
+    p.add_argument("--no-run", action="store_true", help="only add the picks to candidates.json")
+    p.add_argument("--no-notify", action="store_true", help="don't post review cards to Discord")
+    p.add_argument("--allow-overlap", action="store_true",
+                   help="keep moments that overlap an existing pick")
+    p.set_defaults(fn=cmd_pick)
+
+    from .stages import NAMES as STAGE_NAMES
+    p = sub.add_parser("run", help="run every pipeline stage not done yet: transcribe ... review publish",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="stages, in run order: " + ", ".join(STAGE_NAMES[:8]) + ",\n"
+                              + ", ".join(STAGE_NAMES[8:]) + ".\n"
+                              "clips, clips_meta, clips_thumbs and clips_review are the fast lane's early cut,\n"
+                              "metadata, covers and review publish of the picks, what the Shorts need first;\n"
+                              "cut, meta, thumbs and review are the same stages for the segments and\n"
+                              "compilations ([worker] fast_lane). --only and --from choose stages, not what\n"
+                              "they redo: a stage keeps the paid work it finds (drafts, covers, unchanged\n"
+                              "cuts). To redo covers or drafts run the stage itself:\n"
+                              "clipper thumbs STREAM --items IDS --force, clipper meta STREAM.")
+    add_stream(p)
+    p.add_argument("--only", metavar="STAGES", help="just these stages, comma-separated (the list below); "
+                                                    "done ones need --force")
+    p.add_argument("--from", dest="from_", choices=STAGE_NAMES, metavar="STAGE",
+                   help="run this stage and every one after it again, done or not "
+                        "(score, cut and clips get --force)")
+    p.add_argument("--force", action="store_true", help="rerun stages even if done")
+    p.set_defaults(fn=cmd_run)
+
+
+def add_review(sub) -> None:
+    """Review and publish."""
     p = sub.add_parser("review", help="Kitsu review: publish, sync, and per-item decisions")
-    rsub = p.add_subparsers(dest="action", required=True)
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
     p.set_defaults(fn=cmd_review)
     r = rsub.add_parser("publish", help="upload previews to Kitsu (and post to Discord)")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(r)
     r.add_argument("--force", action="store_true", help="publish new revisions even if unchanged")
     r.add_argument("--no-notify", action="store_true", help="don't post to Discord")
     r.add_argument("--only", action="append", choices=["segments", "picks", "shorts", "compilations"],
                    help="publish only these kinds of [review] include (repeatable), e.g. --only shorts")
     r = rsub.add_parser("sync", help="read Kitsu decisions and columns into review.json")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
+    add_stream(r)
     r = rsub.add_parser("notify", help="post a stream's review cards to Discord")
-    r.add_argument("stream", help="stream id under paths.streams, or a stream dir")
-    r.add_argument("--keys", help="only these items, e.g. c01,s02")
+    add_stream(r)
+    add_items(r, "only these items, e.g. c01,s02", old=("--keys",))
     r.add_argument("--force", action="store_true", help="repost items already posted")
     r = rsub.add_parser("status", help="decision counts per stream, and what's scheduled")
+    # Reads review.json unless asked: a sync writes it and can post to Kitsu, not for a status.
     r.add_argument("--sync", action="store_true", help="read Kitsu first")
+    r = rsub.add_parser("invite", help="let a Discord user review: their id goes on [discord] allowed_user_ids "
+                                       "in clipper.toml (then restart the bot)")
+    r.add_argument("user_id", help="their Discord user id (Developer Mode on, right-click the person, Copy User ID)")
     r = rsub.add_parser("list", help="items waiting for a decision, with Kitsu links and previews")
     r.add_argument("stream", nargs="?", help="only this stream")
     r.add_argument("--all", action="store_true", help="every item, decided or not")
     r.add_argument("--no-sync", action="store_true", help="use review.json as is")
+    r.add_argument("--json", action="store_true", help="the rows as JSON")
     item_help = "item: kick-131151926/c03_t01, or c03 / s02 when only one stream has it"
     for name, help_, text_help in [
             ("approve", "approve an item", "optional comment"),
@@ -591,7 +1354,7 @@ def main() -> None:
             ("thumbtext", "change the words on the YouTube thumbnail", "2-4 words"),
             ("description", "change the YouTube description (without its hashtag line)",
              "the new description (or --file)"),
-            ("hashtags", "change the hashtags closing the description", "#Kino #Casino (# optional)"),
+            ("hashtags", "change the hashtags closing the description", "#MyShow #Drama (# optional)"),
             ("tags", "change the YouTube tags", "comma-separated tags (about 500 chars in all)"),
             ("playlist", "change the YouTube playlist", "playlist name")]:
         r = rsub.add_parser(name, help=help_)
@@ -605,8 +1368,8 @@ def main() -> None:
 
     p = sub.add_parser("retake", help="act on retake notes: re-cut / re-thumbnail, republish for review")
     p.add_argument("stream", nargs="?", help="only this stream (default: every stream)")
-    p.add_argument("--item", help="only this item, e.g. c03 or kick-131151926/s02")
-    p.add_argument("--comment", help="with --item: use this note instead of the one in Kitsu")
+    add_items(p, "only these items, e.g. c03 or kick-131151926/s02", old=("--item",))
+    p.add_argument("--comment", help="with one --items item: use this note instead of the one in Kitsu")
     p.add_argument("--dry-run", action="store_true", help="show the plan, change nothing")
     p.add_argument("--no-sync", action="store_true", help="use review.json as is")
     p.set_defaults(fn=cmd_retake)
@@ -614,103 +1377,723 @@ def main() -> None:
     p = sub.add_parser("schedule", help="approved items -> release slots -> schedule.json")
     p.add_argument("--no-sync", action="store_true", help="use review.json as is, skip Kitsu sync")
     p.add_argument("--no-kitsu", action="store_true", help="don't write Scheduled back to Kitsu")
+    p.add_argument("--kitsu-all", action="store_true",
+                   help="check every item's Scheduled in Kitsu, not only the changed slots")
     p.add_argument("--dry-run", action="store_true", help="print the plan, write nothing")
     p.add_argument("--reshuffle", action="store_true",
                    help="re-place automatic entries not yet uploaded (pinned/uploaded stay)")
     p.add_argument("--list", dest="list_only", action="store_true",
                    help="list upcoming schedule.json entries, no replan")
-    p.add_argument("--show", dest="list_only", action="store_true", help=argparse.SUPPRESS)  # old spelling
     p.add_argument("--days", type=int, default=7, help="with --list: how far ahead (default 7)")
+    p.add_argument("--json", action="store_true", help="with --list: the entries as JSON")
     p.set_defaults(fn=cmd_schedule)
 
     p = sub.add_parser("upload", help="upload due schedule.json entries to YouTube (private + publishAt)")
-    p.add_argument("--sign-in", action="store_true", help="one-time YouTube sign-in in your browser")
     p.add_argument("--dry-run", action="store_true", help="show what would upload, upload nothing")
-    p.add_argument("--max", type=int, help="upload at most this many this run")
-    p.add_argument("--thumbnails", action="store_true",
+    p.add_argument("--limit", type=int, help="upload (or with --playlists, add) at most this many this run")
+    p.add_argument("--max", dest="limit", type=int, help=argparse.SUPPRESS)  # old spelling
+    m = p.add_mutually_exclusive_group()  # one job per run; plain `upload` is the scheduled uploads
+    m.add_argument("--sign-in", action="store_true", help="one-time YouTube sign-in in your browser")
+    m.add_argument("--thumbnails", action="store_true",
                    help="only set thumbnails on uploaded videos that lack one (after channel verification)")
-    p.add_argument("--playlists", action="store_true",
+    m.add_argument("--playlists", action="store_true",
                    help="only add uploaded videos to playlists they're missing from, e.g. their show's "
-                        "([youtube] show_playlist); 50 quota units each, --max N to spread it out")
-    p.add_argument("--links", action="store_true",
+                        "([youtube] show_playlist); 50 quota units each, --limit N to spread it out")
+    m.add_argument("--links", action="store_true",
                    help="only add, fix or drop source links (clip -> segment, segment -> compilation) "
                         "on uploaded videos; every upload run does this too ([youtube] source_links)")
-    p.add_argument("--next", type=int, metavar="N",
+    m.add_argument("--captions", action="store_true",
+                   help="only retry captions that failed to go up (400 quota units each, 3 tries); "
+                        "every upload run does this too, from the day's spare quota")
+    m.add_argument("--next", type=int, metavar="N",
                    help="list the next N videos to upload, with their files (for uploading in Studio)")
-    p.add_argument("--attach", nargs=2, metavar=("ITEM", "LINK"),
+    m.add_argument("--attach", nargs=2, metavar=("ITEM", "LINK"),
                    help="a video you uploaded in Studio is ITEM (e.g. kick-132380636/s12): set its "
                         "details, thumbnail, captions, playlist, Kitsu link; record it as uploaded")
+    m.add_argument("--related", nargs="*", metavar="ITEM",
+                   help="list uploaded Shorts whose segment is out, to set its related video in Studio "
+                        "(the API can't); with ITEMs (keys or Short links), record them as set")
     p.set_defaults(fn=cmd_upload)
 
     p = sub.add_parser("rumble", help="ready-to-upload Rumble folders for scheduled items; mark them done")
     p.add_argument("stream", nargs="?", help="stream id (default: every scheduled item)")
-    p.add_argument("--items", help="only these, e.g. s02,c03 or a full schedule key")
+    add_items(p, "only these, e.g. s02,c03 or a full schedule key")
     p.add_argument("--open", action="store_true", help="open the folder and Rumble's upload page")
     p.add_argument("--dry-run", action="store_true", help="show what would be prepared, write nothing")
-    p.add_argument("--status", action="store_true", help="Rumble status of scheduled items")
-    p.add_argument("--done", metavar="ITEM", help="mark ITEM uploaded to Rumble (with --url)")
+    m = p.add_mutually_exclusive_group()
+    m.add_argument("--status", action="store_true", help="Rumble status of scheduled items")
+    m.add_argument("--done", metavar="ITEM", help="mark ITEM uploaded to Rumble (with --url)")
+    m.add_argument("--undo", metavar="ITEM", help="clear ITEM's uploaded mark")
     p.add_argument("--url", help="with --done: the video's Rumble link")
-    p.add_argument("--undo", metavar="ITEM", help="clear ITEM's uploaded mark")
     p.set_defaults(fn=cmd_rumble)
 
     p = sub.add_parser("tiktok", help="send scheduled Shorts to the TikTok app's drafts; post from the phone")
     p.add_argument("stream", nargs="?", help="stream id, for short --items like s02 (default: any)")
-    p.add_argument("--items", help="send these as drafts, e.g. t20,v01_t20 or a full schedule key")
-    p.add_argument("--auto", action="store_true",
+    m = p.add_mutually_exclusive_group()  # none of them: the status of sent drafts
+    add_items(m, "send these as drafts, e.g. t20,v01_t20 or a full schedule key")
+    m.add_argument("--auto", action="store_true",
                    help="send the next unsent Shorts in YouTube-schedule order, up to max_per_24h")
-    p.add_argument("--sign-in", action="store_true", help="one-time TikTok sign-in in your browser")
-    p.add_argument("--caption", metavar="ITEM", help="post a sent draft's caption to Discord again")
-    p.add_argument("--dry-run", action="store_true", help="show files and captions, send nothing")
+    m.add_argument("--caption", metavar="ITEM", help="post a sent draft's caption to Discord again")
+    p.add_argument("--resend", action="store_true",
+                   help="with --items: send again drafts that expired unposted in the app")
+    p.add_argument("--sign-in", action="store_true", help="one-time TikTok sign-in in your browser (then "
+                                                         "carries on with --items/--auto if given)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="show files and captions, send nothing; with no mode, list drafts without asking TikTok")
     p.set_defaults(fn=cmd_tiktok)
 
-    p = sub.add_parser("run", help="run every pipeline stage not done yet: transcribe ... review publish")
-    p.add_argument("stream")
-    p.add_argument("--only", help="just these stages, e.g. transcribe,score")
-    p.add_argument("--from", dest="from_", metavar="STAGE", help="rerun from this stage on")
-    p.add_argument("--force", action="store_true", help="rerun stages even if done")
-    p.set_defaults(fn=cmd_run)
+    p = sub.add_parser("x", help="post scheduled Shorts to X as native video")
+    p.add_argument("stream", nargs="?", help="stream id, for short --items like s02 (default: any)")
+    m = p.add_mutually_exclusive_group()  # none of them: what was posted
+    add_items(m, "post these, e.g. t20,v01_t20 or a full schedule key")
+    m.add_argument("--auto", action="store_true",
+                   help="post the Shorts live on YouTube and not on X yet, up to max_per_24h")
+    m.add_argument("--issue", nargs="?", const="latest", metavar="DAY",
+                   help="post a weekly issue's pages as a thread (any day of its week, YYYY-MM-DD; "
+                        "default the newest issue)")
+    m.add_argument("--mark", nargs=2, metavar=("KEY", "STATUS"),
+                   help="after a hand check of a post that timed out (\"unknown\"): posted[:URL] or failed")
+    p.add_argument("--sign-in", action="store_true", help="one-time X sign-in in your browser (then "
+                                                         "carries on with --items/--auto/--issue if given)")
+    p.add_argument("--dry-run", action="store_true", help="show files and text, post nothing")
+    p.set_defaults(fn=cmd_x)
+
+    p = sub.add_parser("analytics", help="YouTube stats of uploads -> analytics.json (feeds scoring)")
+    p.add_argument("--sign-in", action="store_true", help="once: grant read-only YouTube Analytics")
+    p.add_argument("--list", dest="list_only", action="store_true", help="print analytics.json, best first")
+    p.add_argument("--report", action="store_true",
+                   help="the month's report -> reports/analytics/<month>.md + .csv")
+    p.add_argument("--month", help="with --report: YYYY-MM (default: this month)")
+    p.add_argument("--refresh", action="store_true", help="with --report: refresh analytics.json first")
+    p.set_defaults(fn=cmd_analytics)
+
+
+def add_services(sub) -> None:
+    """Services: long-running."""
+    p = sub.add_parser("record", help="record live streams with real-time chat (NAS service)")
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_record)
+    r = rsub.add_parser("watch", help="watch [record] channels; record each stream they go live with")
+    r.add_argument("--channel", action="append", help="only this channel (repeatable)")
+    r = rsub.add_parser("now", help="record one channel's current (or next) stream, then exit")
+    r.add_argument("channel", help="Kick channel slug")
+    r.add_argument("--max-s", type=float, help="stop after this many seconds and finalize")
+    rsub.add_parser("status", help="what the recorder is doing, from its heartbeat on the share "
+                                   "(exit 3 while recording)")
+    r = rsub.add_parser("finalize", help="join an interrupted recording's parts and write its files")
+    add_stream(r)
+
+    p = sub.add_parser("services", help="status, stop or restart serve, the bot, the worker and the NAS recorder")
+    p.add_argument("action", nargs="?", choices=["status", "stop", "restart"], default="status",
+                   help="status (default), stop or restart")
+    p.add_argument("which", nargs="?", choices=["serve", "bot", "worker", "recorder", "all"],
+                   help="default for status: everything; stop/restart need one (all = worker, serve "
+                        "and bot; the recorder is only ever named)")
+    p.add_argument("--force", action="store_true",
+                   help="restart or stop the recorder even while it's recording (starts a new part)")
+    p.set_defaults(fn=cmd_services)
+
+    p = sub.add_parser("status", help="one screen: what needs you, services and recorder, the worker's streams, "
+                                      "review counts, the next releases, this month's spend (reads files; runs nothing)")
+    p.add_argument("--days", type=int, default=2, help="releases this far ahead (default 2)")
+    p.add_argument("--sync", action="store_true", help="read Kitsu's decisions first (slower)")
+    p.add_argument("--all", action="store_true",
+                   help="every stream, not just the last week's and the unfinished ones")
+    p.add_argument("--json", action="store_true", help="the same as JSON (the Claude container reads it)")
+    p.set_defaults(fn=cmd_status)
+
+    p = sub.add_parser("checkup", help="what the alerts don't catch: stuck streams, quiet services, late uploads, "
+                                       "title slips (reads files; exit 1 on findings)")
+    p.add_argument("--only", action="append", choices=("services", "streams", "schedule", "lint"),
+                   help="just this check (repeatable)")
+    p.add_argument("--json", action="store_true", help="the report as JSON (the nightly Claude run reads it)")
+    p.add_argument("--mark", action="store_true",
+                   help="remember these findings, so the next run says which are new (the scheduled run)")
+    p.set_defaults(fn=cmd_checkup)
+
+    p = sub.add_parser("audit", help="how the week went: runs, uploads, spend, backups, what is parked "
+                                     "(no model); --brief feeds the monthly deep audit")
+    p.add_argument("--all", action="store_true", help="every thing to do, not just the top three")
+    p.add_argument("--save", action="store_true", help="keep this week for the monthly deep audit (the scheduled run)")
+    p.add_argument("--brief", action="store_true", help="the saved weeks side by side, repeat problems first")
+    p.add_argument("--weeks", type=int, metavar="N", help="with --brief: how many weeks (default [audit] deep_weeks)")
+    p.add_argument("--keep-deep", metavar="FILE", help="keep FILE as this month's deep audit (the scheduled run)")
+    p.set_defaults(fn=cmd_audit)
 
     p = sub.add_parser("worker", help="GPU machine: `clipper run` each finished recording")
     p.add_argument("--once", action="store_true", help="one pass, then exit")
     p.add_argument("--status", action="store_true", help="run state of each recording")
     p.set_defaults(fn=cmd_worker)
 
-    p = sub.add_parser("bot", help="Discord review bot: buttons on review cards, slash commands")
+    p = sub.add_parser("serve", help="the always-on process: war room, hourly uploads, pre-shows, retakes, daily jobs")
+    p.add_argument("--port", type=int, help="the war room's port; default [warroom] port (8765)")
+    p.set_defaults(fn=cmd_serve)
+
+    p = sub.add_parser("bot", help="Discord review bot: buttons on review cards, slash commands, DMs")
     p.set_defaults(fn=cmd_bot)
 
-    p = sub.add_parser("analytics", help="YouTube stats of uploads -> analytics.json (feeds scoring)")
-    p.add_argument("--sign-in", action="store_true", help="once: grant read-only YouTube Analytics")
-    p.add_argument("--list", dest="list_only", action="store_true", help="print analytics.json, best first")
-    p.add_argument("--show", dest="list_only", action="store_true", help=argparse.SUPPRESS)  # old spelling
-    p.set_defaults(fn=cmd_analytics)
-
-    p = sub.add_parser("warroom", help="local dashboard: live shows, pipeline, review queue, schedule")
+    p = sub.add_parser("warroom", help="the dashboard alone (clipper serve runs it with the jobs)")
     p.add_argument("--port", type=int, help="default [warroom] port (8765)")
     p.add_argument("--open", action="store_true", help="open it in the browser")
     p.add_argument("--tailnet", choices=("on", "off", "status"),
                    help="serve it on this machine's tailnet over HTTPS (tailscale serve), for the phone")
     p.set_defaults(fn=cmd_warroom)
 
-    p = sub.add_parser("alert", help="notifications (Discord DMs from the bot): test one, see the digest")
-    p.add_argument("what", choices=("test", "digest"))
+    p = sub.add_parser("alert", help="notifications (Discord DMs from the bot): test one, see the digest, send one")
+    p.add_argument("what", choices=("test", "digest", "send"),
+                   help="test: DM yourself a test alert; digest: print today's; send: DM this text")
+    p.add_argument("text", nargs="?", help="send: the message ('-' or none reads stdin)")
+    p.add_argument("--kind", default="checkup", help="send: its kind in [notify] kinds (default checkup)")
     p.add_argument("--send", action="store_true", help="digest: DM it now too")
     p.set_defaults(fn=cmd_alert)
 
+
+def add_extras(sub) -> None:
+    """Extras: side projects and reports."""
+    p = sub.add_parser("weekly", help="the week's streams -> a ten-page tabloid issue (weekly/<saturday>/)")
+    p.add_argument("--week", help="any day of the wanted Sun-Sat week, YYYY-MM-DD (default: this week)")
+    p.add_argument("--headline", help="editor's note for the draft: the cover story, e.g. \"Ethan Klein\"")
+    p.add_argument("--gather", action="store_true", help="only rebuild week.json and stats.json")
+    p.add_argument("--draft", action="store_true", help="draft issue.json again (the old one is kept as a backup)")
+    p.add_argument("--render", action="store_true", help="only render the pages from issue.json")
+    p.add_argument("--only", help="render only these pages, e.g. 01,07")
+    p.add_argument("--format", help="tiktok (1080x1440), youtube (1080x1080 in youtube/) or both, comma-separated; "
+                                    "default [weekly] formats")
+    p.add_argument("--write", nargs="?", const="03,04,05", metavar="PAGES",
+                   help="write the articles again with the writer prompt (03 cover story, 04, 05; default all three)")
+    p.add_argument("--discord", action="store_true",
+                   help="post the issue's pages to [discord] weekly_channel (made if missing), to save on a "
+                        "phone; the newest issue, or --week's")
+    p.set_defaults(fn=cmd_weekly)
+
+    p = sub.add_parser("receipts", help="old clips of the archive subject for a stream's stories, "
+                                        "one video uploaded private (#48)")
+    p.add_argument("action", choices=["find", "list", "script", "cut", "upload"],
+                   help="find: the stories and their receipts (a model call); list: what find found; "
+                        "script: the voice-over (a model call); cut: the video; upload: to YouTube, private")
+    add_stream(p)
+    add_items(p, "find: only these segments, e.g. s02,s05 (default: by topic/figure)", old=("--segments",))
+    p.add_argument("--again", action="store_true", help="upload: a second copy even if one is up")
+    p.set_defaults(fn=cmd_receipts)
+
+    p = sub.add_parser("archive", help="back catalogs (YouTube, Odysee, heinetwork.tv): list, transcribe on Modal")
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_archive)
+    r = rsub.add_parser("add", help="list a channel's long-form videos into a subject's catalog")
+    r.add_argument("subject", help="a short name for the person, e.g. jane: their folder is paths.archive/<subject>")
+    r.add_argument("url", nargs="+", help="YouTube channel/tab, Odysee channel or https://www.heinetwork.tv "
+                                          "(members only: [paths] hei_cookies)")
+    r.add_argument("--match", help="only items whose title matches this regex, e.g. 'On Cinema|Decker'")
+    r = rsub.add_parser("video", help="keep catalog items' videos and captions (YouTube, heinetwork.tv)")
+    add_subject(r)
+    add_items(r, "just these items (default: every one not kept yet)", many=True)
+    r.add_argument("--limit", type=int, help="at most this many items")
+    r.add_argument("--oldest", action="store_true", help="oldest first (default newest first)")
+    r.add_argument("--parallel", type=int, help="downloads at once (default [archive] video_parallel)")
+    r.add_argument("--dry-run", action="store_true", help="say how many hours and roughly how many GB")
+    r = rsub.add_parser("speakers", help="name every item's speakers again from the enrolled voices; talk per name")
+    add_subject(r)
+    r = rsub.add_parser("posts", help="save a public Google Sheet of the subject's posts (posts.json)")
+    add_subject(r)
+    r.add_argument("url", help="the sheet's link")
+    r = rsub.add_parser("transcribe", help="transcribe catalog items not done yet, on Modal")
+    add_subject(r)
+    r.add_argument("--limit", type=int, help="at most this many items")
+    r.add_argument("--oldest", action="store_true", help="oldest first (default newest first)")
+    r.add_argument("--gpu", help="Modal GPU (default [archive] gpu)")
+    r.add_argument("--parallel", type=int, help="items at once (default [archive] parallel)")
+    r.add_argument("--dry-run", action="store_true", help="say how many hours and the estimated cost")
+    r.add_argument("--diarize", action="store_true", help="speaker turns too (default [archive] diarize)")
+    r = rsub.add_parser("status", help="items, hours transcribed, errors, cost, link checks")
+    add_subject(r, optional=True)
+    r = rsub.add_parser("check", help="are the source links still up? (no downloads, no cost)")
+    add_subject(r)
+    add_items(r, "just these items (default: not checked in [archive] link_recheck_days)",
+              old=("--ids",), many=True)
+    r.add_argument("--all", action="store_true", help="every item, however recently checked")
+    r.add_argument("--limit", type=int, help="at most this many items")
+    r = rsub.add_parser("links", help="items by link status (default: every link not alive)")
+    add_subject(r)
+    r.add_argument("--status", choices=["dead", "restricted", "alive", "all"],
+                   help="only links in this state (default: every one not alive)")
+    r = rsub.add_parser("index", help="build the subject's keyword index (index.sqlite; no cost)")
+    add_subject(r)
+    r.add_argument("--rebuild", action="store_true", help="start the index over")
+    r = rsub.add_parser("search", help="search the transcripts: hits with date, link at the moment")
+    add_subject(r)
+    r.add_argument("query", help='FTS5: costco dog | "costco dog" | costco OR walmart | coff*')
+    r.add_argument("--limit", type=int, default=20, help="hits shown (default 20)")
+    r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
+    r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
+    r.add_argument("--by", choices=["rank", "date", "oldest"], default="rank",
+                   help="best match (default), newest first, or oldest first")
+    r.add_argument("--years", action="store_true", help="matching windows per year, not hits")
+    r = rsub.add_parser("ask", help="plain question: a cheap model searches the index, picks the fits")
+    add_subject(r)
+    r.add_argument("question", help="e.g. 'the subject saying they would never take a sponsor'")
+    r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
+    r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
+    r.add_argument("--limit", type=int, default=15, help="options shown")
+
+    p = sub.add_parser("investigate", help="an archive subject's own videos -> facts -> leads nobody has "
+                                           "picked up (#108; research only, never uploaded)")
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_investigate)
+
+    def span(r) -> None:
+        r.add_argument("--since", help="items dated on or after YYYY[-MM-DD]")
+        r.add_argument("--before", help="items dated before YYYY[-MM-DD]")
+
+    r = rsub.add_parser("facts", help="read items for checkable facts, quotes verified (cached per item)")
+    add_subject(r)
+    span(r)
+    r.add_argument("--limit", type=int, help="at most this many items, newest first")
+    r.add_argument("--new", action="store_true", help="only items newer than the newest one read")
+    r.add_argument("--dry-run", action="store_true", help="say how many items and hours and the estimated cost")
+    r = rsub.add_parser("leads", help="candidate threads in code, then the leads model writes them up")
+    add_subject(r)
+    r.add_argument("--about", help='narrow to a focus, e.g. "lawsuit" or a name')
+    span(r)
+    r.add_argument("--max", type=int, help="leads kept (default [investigate] max_leads)")
+    r.add_argument("--confirm", action="store_true", help="then test each lead against more of the archive")
+    r = rsub.add_parser("confirm", help="test the leads against more of the archive (archive ask)")
+    add_subject(r)
+    r.add_argument("--lead", help="just this lead, e.g. L03")
+    r = rsub.add_parser("check", help="is anyone else on it? YouTube, web, Reddit, our streams, his own titles")
+    add_subject(r)
+    r.add_argument("--lead", help="just this lead, e.g. L03")
+    r.add_argument("--trail", action="store_true", help="print the last check's searches and results")
+    r = rsub.add_parser("list", help="the leads: kind, confidence, coverage, receipts")
+    add_subject(r)
+    r = rsub.add_parser("show", help="one lead's story and timeline with quotes and links")
+    add_subject(r)
+    r.add_argument("lead", help="e.g. L03")
+    r = rsub.add_parser("post", help="post the kept leads to [investigate] discord_channel: a thread per "
+                                     "leads run, edited in place after check or confirm")
+    add_subject(r)
+    r.add_argument("--new-thread", action="store_true", help="a fresh thread even if this run has one")
+    r = rsub.add_parser("run", help="facts (--new unless --since) -> leads -> check; prints the total cost")
+    add_subject(r)
+    span(r)
+    r.add_argument("--about", help="narrow the leads to a focus")
+    r.add_argument("--max", type=int, help="leads kept")
+
+    p = sub.add_parser("story", help="a news brief -> the swarm -> transcripts -> the moments -> a dossier; "
+                                     "then plan and cut a video of it for review (#84)")
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_story)
+
+    def limits(r) -> None:
+        r.add_argument("--max-videos", type=int, help="videos to transcribe (default [story] max_videos)")
+        r.add_argument("--max-hours", type=float, help="hours of audio to transcribe (default [story] max_hours)")
+        r.add_argument("--dry-run", action="store_true", help="stop after triage: the list and the Modal estimate")
+
+    r = rsub.add_parser("new", help="start a story from a brief and run every step")
+    r.add_argument("brief", help='e.g. "the streamer banned from Kick after the call"')
+    r.add_argument("--slug", help="the story's name (default: from the brief's words)")
+    r.add_argument("--days", type=int, help="the window: the last N days (default [story] days)")
+    r.add_argument("--since", help="the window starts YYYY-MM-DD")
+    r.add_argument("--before", help="the window ends before YYYY-MM-DD")
+    r.add_argument("--person", action="append", default=[], help="someone the brief doesn't name, by name or "
+                   "nickname in streamers.json or [story] people (repeatable)")
+    r.add_argument("--url", action="append", default=[], help="a video to transcribe whatever triage says "
+                   "(YouTube, Kick VOD, Odysee; repeatable)")
+    limits(r)
+    r = rsub.add_parser("run", help="the steps not done yet (swarm, triage, ingest, find, dossier)")
+    add_slug(r)
+    r.add_argument("--from", dest="start", choices=["swarm", "triage", "ingest", "find", "dossier"],
+                   help="rerun this step and every one after it")
+    limits(r)
+    r = rsub.add_parser("add", help="videos to transcribe whatever triage says; then run --from triage")
+    add_slug(r)
+    r.add_argument("urls", nargs="+", help="video urls to transcribe")
+    r = rsub.add_parser("status", help="each story's steps, transcripts, moments and model cost")
+    add_slug(r, optional=True)
+    r = rsub.add_parser("trail", help="the swarm's task tree: who found what, from which search")
+    add_slug(r)
+    r = rsub.add_parser("show", help="the dossier, re-rendered from dossier.json (keeps hand edits; no model call)")
+    add_slug(r)
+    r = rsub.add_parser("plan", help="the edit from the moments -> streams/story-<slug>/story.json (~$0.03; "
+                                     "clipper --show <key> story plan ... picks the show)")
+    add_slug(r)
+    r.add_argument("--force", action="store_true", help="plan again (the old edit is kept as story.<time>.json)")
+    r = rsub.add_parser("cut", help="render story.json, then meta, thumbs and the Kitsu card; "
+                                    "approved, it goes out asap")
+    add_slug(r)
+    r.add_argument("--force", action="store_true", help="re-render every part and redo meta and thumbs")
+    r.add_argument("--no-review", action="store_true", help="only the video: no meta, thumbs or Kitsu")
+
+    p = sub.add_parser("narrate", help="re-voice a performance take with the ElevenLabs Voice Changer")
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_narrate)
+    r = rsub.add_parser("speak", help="script text file -> <script>.read.wav in [narrate] voice_id (perform to it)")
+    r.add_argument("script", help="UTF-8 text; eleven_v3 tags like [sighs] [pause] allowed")
+    r.add_argument("--voice-id", help="override [narrate] voice_id")
+    r.add_argument("-o", "--out", help="output path")
+    r.add_argument("--stability", type=float, help="0 creative | 0.5 natural | 1 steadiest (eleven_v3)")
+    r.add_argument("--style", type=float, help="0-1 style exaggeration")
+    r.add_argument("--speed", type=float, help="0.7-1.2")
+    r = rsub.add_parser("voice", help="take (video or audio) -> <take>.voiced.mp4/.mp3 in [narrate] voice_id")
+    r.add_argument("take", help="the take: a video or audio file")
+    r.add_argument("--voice-id", help="override [narrate] voice_id")
+    r.add_argument("-o", "--out", help="output path")
+    r = rsub.add_parser("voices", help="list your voices and the shared library; --add one")
+    r.add_argument("--search", help="only voices whose name or description has this")
+    r.add_argument("--accent", help="e.g. british")
+    r.add_argument("--gender", help="male | female | neutral")
+    r.add_argument("--age", help="young | middle_aged | old")
+    r.add_argument("--add", metavar="OWNER:VOICE_ID", help="add a library voice to your account")
+    r.add_argument("--name", default="Mother Moo", help="name for --add")
+
+    p = sub.add_parser("perform", help="lip-sync take to a read: find takes, cut at pauses, stitch the renders")
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_perform)
+    r = rsub.add_parser("prepare", help="find the takes, cut take N at the read's pauses -> DIR/pieceN.mp4")
+    r.add_argument("recording", help="the phone/webcam video, the read playing out loud in it")
+    r.add_argument("--read", required=True, help="the read the takes follow (clipper narrate speak)")
+    r.add_argument("--take", type=int, default=1, help="which take (default 1)")
+    r.add_argument("--out", help="output folder (default <recording>.perform)")
+    r = rsub.add_parser("status", help="which pieces are rendered")
+    r.add_argument("dir", help="the prepare folder (<recording>.perform)")
+    r = rsub.add_parser("stitch", help="renderN.mp4 at their read times + the read -> final.mp4")
+    r.add_argument("dir", help="the prepare folder (<recording>.perform)")
+    r = rsub.add_parser("lipsync", help="redraw the mouth to match the read (LatentSync on Modal, or Sync)")
+    r.add_argument("target", nargs="?", help="a perform dir (uses final.mp4 + its read) or a video")
+    r.add_argument("--engine", choices=["latentsync", "sync", "both"],
+                   help="default [perform] lipsync_engine")
+    r.add_argument("--audio", help="the audio to sync to (default: the dir's read)")
+    r.add_argument("--deploy", action="store_true", help="deploy the LatentSync Modal app")
+
+    p = sub.add_parser("modal", help="Modal now: containers, runs, failures, this month's spend, archives")
+    p.add_argument("--backfill", action="store_true",
+                   help="add runs from before the run log (transcript.json cost records), once")
+    p.set_defaults(fn=cmd_modal)
+
+    p = sub.add_parser("cast", help="the cast library: a few good photos of each regular, from streams "
+                                    "and the web, for covers and the weekly (#41)")
+    csub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_cast)
+    csub.add_parser("list", help="everyone: photos kept and new, who has fewer than [cast] min_photos")
+    r = csub.add_parser("grab", help="the sharpest faces `clipper faces` named in a stream, as new photos")
+    add_stream(r)
+    r.add_argument("--person", help="only this person (default: everyone named)")
+    r.add_argument("-n", type=int, default=4, help="photos tried per person (default 4)")
+    r.add_argument("--needed", action="store_true", help="only people with fewer than [cast] target photos; "
+                                                         "no faces.json is not an error (the worker's cast stage)")
+    r.add_argument("--no-label", action="store_true", help="skip the label call")
+    r = csub.add_parser("find", help="new photos from the web: Wikimedia Commons, the person's channels, "
+                                     "image search ($BRAVE_API_KEY or [paths] brave_key)")
+    r.add_argument("person", help="the person, by name (`clipper cast list`)")
+    r.add_argument("--source", action="append", choices=["commons", "channels", "search"],
+                   help="only these (repeatable; default all)")
+    r.add_argument("--no-label", action="store_true", help="skip the label call")
+    r = csub.add_parser("add", help="one photo from a file or a web address")
+    r.add_argument("person", help="the person, by name (`clipper cast list`)")
+    r.add_argument("src", metavar="FILE|URL", help="a photo file, or its web address")
+    r.add_argument("--no-label", action="store_true", help="skip the label call")
+    r = csub.add_parser("auto", help="a find from every source for everyone with fewer than [cast] target "
+                                     "photos (serve runs it every [cast] auto_hours)")
+    r.add_argument("--no-label", action="store_true", help="skip the label call")
+    for act, what in (("keep", "keep these new photos"), ("drop", "delete these photos; their sources aren't fetched again")):
+        r = csub.add_parser(act, help=what)
+        r.add_argument("person", help="the person, by name (`clipper cast list`)")
+        r.add_argument("ids", nargs="+", metavar="ID", help="the photos' ids")
+    r = csub.add_parser("label", help="set a photo's label (see [cast] labels)")
+    r.add_argument("person", help="the person, by name (`clipper cast list`)")
+    r.add_argument("id", help="the photo's id")
+    r.add_argument("label", help="one of [cast] labels")
+    r = csub.add_parser("set", help="a person's other names and channels (YouTube, Kick) for find")
+    r.add_argument("person", help="the person, by name (`clipper cast list`)")
+    r.add_argument("--alias", action="append", help="another name (repeatable; replaces the list)")
+    r.add_argument("--channel", action="append", metavar="URL", help="https://www.youtube.com/@name or "
+                                                                     "https://kick.com/name (repeatable; replaces the list)")
+
+    p = sub.add_parser("broll", help="free b-roll from public-domain archives (NASA, DVIDS, Prelinger films, "
+                                     "Wikimedia Commons), with each clip's credit and licence (#229)")
+    bsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_broll)
+    r = bsub.add_parser("find", help="search the sources; new clips tagged with the search ([broll] per_source each)")
+    r.add_argument("query", help='what to look for, e.g. "hurricane from orbit"')
+    r.add_argument("--source", action="append", choices=["nasa", "dvids", "prelinger", "commons"],
+                   help="only these (repeatable; default [broll] sources)")
+    r.add_argument("-n", type=int, help="most new clips from each source (default [broll] per_source)")
+    r = bsub.add_parser("add", help="one clip: a source page's address, a library id (a part of a long one) "
+                                    "or a video file")
+    r.add_argument("target", metavar="URL|ID|FILE",
+                   help="images.nasa.gov/details/..., dvidshub.net/video/..., archive.org/details/..., a Commons File: page, "
+                        "an id from `clipper broll list`, or a file (with --credit)")
+    r.add_argument("--from", dest="start", type=time_arg, metavar="TIME", help="the part starts here (0:01:20)")
+    r.add_argument("--to", dest="end", type=time_arg, metavar="TIME", help="...and ends here (default: the end)")
+    r.add_argument("--tag", action="append", help="a tag (repeatable)")
+    r.add_argument("--credit", help="a file: who made it, as a description will credit it")
+    r.add_argument("--licence", default="public domain", help="a file: its licence (default: public domain)")
+    r = bsub.add_parser("list", help="the library, newest first")
+    r.add_argument("--tag", help="only clips with a tag containing this")
+    r.add_argument("--source", choices=["nasa", "dvids", "prelinger", "commons", "file"],
+                   help="only clips from this source")
+    r.add_argument("--status", choices=["new", "kept", "long"], help="only clips in this state")
+    r.add_argument("--json", action="store_true", help="as JSON, with each file's path (for Resolve)")
+    for act, what in (("keep", "keep these new clips"), ("drop", "delete these clips; their sources aren't found again")):
+        r = bsub.add_parser(act, help=what)
+        r.add_argument("ids", nargs="+", metavar="ID", help="the clips' ids (clipper broll list)")
+
+    p = sub.add_parser("doc", help="a narrated mini-documentary: a hand-written plan -> narration -> a Resolve "
+                                   "timeline -> a mastered render, a leak check and a publish kit")
+    dsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_doc)
+    r = dsub.add_parser("new", help="a piece's folder in [paths] documentaries, with a starter plan.toml and banned.txt")
+    r.add_argument("slug", help="the piece's folder name: lower-case letters, digits and hyphens")
+    r.add_argument("--title", help="the working title (default: the slug)")
+    r = dsub.add_parser("voice", help="buy the narration (ElevenLabs, once per take), compress it, time its words")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+    r.add_argument("--dry-run", action="store_true", help="check the plan and say how many characters it would buy")
+    r = dsub.add_parser("build", help="the plan in frames, then a new timeline version in the open Resolve project")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+    r.add_argument("--dry-run", action="store_true", help="write work/build.json and stop: Resolve isn't touched")
+    r = dsub.add_parser("master", help="render the timeline, bring its sound to [doc] lufs, run the leak check")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+    r.add_argument("--file", type=Path, help="master this video instead of rendering from Resolve")
+    r.add_argument("--timeline", help="the timeline to render (default: the last one built)")
+    r.add_argument("--no-leak", action="store_true", help="skip the leak check (it transcribes on Modal)")
+    r = dsub.add_parser("leak", help="transcribe a render on Modal and fail on anything banned.txt lists")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+    r.add_argument("--file", type=Path, help="the video to check (default: the newest mastered render)")
+    r.add_argument("--dry-run", action="store_true", help="say what the transcript would cost and stop")
+    r = dsub.add_parser("kit", help="chapters from the section markers, description, credits and disclosures -> kit.md")
+    r.add_argument("slug", help="the piece (its folder in [paths] documentaries)")
+
+    p = sub.add_parser("people", help="one record per person: names, channels, archive subject, cast folder "
+                                      "(story and investigate look people up here)")
+    psub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_people)
+    psub.add_parser("list", help="everyone, and which lists each record comes from")
+    r = psub.add_parser("show", help="one person's record")
+    r.add_argument("name", help="the person, by any of their names")
+    r = psub.add_parser("set", help="change a person in people.json, or add one (channels: confirmed ones only)")
+    r.add_argument("name", help="a name, alias or id")
+    r.add_argument("--name", dest="new_name", help="rename (the old name stays an alias)")
+    r.add_argument("--alias", action="append", default=[], help="another name, or Whisper's spelling (repeatable)")
+    r.add_argument("--unalias", action="append", default=[],
+                   help="drop an alias (one from streamers.json or the cast library comes back: fix it there)")
+    r.add_argument("--channel", action="append", default=[], metavar="PLATFORM=ID",
+                   help="youtube=@x, kick=x, twitch=x, rumble=URL, odysee=@x, x=handle, or a channel url (repeatable)")
+    r.add_argument("--unchannel", action="append", default=[], metavar="PLATFORM=ID", help="drop a channel")
+    r.add_argument("--subject", help="their archive subject (\"\" for none)")
+    r.add_argument("--cast", help="their cast library folder (\"\" for none)")
+    r.add_argument("--notes", help="free text kept with the record")
+    r = psub.add_parser("import", help="write everyone from streamers.json, [story] people and the cast library "
+                                       "into people.json")
+    r.add_argument("--dry-run", action="store_true", help="say who and what clashes, write nothing")
+    r = psub.add_parser("merge", help="two records of one person: the other's names, channels and links "
+                                      "go to the first, and the other's record is removed")
+    r.add_argument("keep", help="the record to keep (a name, alias or id)")
+    r.add_argument("other", help="the record to fold into it")
+
+    p = sub.add_parser("news", help="headlines about the shows' people: feeds, Reddit, Google News (#110)")
+    nsub = p.add_subparsers(dest="news_cmd", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_news)
+    r = nsub.add_parser("check", help="fetch what's due, match the watchlist, judge the matches "
+                                      "(the bot runs it every [news] check_minutes)")
+    r.add_argument("--no-judge", action="store_true", help="fetch and match only, no model call")
+    r = nsub.add_parser("list", help="recent stories, newest first")
+    r.add_argument("--days", type=float, default=3, help="how many days back (default 3)")
+    r.add_argument("--person", help="only stories about this person")
+    r.add_argument("--all", action="store_true", help="dismissed ones too")
+    r = nsub.add_parser("search", help="Google News now for a query, and the stored headlines")
+    r.add_argument("query", help='e.g. "Ethan Klein"')
+    r.add_argument("--days", type=int, default=7, help="how many days back (default 7)")
+    nsub.add_parser("feeds", help="each source: last fetch, items, error")
+    nsub.add_parser("watch", help="who is watched, under which names, for which shows")
+    r = nsub.add_parser("dismiss", help="never post these stories")
+    r.add_argument("ids", nargs="+", type=int, metavar="STORY", help="story numbers, as `clipper news list` shows them")
+    r = nsub.add_parser("context", help="these stories as the show's next stream_context")
+    r.add_argument("ids", nargs="+", type=int, metavar="STORY", help="story numbers, as `clipper news list` shows them")
+    r.add_argument("--show", dest="context_show", help="the show (default: the story's)")
+
+    p = sub.add_parser("costs", help="what clipper spent this month: models, Modal, fixed costs (#50)")
+    p.add_argument("--month", help="YYYY-MM (default: this month, UTC)")
+    p.add_argument("--json", action="store_true", help="the report as JSON")
+    p.add_argument("--backfill", action="store_true",
+                   help="add model spend earlier runs recorded in their output files, once")
+    p.add_argument("--dry-run", action="store_true", help="with --backfill: list, write nothing")
+    p.add_argument("--providers", action="store_true",
+                   help="this month by the Claude API's and OpenRouter's own count, next to our log")
+    p.set_defaults(fn=cmd_costs)
+
+    p = sub.add_parser("compare", help="another model on a stage that already ran, side by side with "
+                                       "its output and the review decisions (#72)")
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    q = rsub.add_parser("score", help="score a stream again with --model; candidates.json is left alone")
+    add_stream(q)
+    q.add_argument("--model", required=True,
+                   help="the candidate, e.g. openai:gpt-5-mini, openrouter:google/gemini-3-flash, local:qwen3")
+    q.add_argument("--pass", dest="which", choices=("a", "b", "ab"), default="a",
+                   help="a: the candidate judges every window, Pass B stays (default); b: the candidate "
+                        "ranks the stream's own Pass A results; ab: both")
+    q.add_argument("--model-b", default="", help="with --pass ab: a different candidate for Pass B")
+    q.add_argument("--effort", default="", help="the candidate's effort instead of [scoring] effort_a/_b; "
+                                                "none = reasoning off (other providers)")
+    q.add_argument("--prompt-version", default="",
+                   help="try another prompt version (clipper/prompts/score_a_<v>.md ...) on the stream's own windows")
+    q.add_argument("--repeat", action="store_true",
+                   help="allow the stream's own model and prompt: what a rerun alone changes")
+    q.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
+    q.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    q.set_defaults(fn=cmd_compare)
+    q = rsub.add_parser("list", help="every comparison on a stream, one table, best first")
+    add_stream(q)
+    q.set_defaults(fn=cmd_compare)
+
+    p = sub.add_parser("models", help="can a model do clipper's jobs? built-in checks, no stream needed (#72)")
+    rsub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    q = rsub.add_parser("test", help="Pass A on made-up windows, JSON, vision, text, a long transcript; "
+                                     "which stages it could take")
+    q.add_argument("model", help="e.g. claude-haiku-5-5, openrouter:qwen/qwen3.8-flash, local:qwen3")
+    q.add_argument("--effort", default="", help="instead of [scoring] effort_a; none = reasoning off "
+                                                "(other providers)")
+    q.add_argument("--no-long", action="store_true", help="skip the ~130k-token transcript (most of the cost)")
+    q.add_argument("--budget", type=float, default=1.0, help="refuse when the estimate is over this many $ (1)")
+    q.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    q.set_defaults(fn=cmd_models)
+    q = rsub.add_parser("list", help="every saved test, newest first")
+    q.set_defaults(fn=cmd_models)
+    q = rsub.add_parser("gold", help="Pass A against windows a person labelled: propose them, then run a model")
+    gsub = q.add_subparsers(dest="gold_action", required=True, metavar="<action>")
+    g = gsub.add_parser("propose", help="windows from reviewed streams to label, into [paths] model_gold")
+    g.add_argument("--streams", type=int, default=12, help="the newest this many reviewed streams (12)")
+    g.set_defaults(fn=cmd_models)
+    g = gsub.add_parser("confirm", help='set labels from a JSON file: {"<stream>_<id>": {"label": "keep"}}')
+    g.add_argument("file", help="the labels JSON file")
+    g.set_defaults(fn=cmd_models)
+    g = gsub.add_parser("run", help="score the confirmed windows with a model; recall and precision per label")
+    g.add_argument("model", help="model string: bare = Claude, or openai:..., gemini:..., local:...")
+    g.add_argument("--effort", default="", help="instead of [scoring] effort_a; none = reasoning off")
+    g.add_argument("--prompt-version", default="", help="instead of [scoring] prompt_version")
+    g.add_argument("--budget", type=float, default=2.0, help="refuse when the estimate is over this many $ (2)")
+    g.add_argument("--dry-run", action="store_true", help="print the estimate, call nothing")
+    g.set_defaults(fn=cmd_models)
+
+
+def add_setup(sub) -> None:
+    """Setup and checks."""
+    from .setup import STEPS
+    p = sub.add_parser("setup", help="guided first run on a new machine: roles, folders, encoder, keys")
+    p.add_argument("--step", choices=STEPS, help="do this step again")
+    p.add_argument("--check", action="store_true", help="each step's checks, no questions")
+    p.add_argument("--answers", metavar="FILE",
+                   help="answers file (TOML): no questions, defaults for what it leaves out; never keys")
+    p.add_argument("--offline", action="store_true", help="the final check skips the network")
+    p.add_argument("--sync-args", action="store_true", help=argparse.SUPPRESS)  # for deploy/bootstrap
+    p.set_defaults(fn=cmd_setup)
+
     p = sub.add_parser("doctor", help="check this machine: ffmpeg, GPU, fonts, keys, Kitsu/Discord/NAS")
     p.add_argument("--offline", action="store_true", help="skip the network checks")
-    p.add_argument("--role", choices=["all", "gpu", "bot", "nas"], default="all",
-                   help="only what this machine runs (gpu worker, bot, nas recorder)")
+    p.add_argument("--role", choices=["all", "gpu", "serve", "bot", "nas", "claude", "control"], default="all",
+                   help="only what this machine runs (gpu worker, serve, bot, nas recorder, claude on the NAS)")
     p.set_defaults(fn=cmd_doctor)
 
+    p = sub.add_parser("config", help="settings: where a value comes from (default, clipper.toml, show, ...)")
+    csub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    r = csub.add_parser("get", help="a setting's value and every layer that sets it, e.g. meta.model")
+    r.add_argument("name", help="section.key, e.g. bleep.mode")
+    r.add_argument("--stream", dest="for_stream", help="as this stream sees it (its show, its config.toml)")
+    r = csub.add_parser("diff", help="every setting this install changes from clipper/defaults.toml, by layer")
+    r.add_argument("show_key", nargs="?", metavar="show", help="only this show's overrides (base layers stay)")
+    r.add_argument("--json", action="store_true", help="as JSON")
+    p.set_defaults(fn=cmd_config)
+
     p = sub.add_parser("shows", help="list the [shows] profiles and which streams belong to each")
+    p.add_argument("--json", action="store_true", help="as JSON")
     p.set_defaults(fn=cmd_shows)
 
-    args = ap.parse_args()
+    p = sub.add_parser("completion", help="a tab-completion script for bash or PowerShell, to load from your profile")
+    p.add_argument("shell", choices=("bash", "powershell"), help="bash (Git Bash too) or powershell")
+    p.set_defaults(fn=cmd_completion)
+
+    p = sub.add_parser("streams", help="disk: what each stream folder takes, and pruning the source and audio "
+                                       "of streams that are done with")
+    ssub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_streams)
+    r = ssub.add_parser("list", help="size per stream (source, audio, cuts, previews), and whether prune would take it")
+    r.add_argument("--all", action="store_true", help="small streams too (default: 1 GB and over, or prunable)")
+    r.add_argument("--older-than", type=float, metavar="DAYS",
+                   help="the age prune would use (default [streams] keep_source_days, else 30)")
+    r.add_argument("--json", action="store_true", help="as JSON")
+    r = ssub.add_parser("prune", help="remove source and audio of old streams whose items are all decided and "
+                                      "none waits on an upload; keeps every JSON (says what, without --yes)")
+    r.add_argument("--older-than", type=float, metavar="DAYS",
+                   help="only streams older than this (default [streams] keep_source_days, else 30)")
+    r.add_argument("--cuts", action="store_true",
+                   help="also the segment and compilation videos and review previews of uploaded or rejected items")
+    r.add_argument("--stream", dest="only", action="append", metavar="ID",
+                   help="only this stream (repeatable); says why when it's left alone")
+    r.add_argument("--yes", action="store_true", help="remove them (without it, only list what would go)")
+
+    p = sub.add_parser("backup", help="a dated zip of the taste layer: config, schedule, faces, voices, layouts, "
+                                      "cast photos, each stream's config and review state")
+    p.add_argument("--to", metavar="DIR", help="where the zip goes (default [backup] folder)")
+    p.add_argument("--with-secrets", action="store_true", help="secrets/ too")
+    p.add_argument("--dry-run", action="store_true", help="what would go in, with sizes; nothing written")
+    p.set_defaults(fn=cmd_backup)
+
+    p = sub.add_parser("cookies", help="YouTube sign-in cookies for yt-dlp's signed-in retries")
+    ksub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    r = ksub.add_parser("export", help="copy a browser profile's YouTube cookies into [paths] youtube_cookies "
+                                       "(the laptop task that keeps the NAS hub's file fresh)")
+    r.add_argument("--browser", metavar="SPEC", help="yt-dlp browser spec (default: [youtube] cookies_from_browser)")
+    r.add_argument("--to", metavar="FILE", help="where to write, relative to the config file's folder "
+                                                "(default: [paths] youtube_cookies)")
+    p.set_defaults(fn=cmd_cookies)
+
+    p = sub.add_parser("codereview", help="a second reviewer for this branch: its code diff to one "
+                                          "model call ([codereview] reviewer), bugs back")
+    p.add_argument("--base", default="origin/main", help="what the branch is compared with (default origin/main)")
+    p.add_argument("--head", default="HEAD", help="the commit reviewed (default HEAD)")
+    p.add_argument("--pr", type=int, metavar="N",
+                   help="post it on PR N and the issues it links (the review workflow; needs GITHUB_TOKEN)")
+    p.add_argument("--repo", help="owner/name for --pr (default $GITHUB_REPOSITORY)")
+    p.add_argument("--dry-run", action="store_true", help="what would be sent and its cost; no model call")
+    p.set_defaults(fn=cmd_codereview)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = Parser(prog="clipper", epilog=command_list(), formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--version", action="version", version=f"clipper {__version__}")
+    ap.add_argument("--config", help="path to clipper.toml (default: $CLIPPER_CONFIG or ./clipper.toml)")
+    ap.add_argument("--show", help="use this [shows.<key>] profile (default: the stream's, by Kick channel)")
+    sub = ap.add_subparsers(dest="cmd", required=True, metavar="<command>")
+    for add in (add_pipeline, add_review, add_services, add_extras, add_setup):
+        add(sub)
+    return ap
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    try:
+        run_command(args)
+    except ClipperError as e:
+        if str(e):
+            print(e, file=sys.stderr)
+        raise SystemExit(e.status) from None
+
+
+def run_command(args: argparse.Namespace) -> None:
     cfg = config.load(args.config)
-    if args.show:
-        cfg = config.for_show(cfg, args.show)
-    elif getattr(args, "stream", None):
+    if args.show:  # kept by every stage's for_stream, whatever the stream's channel (B4)
+        cfg = config.pin_show(cfg, args.show)
+    stream = getattr(args, "stream", None)
+    if isinstance(stream, str) and stream and not Path(stream).is_dir():
+        # latest, latest:<show> or a prefix becomes the id itself, so every stage and the cost log
+        # see the real stream (#205); after --show, whose [paths] streams may be its own
+        args.stream = config.find_stream(cfg, stream).name
+    if not args.show and getattr(args, "stream", None):
         cfg = config.for_stream(cfg, stream_dir(cfg, args.stream))
+    from . import costs  # what every model call this command makes is recorded under
+
+    action = getattr(args, "action", None)
+    stream = getattr(args, "stream", None)
+    costs.set_context(args.cmd + (f" {action}" if isinstance(action, str) else ""),
+                      Path(stream).name if isinstance(stream, str) else "")
     args.fn(cfg, args)
 
 
