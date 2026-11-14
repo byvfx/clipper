@@ -29,6 +29,17 @@ a PULL-OUT POSTER edge tab, and 7-8 sparkles and 7 hearts scattered in the gaps.
 **The sloth is the H** (user, same day): the masthead renders SLOT·BEAT with the H's advance kept
 blank (`.mast .h{visibility:hidden}`) and the sticker hung in the gap at 110% (114 px wide).
 
+## Photo test (user, 2026-11-14: "run a test with real pictures on both versions")
+`*_v4p.*` and `*_v5p.*` + `contact_sheet_v4p.jpg` / `contact_sheet_v5p.jpg`: v4 and v5 with
+photographs in every face slot instead of silhouettes. The cloud session cannot fetch frames of
+the real subjects (network policy), so the photos are **Runway stand-ins, generic people, not
+likenesses**: `photo_a.png` (bearded, the main face), `photo_b.png` (glasses), `photo_c.png`
+(grey hair, suit), `photo_d.png` (moustache), `photo_owl.png` (plush owl). Cut off their white
+studio background by edge flood-fill (`cutphoto.py` in the session scratchpad; a clean matting
+tool was not installable here). Photos keep the sticker outline (stacked drop-shadows) and the red
+name bars. For the real thing: frames from the videos, cut out with the thumbs stage's person
+matte (DeepLabV3, as the TikTok cover did).
+
 ## v5: early-90s pop-art background (user, 2026-11-14: "more shapes in the bg, the pop art look
 with the mosaic look and gradients, that early nineties look, along with our stuff here")
 `*_v5.html/jpg` + `contact_sheet_v5.jpg`, `cover_v5.css`. Same elements as v4, the arms-up sloth

@@ -412,6 +412,10 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   **User picks (2026-11-14, later):** the first arms-up sloth (`sloth_h.png`) is the mascot in the H slot.
   **v5** = v4 + an early-90s pop-art background the user asked for (gradients, mosaic tiles, Memphis
   shapes, halftone, checker, zigzag; generated SVG, seeded per cover). `*_v5.*` is the current direction.
+  **Photo test** (user asked for real pictures on both): `*_v4p.*` / `*_v5p.*` with Runway stand-in
+  portraits (generic people, not the real subjects: the cloud session cannot fetch frames). User also
+  sent a Feb 1989 'Teen cover as a third reference (flat colour panels on diagonals, framed photo boxes,
+  condensed coverlines with bullet dots, slab-serif masthead); a 'Teen-style v6 is next.
   Waiting on the user's reaction; then Illustrator master, `style = "fanmag"`, `clipper intro`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
   template rendered by headless Chromium (Playwright), not Pillow. Figma's REST API is read/export only
