@@ -214,13 +214,13 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   effects, order after #67. Sloth Beat handle check (@slothbeat).
 - Cast (#41): it fills itself; look over Kept and New in the war room's Cast window (drop wrong or costume
   photos; image search photos always wait for you). Check Jer f868aa21db (auto-kept at 0.73 from a costume
-  night). #41 closes once a cover and a weekly issue use kept cast photos. Commons spells "Candace Owens":
-  add it as her alias.
+  night). #41 closes once a cover and a weekly issue use kept cast photos (weekly 05,
+  11-14, is the test). Candice Owens has the alias "Candace Owens" (Commons' spelling, 11-13).
 - Faces: enroll PPP in his maple-leaf cap from the first non-costume stream (October was costumes every night).
 - Permissions: Papa Meat (#45), MikeyNohMore (#80). Ben Avery archive pull (#47); Jerry Banfield pull waits on
   desktop/storage (#44).
 - `clipper setup` (#78) phase 1 passed in Windows Sandbox (2026-10-28). Next: the real install on the desktop
-  (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the MacBook (#7).
+  (#46; clone into a short folder like `C:\clipper`, run `deploy\bootstrap.ps1`), then the MacBook as #78's join-mode test (#7 closed into #78, 11-13).
 - Weekly issue 04: post it by hand from Discord `#weekly`; the X thread goes out by the scheduled task
   (State now). The bot has full permissions since 11-02 (could be cut back to Send Messages + Attach Files).
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
@@ -228,8 +228,8 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 ## Open work
 **Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (built 11-13, one PR each, all merged
 and deployed 11-13: #199 PR #247, #204 PR #248, #228 PR #249,
-#205 PR #250; #201, #203 and #206 closed), `p2-dated` (#192 after 11-16,
-#41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
+#205 PR #250; #201, #203 and #206 closed; 11-13 also closed #7 into #78 and #57 as built), `p2-dated` (#192 after 11-16,
+#41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#78;
 Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
 `parked` (the rest). `gh issue list --label p1-now` is the queue. 11-13: #13 folded into #158, #200 closed (its
 setup/doctor bug moved to #78), #70 narrowed to punch-ins/emphasis (tighten built).
