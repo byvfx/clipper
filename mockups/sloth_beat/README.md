@@ -34,11 +34,14 @@ to the existing shapes with some that have that mosaic print look")
 `*_v7.html/jpg` + `contact_sheet_v7.jpg`, `cover_v7.css`. The v6 layout untouched; the panels get
 v5's finishes: the ground is a light-to-dark gradient of its colour, the left column a gradient
 with the mosaic print over it at 55%, the bottom-right wedge a two-colour gradient, the top-right
-wedge a gradient, and one wedge stays flat so the eye has a rest. **Halftone, not mosaic** (user,
-same day): three Ben-Day dot fields, generated as SVG circles whose radius fades along one axis
-and clipped to their panel: dark dots on the left column behind the masthead only (fading out
-above the coverlines), white dots on the top-right wedge's upper part, white dots on the
-bottom-right wedge's far corner. Text never sits on dots. Also: coverlines keep off the faces
+wedge a gradient, and one wedge stays flat so the eye has a rest. **Halftone, not mosaic** (user, same
+day), then **the real two-ink crossover halftone** after the user's reference
+(`refs/halftone_gradient_ref.*`): `halftone_grad()` fills a panel with ink B and lays ink A dots
+on a 45-degree screen whose radius grows from 0 to past the merge point, so one end is solid B
+with tiny A dots, the middle a checker, the far end solid A with tiny B holes. Bottom-right wedge:
+c into d toward the corner; top-right wedge: d into c from the top edge; left column: tone on
+tone (the column colour and a darker shade), dark behind the masthead and solid by the date line,
+so no coverline sits on dots. Also: coverlines keep off the faces
 (the Ben Avery cover's two lines moved to the panels either side). **Current direction.**
 
 ## v6: the 'Teen grammar (user sent three 'Teen covers, 1986-1989; see `refs/README.md`)

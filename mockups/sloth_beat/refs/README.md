@@ -24,3 +24,10 @@ Common 'Teen rules (1986-1989): one dominant studio photo on the right, two to f
 secondary photos on the left/bottom, three or four flat panel colours per issue, no gradients,
 no outlines on text, coverlines as short stacked lines with a bullet-dot sub-line, price/date in
 tiny caps under the masthead, and the barcode or mailing label bottom-left.
+
+## Halftone reference (user, 2026-11-14)
+`halftone_gradient_ref.*`: a two-ink halftone gradient, red to yellow. The point is the
+**crossover**: at one end small yellow dots sit on solid red, at the other small red dots sit on
+solid yellow, and in the middle the dots meet as a checker. Dots on a 45° screen. The user also
+pointed at the Behance "Halftone Gradient Collection" (gallery 177613627) as the family of looks;
+not viewable from the cloud session. v7's panels are built this way from here on.
