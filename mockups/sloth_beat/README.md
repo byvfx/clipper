@@ -29,6 +29,19 @@ a PULL-OUT POSTER edge tab, and 7-8 sparkles and 7 hearts scattered in the gaps.
 **The sloth is the H** (user, same day): the masthead renders SLOT·BEAT with the H's advance kept
 blank (`.mast .h{visibility:hidden}`) and the sticker hung in the gap at 110% (114 px wide).
 
+## v5: early-90s pop-art background (user, 2026-11-14: "more shapes in the bg, the pop art look
+with the mosaic look and gradients, that early nineties look, along with our stuff here")
+`*_v5.html/jpg` + `contact_sheet_v5.jpg`, `cover_v5.css`. Same elements as v4, the arms-up sloth
+(`sloth_h.png`, the user's pick) in the H slot at natural size, and the background replaced by a
+generated SVG (`nineties_bg()` in the build, seeded per cover so each is different):
+- a three-stop diagonal gradient per palette (pink/purple/cyan, cyan/teal/yellow, yellow/orange/pink);
+- a pop-art mosaic of rounded tiles over the whole page at low opacity, plus three bold round
+  mosaic patches with outlined tiles;
+- Memphis shapes with black outlines: triangles, rings, squiggles, three-dot rows, bowties,
+  quarter circles, pills, confetti, eight-point stars, some gradient-filled;
+- two halftone dot patches, a black-and-white checker strip at an angle, two zigzag bands.
+The scribble and the sun rays are gone. Everything still sits under the faces and shapes.
+
 ## Arms-up sloth (the brief's pose 1), side by side
 `*_v4_h.html/jpg` + `contact_sheet_v4_h.jpg`: the same v4 covers with `sloth_h.png` in the H slot at
 its natural proportions (no stretch; `object-fit: contain` in a 140x200 box). `sloth_h.png` is

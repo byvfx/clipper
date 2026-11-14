@@ -409,6 +409,9 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   task 05669e7f-fe06-4632-b4bc-c8f3216ddc8b, rendered 2026-11-14; the cloud session cannot download Runway
   output, so the user views it in Runway's assets; not yet judged). Plan: one Runway render per weekly issue, the per-video
   page/zoom transition done by the HTML renderer + ffmpeg so it is automatic; nothing in `clipper/` yet.
+  **User picks (2026-11-14, later):** the first arms-up sloth (`sloth_h.png`) is the mascot in the H slot.
+  **v5** = v4 + an early-90s pop-art background the user asked for (gradients, mosaic tiles, Memphis
+  shapes, halftone, checker, zigzag; generated SVG, seeded per cover). `*_v5.*` is the current direction.
   Waiting on the user's reaction; then Illustrator master, `style = "fanmag"`, `clipper intro`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
   template rendered by headless Chromium (Playwright), not Pillow. Figma's REST API is read/export only
