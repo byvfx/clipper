@@ -417,7 +417,8 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   sent a Feb 1989 'Teen cover as a third reference (flat colour panels on diagonals, framed photo boxes,
   condensed coverlines with bullet dots, slab-serif masthead); **v6** = the 'Teen grammar (flat diagonal panels, framed photos, condensed coverlines with bullet
   dots, mailing label), same stand-in photos, `*_v6.*`. References stored in `mockups/sloth_beat/refs/`
-  (two of the 'Teen scans did not arrive as files; notes only). User chose v6 and asked for a mix: **v7** = v6 layout with gradient and mosaic-print panels (`*_v7.*`),
+  (two of the 'Teen scans did not arrive as files; notes only). User chose v6 and asked for a mix: **v7** = v6 layout with gradient panels and halftone dot fades (user: halftone, not mosaic; text
+  never on a face or on dots) (`*_v7.*`),
   **the current direction**. Next: real frames from the user, Illustrator master, `[thumbnail] style = "fanmag"`.
   Waiting on the user's reaction; then Illustrator master, `style = "fanmag"`, `clipper intro`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS

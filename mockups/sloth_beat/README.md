@@ -34,9 +34,12 @@ to the existing shapes with some that have that mosaic print look")
 `*_v7.html/jpg` + `contact_sheet_v7.jpg`, `cover_v7.css`. The v6 layout untouched; the panels get
 v5's finishes: the ground is a light-to-dark gradient of its colour, the left column a gradient
 with the mosaic print over it at 55%, the bottom-right wedge a two-colour gradient, the top-right
-wedge a gradient with a finer mosaic at 60%, and one wedge stays flat so the eye has a rest. The
-mosaic is an SVG pattern of rounded tiles in the panel's own colours (two patterns, 7x7 and 8x8
-blocks, seeded per cover). Text boxes stay flat for legibility. **Current direction.**
+wedge a gradient, and one wedge stays flat so the eye has a rest. **Halftone, not mosaic** (user,
+same day): three Ben-Day dot fields, generated as SVG circles whose radius fades along one axis
+and clipped to their panel: dark dots on the left column behind the masthead only (fading out
+above the coverlines), white dots on the top-right wedge's upper part, white dots on the
+bottom-right wedge's far corner. Text never sits on dots. Also: coverlines keep off the faces
+(the Ben Avery cover's two lines moved to the panels either side). **Current direction.**
 
 ## v6: the 'Teen grammar (user sent three 'Teen covers, 1986-1989; see `refs/README.md`)
 `*_v6.html/jpg` + `contact_sheet_v6.jpg`, `cover_v6.css`, built with the same stand-in photos.
