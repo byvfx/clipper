@@ -8,6 +8,27 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-13: command-line polish (#205): a stream argument takes `latest`, `latest:<show>` or a unique start
+  of an id, and a mistyped one names the nearest; `--json` on `review list`, `schedule --list` and
+  `shows`; `clipper config diff` lists what this install changes from the defaults, by layer; `clipper
+  completion bash|powershell` prints a tab-completion script; `run --only` suggests the nearest stage;
+  `clipper run` logs "stage N of M".
+- 11-13: the `archive transcribe` and `investigate facts` dry runs count what every call costs
+  beyond its content (a minute of GPU a transcribe call, from the subject's own Modal runs when it has
+  20; the prompt, schema and header a facts call repeats). Items with no length yet are said, not
+  priced. Back-tested on the 759-clip run: $10.87 vs $10.88 logged (was $0.01), facts $0.27 vs $0.26
+  (was $0.11) (#228).
+- 11-13: `clipper backup` zips the taste layer (config, hand-edit backups, schedule, people, faces,
+  voices, layouts, cast photos, each stream's config and review state; secrets only when asked) into
+  `[backup] folder`, and serve makes one every `[backup] every_days` (7). `clipper streams list` shows
+  what each stream takes; `clipper streams prune` removes the source and audio of streams done with
+  (`--cuts` also the long cuts of uploaded or rejected items), and serve does it daily with
+  `[streams] keep_source_days`. `[audit] backup_folder` and `backup_max_days` moved to `[backup]`
+  (#204; wiki Backups).
+- 11-13: `clipper status` opens with what needs you (items waiting or held, checkup's findings on
+  services, runs and late releases), shows each stream's show and date, leaves out week-old streams
+  with nothing waiting (`--all`), and has `--json`. It counts reviews from review.json instead of
+  every item's sidecar: 15 s from the laptop, was 60 s (#199).
 - 11-13: the `review` workflow (Grok on every commit Copilot hadn't reviewed) is gone: too slow at ~25 min
   a PR. Code PRs now get a local Claude Code review before the first push and Copilot's when the PR opens;
   `clipper codereview` stays for a by-hand second opinion (wiki Developing).

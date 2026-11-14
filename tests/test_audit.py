@@ -89,9 +89,10 @@ def test_backups_none_set_up_old_and_fresh(cfg, tmp_path):
     def todo():
         return [i["key"] for i in audit.collect(cfg, datetime.now(UTC))["issues"] if i["key"].startswith("backups")]
 
+    cfg["backup"]["folder"] = ""
     assert todo() == ["backups:none"]
     (tmp_path / "backup").mkdir()
-    cfg["audit"]["backup_folder"] = "backup"
+    cfg["backup"]["folder"] = str(tmp_path / "backup")
     assert todo() == ["backups:old"]              # an empty folder is not a backup
     (tmp_path / "backup" / "state.tar").write_text("x", encoding="utf-8")
     assert todo() == []
@@ -127,6 +128,7 @@ def test_a_missing_backup_outranks_sections_that_couldnt_be_read(cfg, monkeypatc
 
     for name in ("repo", "best", "spend"):
         monkeypatch.setitem(audit.SECTIONS, name, boom)
+    cfg["backup"]["folder"] = ""
     snap = audit.collect(cfg, NOW)
     assert snap["issues"][0]["key"] == "backups:none" and "nothing backs up" in audit.text(snap, TZ)
 

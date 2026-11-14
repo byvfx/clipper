@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import difflib
 import json
 import logging
 import sys
@@ -12,9 +11,9 @@ from pathlib import Path
 
 from . import __version__, config, jsonstate
 from .config import stream_dir
-from .errors import ClipperError
+from .errors import ClipperError, did_you_mean
 
-STREAM_HELP = "stream id under paths.streams, or a stream dir"
+STREAM_HELP = "stream id under paths.streams (or latest, latest:<show>, a unique start of an id), or a stream dir"
 
 
 class Parser(argparse.ArgumentParser):
@@ -25,9 +24,8 @@ class Parser(argparse.ArgumentParser):
         if action.choices is None or value in action.choices:
             return
         names = [str(c) for c in action.choices]
-        near = difflib.get_close_matches(str(value), names, 3)
-        hint = (f"did you mean {', '.join(near)}?" if near
-                else f"choose from {', '.join(names)}" if len(names) <= 10 else "see --help")
+        hint = (did_you_mean(value, names)
+                or (f"choose from {', '.join(names)}" if len(names) <= 10 else "see --help"))
         raise argparse.ArgumentError(action, f"invalid choice: {value!r}; {hint}")
 
 
@@ -642,8 +640,13 @@ def cmd_review(cfg: dict, args: argparse.Namespace) -> None:
               + ("; restart the bot (clipper services restart bot) for it to count" if added else ""))
         return
     if args.action == "list":
-        actions.print_rows(actions.list_items(cfg, args.stream, everything=args.all,
-                                              sync=not args.no_sync))
+        if args.json:
+            with to_stderr():   # a sync's notes (thumbnail text, ...): stdout is the JSON alone
+                rows = actions.list_items(cfg, args.stream, everything=args.all, sync=not args.no_sync)
+            print_json(rows)
+        else:
+            actions.print_rows(actions.list_items(cfg, args.stream, everything=args.all,
+                                                  sync=not args.no_sync))
         return
     item = actions.resolve(cfg, args.item)
     text = " ".join(getattr(args, "text", None) or [])
@@ -661,8 +664,13 @@ def cmd_schedule(cfg: dict, args: argparse.Namespace) -> None:
     from . import schedule
 
     if args.list_only:
-        schedule.show(cfg, args.days)
+        if args.json:
+            print_json(schedule.upcoming(cfg, args.days))
+        else:
+            schedule.show(cfg, args.days)
         return
+    if args.json:
+        raise ClipperError("schedule: --json goes with --list")
     schedule.run(cfg, sync_first=not args.no_sync, write_kitsu=not args.no_kitsu,
                  dry_run=args.dry_run, reshuffle=args.reshuffle, kitsu_all=args.kitsu_all)
 
@@ -835,6 +843,12 @@ def config_path(args: argparse.Namespace) -> str:
     return str(config.find(args.config).resolve())
 
 
+def near_stage(names, stages) -> str:
+    """The end of an unknown-stage error: the nearest stage to each bad name, or all of them (#205)."""
+    hints = [f"{n}: {h}" for n in sorted(names) if (h := did_you_mean(n, stages))]
+    return "; ".join(hints) if hints else f"stages: {', '.join(stages)}"
+
+
 def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
     from . import stages as stage_table
     from . import worker
@@ -843,13 +857,13 @@ def cmd_run(cfg: dict, args: argparse.Namespace) -> None:
     stages = None
     if args.only or args.from_:
         if args.from_ and args.from_ not in worker.STAGES:  # #77 L14
-            raise ClipperError(f"run: unknown stage {args.from_!r}; stages: {', '.join(worker.STAGES)}")
+            raise ClipperError(f"run: unknown stage {args.from_!r}; {near_stage([args.from_], worker.STAGES)}")
         if args.only and args.from_:
             raise ClipperError("run: --only or --from, not both")
         stages = args.only.split(",") if args.only else stage_table.from_stage(args.from_, cfg["worker"])
         bad = set(stages) - set(worker.STAGES)
         if bad:
-            raise ClipperError(f"run: unknown stage {sorted(bad)}; stages: {', '.join(worker.STAGES)}")
+            raise ClipperError(f"run: unknown stage {sorted(bad)}; {near_stage(bad, worker.STAGES)}")
     try:
         ok = worker.run_stream(cfg, stream_dir(cfg, args.stream), config_path(args), stages,
                                force=args.force or bool(args.from_))
@@ -873,19 +887,40 @@ def cmd_shows(cfg: dict, args: argparse.Namespace) -> None:
     from .review import project_name
 
     by_show: dict[str, list[str]] = {}
+    no_show: dict[str, list[str]] = {}  # by channel
     streams = cfg["paths"]["streams"]
     for meta in sorted(streams.glob("*/meta.json")) if streams.is_dir() else []:
         ch = config.stream_channel(meta.parent)
-        by_show.setdefault(config.show_of_channel(cfg, ch) or f"(none: {ch or '?'})", []).append(
-            meta.parent.name)
+        key = config.show_of_channel(cfg, ch)
+        (by_show.setdefault(key, []) if key else no_show.setdefault(ch, [])).append(meta.parent.name)
+    rows = []
     for key, show in cfg["shows"].items():
         sc = config.for_show(cfg, key)
-        ids = by_show.pop(key, [])
-        print(f"{key:12} {sc['meta']['show_name'] or '(no show_name)':24} "
-              f"channels {', '.join(show['channels']) or '-'}; Kitsu {project_name(sc)!r}; "
-              f"{len(ids)} streams")
-    for key, ids in by_show.items():
-        print(f"{key:12} {len(ids)} streams: {', '.join(ids)}")
+        rows.append({"show": key, "show_name": sc["meta"]["show_name"], "channels": show["channels"],
+                     "kitsu": project_name(sc), "streams": by_show.pop(key, [])})
+    # streams whose channel no show has: show "" and the channel
+    rows += [{"show": "", "show_name": "", "channels": [ch] if ch else [], "kitsu": "", "streams": ids}
+             for ch, ids in no_show.items()]
+    if args.json:
+        print_json(rows)
+        return
+    for r in rows:
+        if r["show"]:
+            print(f"{r['show']:12} {r['show_name'] or '(no show_name)':24} "
+                  f"channels {', '.join(r['channels']) or '-'}; Kitsu {r['kitsu']!r}; "
+                  f"{len(r['streams'])} streams")
+        else:
+            label = f"(none: {r['channels'][0] if r['channels'] else '?'})"
+            print(f"{label:12} {len(r['streams'])} streams: {', '.join(r['streams'])}")
+
+
+def cmd_completion(cfg: dict, args: argparse.Namespace) -> None:
+    from . import completion
+
+    text = completion.script(args.shell, build_parser(), list(config.base(cfg)["shows"]))
+    sys.stdout.flush()
+    sys.stdout.buffer.write(text.encode("utf-8"))  # bytes: \n stays \n on Windows, which bash needs
+    sys.stdout.buffer.flush()
 
 
 def cmd_analytics(cfg: dict, args: argparse.Namespace) -> None:
@@ -940,8 +975,39 @@ def cmd_alert(cfg: dict, args: argparse.Namespace) -> None:
             print("\nqueued; the bot DMs it within a minute")
 
 
+def to_stderr():
+    """For --json: whatever runs inside prints to stderr, so stdout holds the document alone."""
+    import contextlib
+
+    return contextlib.redirect_stdout(sys.stderr)
+
+
+def print_json(obj) -> None:
+    """--json output: paths and datetimes as strings, non-ASCII titles as they are."""
+    print(json.dumps(obj, indent=1, default=str, ensure_ascii=False))
+
+
+def short_json(value, width: int = 90) -> str:
+    text = json.dumps(value, default=str, ensure_ascii=False)
+    return text if len(text) <= width else text[:width - 3] + "..."
+
+
 def cmd_config(cfg: dict, args: argparse.Namespace) -> None:
-    sdir = stream_dir(cfg, args.for_stream) if args.for_stream else None
+    if args.action == "diff":
+        rows = config.diff(cfg, args.show_key or (cfg["show"]["key"] if cfg.get("_pinned") else ""))
+        if args.json:
+            print_json([{"layer": la, "name": n, "default": d, "value": v} for la, n, d, v in rows])
+            return
+        if not rows:
+            print("nothing differs from clipper/defaults.toml")
+        layer = None
+        for la, name, default, value in rows:
+            if la != layer:
+                print(la)
+                layer = la
+            print(f"  {name:<36} {short_json(value)}    (default {short_json(default)})")
+        return
+    sdir = config.find_stream(cfg, args.for_stream) if args.for_stream else None
     e = config.explain(cfg, args.name, sdir)
     show = f"show {e['show']}" if e["show"] else "base config, no show"
     where = f"stream {sdir.name}, {show}" if sdir else show
@@ -997,7 +1063,15 @@ def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_status(cfg: dict, args: argparse.Namespace) -> None:
     from . import status
 
-    print("\n".join(status.lines(cfg, days=args.days, sync=args.sync)))
+    if args.json:
+        import contextlib
+
+        with contextlib.redirect_stdout(sys.stderr):  # a sync's notes; stdout is the JSON alone
+            s = status.collect(cfg, days=args.days, sync=args.sync, everything=args.all)
+        print(json.dumps(s, indent=1, ensure_ascii=False, default=str))
+        return
+    print("\n".join(status.render(status.collect(cfg, days=args.days, sync=args.sync,
+                                                 everything=args.all), cfg)))
 
 
 def cmd_checkup(cfg: dict, args: argparse.Namespace) -> None:
@@ -1042,13 +1116,30 @@ def cmd_bot(cfg: dict, args: argparse.Namespace) -> None:
     bot.run(cfg)
 
 
+def cmd_streams(cfg: dict, args: argparse.Namespace) -> None:
+    from . import streams
+
+    if args.action == "list":
+        s = streams.listing(cfg, everything=args.all, older_than_days=args.older_than)
+        print(json.dumps(s, indent=1, default=str) if args.json else "\n".join(streams.listing_lines(s)))
+    else:
+        print("\n".join(streams.prune(cfg, older_than_days=args.older_than, cuts=args.cuts,
+                                      only=args.only, yes=args.yes)))
+
+
+def cmd_backup(cfg: dict, args: argparse.Namespace) -> None:
+    from . import backup
+
+    print("\n".join(backup.run(cfg, to=args.to, with_secrets=args.with_secrets or None, dry_run=args.dry_run)))
+
+
 COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'status', 'checkup', 'audit', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
     ('Extras', ['weekly', 'cast', 'broll', 'doc', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
-    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'cookies', 'codereview']),
+    ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'streams', 'backup', 'completion', 'cookies', 'codereview']),
 ]
 
 
@@ -1250,6 +1341,7 @@ def add_review(sub) -> None:
     r.add_argument("stream", nargs="?", help="only this stream")
     r.add_argument("--all", action="store_true", help="every item, decided or not")
     r.add_argument("--no-sync", action="store_true", help="use review.json as is")
+    r.add_argument("--json", action="store_true", help="the rows as JSON")
     item_help = "item: kick-131151926/c03_t01, or c03 / s02 when only one stream has it"
     for name, help_, text_help in [
             ("approve", "approve an item", "optional comment"),
@@ -1293,6 +1385,7 @@ def add_review(sub) -> None:
     p.add_argument("--list", dest="list_only", action="store_true",
                    help="list upcoming schedule.json entries, no replan")
     p.add_argument("--days", type=int, default=7, help="with --list: how far ahead (default 7)")
+    p.add_argument("--json", action="store_true", help="with --list: the entries as JSON")
     p.set_defaults(fn=cmd_schedule)
 
     p = sub.add_parser("upload", help="upload due schedule.json entries to YouTube (private + publishAt)")
@@ -1400,10 +1493,13 @@ def add_services(sub) -> None:
                    help="restart or stop the recorder even while it's recording (starts a new part)")
     p.set_defaults(fn=cmd_services)
 
-    p = sub.add_parser("status", help="one screen: services and recorder, the worker's streams, review counts, "
-                                      "the next releases, this month's spend (reads files; runs nothing)")
+    p = sub.add_parser("status", help="one screen: what needs you, services and recorder, the worker's streams, "
+                                      "review counts, the next releases, this month's spend (reads files; runs nothing)")
     p.add_argument("--days", type=int, default=2, help="releases this far ahead (default 2)")
     p.add_argument("--sync", action="store_true", help="read Kitsu's decisions first (slower)")
+    p.add_argument("--all", action="store_true",
+                   help="every stream, not just the last week's and the unfinished ones")
+    p.add_argument("--json", action="store_true", help="the same as JSON (the Claude container reads it)")
     p.set_defaults(fn=cmd_status)
 
     p = sub.add_parser("checkup", help="what the alerts don't catch: stuck streams, quiet services, late uploads, "
@@ -1901,10 +1997,44 @@ def add_setup(sub) -> None:
     r = csub.add_parser("get", help="a setting's value and every layer that sets it, e.g. meta.model")
     r.add_argument("name", help="section.key, e.g. bleep.mode")
     r.add_argument("--stream", dest="for_stream", help="as this stream sees it (its show, its config.toml)")
+    r = csub.add_parser("diff", help="every setting this install changes from clipper/defaults.toml, by layer")
+    r.add_argument("show_key", nargs="?", metavar="show", help="only this show's overrides (base layers stay)")
+    r.add_argument("--json", action="store_true", help="as JSON")
     p.set_defaults(fn=cmd_config)
 
     p = sub.add_parser("shows", help="list the [shows] profiles and which streams belong to each")
+    p.add_argument("--json", action="store_true", help="as JSON")
     p.set_defaults(fn=cmd_shows)
+
+    p = sub.add_parser("completion", help="a tab-completion script for bash or PowerShell, to load from your profile")
+    p.add_argument("shell", choices=("bash", "powershell"), help="bash (Git Bash too) or powershell")
+    p.set_defaults(fn=cmd_completion)
+
+    p = sub.add_parser("streams", help="disk: what each stream folder takes, and pruning the source and audio "
+                                       "of streams that are done with")
+    ssub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_streams)
+    r = ssub.add_parser("list", help="size per stream (source, audio, cuts, previews), and whether prune would take it")
+    r.add_argument("--all", action="store_true", help="small streams too (default: 1 GB and over, or prunable)")
+    r.add_argument("--older-than", type=float, metavar="DAYS",
+                   help="the age prune would use (default [streams] keep_source_days, else 30)")
+    r.add_argument("--json", action="store_true", help="as JSON")
+    r = ssub.add_parser("prune", help="remove source and audio of old streams whose items are all decided and "
+                                      "none waits on an upload; keeps every JSON (says what, without --yes)")
+    r.add_argument("--older-than", type=float, metavar="DAYS",
+                   help="only streams older than this (default [streams] keep_source_days, else 30)")
+    r.add_argument("--cuts", action="store_true",
+                   help="also the segment and compilation videos and review previews of uploaded or rejected items")
+    r.add_argument("--stream", dest="only", action="append", metavar="ID",
+                   help="only this stream (repeatable); says why when it's left alone")
+    r.add_argument("--yes", action="store_true", help="remove them (without it, only list what would go)")
+
+    p = sub.add_parser("backup", help="a dated zip of the taste layer: config, schedule, faces, voices, layouts, "
+                                      "cast photos, each stream's config and review state")
+    p.add_argument("--to", metavar="DIR", help="where the zip goes (default [backup] folder)")
+    p.add_argument("--with-secrets", action="store_true", help="secrets/ too")
+    p.add_argument("--dry-run", action="store_true", help="what would go in, with sizes; nothing written")
+    p.set_defaults(fn=cmd_backup)
 
     p = sub.add_parser("cookies", help="YouTube sign-in cookies for yt-dlp's signed-in retries")
     ksub = p.add_subparsers(dest="action", required=True, metavar="<action>")
@@ -1951,7 +2081,12 @@ def run_command(args: argparse.Namespace) -> None:
     cfg = config.load(args.config)
     if args.show:  # kept by every stage's for_stream, whatever the stream's channel (B4)
         cfg = config.pin_show(cfg, args.show)
-    elif getattr(args, "stream", None):
+    stream = getattr(args, "stream", None)
+    if isinstance(stream, str) and stream and not Path(stream).is_dir():
+        # latest, latest:<show> or a prefix becomes the id itself, so every stage and the cost log
+        # see the real stream (#205); after --show, whose [paths] streams may be its own
+        args.stream = config.find_stream(cfg, stream).name
+    if not args.show and getattr(args, "stream", None):
         cfg = config.for_stream(cfg, stream_dir(cfg, args.stream))
     from . import costs  # what every model call this command makes is recorded under
 

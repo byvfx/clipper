@@ -960,6 +960,26 @@ def check_people(cfg: dict) -> None:
            + ("" if own else " (clipper people import writes them there)"))
 
 
+def check_backup(cfg: dict, now: float | None = None) -> None:
+    """#204: the newest `clipper backup` zip, warned past [backup] max_age_days."""
+    from . import backup
+
+    bc = cfg["backup"]
+    if not bc["folder"]:
+        warn("backup", "no [backup] folder: nothing backs up the config, faces, cast and review state",
+             f"set [backup] folder (e.g. \"backups/taste\"), then clipper backup ({wiki.page('Backups')})")
+        return
+    p = backup.newest(cfg)
+    auto = f"serve makes one every {bc['every_days']} days" if bc["every_days"] else "[backup] every_days is 0"
+    if p is None:
+        warn("backup", f"no backup yet in {backup.folder(cfg)} ({auto})", "clipper backup")
+        return
+    age = ((now or time.time()) - p.stat().st_mtime) / 86400
+    (warn if age > bc["max_age_days"] else ok)(
+        "backup", f"newest {p.name}, {age:.0f} days old ({auto})",
+        "clipper backup; check serve's backup job (clipper services status serve)")
+
+
 def check_news(cfg: dict, offline: bool) -> None:
     """#110: where the bot posts news, the judge's prompt, and (online) whether the feeds answer."""
     nc = cfg["news"]
@@ -1266,6 +1286,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
         check_cast_serve(cfg)
     if role in ("all", "serve"):
         check_people(cfg)
+        check_backup(cfg)
     if role in ("all", "serve", "bot"):
         check_news(cfg, offline)
     if role == "claude":

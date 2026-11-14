@@ -17,6 +17,8 @@ Jobs (`jobs()`; each runs `clipper ...` as a child process; an interval of 0 tur
     analytics  every [analytics] auto_hours, once something is uploaded
     cast       every [cast] auto_hours: `clipper cast auto` (needs OpenCV and [thumbnail] photos)
     news       every [news] check_minutes: `clipper news check` (the bot posts what it finds)
+    backup     `clipper backup` when the newest zip is [backup] every_days old (looked at hourly)
+    prune      daily with [streams] keep_source_days: `clipper streams prune --yes --older-than N`
 A job that exits non-zero is queued as a DM (clipper/alerts.py; the bot sends it).
 
 Every minute it writes <streams>/.serve/status.json (clipper/daemon.py): what ran last,
@@ -54,6 +56,14 @@ log = logging.getLogger("clipper.serve")
 RETAKE_EVERY_S = 600   # with [retake] auto: act on notes review.json already has this often
 RETAKE_SYNC_S = 1800   # ...and run `clipper retake` anyway this often: it syncs Kitsu first
 FIRST_PASS_S = 30      # settle (the war room warms up) before the first job
+
+
+def backup_due(cfg: dict, now: float | None = None) -> bool:
+    """No backup zip yet, or the newest is [backup] every_days old."""
+    from . import backup
+
+    p = backup.newest(cfg)
+    return p is None or (now or time.time()) - p.stat().st_mtime >= cfg["backup"]["every_days"] * 86400
 
 
 def has_opencv() -> bool:
@@ -128,6 +138,14 @@ class Serve:
             Job("news", cfg["news"]["check_minutes"] * 60,  # #110: headlines about the watched terms
              lambda: not self.running("news") and bool(news.watchlist(cfg)),  # no terms: nothing to do
              lambda: task(self.run_clipper("news", ["news", "check"]))),
+            # #204: looks hourly, makes one when the newest is every_days old (a restart makes none)
+            Job("backup", 3600 if cfg["backup"]["every_days"] and cfg["backup"]["folder"] else 0,
+             lambda: not self.running("backup") and backup_due(cfg),
+             lambda: task(self.run_clipper("backup", ["backup"]))),
+            Job("prune", 86400 if cfg["streams"]["keep_source_days"] else 0,  # #204: source and audio
+             lambda: not self.running("prune"),
+             lambda: task(self.run_clipper("prune", ["streams", "prune", "--yes", "--older-than",
+                                                     str(cfg["streams"]["keep_source_days"])]))),
         ]
 
     async def run_clipper(self, name: str, args: list[str]) -> int | None:

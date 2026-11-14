@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from . import jsonstate
-from .errors import ClipperError
+from .errors import ClipperError, did_you_mean
 
 # Every default, with a comment on what it does, is defaults.toml beside this file: that file is
 # the documentation of the settings, and this is it loaded. TOML has no null, so a key whose
@@ -64,16 +64,69 @@ def _coerce(raw: str, like: Any, name: str = "") -> Any:
     return raw
 
 
+def _stream_ids(root: Path) -> list[str]:
+    return sorted(n.name for n in root.iterdir() if not n.name.startswith(".") and n.is_dir()) \
+        if root.is_dir() else []
+
+
 def stream_dir(cfg: dict, ref: str) -> Path:
     """A stream id under paths.streams, or a stream directory. One that doesn't exist is an
-    error here, not a traceback three calls later (or a base config labelled as the stream)."""
+    error here, not a traceback three calls later (or a base config labelled as the stream).
+    Exact only: the shortcuts are find_stream's, for what a person types."""
     p = Path(ref)
     if p.is_dir():
         return p
-    d = cfg["paths"]["streams"] / ref
-    if not d.is_dir():
-        raise ClipperError(f"no stream {ref!r} in {cfg['paths']['streams']} (clipper worker --status lists them)")
-    return d
+    root: Path = cfg["paths"]["streams"]
+    d = root / ref
+    if d.is_dir():
+        return d
+    hint = did_you_mean(ref, _stream_ids(root))
+    raise ClipperError(f"no stream {ref!r} in {root}"
+                       + (f"; {hint}" if hint else " (clipper worker --status lists them)"))
+
+
+def find_stream(cfg: dict, ref: str) -> Path:
+    """stream_dir plus the shortcuts a person types on the command line (#205): `latest` (the
+    newest finished stream), `latest:<show>` (that show's), or any unique start of an id
+    (`kick-1373`). Services keep to stream_dir, so an id they hold never matches another."""
+    root: Path = cfg["paths"]["streams"]
+    if Path(ref).is_dir() or (root / ref).is_dir():
+        return stream_dir(cfg, ref)
+    if ref == "latest" or ref.startswith("latest:"):
+        return latest_stream(cfg, ref.partition(":")[2])
+    hits = [i for i in _stream_ids(root) if i.startswith(ref)]
+    if len(hits) == 1:
+        return root / hits[0]
+    if hits:
+        more = f" and {len(hits) - 5} more" if len(hits) > 5 else ""
+        raise ClipperError(f"{ref!r} starts {len(hits)} stream ids ({', '.join(hits[:5])}{more}): give more of it")
+    return stream_dir(cfg, ref)  # its error, with the nearest ids
+
+
+def latest_stream(cfg: dict, show: str = "") -> Path:
+    """The stream with the newest started_at in its meta.json (a recording still going has
+    none yet), of this show if one is named."""
+    root: Path = cfg["paths"]["streams"]
+    if show and show not in _root(cfg)["shows"]:
+        raise ClipperError(f"latest:{show}: no [shows.{show}] (shows: {', '.join(_root(cfg)['shows']) or 'none'})")
+    from datetime import UTC, datetime
+
+    best: tuple[datetime, Path] | None = None
+    for m in root.glob("*/meta.json") if root.is_dir() else []:
+        try:
+            meta = jsonstate.load(m)
+            started = datetime.fromisoformat(meta.get("started_at") or "")
+        except (OSError, ValueError, TypeError):  # unreadable, or no start (yet)
+            continue
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        if show and show_of_channel(cfg, meta.get("channel", "")) != show:
+            continue
+        if best is None or started > best[0]:
+            best = (started, m.parent)
+    if best is None:
+        raise ClipperError(f"no finished stream{f' of {show}' if show else ''} in {root}")
+    return best[1]
 
 
 # Settings that take one of a fixed set of values. Anything else would quietly do the wrong
@@ -384,9 +437,8 @@ def explain(cfg: dict, name: str, sdir: Path | None = None) -> dict:
     value that wins, for this stream (or the config's show, or the base config)."""
     section, _, key = name.partition(".")
     if section not in DEFAULTS or key not in DEFAULTS[section]:
-        import difflib
-        near = difflib.get_close_matches(name, [f"{s}.{k}" for s, v in DEFAULTS.items() for k in v], 4, 0.75)
-        raise ClipperError(f"no setting {name!r}" + (f"; did you mean {', '.join(near)}?" if near else ""))
+        hint = did_you_mean(name, [f"{s}.{k}" for s, v in DEFAULTS.items() for k in v], 4, 0.75)
+        raise ClipperError(f"no setting {name!r}" + (f"; {hint}" if hint else ""))
     root = _root(cfg)
     resolved = for_stream(cfg, sdir) if sdir else cfg
     show = resolved["show"]["key"]
@@ -407,6 +459,37 @@ def explain(cfg: dict, name: str, sdir: Path | None = None) -> dict:
     if env in os.environ:
         layers.append((f"${env}", os.environ[env]))
     return {"name": name, "value": resolved[section][key], "show": show, "layers": layers}
+
+
+def diff(cfg: dict, show: str = "") -> list[tuple[str, str, Any, Any]]:
+    """What this install changes from defaults.toml (#205), as (layer, "section.key", default,
+    value) in the order the layers apply: clipper.toml, each show's table (only `show`'s when
+    one is named), clipper.local.toml, then CLIPPER_* env vars. A key set to its default isn't
+    listed; nor are a show's channels or the [shows] tables themselves (`clipper shows` lists those)."""
+    root = _root(cfg)
+    if show and show not in root["shows"]:
+        raise ClipperError(f"no [shows.{show}] (shows: {', '.join(root['shows']) or 'none'})")
+    layers: list[tuple[str, dict]] = []
+    if root.get("_file"):
+        layers.append((Path(root["_file"]).name,
+                       tomllib.loads(Path(root["_file"]).read_text(encoding="utf-8"))))
+    layers += [(f"[shows.{k}]", s["overrides"]) for k, s in root["shows"].items() if not show or k == show]
+    layers.append((LOCAL_CONFIG, root["_local"]))
+    env: dict[str, dict] = {}
+    for section, keys in DEFAULTS.items():
+        for key, like in keys.items():
+            raw = os.environ.get(f"CLIPPER_{section}_{key}".upper())
+            if raw is not None:
+                env.setdefault(section, {})[key] = _coerce(raw, like, f"CLIPPER_{section}_{key}".upper())
+    layers.append(("environment", env))
+    out = []
+    for layer, data in layers:
+        for section, keys in data.items():
+            if section not in DEFAULTS or not isinstance(keys, dict):
+                continue
+            out += [(layer, f"{section}.{key}", DEFAULTS[section][key], value) for key, value in keys.items()
+                    if key in DEFAULTS[section] and value != DEFAULTS[section][key]]
+    return out
 
 
 def show_args(cfg: dict) -> list[str]:

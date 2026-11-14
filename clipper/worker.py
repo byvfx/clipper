@@ -297,7 +297,7 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,  # n
             st = run.data["stages"][stage] = {"status": "running", "started": now_iso(),
                                               "log": log_path.name}
             run.save()
-            log.info("%s: %s", name, stage)
+            log.info("%s: %s (stage %d of %d)", name, stage, i + 1, len(order))  # #205
             t = time.time()
             env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
             with open(log_path, "a", encoding="utf-8") as out:
@@ -339,6 +339,14 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,  # n
             log.info("%s: run %s", name, run.data["status"])
 
 
+def takes(cfg: dict, channel: str) -> bool:
+    """Whether the worker clips this channel's recordings ([worker] channels, a show for it)."""
+    wc = cfg["worker"]
+    if wc["channels"] and channel not in wc["channels"]:
+        return False
+    return not cfg["shows"] or bool(show_of_channel(cfg, channel))
+
+
 def pending(cfg: dict) -> list[Path]:
     """Finished recordings whose run isn't done, oldest first, minus ones to wait on."""
     wc = cfg["worker"]
@@ -349,9 +357,7 @@ def pending(cfg: dict) -> list[Path]:
         state = jsonstate.read_or(state_path, {})
         if state.get("status") != "done":
             continue
-        if wc["channels"] and state.get("channel") not in wc["channels"]:
-            continue
-        if cfg["shows"] and not show_of_channel(cfg, state.get("channel", "")):
+        if not takes(cfg, state.get("channel", "")):
             continue  # recorded only: add a [shows.<key>] profile for the channel to clip it
         ready.append(d)
     # Grabbed pre-shows: meta.json is written once the download is complete.
@@ -474,23 +480,48 @@ def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None
             time.sleep(wc["poll_s"])
 
 
-def status_lines(cfg: dict) -> list[str]:
-    """A line per stream the worker has touched or the recorder is writing (`worker --status`,
-    `clipper status`)."""
+DONE = ("done", "skip")
+
+
+def stream_rows(cfg: dict, recent_days: float | None = None) -> list[dict]:
+    """A row per stream the worker has touched or the recorder is writing, with its show and
+    date. recent_days: leave out runs that are done (or skipped) and older than that, which is
+    most of the folder after a month (`clipper status`, #199); None keeps every one."""
     root: Path = cfg["paths"]["streams"]
     dirs = sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir()) \
         if root.is_dir() else []
+    old = recent_days * 86400 if recent_days is not None else None
     out = []
     for d in dirs:
         run = jsonstate.read_or(d / "run.json", {})
-        rec = jsonstate.read_or(d / "live" / "state.json", {}).get("status", "-")
-        stages = run.get("stages", {})
-        last = next((s for s in reversed(STAGES) if stages.get(s, {}).get("status")), "")
-        out.append(f"{d.name:<18} rec={rec:<10} run={run.get('status', 'new'):<8} "
-                   f"last={last}:{stages.get(last, {}).get('status', '')} "
-                   + (f"clips in review {run['clips_ready'][5:16]} " if run.get("clips_ready") else "")
-                   + f"{run.get('error') or run.get('paused', '')}"[:80])
+        if old is not None and run.get("status") in DONE and age_s(run.get("updated")) > old:
+            continue   # an old run without "updated" is old too: age_s says inf
+        live = jsonstate.read_or(d / "live" / "state.json", {}) if (d / "live").is_dir() else {}
+        if old is not None and not run and time.time() - float(live.get("last_seen") or 0) > old \
+                and (live.get("status") == "failed"
+                     or (live.get("status") == "done" and not takes(cfg, live.get("channel", "")))):
+            continue   # long over, and the worker never takes it (no show for its channel)
+        meta = jsonstate.read_or(d / "meta.json", {})
+        stages_ = run.get("stages", {})
+        last = next((s for s in reversed(STAGES) if stages_.get(s, {}).get("status")), "")
+        out.append({"stream": d.name, "show": show_of_channel(cfg, meta.get("channel") or live.get("channel", "")),
+                    "date": (meta.get("started_at") or live.get("stream_started_at") or "")[:10],
+                    "rec": live.get("status", "-"), "run": run.get("status", "new"),
+                    "last": last, "last_status": stages_.get(last, {}).get("status", ""),
+                    "clips_ready": run.get("clips_ready", ""), "attempts": run.get("attempts", 0),
+                    "note": f"{run.get('error') or run.get('paused', '')}"[:80]})
     return out
+
+
+def row_line(r: dict) -> str:
+    return (f"{r['stream']:<18} {r['show'] or '-':<6} {r['date'][5:] or '-':<5} rec={r['rec']:<10} "
+            f"run={r['run']:<8} last={r['last']}:{r['last_status']} "
+            + (f"clips in review {r['clips_ready'][5:16]} " if r["clips_ready"] else "") + r["note"])
+
+
+def status_lines(cfg: dict, recent_days: float | None = None) -> list[str]:
+    """`worker --status` (every stream) and `clipper status` (recent ones)."""
+    return [row_line(r) for r in stream_rows(cfg, recent_days)]
 
 
 def status(cfg: dict) -> None:
