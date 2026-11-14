@@ -263,12 +263,13 @@ messages: GitHub closes the issue on "fix".
 - **B-roll library #229 (11-12, steps 1-2 of 4, PR #230):** `clipper broll find|add|list|keep|drop`
   (wiki B-roll): NASA, DVIDS (the B-Roll category; keys in `secrets/dvids_secret.txt`, public key first,
   added by the user 11-12), Prelinger and Commons; public domain / CC0 only, no sound by default (NASA
-  music). Next: the National Archives (key by email from NARA), `[story] broll` in story cuts, then a war
+  music). Pixabay stock video too (11-14, branch `broll-pixabay`; same key as clip art, live footage only,
+  its licence kept by default). Next: the National Archives (key by email from NARA), `[story] broll` in story cuts, then a war
   room window. The library is `[paths] broll` on the share.
 - **Clip art library (11-14, PR #255, merged; no deploy needed):** `clipper clipart find|add|list|keep|drop`
   (wiki Clip-art): Commons (SVG drawings first, photos only when a find wants more), the Met, Cleveland (CC0),
-  Iconify emoji/icons (logo sets never), Pixabay (needs a free key in `secrets/pixabay_secret.txt`, not set:
-  untried). `add` takes a folder (Kenney packs, `--licence CC0`). The library is `[paths] clipart` on the
+  Iconify emoji/icons (logo sets never), Pixabay (key in `secrets/pixabay_secret.txt` since 11-14, tried:
+  works). `add` takes a folder (Kenney packs, `--licence CC0`). The library is `[paths] clipart` on the
   share: 10 popcorn pictures from the first test (the four off-target ones dropped), plus a "Popcorn function"
   maths plot (`commons-c2e98328`) worth dropping. Not yet used by covers or the weekly. Left from review:
   a search for scans ("engraving") gets SVG drawings first; Commons metadata parsing is in broll, cast and

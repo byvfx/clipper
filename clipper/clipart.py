@@ -27,14 +27,13 @@ import hashlib
 import json
 import re
 import shutil
-import time
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
-from . import broll, config, jsonstate, wiki
+from . import broll, jsonstate, wiki
 from .errors import ClipperError
 
 INDEX = "clipart.json"
@@ -93,9 +92,7 @@ def refused(c: dict, cfg: dict) -> str:
     return ""
 
 
-def pixabay_key(cfg: dict | None = None) -> str:
-    """$PIXABAY_API_KEY, else the first line of [paths] pixabay_key; "" if neither."""
-    return config.key(cfg, "PIXABAY_API_KEY", "pixabay_key")
+pixabay_key = broll.pixabay_key  # $PIXABAY_API_KEY or [paths] pixabay_key, shared with b-roll
 
 
 def _get(url: str, params: dict | None = None, timeout: int = 20):
@@ -293,23 +290,8 @@ def pixabay(query: str, n: int, cfg: dict, pid: str = "") -> list[dict]:
 
 
 def _pixabay_hits(cfg: dict, key: str, params: dict) -> list[dict]:
-    """One Pixabay API response, from the library's cache when the same request (the key left
-    out) was made in the last 24 hours, as Pixabay's API terms ask."""
-    req = hashlib.sha1(json.dumps(params, sort_keys=True).encode()).hexdigest()[:16]
-    path = _index(cfg).with_name(PIXABAY_CACHE)
-    now = time.time()
-    cached = (jsonstate.read(path, None) or {}).get(req) or {}
-    if now - cached.get("t", 0) < 86400:
-        return cached.get("hits") or []
-    try:
-        hits = _get("https://pixabay.com/api/", {"key": key, **params}).get("hits") or []
-    except ClipperError as e:  # the address carries the key: never let it into a message
-        raise ClipperError(str(e).replace(key, "***")) from None
-    with jsonstate.update(path, {}) as cache:
-        for k in [k for k, v in cache.items() if now - v.get("t", 0) >= 86400]:
-            del cache[k]
-        cache[req] = {"t": now, "hits": hits}
-    return hits
+    """One Pixabay images response, cached 24 hours beside the library (Pixabay's API terms)."""
+    return broll.pixabay_hits("https://pixabay.com/api/", key, params, _index(cfg).with_name(PIXABAY_CACHE), ua=UA)
 
 
 FINDERS = {"commons": commons, "met": met, "cleveland": cleveland, "iconify": iconify, "pixabay": pixabay}

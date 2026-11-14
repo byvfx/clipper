@@ -57,7 +57,7 @@ the same PR as the change.
   `clipper doctor` should fail with a fix when a required one is unset.
 - Secrets are env vars (`ANTHROPIC_API_KEY`, `KITSU_TOKEN`, `DISCORD_BOT_TOKEN`,
   `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`, `ELEVENLABS_API_KEY`, `BRAVE_API_KEY` for cast image
-  search, `DVIDS_API_KEY` for b-roll (or `secrets/dvids_secret.txt`, public key first), `PIXABAY_API_KEY` for clip art (or `secrets/pixabay_secret.txt`), and `OPENAI_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY` if a stage uses those providers) or files
+  search, `DVIDS_API_KEY` for b-roll (or `secrets/dvids_secret.txt`, public key first), `PIXABAY_API_KEY` for clip art and b-roll (or `secrets/pixabay_secret.txt`), and `OPENAI_API_KEY` / `GEMINI_API_KEY` / `OPENROUTER_API_KEY` if a stage uses those providers) or files
   under `secrets/`. Never write them into tracked files, logs, or messages.
 - Anything a new check or install step needs belongs in `clipper doctor` and its wiki page, not
   only in a chat answer (and in `clipper setup`, `clipper/setup.py`, when a new user would

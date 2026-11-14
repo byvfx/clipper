@@ -1,8 +1,9 @@
 """`clipper broll` (#229): a library of free b-roll for story cuts, explainers and the weekly,
 from archives whose footage is free to use: work of the US government has no copyright
-(17 U.S.C. 105), and the Internet Archive and Wikimedia Commons say each item's licence.
+(17 U.S.C. 105), the Internet Archive and Wikimedia Commons say each item's licence, and
+Pixabay's own licence allows commercial use without credit.
 
-    clipper broll find "<query>" [--source nasa|dvids|prelinger|commons] [-n N]
+    clipper broll find "<query>" [--source nasa|dvids|prelinger|commons|pixabay] [-n N]
     clipper broll add <url|id|file> [--from TIME] [--to TIME] [--tag X] [--credit TEXT]
     clipper broll list [--tag X] [--source X] [--status new|kept|long] [--json]
     clipper broll keep|drop <id> ...
@@ -10,8 +11,9 @@ from archives whose footage is free to use: work of the US government has no cop
 Sources: nasa (the NASA Image and Video Library), dvids (the Defense Visual Information
 Distribution Service: the armed forces' own video, its public key from $DVIDS_API_KEY or the
 first line of [paths] dvids_key), prelinger (the Internet Archive's Prelinger films: ads,
-industrial and educational films), commons (Wikimedia Commons video). A clip is
-kept only when its licence is one of [broll] licences (public domain and CC0 at first) and
+industrial and educational films), commons (Wikimedia Commons video), pixabay (Pixabay's
+stock video, its key from $PIXABAY_API_KEY or the first line of [paths] pixabay_key). A clip is
+kept only when its licence is one of [broll] licences (public domain, CC0 and Pixabay's at first) and
 nothing in its description names an outside copyright holder; anything else is skipped with
 the reason. Clips up to [broll] max_s are downloaded whole, re-encoded to at most [broll]
 max_height, without sound unless [broll] audio (NASA videos often carry licensed music);
@@ -32,17 +34,19 @@ import html
 import json
 import re
 import subprocess
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
-from . import config, jsonstate
+from . import config, jsonstate, wiki
 from .errors import ClipperError
 
 INDEX = "broll.json"
-SOURCES = ("nasa", "dvids", "prelinger", "commons")
+SOURCES = ("nasa", "dvids", "prelinger", "commons", "pixabay")
 STATUSES = ("new", "kept", "long")
-LICENCES = ("pd", "cc0", "cc-by", "cc-by-sa")
+LICENCES = ("pd", "cc0", "pixabay", "cc-by", "cc-by-sa")
+PIXABAY_CACHE = ".pixabay_cache.json"  # Pixabay's API terms: keep each response 24 hours
 UA = "clipper-broll/1.0 (b-roll library; https://github.com/byvfx/clipper)"  # Wikimedia asks for one
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".ts", ".mpg", ".mpeg", ".ogv"}
 
@@ -147,6 +151,32 @@ def dvids_key(cfg: dict | None = None) -> str:
     """$DVIDS_API_KEY, else the first line of [paths] dvids_key (the public key; the second line,
     the private key, isn't needed to read); "" if neither."""
     return config.key(cfg, "DVIDS_API_KEY", "dvids_key")
+
+
+def pixabay_key(cfg: dict | None = None) -> str:
+    """$PIXABAY_API_KEY, else the first line of [paths] pixabay_key; "" if neither (b-roll and
+    clip art share it)."""
+    return config.key(cfg, "PIXABAY_API_KEY", "pixabay_key")
+
+
+def pixabay_hits(url: str, key: str, params: dict, cache: Path, ua: str = UA) -> list[dict]:
+    """One Pixabay API response (its images or its videos address), from the cache file when the
+    same request (the key left out) was made in the last 24 hours, as Pixabay's API terms ask."""
+    req = hashlib.sha1(json.dumps([url, params], sort_keys=True).encode()).hexdigest()[:16]
+    now = time.time()
+    cached = (jsonstate.read(cache, None) or {}).get(req) or {}
+    if now - cached.get("t", 0) < 86400:
+        return cached.get("hits") or []
+    try:
+        hits = _get(url, {"key": key, **params}, ua=ua).get("hits") or []
+    except ClipperError as e:  # the address carries the key: never let it into a message
+        raise ClipperError(str(e).replace(key, "***")) from None
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    with jsonstate.update(cache, {}) as kept:
+        for k in [k for k, v in kept.items() if now - v.get("t", 0) >= 86400]:
+            del kept[k]
+        kept[req] = {"t": now, "hits": hits}
+    return hits
 
 
 def _get(url: str, params: dict | None = None, timeout: int = 20, ua: str = UA):
@@ -324,6 +354,48 @@ def _dvids_media(c: dict, cfg: dict) -> None:
     c["url"] = pick["src"]
 
 
+def pixabay(query: str, n: int, cfg: dict | None = None, video_id: str = "") -> list[dict]:
+    """Pixabay's stock video (pixabay.com/api/videos, a free key) under the Pixabay Content
+    License: commercial use and edits without credit (the uploader is credited anyway); it bans
+    selling a clip unaltered and using one that shows a brand, or a person in a bad light. A
+    search is of [broll] pixabay_type (film: no animation) unless that's "", safe search on.
+    Each hit lists its files (`_pixabay_media` picks one), whose addresses carry no key."""
+    key = pixabay_key(cfg)
+    if not key:
+        raise ClipperError(f"no $PIXABAY_API_KEY or [paths] pixabay_key file ({wiki.page('B-roll', 'sources')})")
+    params: dict = {"safesearch": "true"}
+    if video_id:
+        params["id"] = video_id
+    else:
+        params.update(q=query[:100], per_page=min(max(n * 3, 10), 200))  # the API's limits: 100 chars, 3-200
+        if vt := ((cfg or {}).get("broll") or {}).get("pixabay_type"):
+            params["video_type"] = vt
+    out = []
+    for h in pixabay_hits("https://pixabay.com/api/videos/", key, params, _index(cfg).with_name(PIXABAY_CACHE)):
+        if not h.get("id") or not isinstance(h.get("videos"), dict):
+            continue
+        page = h.get("pageURL") or f"https://pixabay.com/videos/id-{h['id']}/"
+        tags = str(h.get("tags") or "")
+        out.append({"key": page, "source": "pixabay", "title": tags or f"Pixabay video {h['id']}", "page": page,
+                    "url": _pixabay_file(h["videos"], cfg), "date": "",
+                    "credit": f"{h['user']} on Pixabay" if h.get("user") else "Pixabay",
+                    "licence": "Pixabay Content License", "description": tags,
+                    "duration": seconds(h.get("duration"))})
+    return out
+
+
+def _pixabay_file(videos: dict, cfg: dict | None) -> str:
+    """The smallest file at least [broll] max_height tall, else the tallest (Pixabay keeps each
+    video as large, medium, small and tiny; a size it hasn't made has no url); "" if none."""
+    mp4 = [f for f in videos.values() if isinstance(f, dict) and f.get("url")]
+    if not mp4:
+        return ""
+    tall = [f for f in mp4 if int(f.get("height") or 0) >= ((cfg or {}).get("broll") or {}).get("max_height", 1080)]
+    pick = (min(tall, key=lambda f: int(f.get("size") or 0)) if tall
+            else max(mp4, key=lambda f: int(f.get("height") or 0)))
+    return pick["url"]
+
+
 def media(c: dict, cfg: dict) -> None:
     """A candidate's media address and length, where its search didn't give them."""
     if c.get("url"):
@@ -332,9 +404,11 @@ def media(c: dict, cfg: dict) -> None:
         _nasa_media(c)
     elif c["source"] == "dvids":
         _dvids_media(c, cfg)
+    elif c["source"] == "pixabay":
+        raise ClipperError(f"{c['page']}: no mp4")  # its search gives the file, when there is one
 
 
-FINDERS = {"nasa": nasa, "dvids": dvids, "prelinger": prelinger, "commons": commons}
+FINDERS = {"nasa": nasa, "dvids": dvids, "prelinger": prelinger, "commons": commons, "pixabay": pixabay}
 
 
 def resolve(url: str, cfg: dict | None = None) -> dict:
@@ -350,9 +424,11 @@ def resolve(url: str, cfg: dict | None = None) -> dict:
         found = prelinger("", 1, identifier=path.split("/details/", 1)[1].split("/")[0])
     elif host.endswith("wikimedia.org") and "/wiki/" in path:
         found = commons("", 1, title=path.split("/wiki/", 1)[1])
+    elif host.endswith("pixabay.com") and (m := re.search(r"/videos/(?:[^/]*-)?(\d+)/?$", path)):
+        found = pixabay("", 1, cfg, video_id=m.group(1))
     else:
-        raise ClipperError(f"{url}: an images.nasa.gov/details, dvidshub.net/video, archive.org/details or "
-                           "commons.wikimedia.org/wiki "
+        raise ClipperError(f"{url}: an images.nasa.gov/details, dvidshub.net/video, archive.org/details, "
+                           "pixabay.com/videos or commons.wikimedia.org/wiki "
                            "address (or a local file with --credit)")
     if not found:
         raise ClipperError(f"{url}: no video there")
