@@ -186,8 +186,7 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   Moving a stage (e.g. Pass A to DeepSeek V4 Pro) is a config change whenever the user wants it.
 
 ## Waiting on the user
-- **p1 PRs #247-#250:** each has Copilot's review in, every finding fixed, CI green. Merge them at your word
-  (#250 and #248 both touch `cli.py`'s setup group: whichever goes second needs a small rebase), then
+- **p1 PRs #247-#250 are merged (11-13), not deployed:**
   update the laptop checkout (`git checkout main; git pull`: deploy.sh copies `clipper/` from it) and deploy the hub: `& "C:\Program Files\Git\bin\bash.exe" deploy/hub/deploy.sh`. **After** the deploy (an older
   hub refuses the new key), back up `clipper.toml` to `backups/` and add `[streams] never_prune =
   ["kick-131151926"]`: the test stream otherwise looks prunable. `streams prune` stays by hand until you set
@@ -230,8 +229,8 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 - `ANTHROPIC_ADMIN_KEY` for Claude's own usage count on Costs, if wanted.
 
 ## Open work
-**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (built 11-13, one PR each, all open
-with Copilot's findings fixed and CI green, waiting on the user's merge: #199 PR #247, #204 PR #248, #228 PR #249,
+**Priority labels (user, 2026-11-13):** every open issue carries one: `p1-now` (built 11-13, one PR each, all merged
+11-13 and waiting on the hub deploy: #199 PR #247, #204 PR #248, #228 PR #249,
 #205 PR #250; #201, #203 and #206 closed), `p2-dated` (#192 after 11-16,
 #41 after weekly 05), `p3-track` (one big track at a time, the user picks: desktop install #46 → #44/#47/#45/#7/#78;
 Udder Truth #58-#60; archive tooling #221-#227 before the next mini-doc; b-roll #229), `waiting` (#80, #48, #45),
@@ -264,7 +263,7 @@ messages: GitHub closes the issue on "fix".
   added by the user 11-12), Prelinger and Commons; public domain / CC0 only, no sound by default (NASA
   music). Next: the National Archives (key by email from NARA), `[story] broll` in story cuts, then a war
   room window. The library is `[paths] broll` on the share.
-- **Usability review (11-10):** built 11-13, PRs open: `clipper status` with "needs you" first, 60 s to 12 s
+- **Usability review (11-10):** built and merged 11-13: `clipper status` with "needs you" first, 60 s to 12 s
   on the share (#199, PR #247); `clipper streams list|prune` and `clipper backup`, both also serve jobs (#204,
   PR #248); Modal per-call overhead in the archive/story estimates (#228, PR #249); CLI polish: `latest`,
   `latest:<show>` and id prefixes, `--json` on the read commands, `config diff`, `completion bash|powershell`
@@ -301,7 +300,7 @@ messages: GitHub closes the issue on "fix".
 - **Weekly and monthly audit (11-10, wiki Audit):** `clipper audit` (no model) DMs how the week went and saves
   `streams/.audit/weekly-<date>.json`; on the 1st a read-only `claude -p` reads the saved weeks, traces repeat
   problems and leaves `deep-<YYYY-MM>.md`. The claude container runs both after the checkup (`audit.sh`), so it
-  needs `bash deploy/claude/deploy.sh` once. Once PR #248 is merged, the backup settings are `[backup]` (folder
+  needs `bash deploy/claude/deploy.sh` once. Since PR #248 the backup settings are `[backup]` (folder
   `backups/taste`, every 7 days by serve), and the digest and doctor read the newest zip there. Dependabot opens grouped weekly PRs (ruff ignored; no review, no secrets). Its security
   alerts are a separate repo switch, off as of 11-10.
 - **News watcher #110:** off since 2026-11-03 at the user's word (`[news] check_minutes = 0`, no terms); only
@@ -353,7 +352,7 @@ messages: GitHub closes the issue on "fix".
 ## Back up the taste layer (user, 2026-10-24)
 The Python is replaceable; the months of editorial judgement are in prompts and config. Treat them
 like footage. `clipper backup` (PR #248, #204; wiki Backups) zips the list below into `backups/taste/`
-(about 17 MB, 390 files; the newest 8 kept; secrets only with `--with-secrets`), and once it is merged and
+(about 17 MB, 390 files; the newest 8 kept; secrets only with `--with-secrets`), and once the hub is
 deployed serve makes one every 7 days. The first was made by hand 11-13 (`backups/taste/taste-2026-11-13-1707.zip`,
 no secrets). Copy one off the NAS now and then. Not in it: `deploy/*/env.local` and the Kitsu volumes.
 - **In git (push it):** `clipper/prompts/` (every version, never edit one that produced reviewed output),
