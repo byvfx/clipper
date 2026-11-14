@@ -66,14 +66,52 @@ def _coerce(raw: str, like: Any, name: str = "") -> Any:
 
 def stream_dir(cfg: dict, ref: str) -> Path:
     """A stream id under paths.streams, or a stream directory. One that doesn't exist is an
-    error here, not a traceback three calls later (or a base config labelled as the stream)."""
+    error here, not a traceback three calls later (or a base config labelled as the stream).
+    Shortcuts (#205): `latest` (the newest finished stream), `latest:<show>` (that show's), or
+    any unique start of an id (`kick-1373`)."""
     p = Path(ref)
     if p.is_dir():
         return p
-    d = cfg["paths"]["streams"] / ref
-    if not d.is_dir():
-        raise ClipperError(f"no stream {ref!r} in {cfg['paths']['streams']} (clipper worker --status lists them)")
-    return d
+    root: Path = cfg["paths"]["streams"]
+    d = root / ref
+    if d.is_dir():
+        return d
+    if ref == "latest" or ref.startswith("latest:"):
+        return latest_stream(cfg, ref.partition(":")[2])
+    ids = sorted(n.name for n in root.iterdir() if not n.name.startswith(".") and n.is_dir()) \
+        if root.is_dir() else []
+    hits = [i for i in ids if i.startswith(ref)]
+    if len(hits) == 1:
+        return root / hits[0]
+    if hits:
+        more = f" and {len(hits) - 5} more" if len(hits) > 5 else ""
+        raise ClipperError(f"{ref!r} starts {len(hits)} stream ids ({', '.join(hits[:5])}{more}): give more of it")
+    import difflib
+    near = difflib.get_close_matches(ref, ids, 3, 0.6)
+    raise ClipperError(f"no stream {ref!r} in {root}"
+                       + (f"; did you mean {', '.join(near)}?" if near else " (clipper worker --status lists them)"))
+
+
+def latest_stream(cfg: dict, show: str = "") -> Path:
+    """The stream with the newest started_at in its meta.json (a recording still going has
+    none yet), of this show if one is named."""
+    root: Path = cfg["paths"]["streams"]
+    if show and show not in _root(cfg)["shows"]:
+        raise ClipperError(f"latest:{show}: no [shows.{show}] (shows: {', '.join(_root(cfg)['shows']) or 'none'})")
+    best: tuple[str, Path] | None = None
+    for m in root.glob("*/meta.json") if root.is_dir() else []:
+        try:
+            meta = jsonstate.load(m)
+        except (OSError, ValueError):
+            continue
+        started = meta.get("started_at") or ""
+        if not started or (show and show_of_channel(cfg, meta.get("channel", "")) != show):
+            continue
+        if best is None or started > best[0]:
+            best = (started, m.parent)
+    if best is None:
+        raise ClipperError(f"no finished stream{f' of {show}' if show else ''} in {root}")
+    return best[1]
 
 
 # Settings that take one of a fixed set of values. Anything else would quietly do the wrong
@@ -407,6 +445,37 @@ def explain(cfg: dict, name: str, sdir: Path | None = None) -> dict:
     if env in os.environ:
         layers.append((f"${env}", os.environ[env]))
     return {"name": name, "value": resolved[section][key], "show": show, "layers": layers}
+
+
+def diff(cfg: dict, show: str = "") -> list[tuple[str, str, Any, Any]]:
+    """What this install changes from defaults.toml (#205), as (layer, "section.key", default,
+    value) in the order the layers apply: clipper.toml, each show's table (only `show`'s when
+    one is named), clipper.local.toml, then CLIPPER_* env vars. A key set to its default isn't
+    listed; nor are a show's channels or the [shows] tables themselves (`clipper shows` lists those)."""
+    root = _root(cfg)
+    if show and show not in root["shows"]:
+        raise ClipperError(f"no [shows.{show}] (shows: {', '.join(root['shows']) or 'none'})")
+    layers: list[tuple[str, dict]] = []
+    if root.get("_file"):
+        layers.append((Path(root["_file"]).name,
+                       tomllib.loads(Path(root["_file"]).read_text(encoding="utf-8"))))
+    layers += [(f"[shows.{k}]", s["overrides"]) for k, s in root["shows"].items() if not show or k == show]
+    layers.append((LOCAL_CONFIG, root["_local"]))
+    env: dict[str, dict] = {}
+    for section, keys in DEFAULTS.items():
+        for key, like in keys.items():
+            raw = os.environ.get(f"CLIPPER_{section}_{key}".upper())
+            if raw is not None:
+                env.setdefault(section, {})[key] = _coerce(raw, like, f"CLIPPER_{section}_{key}".upper())
+    layers.append(("environment", env))
+    out = []
+    for layer, data in layers:
+        for section, keys in data.items():
+            if section not in DEFAULTS or not isinstance(keys, dict):
+                continue
+            out += [(layer, f"{section}.{key}", DEFAULTS[section][key], value) for key, value in keys.items()
+                    if key in DEFAULTS[section] and value != DEFAULTS[section][key]]
+    return out
 
 
 def show_args(cfg: dict) -> list[str]:

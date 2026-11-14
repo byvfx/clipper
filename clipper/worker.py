@@ -297,7 +297,7 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,  # n
             st = run.data["stages"][stage] = {"status": "running", "started": now_iso(),
                                               "log": log_path.name}
             run.save()
-            log.info("%s: %s", name, stage)
+            log.info("%s: %s (stage %d of %d)", name, stage, i + 1, len(order))  # #205
             t = time.time()
             env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
             with open(log_path, "a", encoding="utf-8") as out:

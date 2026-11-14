@@ -8,6 +8,11 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-13: command-line polish (#205): a stream argument takes `latest`, `latest:<show>` or a unique start
+  of an id, and a mistyped one names the nearest; `--json` on `review list`, `schedule --list` and
+  `shows`; `clipper config diff` lists what this install changes from the defaults, by layer; `clipper
+  completion bash|powershell` prints a tab-completion script; `run --only` suggests the nearest stage;
+  `clipper run` logs "stage N of M".
 - 11-13: the `review` workflow (Grok on every commit Copilot hadn't reviewed) is gone: too slow at ~25 min
   a PR. Code PRs now get a local Claude Code review before the first push and Copilot's when the PR opens;
   `clipper codereview` stays for a by-hand second opinion (wiki Developing).

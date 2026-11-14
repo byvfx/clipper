@@ -23,5 +23,10 @@ Discord ids and Kitsu address.
 loads; an unknown setting or `CLIPPER_*` variable is a warning on every command, and
 `clipper doctor` fails on it. `clipper --show <key>` applies that show to any stream.
 
+`clipper config diff` lists every setting this install changes from `clipper/defaults.toml`,
+by layer: `clipper.toml`, each show's table, `clipper.local.toml`, then `CLIPPER_*` variables
+(`clipper config diff kino` keeps one show's table; `--json` for a script). It answers "what
+did I change" without opening the file on the share.
+
 Secrets never go in the config: API keys and tokens are environment variables, and the
 YouTube OAuth files live in `secrets/` (gitignored).
