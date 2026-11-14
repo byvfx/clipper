@@ -58,6 +58,10 @@ the concavities (hair, the neck), fills it with off-white paper with a grey cut 
 the photo on top: `photo_*_cut.png`. Both the main portrait and the stickers use them; the cover
 adds only the hard shadow. The stand-in photos keep their rough flood-fill mattes (a white patch on
 one sweater): the real frames get the thumbs stage's person matte.
+**Jagged background** (user: "now we will need some simple jagged lines in the bg or the design
+won't flow"): the panel diagonals are cut the same way as the portraits (`jag()`: short straight
+segments with a few px of sideways wobble, seeded per cover), and one torn paper strip runs along
+the bottom edge under the sticker row, where nothing above it is bare text.
 **Small portraits are stickers again** (user, same day): cutouts with the white outline, hard shadow,
 a slight tilt and a red name bar inside the lower-left corner; the main photo stays borderless.
 **`*_v5hp.*`** is the v5 pop-art version with the mosaic tiles replaced by the same crossover halftone
