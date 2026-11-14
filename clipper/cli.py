@@ -997,11 +997,15 @@ def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_status(cfg: dict, args: argparse.Namespace) -> None:
     from . import status
 
-    s = status.collect(cfg, days=args.days, sync=args.sync, everything=args.all)
     if args.json:
+        import contextlib
+
+        with contextlib.redirect_stdout(sys.stderr):  # a sync's notes; stdout is the JSON alone
+            s = status.collect(cfg, days=args.days, sync=args.sync, everything=args.all)
         print(json.dumps(s, indent=1, ensure_ascii=False, default=str))
-    else:
-        print("\n".join(status.render(s, cfg)))
+        return
+    print("\n".join(status.render(status.collect(cfg, days=args.days, sync=args.sync,
+                                                 everything=args.all), cfg)))
 
 
 def cmd_checkup(cfg: dict, args: argparse.Namespace) -> None:

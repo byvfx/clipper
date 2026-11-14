@@ -35,14 +35,12 @@ def collect(cfg: dict, days: int = 2, sync: bool = False, everything: bool = Fal
     """Everything the screen shows, as data (`clipper status --json`)."""
     now = now or datetime.now(UTC)
     recent = None if everything else RECENT_DAYS
-    review = actions.status(cfg, sync=sync, links=sync)
-    stale = cfg["schedule"]["stale_days"]
+    review = actions.status(cfg, sync=sync, links=sync, now=now)
 
     def waiting(r: dict) -> bool:
-        """Undecided items always; held ones only while they could still go out (an approved
-        item isn't scheduled stale_days after its stream, held or not: a pin sends it anyway)."""
-        age = _age_days(r["date"], now)
-        return bool(r["open"]) or bool(r["held"] and (not stale or age is None or age <= stale + 1))
+        """Undecided items always; held ones only while they could still go out: pinned, or
+        their stream inside the scheduler's window (actions.hold_waiting)."""
+        return bool(r["open"] or r["held_waiting"])
 
     rows = review["streams"]
     if recent is not None:

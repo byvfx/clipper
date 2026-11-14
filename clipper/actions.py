@@ -477,34 +477,56 @@ def list_items(cfg: dict, stream: str | None = None, everything: bool = False,
     return rows
 
 
-def stream_counts(cfg: dict, sdir: Path, links: bool = False) -> dict:
+def stale_at(cfg: dict, sdir: Path, meta: dict) -> datetime | None:
+    """When a stream's approved items stop being scheduled (schedule.release_window, with the
+    stream's own show and config.toml); None: never, or when its meta can't say."""
+    from .schedule import release_window
+
+    try:
+        return release_window(cfg, sdir, {**meta, "duration_s": meta.get("duration_s") or 0})[1]
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def hold_waiting(fields: dict, stale: datetime | None, now: datetime) -> bool:
+    """A held item that could still go out once released: pinned (Publish at, which the
+    scheduler never lets go stale), or its stream not stale yet."""
+    return is_held(fields) and (bool(fields.get("Publish at")) or stale is None or now <= stale)
+
+
+def stream_counts(cfg: dict, sdir: Path, links: bool = False, now: datetime | None = None) -> dict:
     """One stream's decision counts from review_state.json and review.json alone: three small
     reads, where describe() opens every item's sidecar (1,913 reads over SMB for 41 streams made
     `clipper status` take a minute, #199). links=True asks Kitsu for links older publishes lack."""
     state = review.ensure_links(sdir, cfg) if links else jsonstate.load(sdir / "review_state.json")
     decisions = jsonstate.read(sdir / "review.json", {})
+    meta = jsonstate.read(sdir / "meta.json", {})
+    stale = stale_at(cfg, sdir, meta)
+    now = now or datetime.now(ZoneInfo("UTC"))
     counts: dict[str, int] = {}
-    held = 0
+    held = waiting = 0
     for key in state:
         r = decisions.get(key, {})
         counts[r.get("decision", "pending")] = counts.get(r.get("decision", "pending"), 0) + 1
         # only an approved item waits on its hold: a rejected one that arrived held is done with
-        held += r.get("decision") == "approved" and is_held(r.get("fields") or {})
-    meta = jsonstate.read(sdir / "meta.json", {})
+        if r.get("decision") == "approved":
+            fields = r.get("fields") or {}
+            held += is_held(fields)
+            waiting += hold_waiting(fields, stale, now)
     first = next(iter(state.values()), {})
     return {"stream": sdir.name, "date": meta.get("started_at", "")[:10], "title": meta.get("title", ""),
-            "counts": counts, "held": held, "open": sum(counts.get(k, 0) for k in OPEN),
-            "episode_url": first.get("episode_url", "")}
+            "counts": counts, "held": held, "held_waiting": waiting,
+            "open": sum(counts.get(k, 0) for k in OPEN), "episode_url": first.get("episode_url", "")}
 
 
-def status(cfg: dict, sync: bool = False, links: bool = True) -> dict:
+def status(cfg: dict, sync: bool = False, links: bool = True, now: datetime | None = None) -> dict:
     """Per stream: decision counts; plus what schedule.json has coming up. links=False never
     asks Kitsu, not even for an old item's missing link."""
     streams = []
     for d in review_dirs(cfg):
         if sync:
             review.sync(d, cfg, quiet=True)
-        streams.append(stream_counts(cfg, d, links=links))
+        streams.append(stream_counts(cfg, d, links=links, now=now))
     data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     now = datetime.now(tz)

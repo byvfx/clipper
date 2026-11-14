@@ -100,6 +100,41 @@ def test_held_counts_only_what_could_still_go_out(defaults, tmp_path):
     assert {r["stream"]: r["held"] for r in s["review"]["streams"]}["kick-rejected"] == 0
 
 
+def test_a_pinned_hold_or_a_show_without_stale_days_keeps_waiting(defaults, tmp_path):
+    """The scheduler's rules, not the base stale_days alone (Copilot on #247): a pinned item
+    never goes stale, and a show with stale_days = 0 never lets its items go."""
+    cfg = in_tmp(defaults, tmp_path)
+    cfg["schedule"]["stale_days"] = 3
+    cfg["shows"] = {"c404": {"channels": ["donflurgundy"], "overrides": {"schedule": {"stale_days": 0}}}}
+    cfg["_root"] = cfg
+    old = (datetime.now(UTC).date() - timedelta(days=40)).isoformat()
+    published(cfg, "kick-pinned", old, {"c01": {"decision": "approved",
+                                                "fields": {"Hold": True, "Publish at": "2026-12-01 10:00"}}})
+    published(cfg, "kick-c404", old, {"c01": {"decision": "approved", "fields": {"Hold": True}}},
+              channel="donflurgundy")
+    published(cfg, "kick-gone", old, {"c01": {"decision": "approved", "fields": {"Hold": True}}})
+    s = status.collect(cfg)
+    assert [r["stream"] for r in s["needs_you"]["review"]] == ["kick-c404", "kick-pinned"]
+
+
+def test_status_json_keeps_stdout_for_the_document(defaults, tmp_path, monkeypatch, capsys):
+    import json
+
+    from clipper import cli
+
+    cfg = in_tmp(defaults, tmp_path)
+    real = status.collect
+
+    def noisy(*a, **k):
+        print("thumbnail text updated")   # what a sync can print
+        return real(*a, **k)
+
+    monkeypatch.setattr(status, "collect", noisy)
+    cli.cmd_status(cfg, cli.build_parser().parse_args(["status", "--json"]))
+    out = capsys.readouterr()
+    assert json.loads(out.out)["recent_days"] == status.RECENT_DAYS and "thumbnail" in out.err
+
+
 def test_status_json_is_plain_data(defaults, tmp_path):
     import json
 
@@ -123,12 +158,16 @@ def test_worker_rows_carry_show_and_date_and_drop_old_finished_runs(defaults, tm
         (root / sid).mkdir(parents=True)
         jsonstate.write(root / sid / "run.json", run)
         jsonstate.write(root / sid / "meta.json", {"channel": "kinocasinogaming", "started_at": "2026-10-24T20:00:00Z"})
-    for sid, last_seen in (("kick-rec-old", 0), ("kick-rec-new", datetime.now(UTC).timestamp())):
+    for sid, last_seen, channel in (("kick-rec-old", 0, "someoneelse"),
+                                    ("kick-rec-new", datetime.now(UTC).timestamp(), "someoneelse"),
+                                    ("kick-rec-queued", 0, "kinocasinogaming")):
         (root / sid / "live").mkdir(parents=True)          # recorded only: no run.json
-        jsonstate.write(root / sid / "live" / "state.json", {"status": "done", "last_seen": last_seen})
+        jsonstate.write(root / sid / "live" / "state.json",
+                        {"status": "done", "last_seen": last_seen, "channel": channel})
     rows = {r["stream"]: r for r in worker.stream_rows(cfg, recent_days=7)}
-    assert set(rows) == {"kick-failed", "kick-rec-new"}  # unfinished stays, however old
+    # unfinished stays, however old: kick-rec-queued is still the worker's to take (Copilot on #247)
+    assert set(rows) == {"kick-failed", "kick-rec-new", "kick-rec-queued"}
     line = worker.row_line(rows["kick-failed"])
     assert "kino" in line and "10-24" in line and "cut: boom" in line
     assert {r["stream"] for r in worker.stream_rows(cfg)} == {"kick-done", "kick-failed", "kick-rec-old",
-                                                              "kick-rec-new"}
+                                                              "kick-rec-new", "kick-rec-queued"}

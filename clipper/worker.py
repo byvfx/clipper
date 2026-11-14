@@ -339,6 +339,14 @@ def run_stream(cfg: dict, stream_dir: Path, config_path: str | None = None,  # n
             log.info("%s: run %s", name, run.data["status"])
 
 
+def takes(cfg: dict, channel: str) -> bool:
+    """Whether the worker clips this channel's recordings ([worker] channels, a show for it)."""
+    wc = cfg["worker"]
+    if wc["channels"] and channel not in wc["channels"]:
+        return False
+    return not cfg["shows"] or bool(show_of_channel(cfg, channel))
+
+
 def pending(cfg: dict) -> list[Path]:
     """Finished recordings whose run isn't done, oldest first, minus ones to wait on."""
     wc = cfg["worker"]
@@ -349,9 +357,7 @@ def pending(cfg: dict) -> list[Path]:
         state = jsonstate.read_or(state_path, {})
         if state.get("status") != "done":
             continue
-        if wc["channels"] and state.get("channel") not in wc["channels"]:
-            continue
-        if cfg["shows"] and not show_of_channel(cfg, state.get("channel", "")):
+        if not takes(cfg, state.get("channel", "")):
             continue  # recorded only: add a [shows.<key>] profile for the channel to clip it
         ready.append(d)
     # Grabbed pre-shows: meta.json is written once the download is complete.
@@ -491,9 +497,10 @@ def stream_rows(cfg: dict, recent_days: float | None = None) -> list[dict]:
         if old is not None and run.get("status") in DONE and age_s(run.get("updated")) > old:
             continue   # an old run without "updated" is old too: age_s says inf
         live = jsonstate.read_or(d / "live" / "state.json", {}) if (d / "live").is_dir() else {}
-        if old is not None and not run and live.get("status") in ("done", "failed") \
-                and time.time() - float(live.get("last_seen") or 0) > old:
-            continue   # a recording the worker never takes (no show for its channel), long over
+        if old is not None and not run and time.time() - float(live.get("last_seen") or 0) > old \
+                and (live.get("status") == "failed"
+                     or (live.get("status") == "done" and not takes(cfg, live.get("channel", "")))):
+            continue   # long over, and the worker never takes it (no show for its channel)
         meta = jsonstate.read_or(d / "meta.json", {})
         stages_ = run.get("stages", {})
         last = next((s for s in reversed(STAGES) if stages_.get(s, {}).get("status")), "")
