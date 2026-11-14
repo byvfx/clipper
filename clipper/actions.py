@@ -401,6 +401,11 @@ def other_voices(seconds, limit: float) -> str:
     return f"{s:.0f} s of other voices (limit {limit:g} s)" if s > limit else ""
 
 
+def is_held(fields: dict) -> bool:
+    """The Hold column as Kitsu stores it (a checkbox: true, or text a person typed)."""
+    return str(fields.get("Hold") or "").lower() in ("true", "1", "yes", "on")
+
+
 def describe(cfg: dict, sdir: Path, gazu=None, links: bool = True) -> dict[str, dict]:
     """Everything a card or list row shows, per item, from local files (review.json is
     as of the last sync). Kitsu is only asked for links older publishes didn't save, and not
@@ -437,7 +442,7 @@ def describe(cfg: dict, sdir: Path, gazu=None, links: bool = True) -> dict[str, 
             "duration_s": it.get("duration_s"),
             "decision": r.get("decision", "pending"), "status": r.get("status", "wfa"),
             "comment": r.get("comment", ""),
-            "hold": str(fields.get("Hold") or "").lower() in ("true", "1", "yes", "on"),
+            "hold": is_held(fields),
             "other_voices": other_voices(fields.get("Other voices") or proposed.get("Other voices"),
                                          cfg["scoring"]["max_source_audio_s"]),
             "publish_at": fields.get("Publish at") or "",
@@ -470,6 +475,25 @@ def list_items(cfg: dict, stream: str | None = None, everything: bool = False,
     return rows
 
 
+def stream_counts(cfg: dict, sdir: Path, links: bool = False) -> dict:
+    """One stream's decision counts from review_state.json and review.json alone: three small
+    reads, where describe() opens every item's sidecar (1,913 reads over SMB for 41 streams made
+    `clipper status` take a minute, #199). links=True asks Kitsu for links older publishes lack."""
+    state = review.ensure_links(sdir, cfg) if links else jsonstate.load(sdir / "review_state.json")
+    decisions = jsonstate.read(sdir / "review.json", {})
+    counts: dict[str, int] = {}
+    held = 0
+    for key in state:
+        r = decisions.get(key, {})
+        counts[r.get("decision", "pending")] = counts.get(r.get("decision", "pending"), 0) + 1
+        held += is_held(r.get("fields") or {})
+    meta = jsonstate.read(sdir / "meta.json", {})
+    first = next(iter(state.values()), {})
+    return {"stream": sdir.name, "date": meta.get("started_at", "")[:10], "title": meta.get("title", ""),
+            "counts": counts, "held": held, "open": sum(counts.get(k, 0) for k in OPEN),
+            "episode_url": first.get("episode_url", "")}
+
+
 def status(cfg: dict, sync: bool = False, links: bool = True) -> dict:
     """Per stream: decision counts; plus what schedule.json has coming up. links=False never
     asks Kitsu, not even for an old item's missing link."""
@@ -477,15 +501,7 @@ def status(cfg: dict, sync: bool = False, links: bool = True) -> dict:
     for d in review_dirs(cfg):
         if sync:
             review.sync(d, cfg, quiet=True)
-        rows = describe(cfg, d, links=links).values()
-        counts: dict[str, int] = {}
-        for r in rows:
-            counts[r["decision"]] = counts.get(r["decision"], 0) + 1
-        meta = jsonstate.read(d / "meta.json", {})
-        streams.append({"stream": d.name, "date": meta.get("started_at", "")[:10],
-                        "title": meta.get("title", ""), "counts": counts,
-                        "held": sum(r["hold"] for r in rows),
-                        "episode_url": next(iter(rows))["episode_url"] if rows else ""})
+        streams.append(stream_counts(cfg, d, links=links))
     data = jsonstate.read(cfg["paths"]["schedule"], {}) or {}
     tz = ZoneInfo(cfg["schedule"]["timezone"])
     now = datetime.now(tz)

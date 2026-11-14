@@ -997,7 +997,11 @@ def cmd_services(cfg: dict, args: argparse.Namespace) -> None:
 def cmd_status(cfg: dict, args: argparse.Namespace) -> None:
     from . import status
 
-    print("\n".join(status.lines(cfg, days=args.days, sync=args.sync)))
+    s = status.collect(cfg, days=args.days, sync=args.sync, everything=args.all)
+    if args.json:
+        print(json.dumps(s, indent=1, ensure_ascii=False, default=str))
+    else:
+        print("\n".join(status.render(s, cfg)))
 
 
 def cmd_checkup(cfg: dict, args: argparse.Namespace) -> None:
@@ -1400,10 +1404,13 @@ def add_services(sub) -> None:
                    help="restart or stop the recorder even while it's recording (starts a new part)")
     p.set_defaults(fn=cmd_services)
 
-    p = sub.add_parser("status", help="one screen: services and recorder, the worker's streams, review counts, "
-                                      "the next releases, this month's spend (reads files; runs nothing)")
+    p = sub.add_parser("status", help="one screen: what needs you, services and recorder, the worker's streams, "
+                                      "review counts, the next releases, this month's spend (reads files; runs nothing)")
     p.add_argument("--days", type=int, default=2, help="releases this far ahead (default 2)")
     p.add_argument("--sync", action="store_true", help="read Kitsu's decisions first (slower)")
+    p.add_argument("--all", action="store_true",
+                   help="every stream, not just the last week's and the unfinished ones")
+    p.add_argument("--json", action="store_true", help="the same as JSON (the Claude container reads it)")
     p.set_defaults(fn=cmd_status)
 
     p = sub.add_parser("checkup", help="what the alerts don't catch: stuck streams, quiet services, late uploads, "

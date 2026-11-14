@@ -8,6 +8,10 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-13: `clipper status` opens with what needs you (items waiting or held, checkup's findings on
+  services, runs and late releases), shows each stream's show and date, leaves out week-old streams
+  with nothing waiting (`--all`), and has `--json`. It counts reviews from review.json instead of
+  every item's sidecar: 15 s from the laptop, was 60 s (#199).
 - 11-13: the `review` workflow (Grok on every commit Copilot hadn't reviewed) is gone: too slow at ~25 min
   a PR. Code PRs now get a local Claude Code review before the first push and Copilot's when the PR opens;
   `clipper codereview` stays for a by-hand second opinion (wiki Developing).

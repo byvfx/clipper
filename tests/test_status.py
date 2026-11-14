@@ -47,8 +47,68 @@ def test_status_counts_reviews_from_files_without_kitsu(defaults, tmp_path, monk
     jsonstate.write(sdir / "review_state.json", {"c01_t20": {
         "kind": "pick", "id": "t20", "file": "clips/01_t20.mp4", "task_id": "T", "entity_id": "E", "fields": {}}})
     jsonstate.write(sdir / "review.json", {"c01_t20": {"decision": "approved", "status": "approved", "fields": {}}})
-    jsonstate.write(sdir / "meta.json", {"started_at": "2026-11-07T20:00:00-08:00"})
+    day = datetime.now(UTC).date().isoformat()
+    jsonstate.write(sdir / "meta.json", {"started_at": f"{day}T20:00:00-08:00"})
     jsonstate.write(defaults["paths"]["schedule"], {"entries": []})
     monkeypatch.setattr(review, "connect", lambda rc: pytest.fail("status reached Kitsu"))
+    monkeypatch.setattr(review, "items", lambda *a, **k: pytest.fail("status read every sidecar"))
     out = "\n".join(status.lines(defaults, days=1))
-    assert "kick-1 (2026-11-07): 1 approved" in out and "worker" not in out.split("streams")[0]
+    assert f"kick-1 ({day}): 1 approved" in out
+
+
+def published(cfg: dict, sid: str, day: str, decisions: dict[str, dict], channel: str = "") -> None:
+    sdir = cfg["paths"]["streams"] / sid
+    sdir.mkdir(parents=True)
+    jsonstate.write(sdir / "review_state.json", {k: {"kind": "pick", "file": f"clips/{k}.mp4"} for k in decisions})
+    jsonstate.write(sdir / "review.json", decisions)
+    jsonstate.write(sdir / "meta.json", {"started_at": f"{day}T20:00:00-08:00", "title": f"night {sid}",
+                                         "channel": channel})
+
+
+def test_what_needs_you_comes_first_and_old_streams_are_hidden(defaults, tmp_path):
+    """#199: pending and held items on top; a month-old stream with nothing waiting only under --all."""
+    cfg = in_tmp(defaults, tmp_path)
+    today = datetime.now(UTC).date()
+    old = (today - timedelta(days=30)).isoformat()
+    published(cfg, "kick-old", old, {"c01": {"decision": "approved"}})
+    published(cfg, "kick-old-pending", old, {"c01": {"decision": "pending"}})
+    published(cfg, "kick-new", today.isoformat(), {
+        "c01": {"decision": "pending"}, "c02": {"decision": "changes_requested"},
+        "c03": {"decision": "approved", "fields": {"Hold": True}}, "c04": {"decision": "rejected"}})
+    out = status.lines(cfg, days=1)
+    needs = out[1:out.index("")]
+    assert any(x.startswith("  kick-new (") and "1 pending, 1 changes requested, 1 held" in x for x in needs)
+    assert any("kick-old-pending" in x for x in needs)    # old, but still waiting: never hidden
+    assert not any("kick-old " in x for x in out)
+    assert "  1 older streams with nothing waiting: --all lists them" in out
+    assert any(x.startswith("  kick-old (") for x in status.lines(cfg, days=1, everything=True))
+
+
+def test_status_json_is_plain_data(defaults, tmp_path):
+    import json
+
+    cfg = in_tmp(defaults, tmp_path)
+    published(cfg, "kick-1", datetime.now(UTC).date().isoformat(), {"c01": {"decision": "pending"}})
+    s = json.loads(json.dumps(status.collect(cfg), default=str))
+    assert s["needs_you"]["review"][0]["stream"] == "kick-1" and s["needs_you"]["review"][0]["open"] == 1
+    assert {f["check"] for f in s["needs_you"]["findings"]} <= set(status.CHECKS)
+
+
+def test_worker_rows_carry_show_and_date_and_drop_old_finished_runs(defaults, tmp_path):
+    from clipper import worker
+
+    cfg = in_tmp(defaults, tmp_path)
+    cfg["shows"] = {"kino": {"channels": ["kinocasinogaming"], "overrides": {}}}
+    cfg["_root"] = cfg
+    root = cfg["paths"]["streams"]
+    long_ago = (datetime.now(UTC) - timedelta(days=20)).isoformat(timespec="seconds")
+    for sid, run in (("kick-done", {"status": "done", "updated": long_ago}),
+                     ("kick-failed", {"status": "failed", "updated": long_ago, "error": "cut: boom"})):
+        (root / sid).mkdir(parents=True)
+        jsonstate.write(root / sid / "run.json", run)
+        jsonstate.write(root / sid / "meta.json", {"channel": "kinocasinogaming", "started_at": "2026-10-24T20:00:00Z"})
+    rows = {r["stream"]: r for r in worker.stream_rows(cfg, recent_days=7)}
+    assert set(rows) == {"kick-failed"}                  # unfinished stays, however old
+    line = worker.row_line(rows["kick-failed"])
+    assert "kino" in line and "10-24" in line and "cut: boom" in line
+    assert {r["stream"] for r in worker.stream_rows(cfg)} == {"kick-done", "kick-failed"}

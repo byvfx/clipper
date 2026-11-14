@@ -474,23 +474,42 @@ def watch(cfg: dict, config_path: str | None = None, once: bool = False) -> None
             time.sleep(wc["poll_s"])
 
 
-def status_lines(cfg: dict) -> list[str]:
-    """A line per stream the worker has touched or the recorder is writing (`worker --status`,
-    `clipper status`)."""
+DONE = ("done", "skip")
+
+
+def stream_rows(cfg: dict, recent_days: float | None = None) -> list[dict]:
+    """A row per stream the worker has touched or the recorder is writing, with its show and
+    date. recent_days: leave out runs that are done (or skipped) and older than that, which is
+    most of the folder after a month (`clipper status`, #199); None keeps every one."""
     root: Path = cfg["paths"]["streams"]
-    dirs = sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir()) \
-        if root.is_dir() else []
+    dirs = sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir())         if root.is_dir() else []
     out = []
     for d in dirs:
         run = jsonstate.read_or(d / "run.json", {})
-        rec = jsonstate.read_or(d / "live" / "state.json", {}).get("status", "-")
-        stages = run.get("stages", {})
-        last = next((s for s in reversed(STAGES) if stages.get(s, {}).get("status")), "")
-        out.append(f"{d.name:<18} rec={rec:<10} run={run.get('status', 'new'):<8} "
-                   f"last={last}:{stages.get(last, {}).get('status', '')} "
-                   + (f"clips in review {run['clips_ready'][5:16]} " if run.get("clips_ready") else "")
-                   + f"{run.get('error') or run.get('paused', '')}"[:80])
+        if recent_days is not None and run.get("status") in DONE                 and age_s(run.get("updated")) > recent_days * 86400:
+            continue   # an old run without "updated" is old too: age_s says inf
+        live = jsonstate.read_or(d / "live" / "state.json", {}) if (d / "live").is_dir() else {}
+        meta = jsonstate.read_or(d / "meta.json", {})
+        stages_ = run.get("stages", {})
+        last = next((s for s in reversed(STAGES) if stages_.get(s, {}).get("status")), "")
+        out.append({"stream": d.name, "show": show_of_channel(cfg, meta.get("channel") or live.get("channel", "")),
+                    "date": (meta.get("started_at") or live.get("stream_started_at") or "")[:10],
+                    "rec": live.get("status", "-"), "run": run.get("status", "new"),
+                    "last": last, "last_status": stages_.get(last, {}).get("status", ""),
+                    "clips_ready": run.get("clips_ready", ""), "attempts": run.get("attempts", 0),
+                    "note": f"{run.get('error') or run.get('paused', '')}"[:80]})
     return out
+
+
+def row_line(r: dict) -> str:
+    return (f"{r['stream']:<18} {r['show'] or '-':<6} {r['date'][5:] or '-':<5} rec={r['rec']:<10} "
+            f"run={r['run']:<8} last={r['last']}:{r['last_status']} "
+            + (f"clips in review {r['clips_ready'][5:16]} " if r["clips_ready"] else "") + r["note"])
+
+
+def status_lines(cfg: dict, recent_days: float | None = None) -> list[str]:
+    """`worker --status` (every stream) and `clipper status` (recent ones)."""
+    return [row_line(r) for r in stream_rows(cfg, recent_days)]
 
 
 def status(cfg: dict) -> None:
