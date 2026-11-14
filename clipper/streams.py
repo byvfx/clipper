@@ -98,6 +98,17 @@ def check(cfg: dict, sdir: Path, entries: dict[str, dict], older_than_days: floa
                 "done": [], "files": {}, "show": ""}
 
 
+def stale_at(cfg: dict, sdir: Path, meta: dict) -> datetime | None:
+    """When the scheduler stops placing this stream's items (schedule.release_window, with its
+    show and config.toml); None: never, or its meta can't say, so a hold keeps the source."""
+    from .schedule import release_window
+
+    try:
+        return release_window(cfg, sdir, {**meta, "duration_s": meta.get("duration_s") or 0})[1]
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def _check(cfg: dict, sdir: Path, entries: dict[str, dict], older_than_days: float, now: datetime) -> dict:
     meta = jsonstate.read(sdir / "meta.json", {})
     date = stream_date(sdir, meta)
@@ -122,7 +133,7 @@ def _check(cfg: dict, sdir: Path, entries: dict[str, dict], older_than_days: flo
         return out
     state = jsonstate.load(sdir / "review_state.json")
     decisions = jsonstate.read(sdir / "review.json", {})
-    stale = cfg["schedule"]["stale_days"]
+    stale = stale_at(cfg, sdir, meta)
     waiting, scheduled, held = 0, 0, 0
     for key, st in state.items():
         r = decisions.get(key, {})
@@ -137,8 +148,9 @@ def _check(cfg: dict, sdir: Path, entries: dict[str, dict], older_than_days: flo
             out["done"].append(key)
         elif entry:
             scheduled += 1
-        elif truthy((r.get("fields") or {}).get("Hold") or "") and (not stale or days <= stale + 1):
-            held += 1
+        elif truthy((r.get("fields") or {}).get("Hold") or "") and (
+                (r.get("fields") or {}).get("Publish at") or stale is None or now <= stale):
+            held += 1   # could still go out: pinned (never stale), or inside its release window
         # else approved and let go, or never scheduled (a horizontal clip): its cut stays, the
         # source isn't needed for it
     why = [f"{n} {what}" for n, what in ((waiting, "waiting on a decision"),
@@ -165,8 +177,9 @@ def removable(sdir: Path, c: dict, cuts: bool) -> list[Path]:
             f = c["files"].get(key, "")
             if f.split("/", 1)[0] in CUT_DIRS and (sdir / f).is_file():
                 out.append(sdir / f)
-            if (sdir / "review" / f"{key}.mp4").is_file():
-                out.append(sdir / "review" / f"{key}.mp4")
+            for name in (f"{key}.mp4", f"{key}.small.mp4"):   # the preview, and its smaller upload copy
+                if (sdir / "review" / name).is_file():
+                    out.append(sdir / "review" / name)
     return out
 
 

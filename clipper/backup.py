@@ -23,6 +23,8 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from . import jsonstate
+from .config import base, for_show, for_stream
 from .errors import ClipperError
 
 STREAM_FILES = ("config.toml", "meta.json", "review.json", "review_state.json", "thumbnails.json",
@@ -33,6 +35,7 @@ SKIP_DIRS = {"models", "__pycache__"}   # faces/models: downloaded again by `cli
 
 def folder(cfg: dict, to: str | Path | None = None) -> Path:
     """Where backups land: --to, else [backup] folder, relative to the config file's folder."""
+    cfg = base(cfg)   # `clipper --show kino backup`: the install's, not a show's (no _dir there)
     name = to or cfg["backup"]["folder"]
     if not name:
         raise ClipperError("no backup folder: set [backup] folder or pass --to")
@@ -47,8 +50,30 @@ def _walk(top: Path):
             yield Path(dirpath) / n
 
 
+def is_archive(name: str) -> bool:
+    """A backup zip (or one being written), wherever it is: never inside another backup, so
+    a --to folder doesn't take the secrets of a --with-secrets zip in [backup] folder."""
+    return name.startswith(PREFIX) and (name.endswith(".zip") or name.endswith(".zip.part"))
+
+
+def photo_dirs(cfg: dict) -> list[str]:
+    """[thumbnail] photos of the base config, every show, and every stream with a config.toml
+    of its own (kino_photos, night_photos, ...)."""
+    out = [cfg["thumbnail"].get("photos")]
+    out += [for_show(cfg, key)["thumbnail"].get("photos") for key in cfg["shows"]]
+    streams: Path = cfg["paths"]["streams"]
+    for d in sorted(streams.iterdir()) if streams.is_dir() else []:
+        if (d / "config.toml").is_file():
+            try:
+                out.append(for_stream(cfg, d)["thumbnail"].get("photos"))
+            except (ClipperError, ValueError):   # a broken config.toml: the file itself is still backed up
+                continue
+    return [str(p) for p in dict.fromkeys(out) if p]
+
+
 def plan(cfg: dict, with_secrets: bool = False, dest: Path | None = None) -> list[tuple[str, Path]]:
     """(name in the zip, file) for everything a backup takes."""
+    cfg = base(cfg)
     root = Path(cfg["_dir"])
     paths = cfg["paths"]
     seen: set[Path] = set()
@@ -63,7 +88,7 @@ def plan(cfg: dict, with_secrets: bool = False, dest: Path | None = None) -> lis
             return
         for f in _walk(p) if p.is_dir() else [p]:
             f = f.resolve()
-            if f in seen or not f.is_file() or (skip and skip in f.parents):   # never the zips themselves
+            if f in seen or not f.is_file() or is_archive(f.name) or (skip and skip in f.parents):
                 continue
             seen.add(f)
             try:
@@ -79,7 +104,8 @@ def plan(cfg: dict, with_secrets: bool = False, dest: Path | None = None) -> lis
     for key in ("schedule", "people", "costs", "faces", "voices", "layouts"):
         add(paths[key])
     add(paths["prompts"] or None)
-    add(cfg["thumbnail"].get("photos") or None)
+    for photos in photo_dirs(cfg):
+        add(photos)
     streams: Path = paths["streams"]
     if streams.is_dir():
         for d in sorted(streams.iterdir()):
@@ -94,6 +120,7 @@ def plan(cfg: dict, with_secrets: bool = False, dest: Path | None = None) -> lis
 def run(cfg: dict, to: str | Path | None = None, with_secrets: bool | None = None,
         dry_run: bool = False) -> list[str]:
     """Write the zip (or, with dry_run, say what would go in it) and drop the old ones."""
+    cfg = base(cfg)
     dest = folder(cfg, to)
     secrets = cfg["backup"]["with_secrets"] if with_secrets is None else with_secrets
     files = plan(cfg, secrets, dest)
@@ -113,6 +140,16 @@ def run(cfg: dict, to: str | Path | None = None, with_secrets: bool | None = Non
         return [f"would write {target} ({len(files)} files, {_mb(size)} before compression"
                 + (", secrets included" if secrets else ", no secrets") + "):", *lines]
     dest.mkdir(parents=True, exist_ok=True)
+    try:
+        # one backup at a time per folder (serve's and one by hand): a .part left behind is
+        # then a killed run's, and the newest-keep count sees every finished zip
+        with jsonstate.locked(dest / "backup", wait_s=5):
+            return _write(cfg, dest, target, files, secrets)
+    except TimeoutError:
+        raise ClipperError(f"another backup is writing to {dest} now; try again when it is done") from None
+
+
+def _write(cfg: dict, dest: Path, target: Path, files: list[tuple[str, Path]], secrets: bool) -> list[str]:
     for left in dest.glob(f"{PREFIX}*.zip.part"):   # a run killed mid-write
         left.unlink(missing_ok=True)
     tmp = target.with_suffix(".zip.part")

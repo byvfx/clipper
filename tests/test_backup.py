@@ -6,7 +6,7 @@ import zipfile
 
 import pytest
 
-from clipper import backup, jsonstate, serve
+from clipper import backup, config, jsonstate, serve
 from clipper.errors import ClipperError
 
 
@@ -95,3 +95,32 @@ def test_serve_makes_one_only_when_the_newest_is_old(cfg):
     old = time.time() - 8 * 86400
     os.utime(p, (old, old))
     assert serve.backup_due(cfg)
+
+
+def test_a_backup_elsewhere_never_takes_the_zips_in_backups(cfg, tmp_path):
+    """Copilot on #248: --to another folder still leaves out the taste zips (one may hold secrets)."""
+    backup.run(cfg, with_secrets=True)
+    backup.run(cfg, to=tmp_path / "offsite")
+    (z,) = (tmp_path / "offsite").glob("taste-*.zip")
+    assert not any(n.endswith(".zip") for n in names(z))
+
+
+def test_a_show_pinned_config_backs_up_the_install(cfg):
+    """`clipper --show kino backup`: a show's config has no _dir; the install's is used."""
+    cfg["shows"] = {"kino": {"channels": ["k"], "overrides": {"thumbnail": {"photos": str(cfg["_dir"] / "kino_photos")}}}}
+    cfg["_root"] = cfg
+    (cfg["_dir"] / "kino_photos" / "PPP").mkdir(parents=True)
+    jsonstate.write(cfg["_dir"] / "kino_photos" / "PPP" / "cast.json", {})
+    pinned = {k: v for k, v in config.pin_show(cfg, "kino").items() if k not in ("_dir", "_file", "_local_file")}
+    backup.run(pinned)
+    (z,) = (cfg["_dir"] / "backups" / "taste").glob("taste-*.zip")
+    got = names(z)
+    assert "photos/Andy/cast.json" in got and "kino_photos/PPP/cast.json" in got   # every show's photos
+
+
+def test_one_backup_at_a_time(cfg):
+    dest = cfg["_dir"] / "backups" / "taste"
+    dest.mkdir(parents=True)
+    (dest / "backup.lock").write_text("someone else\n", encoding="utf-8")   # fresh: not stale
+    with pytest.raises(ClipperError, match="another backup is writing"):
+        backup.run(cfg)

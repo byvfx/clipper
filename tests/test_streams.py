@@ -93,15 +93,29 @@ def test_a_held_item_blocks_only_while_it_could_still_go_out(cfg):
     make(cfg, "kick-1", 40, held)
     assert streams.check(cfg, cfg["paths"]["streams"] / "kick-1", {}, 30)["ok"]   # past stale_days
     cfg["schedule"]["stale_days"] = 0                                             # never stale: waits
+    cfg["_resolved"].clear()   # for_stream cached the stream's config with the old value
     assert streams.check(cfg, cfg["paths"]["streams"] / "kick-1", {}, 30)["why"] == "1 held"
+
+
+def test_a_pinned_hold_or_a_show_that_never_goes_stale_keeps_the_source(cfg):
+    """Copilot on #248: the scheduler's rules, per stream: a pin never goes stale, and a show's
+    own stale_days = 0 keeps a held item waiting however old the stream."""
+    make(cfg, "kick-1", 40, {"s01": {"decision": "approved", "fields": {"Hold": True, "Publish at": "2026-12-01"}}})
+    assert streams.check(cfg, cfg["paths"]["streams"] / "kick-1", {}, 30)["why"] == "1 held"
+    cfg["shows"] = {"kino": {"channels": ["kinocasinogaming"], "overrides": {"schedule": {"stale_days": 0}}}}
+    cfg["_root"] = cfg
+    make(cfg, "kick-2", 40, {"s01": {"decision": "approved", "fields": {"Hold": True}}})
+    assert streams.check(cfg, cfg["paths"]["streams"] / "kick-2", {}, 30)["why"] == "1 held"
 
 
 def test_cuts_go_only_for_uploaded_or_rejected_items(cfg):
     d = make(cfg, "kick-1", 40, {"s01": {"decision": "approved"}, "s02": {"decision": "rejected"},
                                  "s03": {"decision": "approved"}})
     schedule(cfg, ("kick-1/s01", "uploaded"))        # s03: let go by the scheduler, a pin may still send it
+    (d / "review" / "s01.small.mp4").write_bytes(b"x" * 50)   # the copy a big preview uploads as
     streams.prune(cfg, cuts=True, yes=True)
     assert not (d / "segments" / "s01.mp4").exists() and not (d / "review" / "s01.mp4").exists()
+    assert not (d / "review" / "s01.small.mp4").exists()
     assert not (d / "segments" / "s02.mp4").exists()
     assert (d / "segments" / "s03.mp4").exists() and (d / "review" / "s03.mp4").exists()
 
