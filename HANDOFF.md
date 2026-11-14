@@ -435,6 +435,52 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
 - Next: user reacts to the covers; then mascot art in Runway (flat sticker, transparent, several
   poses), master cover in Illustrator (MCP on the user's machine), then `[thumbnail] style = "fanmag"`.
 
+## Fan-mag thumbnails: `[thumbnail] style = "fanmag"` (built 2026-11-14, not yet run on real frames)
+The Sloth Beat cover (mockups v7) as a thumbs-stage style. `clipper/fanmag.py`:
+- Same model pick as the enquirer cover (`pick_enquirer`, `COVER_STYLES` in thumbs.py), prompt
+  `prompts/thumbnail_fanmag_v1.md` (fan-mag voice: adoring, not exposé; headline 2-3 short lines,
+  attribution = bullet line, subhead = script line, band_kicker + band_headline = another cover's
+  ribbon, teaser = a side coverline on the other covers). thumbnails.json entries look the same.
+- Compose = an HTML page per video in `streams/<id>/thumbs/<key>/fanmag/` (cover.html + the
+  cut-out PNGs), screenshotted by a Chromium-based browser in headless mode (`find_browser`: Edge /
+  Chrome / Chromium, or `[thumbnail] browser`). No Playwright. ~5 s a cover. On Windows a throwaway
+  `--user-data-dir` keeps a running Edge from taking the call over; on Linux that flag hangs the
+  bundled Chromium, so it is Windows-only.
+- Look: gradient ground, left column and two wedges with hand-cut edges (`jag`), two-ink crossover
+  halftones (`halftone`), torn paper strip, striped stacked masthead (`masthead`, `[thumbnail]
+  masthead`), the mascot hung in place of letter `mascot_letter` (`mascot = "sloth"` = bundled
+  `clipper/assets/fanmag/sloth.png`), hand-cut ribbon, cut-outs with a hand-cut paper margin
+  (`handcut`), red name bars, condensed coverlines with bullet dots. Fonts bundled (OFL).
+- Cut-outs: `person_matte` uses torchvision DeepLabV3 when installed (gpu extra; weights download
+  once), else the face-crop rectangle; both get the paper margin. Text is kept off faces by
+  construction: coverlines in the left column (x < 540), the main cut-out from x = 600; the one
+  box over the photo (the title) has a solid background.
+- Config keys (config.py, example toml): `fanmag_prompt_version`, `browser`, `mascot`,
+  `mascot_letter`; reuse `masthead`, `masthead_price`, `photos`, `max_bytes`. Doctor: `check_fanmag`
+  (browser, assets, mascot path, torchvision warning); prompt file in `prompt_files`. SETUP.md step 6,
+  README line. `scoring.VIEWER_FACING` has `thumbnail_fanmag` so house_style applies.
+- Tested here only with synthetic frames (the stand-in portraits pasted on a backdrop; no
+  torchvision, so rectangle cut-outs): `mockups/sloth_beat/pipeline_test_s01.jpg`. **Not run on a real
+  stream: the cloud session has no streams.** Handed to a desktop/laptop agent (task card + the
+  steps below). Gaps: no 9:16 Short covers for fanmag (`short_covers` is enquirer-only); the layout
+  does not yet vary slot positions per cover beyond palette/jag seeds; `--photo/--teaser-photo` work.
+- **Real-frames test, for the agent on the machine with the streams** (costs: one `thumbs --force`
+  on kick-131151926 is ~the usual enquirer cost, Opus medium, a few cents a video):
+  1. `git fetch origin ccr-8319354b-axsr9v && git checkout ccr-8319354b-axsr9v` (or merge it).
+  2. `uv sync` (no new deps). `clipper doctor --role gpu --offline` must show `fanmag` lines: the
+     browser (Edge) and assets ok; torchvision ok on the GPU box.
+  3. Trial on the test stream without touching its config: in `streams/kick-131151926/config.toml`
+     add `[thumbnail] style = "fanmag"`, `masthead = "SLOTH BEAT"`, `mascot = "sloth"`,
+     `mascot_letter = 4` (stream config beats the show's), then
+     `clipper thumbs kick-131151926 --ids <2-3 ids> --force --no-kitsu`. Look at the jpgs and
+     `thumbs/<key>/fanmag/cover.html` (open it in a browser to nudge things). Remove the stream
+     config afterwards so the test stream renders enquirer covers again.
+  4. Judge: cut-out quality from real frames (DeepLabV3 vs rectangle), whether the model's
+     headline/subhead/ribbon read as fan-mag copy, legibility at 320 px wide, and that no coverline
+     lands on a face. Fix in `clipper/fanmag.py` (`build_page` holds the layout; `CSS` the type).
+  5. Then the real thing: a `[shows.<key>.thumbnail]` block for the Sloth Beat show(s) on the
+     desktop install (#46), `style = "fanmag"`, and `clipper doctor`.
+
 ## Roadmap: YouTube Posts as a gossip magazine (user's idea 2026-10-21, issues only, nothing built)
 2026-10-22: Posts take at most 5 images (Google Help; recommends 1:1, feed shows square, tap for
 full). Issue 01 (`mockups/weekly/tiktok/`, 10 pages, 3:4) goes out as two posts of five; text in

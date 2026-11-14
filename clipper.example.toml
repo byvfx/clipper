@@ -224,8 +224,15 @@ kitsu = true                   # attach to each item's Kitsu revision and set it
 
 # Thumbnail look: "classic" (frame + big text) or "enquirer" (1990s tabloid cover:
 # masthead, teaser band and boxes plugging the episode's other videos, big face, inset).
-style = "classic"
+style = "classic"              # classic | enquirer | fanmag
 enquirer_prompt_version = "v3"   # prompts/thumbnail_enquirer_<v>.md
+# style = "fanmag": late-80s teen fan magazine (the Sloth Beat channel): cut-out photos with
+# hand-cut paper edges, halftone panels, the striped masthead with the mascot as one letter.
+# Rendered by a Chromium-based browser in headless mode (Edge on Windows is found by itself).
+fanmag_prompt_version = "v1"     # prompts/thumbnail_fanmag_<v>.md
+browser = ""                     # msedge.exe / chrome executable; "" = auto-detect
+mascot = "sloth"                 # "sloth" (bundled), a PNG path, or "" for none
+mascot_letter = 4                # 0-based letter of the masthead it hangs in place of; -1 = none
 masthead = ""                  # empty = meta.show_name
 masthead_tagline = "LARGEST CIRCULATION OF ANY STREAM ON KICK"
 masthead_price = "$1.39"

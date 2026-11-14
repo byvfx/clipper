@@ -110,8 +110,9 @@ def prompt_files(cfg: dict) -> list[str]:
              f"retake_{cfg['retake']['prompt_version']}",
              f"preshow_{cfg['preshow']['prompt_version']}"]
     tc = cfg["thumbnail"]
-    names.append(f"thumbnail_enquirer_{tc['enquirer_prompt_version']}" if tc["style"] == "enquirer"
-                 else f"thumbnail_{tc['prompt_version']}")
+    names.append({"enquirer": f"thumbnail_enquirer_{tc['enquirer_prompt_version']}",
+                  "fanmag": f"thumbnail_fanmag_{tc['fanmag_prompt_version']}"}.get(
+        tc["style"], f"thumbnail_{tc['prompt_version']}"))
     return names
 
 
@@ -191,6 +192,33 @@ def check_fonts(cfg: dict) -> None:
     else:
         warn("fonts", f"caption font {sc['caption_font']!r} not found; libass falls back to another font",
              "install it, or set [shorts] caption_fontsdir to a folder with the .ttf")
+
+
+def check_fanmag(cfg: dict) -> None:
+    """style = "fanmag": a Chromium-based browser to render with, and the bundled assets."""
+    tc = cfg["thumbnail"]
+    if tc["style"] != "fanmag":
+        return
+    from .fanmag import ASSETS, find_browser
+    browser = find_browser(tc)
+    if browser:
+        ok("fanmag", f"browser {browser}")
+    else:
+        fail("fanmag", "no Chromium-based browser found for fan-mag covers",
+             "install Microsoft Edge or Google Chrome, or set [thumbnail] browser to the executable")
+    missing = [f for f in ("fonts/TitanOne.ttf", "fonts/Oswald.ttf", "fonts/ArchivoNarrow.ttf", "fonts/Kalam.ttf",
+                           "fonts/Lobster.ttf", "sloth.png") if not (ASSETS / f).exists()]
+    (fail if missing else ok)("fanmag", f"assets missing: {missing}" if missing else f"assets in {ASSETS}",
+                              "reinstall the package (clipper/assets/fanmag ships with it)" if missing else "")
+    m = tc["mascot"]
+    if m and m != "sloth" and not Path(m).exists():
+        fail("fanmag", f"[thumbnail] mascot {m} does not exist", "a PNG with alpha, or \"sloth\", or \"\"")
+    try:
+        import torchvision  # noqa: F401
+        ok("fanmag", "torchvision: person cut-outs follow the silhouette")
+    except ImportError:
+        warn("fanmag", "no torchvision: cut-outs are the face crop's rectangle (still hand-cut)",
+             "install the gpu extra for silhouette cut-outs")
 
 
 def check_gpu(cfg: dict) -> None:
@@ -475,6 +503,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     check_ffmpeg(cfg, role)
     if role in ("all", "gpu"):
         check_fonts(cfg)
+        check_fanmag(cfg)
         check_photos(cfg)
         check_gpu(cfg)
     check_keys(cfg, role)

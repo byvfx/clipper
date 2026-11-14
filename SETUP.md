@@ -63,6 +63,16 @@ checks everything below and prints a fix for each problem.
    `[thumbnail] photos` to it. The model may then use one for a cover's face or teaser box;
    `clipper thumbs <stream> --ids s04 --teaser-photo "Hasan Piker"` sets one by hand.
 
+   **Fan-magazine covers** (`[thumbnail] style = "fanmag"`, the Sloth Beat channel): the cover
+   is an HTML page rendered by a Chromium-based browser in headless mode. Microsoft Edge (on
+   every Windows machine) or Google Chrome is found by itself; otherwise set `[thumbnail]
+   browser` to the executable. The fonts and the sloth mascot ship with the package
+   (`clipper/assets/fanmag/`). With the `gpu` extra (torchvision) the cut-outs follow the
+   person's silhouette; without it they are the face crop's rectangle, still hand-cut.
+   `clipper doctor` reports both. Set `masthead` (the channel name), `mascot` (`"sloth"`, a
+   PNG path, or `""`) and `mascot_letter` (the letter the mascot hangs in place of) in the
+   show's `[shows.<key>.thumbnail]`.
+
 7. **Check**: `uv run clipper doctor --role gpu` (or `--role bot`).
 
 8. **Run unattended** (scheduled tasks at logon, restarted if they exit, no admin needed):

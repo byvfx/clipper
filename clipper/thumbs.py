@@ -22,6 +22,10 @@ about but not on screen: the model is offered the names and may set "photo" (the
 face) or "teaser_photo" (shown beside this video's teaser on the other covers);
 `--photo` / `--teaser-photo` set them by hand (set_photos).
 
+style = "fanmag" is the late-80s teen fan magazine (Sloth Beat): same pick as the enquirer
+cover (prompts/thumbnail_fanmag_<v>.md), rendered as an HTML page by a headless Chromium
+in clipper/fanmag.py. No Shorts covers for it yet.
+
 Shorts get a 9:16 version of their clip's enquirer cover beside them (shorts/<name>.jpg):
 compose_vertical, from the clip's thumbnails.json choice, no model calls. `clipper thumbs`
 draws them with the clip covers, `clipper shorts` right after rendering a Short, and
@@ -99,6 +103,7 @@ ENQ_SCHEMA = {
     "additionalProperties": False,
 }
 ENQ_TEXT = ("headline", "attribution", "subhead", "teaser", "band_kicker", "band_headline")
+COVER_STYLES = ("enquirer", "fanmag")   # magazine covers: the enquirer pick (frame, face, headline, teasers)
 
 
 def asset_key(x: dict) -> str:
@@ -625,7 +630,7 @@ def cover_context(key: str, state: dict, stream_dir: Path, tc: dict, own_band: s
     me = state[key]
     rank = {"compilation": 0, "segment": 1, "clip": 2}
     others = [(k, e) for k, e in state.items()
-              if k != key and e.get("style") == "enquirer" and e.get("teaser")]
+              if k != key and e.get("style") in COVER_STYLES and e.get("teaser")]
     others.sort(key=lambda ke: (rank.get(ke[1]["kind"], 3), -ke[1].get("duration_s", 0), ke[0]))
     # Rotate per cover (stable for a given video) so covers plug different stories;
     # other topics still come before this cover's own.
@@ -648,7 +653,7 @@ def cover_context(key: str, state: dict, stream_dir: Path, tc: dict, own_band: s
         photo = tc.get("_photos", {}).get(photo_name(tc, e.get("teaser_photo", "")))
         path = photo or stream_dir / "thumbs" / k / e["frames"][e["frame"] - 1]["path"]
         side.append({"text": e["teaser"], "topic": e.get("topic") or "", "frame": path,
-                     "face": WHOLE if photo else e["face"]})
+                     "face": WHOLE if photo else e["face"], "name": e.get("main_person", "")})
     if not others:
         return own_context(key, me, stream_dir, own_band)
     return {"band": band, "side": side}
@@ -950,7 +955,7 @@ def printable(e: dict, bleeper) -> dict:
     the original headline (enquirer) or no text (classic)."""
     if not unsafe(e["text"], bleeper):
         return e
-    if e.get("style") == "enquirer":
+    if e.get("style") in COVER_STYLES:
         print(f"  {e['id']}: text has a banned word; using the original headline")
         return {**e, "text": " ".join(e["headline"])}
     print(f"  {e['id']}: text {e['text']!r} has a banned word; printing none")
@@ -1061,8 +1066,8 @@ def set_photos(stream_dir: Path, cfg: dict, ids: list[str], photo: str | None = 
             raise SystemExit(f"no photo of {name!r} in [thumbnail] photos "
                              f"({tc['photos'] or 'unset'}): {', '.join(tc['_photos']) or 'none'}")
         for k in keys:
-            if state[k].get("style") != "enquirer":
-                raise SystemExit(f"{state[k]['id']}: photos are for enquirer covers only")
+            if state[k].get("style") not in COVER_STYLES:
+                raise SystemExit(f"{state[k]['id']}: photos are for enquirer/fanmag covers only")
             if state[k].get(field, "") != on_file:
                 if on_file:
                     state[k][field] = on_file
@@ -1085,7 +1090,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
     from .bleep import Bleeper
 
     tc = {**cfg["thumbnail"]}
-    tc["_photos"] = photos(tc) if tc["style"] == "enquirer" else {}
+    tc["_photos"] = photos(tc) if tc["style"] in COVER_STYLES else {}
     assets = [x for x in load_assets(stream_dir) if not ids or x["id"] in ids]
     if not assets:
         raise SystemExit("no cut assets" + (f" matching {ids}" if ids else "; run `clipper cut` first"))
@@ -1117,11 +1122,12 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
         claude = Claude(cfg["scoring"]["workspace_id"])
         preflight(claude, tc["model"])
         prompts = Prompts(cfg)
-        prompts.version = tc["enquirer_prompt_version"] if style == "enquirer" else tc["prompt_version"]
+        prompts.version = {"enquirer": tc["enquirer_prompt_version"], "fanmag": tc["fanmag_prompt_version"]}.get(
+            style, tc["prompt_version"])
         prompts.vars.update(show_name=cfg["meta"]["show_name"] or "the show",
                             max_words=tc["max_words"], max_words_min=min(2, tc["max_words"]),
                             min_crop=tc["min_crop"])
-        system = prompts.get("thumbnail_enquirer" if style == "enquirer" else "thumbnail")
+        system = prompts.get(f"thumbnail_{style}" if style in COVER_STYLES else "thumbnail")
         sig = load_signals(stream_dir) if (stream_dir / "signals.parquet").exists() else None
 
         def one(x: dict) -> tuple[str, dict]:
@@ -1132,7 +1138,7 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
                    "clip_frames": tc["clip_frames"] * 2} if note else tc
             fr = frames(x, sig, ftc, stream_dir / "thumbs" / asset_key(x))
             info = asset_info(stream_dir, x, review)
-            choice = (pick_enquirer if style == "enquirer" else pick)(
+            choice = (pick_enquirer if style in COVER_STYLES else pick)(
                 x, fr, info, tc, claude, system, bleeper, note)
             print(f"{x['id']:<22} {len(fr)} frames -> #{choice['frame']} at {choice['t']:.1f}s: "
                   f"{choice['text']} ({time.time() - t:.0f}s)", flush=True)
@@ -1161,6 +1167,11 @@ def run(stream_dir: Path, cfg: dict, ids: list[str] | None = None, force: bool =
             size = compose_enquirer(stream_dir, asset_key(x), e,
                                     cover_context(asset_key(x), state, stream_dir, tc, own_band),
                                     tc_enq, date, x["video"], x["video"].with_suffix(".jpg"))
+        elif e.get("style") == "fanmag":
+            from .fanmag import compose_fanmag, fanmag_setup
+            size = compose_fanmag(stream_dir, asset_key(x), e,
+                                  cover_context(asset_key(x), state, stream_dir, tc, own_band),
+                                  fanmag_setup(tc_enq), date, x["video"], x["video"].with_suffix(".jpg"))
         else:
             size = compose(frame, e, tc, x["video"].with_suffix(".jpg"))
         results.append({"key": asset_key(x), "jpg": x["video"].with_suffix(".jpg"), "bytes": size, **e})

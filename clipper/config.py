@@ -286,8 +286,15 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "kitsu": True,            # attach to the published Kitsu revision, and set it as the thumbnail
         # style = "enquirer": a 1990s supermarket-tabloid cover (masthead, teaser band and
         # boxes plugging the episode's other videos, big face, yellow headline, inset).
-        "style": "classic",       # classic | enquirer
+        "style": "classic",       # classic | enquirer | fanmag
         "enquirer_prompt_version": "v3",  # prompts/thumbnail_enquirer_<v>.md
+        # style = "fanmag": a late-80s teen fan magazine cover (Sloth Beat): cut-out photos
+        # with hand-cut paper edges, halftone panels, the striped masthead with the mascot
+        # hanging in place of one letter. Rendered by a Chromium-based browser (Edge, Chrome).
+        "fanmag_prompt_version": "v1",    # prompts/thumbnail_fanmag_<v>.md
+        "browser": "",            # msedge.exe / chrome / chromium executable; "" = auto-detect
+        "mascot": "sloth",        # "sloth" (bundled), a PNG path, or "" for none
+        "mascot_letter": 4,       # 0-based letter of the masthead it replaces (SLOTH BEAT: the H); -1 = none
         "masthead": "",           # empty = meta.show_name
         "masthead_tagline": "LARGEST CIRCULATION OF ANY STREAM ON KICK",
         "masthead_price": "$1.39",

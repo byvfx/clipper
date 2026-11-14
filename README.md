@@ -18,7 +18,8 @@ fetch / record -> transcribe -> signals -> score -> segments -> cut -> meta -> t
 - **score**: Claude reads the transcript and heat curve and proposes moments and picks.
 - **segments**: Claude splits the stream into topic segments and compilations.
 - **cut**: lossless segment cuts on keyframes, re-encoded picks, bleeps.
-- **meta / thumbs / shorts**: upload metadata and SRT, tabloid-style thumbnails (a 9:16 one for each Short),
+- **meta / thumbs / shorts**: upload metadata and SRT, tabloid-style thumbnails (a 9:16 one for each Short)
+  or late-80s fan-magazine covers (`[thumbnail] style = "fanmag"`, rendered by a headless browser),
   vertical captioned Shorts. With `[shorts] window = "short"` each Short is the pick's scored hot-take
   moment (15-59 s here, under YouTube's 60 s Content ID block line), ending on a full sentence.
   Picks are also cut as horizontal clips; leave `"picks"` out of `[review] include` to post only their Shorts.
