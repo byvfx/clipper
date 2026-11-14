@@ -105,7 +105,7 @@ def stale_at(cfg: dict, sdir: Path, meta: dict) -> datetime | None:
 
     try:
         return release_window(cfg, sdir, {**meta, "duration_s": meta.get("duration_s") or 0})[1]
-    except (KeyError, TypeError, ValueError):
+    except (ClipperError, KeyError, TypeError, ValueError):   # a broken config.toml too
         return None
 
 
