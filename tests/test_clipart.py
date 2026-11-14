@@ -177,11 +177,47 @@ def test_commons_parse(cfg, monkeypatch):
             "3": {"index": 3, "title": "File:Cow.webm", "imageinfo": [{"mime": "video/webm", "url": "x"}]}}}}
 
     monkeypatch.setattr(clipart.broll, "_get", lambda url, params=None, timeout=20, ua="": get(url, params))
+    cfg["clipart"]["commons_pictures"] = False
     old, svg = clipart.commons("cow", 4, cfg)
-    assert "filetype:bitmap|drawing" in seen["gsrsearch"] and seen["iiurlwidth"] == 2000
+    assert seen["gsrsearch"] == "cow filetype:drawing" and seen["iiurlwidth"] == 2000
     assert old["url"] == "https://upload.wikimedia.org/o/Old_cow.jpg" and old["licence"] == "Public domain"
     assert svg["url"].endswith("2000px-Cow.svg.png") and svg["credit"] == "Ann, via Wikimedia Commons"
     assert svg["restrictions"] == "trademarked" and clipart.refused(svg, cfg)
+    clipart.resolve("https://commons.wikimedia.org/wiki/File:Old_cow.jpg", cfg)
+    assert seen["titles"] == "File:Old_cow.jpg"
+
+
+def commons_page(name: str, mime: str) -> dict:
+    return {"query": {"pages": {"1": {"index": 1, "title": f"File:{name}", "imageinfo": [{
+        "mime": mime, "width": 800, "url": f"https://upload.wikimedia.org/{name}",
+        "descriptionurl": f"https://commons.wikimedia.org/wiki/File:{name}",
+        "extmetadata": {"LicenseShortName": {"value": "CC0"}}}]}}}}
+
+
+def test_commons_drawings_first_then_pictures_only_if_wanted(cfg, monkeypatch):
+    searches = []
+
+    def get(url, params=None, timeout=20, ua=""):
+        searches.append(params["gsrsearch"])
+        if params["gsrsearch"].endswith("drawing"):
+            return commons_page("Popcorn.svg", "image/svg+xml")
+        if fail_pictures:
+            raise ClipperError("commons.wikimedia.org: HTTP 503")
+        return commons_page("Popcorn.jpg", "image/jpeg")
+
+    monkeypatch.setattr(clipart.broll, "_get", get)
+    fail_pictures = False
+    assert clipart.find(cfg, "popcorn", ["commons"], n=1, say=lambda s: None) == 1
+    assert searches == ["popcorn filetype:drawing"]  # one drawing was enough: no photo search
+    assert clipart.find(cfg, "popcorn", ["commons"], n=2, say=lambda s: None) == 1  # the drawing is had already
+    assert searches[1:] == ["popcorn filetype:drawing", "popcorn filetype:bitmap"]
+    assert {e["title"] for e in clipart.load(cfg)["art"].values()} == {"File:Popcorn.svg", "File:Popcorn.jpg"}
+    fail_pictures = True  # the photo search failing keeps the drawings found before it
+    searches.clear()
+    cfg["paths"]["clipart"] = cfg["paths"]["clipart"].with_name("clipart2")
+    said = []
+    assert clipart.find(cfg, "popcorn", ["commons"], n=3, say=said.append) == 1
+    assert "commons: 1 added" in said
 
 
 def test_met_parse_keeps_only_public_domain(cfg, monkeypatch):

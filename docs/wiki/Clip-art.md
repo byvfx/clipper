@@ -5,10 +5,12 @@ where it came from, its credit line and its licence.
 
 ## Sources
 
-- `commons`: Wikimedia Commons drawings and pictures. An SVG, or a picture wider than
+- `commons`: Wikimedia Commons. Drawings (SVG files: clip art, icons, diagrams) come first.
+  Only when a find still wants more does it search pictures (photos and scans), which are
+  mostly photos and often need a credit; `[clipart] commons_pictures = false` keeps it to
+  drawings. Add "engraving" to a search for old prints. An SVG, or a picture wider than
   `[clipart] max_px`, comes as Commons' own render at about that width (Commons rounds it to
-  one of its standard sizes; SVGs come as PNG). No key. Add "drawing" or "engraving" to a
-  search, or Commons returns mostly photos, and most of those need a credit.
+  one of its standard sizes; SVGs come as PNG, with their transparent background). No key.
 - `met`: The Metropolitan Museum of Art's open access: prints, trade cards, ads and drawings
   the Met marks public domain, which it releases as CC0. No key.
 - `cleveland`: the Cleveland Museum of Art's open access, only works it marks CC0, at 3400
@@ -102,6 +104,6 @@ to what they serve.
 
 ## Settings
 
-`[clipart]` in `clipper/defaults.toml`: `sources`, `per_source`, `licences`, `max_px`,
+`[clipart]` in `clipper/defaults.toml`: `sources`, `per_source`, `licences`, `commons_pictures`, `max_px`,
 `max_mb`, `iconify_sets`, `pixabay_type`, `pixabay_transparent`, `timeout_s`. `clipper doctor`
 checks the source and licence names, warns when Pixabay has no key, and counts the library.

@@ -109,20 +109,41 @@ def _text(text) -> str:
 # --- description, restrictions}; alt is a smaller copy for when url is over [clipart] max_mb
 
 
-def commons(query: str, n: int, cfg: dict, title: str = "") -> list[dict]:
-    """Wikimedia Commons drawings and pictures, licence, author and restrictions from each
-    file's metadata. An SVG, or a picture wider than [clipart] max_px, comes as Commons' own
-    render at about that width (Commons rounds it to one of its standard sizes)."""
-    params = {"action": "query", "format": "json", "prop": "imageinfo", "iiprop": "url|extmetadata|mime|size",
-              "iiurlwidth": cfg["clipart"]["max_px"]}
+def commons(query: str, n: int, cfg: dict, title: str = "") -> Iterator[dict]:
+    """Wikimedia Commons drawings (SVG) first, then, with [clipart] commons_pictures and only
+    when a find still wants more, pictures (photos, scans); licence, author and restrictions
+    from each file's metadata. An SVG, or a picture wider than [clipart] max_px, comes as
+    Commons' own render at about that width (Commons rounds it to one of its standard sizes)."""
     if title:
-        params["titles"] = title
-    else:
-        params.update(generator="search", gsrnamespace=6, gsrlimit=min(max(n * 3, 10), 50),
-                      gsrsearch=f"{query} filetype:bitmap|drawing")
+        return iter(_commons_files(_commons_query(cfg, titles=title), cfg))
+    limit = min(max(n * 3, 10), 50)
+    drawings = _commons_files(_commons_query(cfg, gsrsearch=f"{query} filetype:drawing", gsrlimit=limit), cfg)
+    return _commons_then_pictures(drawings, query, limit, cfg)
+
+
+def _commons_then_pictures(drawings: list[dict], query: str, limit: int, cfg: dict) -> Iterator[dict]:
+    yield from drawings
+    if not cfg["clipart"]["commons_pictures"]:
+        return
+    try:  # asked only once the drawings ran out; failing now leaves the drawings taken
+        js = _commons_query(cfg, gsrsearch=f"{query} filetype:bitmap", gsrlimit=limit)
+    except ClipperError:
+        return
+    yield from _commons_files(js, cfg)
+
+
+def _commons_query(cfg: dict, **search) -> dict:
+    params = {"action": "query", "format": "json", "prop": "imageinfo", "iiprop": "url|extmetadata|mime|size",
+              "iiurlwidth": cfg["clipart"]["max_px"], **search}
+    if "gsrsearch" in search:
+        params.update(generator="search", gsrnamespace=6)
     js = _get("https://commons.wikimedia.org/w/api.php", params)
     if err := js.get("error"):
         raise ClipperError(f"Commons: {err.get('code', '')} {err.get('info', '')}".strip())
+    return js
+
+
+def _commons_files(js: dict, cfg: dict) -> list[dict]:
     out = []
     for pg in sorted((js.get("query") or {}).get("pages", {}).values(), key=lambda p: p.get("index", 0)):
         ii = (pg.get("imageinfo") or [None])[0]
@@ -307,7 +328,7 @@ def resolve(target: str, cfg: dict) -> dict:
     host, path = (p.hostname or "").lower(), unquote(p.path)
     found: list[dict] = []
     if host.endswith("wikimedia.org") and "/wiki/" in path:
-        found = commons("", 1, cfg, title=path.split("/wiki/", 1)[1])
+        found = list(commons("", 1, cfg, title=path.split("/wiki/", 1)[1]))
     elif host.endswith("metmuseum.org") and (m := re.search(r"/search/(\d+)", path)):
         found = list(met("", 1, cfg, object_id=m.group(1)))
     elif host.endswith("clevelandart.org") and "/art/" in path:

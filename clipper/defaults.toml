@@ -204,6 +204,7 @@ sources = ["commons", "met", "cleveland", "iconify", "pixabay"]   # what a find 
 per_source = 4             # most new pictures one find adds from each source
 licences = ["pd", "cc0", "permissive", "pixabay"]  # kept: public domain, CC0, MIT/Apache/ISC/BSD/OFL, Pixabay's;
                            # also cc-by / cc-by-sa (credit the author on every use; share-alike reaches what you make)
+commons_pictures = true    # Commons: after its drawings (SVG), photos and scans too when a find wants more
 max_px = 2000              # Commons pictures wider than this, and its SVGs, come as its render about this wide;
                            # Iconify SVGs are sized this tall
 max_mb = 25                # a bigger file falls back to the source's smaller copy, else isn't taken
