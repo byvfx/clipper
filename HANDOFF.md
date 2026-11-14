@@ -267,6 +267,10 @@ messages: GitHub closes the issue on "fix".
   (#205, PR #250; `--quiet`/`--verbose` left out on purpose). War room #201-#203 and #206 closed (#206's
   closing comment lists the three items left on purpose); #200 closed. Still open: new users and the public
   repo #207 (this install's values in tracked files, packaging).
+- **"Next level" look (11-14, read-only; numbers in the log):** review approves 801 of 813 items; the top
+  tenth of uploads draw 65% of 7-day views; the Short score predicts views, the segments' chat-heat rank
+  doesn't (Spearman 0.15). Suggested, nothing decided: a segment score checked against views, auto-approve
+  by rule, a command catalog with risk tags and `--json` (rather than `clipper mcp`), recipes as skills.
 - **Checkup (#185 closed 11-09, the rest is tracked here):** `clipper checkup` (services, streams, schedule,
   lint; `[checkup]`; wiki Checkup) and `clipper alert send` are merged (#189). The nightly run
   (`deploy/claude/checkup.sh`, prompt `checkup.md`, both baked into the image) is not on yet. Left:
