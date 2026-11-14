@@ -398,7 +398,8 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   `sloth_sticker_b.png`. Both are kawaii rather than 1990s flat; a proper mascot pass is still to do.
   **v4** (same day, user: "add more stuff, I want it to feel really busy"): seals, WIN! bursts, PLUS!,
   TOP 5 cards, page refs, XOXO + kiss, zzz bubble, pull-out tab, sparkles and hearts in every gap.
-  `*_v4.*`. Waiting on the user's reaction; then mascot brief, Illustrator master, `style = "fanmag"`.
+  `*_v4.*`. **The sloth is the H in SLOTH** (user): the letter is blanked, the sticker hangs in its slot.
+  Waiting on the user's reaction; then mascot brief, Illustrator master, `style = "fanmag"`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
   template rendered by headless Chromium (Playwright), not Pillow. Figma's REST API is read/export only
   and an Illustrator MCP needs the app open in a logged-in session, so neither can be the pipeline

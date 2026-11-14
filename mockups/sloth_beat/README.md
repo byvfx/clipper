@@ -26,6 +26,8 @@ card, "pg. N" page-reference tags on four items, XOXO in red marker, a lipstick 
 "zzz..." speech bubble from the sloth, a dashed "100% UNOFFICIAL FAN MAG" seal by the barcode,
 a PULL-OUT POSTER edge tab, and 7-8 sparkles and 7 hearts scattered in the gaps. The wire sloth
 (`sloth_sticker.png`) is the mascot; the branch variant is kept for reference only.
+**The sloth is the H** (user, same day): the masthead renders SLOT·BEAT with the H's advance kept
+blank (`.mast .h{visibility:hidden}`) and the sticker hung in the gap at 110% (114 px wide).
 
 ## v3: as dense as the references (user: "density can be even tighter", 2026-11-14)
 `*_v3.html/jpg` + `contact_sheet_v3.jpg`, `cover_v3.css`. Every gap is filled and things overlap
