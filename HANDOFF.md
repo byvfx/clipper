@@ -399,7 +399,16 @@ chose: Content Posting API upload to inbox, user taps post), #29 direct posting 
   **v4** (same day, user: "add more stuff, I want it to feel really busy"): seals, WIN! bursts, PLUS!,
   TOP 5 cards, page refs, XOXO + kiss, zzz bubble, pull-out tab, sparkles and hearts in every gap.
   `*_v4.*`. **The sloth is the H in SLOTH** (user): the letter is blanked, the sticker hangs in its slot.
-  Waiting on the user's reaction; then mascot brief, Illustrator master, `style = "fanmag"`.
+  Sloth widened to fill the slot and lowered 10% (user). **Mascot brief:** `mockups/sloth_beat/mascot_brief.md`
+  (character, 1990s flat sticker look, palette, the H pose at 7:10, five more poses, Runway settings,
+  acceptance). **Arms-up sloth** generated (Seedream 5 Pro, two variants, `sloth_h.png` / `sloth_h_b.png`)
+  and shown side by side as `*_v4_h.*`; user keeps the stretched wire sloth set as well.
+  **Intro video idea (user, 2026-11-14):** a weekly magazine intro: the magazine falls into frame (or we
+  are already close on it), opens to our cover, opens to a page, a zoom/transition into the video. First
+  Runway test started: image-to-video from the Papa Meat v4 cover (Seedance 2.5, 6 s, 720p, 180 credits,
+  task 05669e7f-fe06-4632-b4bc-c8f3216ddc8b). Plan: one Runway render per weekly issue, the per-video
+  page/zoom transition done by the HTML renderer + ffmpeg so it is automatic; nothing in `clipper/` yet.
+  Waiting on the user's reaction; then Illustrator master, `style = "fanmag"`, `clipper intro`.
 - **Renderer decision (proposed, user leaning this way):** the channel's thumbs style is an HTML/CSS
   template rendered by headless Chromium (Playwright), not Pillow. Figma's REST API is read/export only
   and an Illustrator MCP needs the app open in a logged-in session, so neither can be the pipeline

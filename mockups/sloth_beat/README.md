@@ -29,6 +29,14 @@ a PULL-OUT POSTER edge tab, and 7-8 sparkles and 7 hearts scattered in the gaps.
 **The sloth is the H** (user, same day): the masthead renders SLOT·BEAT with the H's advance kept
 blank (`.mast .h{visibility:hidden}`) and the sticker hung in the gap at 110% (114 px wide).
 
+## Arms-up sloth (the brief's pose 1), side by side
+`*_v4_h.html/jpg` + `contact_sheet_v4_h.jpg`: the same v4 covers with `sloth_h.png` in the H slot at
+its natural proportions (no stretch; `object-fit: contain` in a 140x200 box). `sloth_h.png` is
+Runway task 71eaa329-dcb9-4a23-b363-de586fee48e1 (Seedream 5 Pro, 3:4, the first prompt in
+`mascot_brief.md`); `sloth_h_b.png` is its sibling 7fd620ce-7354-40b3-9dc9-841874a40972 (has blush,
+which the brief rules out). The user likes the stretched wire sloth in `*_v4.*` too, so both sets
+stay. Still JPEG-preview cutouts, not the real transparent PNGs.
+
 ## v3: as dense as the references (user: "density can be even tighter", 2026-11-14)
 `*_v3.html/jpg` + `contact_sheet_v3.jpg`, `cover_v3.css`. Every gap is filled and things overlap
 the way the Bop covers do: the main face stands in front of the masthead's tail, labels sit on
