@@ -188,7 +188,7 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
 ## Waiting on the user
 - **p1 PRs #247-#250:** each has Copilot's review in, every finding fixed, CI green. Merge them at your word
   (#250 and #248 both touch `cli.py`'s setup group: whichever goes second needs a small rebase), then
-  deploy the hub: `& "C:\Program Files\Git\bin\bash.exe" deploy/hub/deploy.sh`. **After** the deploy (an older
+  update the laptop checkout (`git checkout main; git pull`: deploy.sh copies `clipper/` from it) and deploy the hub: `& "C:\Program Files\Git\bin\bash.exe" deploy/hub/deploy.sh`. **After** the deploy (an older
   hub refuses the new key), back up `clipper.toml` to `backups/` and add `[streams] never_prune =
   ["kick-131151926"]`: the test stream otherwise looks prunable. `streams prune` stays by hand until you set
   `[streams] keep_source_days` (111 GB would go at 30 days).
