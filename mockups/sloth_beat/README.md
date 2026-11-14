@@ -29,6 +29,15 @@ a PULL-OUT POSTER edge tab, and 7-8 sparkles and 7 hearts scattered in the gaps.
 **The sloth is the H** (user, same day): the masthead renders SLOT·BEAT with the H's advance kept
 blank (`.mast .h{visibility:hidden}`) and the sticker hung in the gap at 110% (114 px wide).
 
+## v7: the mix (user, 2026-11-14: "I like v6, let's do a mix of v5 and v6, adding some gradients
+to the existing shapes with some that have that mosaic print look")
+`*_v7.html/jpg` + `contact_sheet_v7.jpg`, `cover_v7.css`. The v6 layout untouched; the panels get
+v5's finishes: the ground is a light-to-dark gradient of its colour, the left column a gradient
+with the mosaic print over it at 55%, the bottom-right wedge a two-colour gradient, the top-right
+wedge a gradient with a finer mosaic at 60%, and one wedge stays flat so the eye has a rest. The
+mosaic is an SVG pattern of rounded tiles in the panel's own colours (two patterns, 7x7 and 8x8
+blocks, seeded per cover). Text boxes stay flat for legibility. **Current direction.**
+
 ## v6: the 'Teen grammar (user sent three 'Teen covers, 1986-1989; see `refs/README.md`)
 `*_v6.html/jpg` + `contact_sheet_v6.jpg`, `cover_v6.css`, built with the same stand-in photos.
 Different rules from Bop: flat colour panels cut on diagonals (one ground, one left column, two
