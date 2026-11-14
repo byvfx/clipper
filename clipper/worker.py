@@ -482,13 +482,18 @@ def stream_rows(cfg: dict, recent_days: float | None = None) -> list[dict]:
     date. recent_days: leave out runs that are done (or skipped) and older than that, which is
     most of the folder after a month (`clipper status`, #199); None keeps every one."""
     root: Path = cfg["paths"]["streams"]
-    dirs = sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir())         if root.is_dir() else []
+    dirs = sorted(p for p in root.iterdir() if (p / "run.json").exists() or (p / "live").is_dir()) \
+        if root.is_dir() else []
+    old = recent_days * 86400 if recent_days is not None else None
     out = []
     for d in dirs:
         run = jsonstate.read_or(d / "run.json", {})
-        if recent_days is not None and run.get("status") in DONE                 and age_s(run.get("updated")) > recent_days * 86400:
+        if old is not None and run.get("status") in DONE and age_s(run.get("updated")) > old:
             continue   # an old run without "updated" is old too: age_s says inf
         live = jsonstate.read_or(d / "live" / "state.json", {}) if (d / "live").is_dir() else {}
+        if old is not None and not run and live.get("status") in ("done", "failed") \
+                and time.time() - float(live.get("last_seen") or 0) > old:
+            continue   # a recording the worker never takes (no show for its channel), long over
         meta = jsonstate.read_or(d / "meta.json", {})
         stages_ = run.get("stages", {})
         last = next((s for s in reversed(STAGES) if stages_.get(s, {}).get("status")), "")

@@ -84,6 +84,22 @@ def test_what_needs_you_comes_first_and_old_streams_are_hidden(defaults, tmp_pat
     assert any(x.startswith("  kick-old (") for x in status.lines(cfg, days=1, everything=True))
 
 
+def test_held_counts_only_what_could_still_go_out(defaults, tmp_path):
+    """A rejected item that arrived held is done with; an approved held one in a stream past
+    stale_days can't go out without a pin: neither keeps its stream in "needs you"."""
+    cfg = in_tmp(defaults, tmp_path)
+    cfg["schedule"]["stale_days"] = 3
+    today = datetime.now(UTC).date()
+    held = {"decision": "approved", "fields": {"Hold": " yes"}}   # read as the scheduler reads it
+    published(cfg, "kick-rejected", today.isoformat(), {"c01": {"decision": "rejected", "fields": {"Hold": True}}})
+    published(cfg, "kick-stale", (today - timedelta(days=10)).isoformat(), {"c01": held})
+    published(cfg, "kick-fresh", (today - timedelta(days=1)).isoformat(), {"c01": held})
+    published(cfg, "kick-baddate", "11/13/2026", {"c01": {"decision": "approved"}})   # no crash
+    s = status.collect(cfg)
+    assert [r["stream"] for r in s["needs_you"]["review"]] == ["kick-fresh"]
+    assert {r["stream"]: r["held"] for r in s["review"]["streams"]}["kick-rejected"] == 0
+
+
 def test_status_json_is_plain_data(defaults, tmp_path):
     import json
 
@@ -107,8 +123,12 @@ def test_worker_rows_carry_show_and_date_and_drop_old_finished_runs(defaults, tm
         (root / sid).mkdir(parents=True)
         jsonstate.write(root / sid / "run.json", run)
         jsonstate.write(root / sid / "meta.json", {"channel": "kinocasinogaming", "started_at": "2026-10-24T20:00:00Z"})
+    for sid, last_seen in (("kick-rec-old", 0), ("kick-rec-new", datetime.now(UTC).timestamp())):
+        (root / sid / "live").mkdir(parents=True)          # recorded only: no run.json
+        jsonstate.write(root / sid / "live" / "state.json", {"status": "done", "last_seen": last_seen})
     rows = {r["stream"]: r for r in worker.stream_rows(cfg, recent_days=7)}
-    assert set(rows) == {"kick-failed"}                  # unfinished stays, however old
+    assert set(rows) == {"kick-failed", "kick-rec-new"}  # unfinished stays, however old
     line = worker.row_line(rows["kick-failed"])
     assert "kino" in line and "10-24" in line and "cut: boom" in line
-    assert {r["stream"] for r in worker.stream_rows(cfg)} == {"kick-done", "kick-failed"}
+    assert {r["stream"] for r in worker.stream_rows(cfg)} == {"kick-done", "kick-failed", "kick-rec-old",
+                                                              "kick-rec-new"}

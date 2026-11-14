@@ -37,6 +37,7 @@ from zoneinfo import ZoneInfo
 from . import jsonstate, review
 from .config import base, for_stream, stream_dir
 from .errors import ClipperError
+from .schedule import truthy
 from .timefmt import length
 
 OPEN = ("pending", "changes_requested")  # decisions still waiting on you
@@ -402,8 +403,9 @@ def other_voices(seconds, limit: float) -> str:
 
 
 def is_held(fields: dict) -> bool:
-    """The Hold column as Kitsu stores it (a checkbox: true, or text a person typed)."""
-    return str(fields.get("Hold") or "").lower() in ("true", "1", "yes", "on")
+    """The Hold column as Kitsu stores it (a checkbox: true, or text a person typed), read the
+    way the scheduler reads it."""
+    return truthy(fields.get("Hold") or "")
 
 
 def describe(cfg: dict, sdir: Path, gazu=None, links: bool = True) -> dict[str, dict]:
@@ -486,7 +488,8 @@ def stream_counts(cfg: dict, sdir: Path, links: bool = False) -> dict:
     for key in state:
         r = decisions.get(key, {})
         counts[r.get("decision", "pending")] = counts.get(r.get("decision", "pending"), 0) + 1
-        held += is_held(r.get("fields") or {})
+        # only an approved item waits on its hold: a rejected one that arrived held is done with
+        held += r.get("decision") == "approved" and is_held(r.get("fields") or {})
     meta = jsonstate.read(sdir / "meta.json", {})
     first = next(iter(state.values()), {})
     return {"stream": sdir.name, "date": meta.get("started_at", "")[:10], "title": meta.get("title", ""),

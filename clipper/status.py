@@ -22,22 +22,35 @@ RECENT_DAYS = 7
 CHECKS = ("services", "streams", "schedule")   # checkup's lint reads every item: not here
 
 
+def _age_days(day: str, now: datetime) -> int | None:
+    """Days since a stream's YYYY-MM-DD date; None when it has none or it doesn't parse."""
+    try:
+        return now.date().toordinal() - datetime.strptime(day, "%Y-%m-%d").toordinal()
+    except (TypeError, ValueError):
+        return None
+
+
 def collect(cfg: dict, days: int = 2, sync: bool = False, everything: bool = False,
             now: datetime | None = None) -> dict:
     """Everything the screen shows, as data (`clipper status --json`)."""
     now = now or datetime.now(UTC)
     recent = None if everything else RECENT_DAYS
     review = actions.status(cfg, sync=sync, links=sync)
+    stale = cfg["schedule"]["stale_days"]
+
+    def waiting(r: dict) -> bool:
+        """Undecided items always; held ones only while they could still go out (an approved
+        item isn't scheduled stale_days after its stream, held or not: a pin sends it anyway)."""
+        age = _age_days(r["date"], now)
+        return bool(r["open"]) or bool(r["held"] and (not stale or age is None or age <= stale + 1))
+
     rows = review["streams"]
     if recent is not None:
-        cutoff = (now.date().toordinal() - recent)
-        rows = [r for r in rows if r["open"] or r["held"] or not r["date"]
-                or datetime.fromisoformat(r["date"]).toordinal() >= cutoff]
+        rows = [r for r in rows if waiting(r) or (_age_days(r["date"], now) or 0) <= recent]
     found = checkup.run(cfg, only=list(CHECKS), now=now)["findings"]
     return {
         "at": now.isoformat(timespec="seconds"),
-        "needs_you": {"review": [r for r in review["streams"] if r["open"] or r["held"]],
-                      "findings": found},
+        "needs_you": {"review": [r for r in review["streams"] if waiting(r)], "findings": found},
         "services": {name: daemon.heartbeat(cfg, name, now) for name in SERVICES},
         "recorder": services.recorder(cfg, now),
         "worker": worker.stream_rows(cfg, recent),
