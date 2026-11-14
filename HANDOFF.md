@@ -190,6 +190,11 @@ narrated catch-up cut), `people`, `faces`, `cast`, `speakers`, `narrate` / `perf
   (111 GB would go at 30 days). The test stream is in `[streams] never_prune` (set 11-13).
 - `secrets/youtube_cookies.netscape.txt` on the share is unused since PR #195 and can be deleted.
 - Close Fusion and merge the `mockups/udder_truth/` leftovers into `studio/mockups/` (ignored by `/mockups/`).
+- **`C:\clipper` is on `ccr-8319354b-axsr9v`** (Sloth Beat fanmag, a cloud branch) since 11-14 00:57, with
+  uncommitted fanmag work in the tree (thumbs/fanmag.py, config, doctor, Covers wiki, studio mockups). Until
+  that work is committed and the checkout is back on main and pulled, `clipper` on PATH runs that branch's
+  code, which has no `clipart` (and none of main's later changes). Check `git branch --show-current` there
+  before branching.
 - Branches and worktrees were cleaned up again 11-13: everything merged is gone, plus the old `ccr-*` and
   `claude/clipper-investigate-command-*` branches and the swarm worktree, all at the user's word. Kept on
   purpose: `story-dig` and `jev-lab` (`C:\clipper-jevlab`; it holds `jev-gate`'s commit), both pushed and
@@ -260,11 +265,14 @@ messages: GitHub closes the issue on "fix".
   added by the user 11-12), Prelinger and Commons; public domain / CC0 only, no sound by default (NASA
   music). Next: the National Archives (key by email from NARA), `[story] broll` in story cuts, then a war
   room window. The library is `[paths] broll` on the share.
-- **Clip art library (11-14, branch `clipart`):** `clipper clipart find|add|list|keep|drop` (wiki Clip-art):
-  Commons, the Met, Cleveland (CC0), Iconify emoji/icons (logo sets never), Pixabay (needs a free key in
-  `secrets/pixabay_secret.txt`, not set). `add` takes a folder (Kenney packs, `--licence CC0`). The library
-  is `[paths] clipart` on the share, empty so far. Not yet used by covers or the weekly; Openclipart (account
-  key) and the Library of Congress (20 requests/min) could be sources later.
+- **Clip art library (11-14, PR #255, merged; no deploy needed):** `clipper clipart find|add|list|keep|drop`
+  (wiki Clip-art): Commons (SVG drawings first, photos only when a find wants more), the Met, Cleveland (CC0),
+  Iconify emoji/icons (logo sets never), Pixabay (needs a free key in `secrets/pixabay_secret.txt`, not set:
+  untried). `add` takes a folder (Kenney packs, `--licence CC0`). The library is `[paths] clipart` on the
+  share: 10 popcorn pictures from the first test (the four off-target ones dropped), plus a "Popcorn function"
+  maths plot (`commons-c2e98328`) worth dropping. Not yet used by covers or the weekly. Left from review:
+  a search for scans ("engraving") gets SVG drawings first; Commons metadata parsing is in broll, cast and
+  clipart. Openclipart (account key) and the Library of Congress (20 requests/min) could be sources later.
 - **Usability review (11-10):** built and merged 11-13: `clipper status` with "needs you" first, 60 s to 12 s
   on the share (#199, PR #247); `clipper streams list|prune` and `clipper backup`, both also serve jobs (#204,
   PR #248); Modal per-call overhead in the archive/story estimates (#228, PR #249); CLI polish: `latest`,
