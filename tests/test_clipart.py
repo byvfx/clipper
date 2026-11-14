@@ -305,7 +305,8 @@ def test_iconify_licences_and_logo_sets(cfg, monkeypatch):
 def test_icon_variants():
     base = lambda name: clipart.VARIANT.sub("", name)
     assert base("cow") == base("cow-bold") == base("cow-duotone") == base("cow-fill-round") == "cow"
-    assert base("cow-48-bold") == "cow" and base("cow-face") == "cow-face"
+    assert base("cow-48-bold") == "cow-48" and base("cow-face") == "cow-face"
+    assert len({base(f"dice-{i}") for i in (1, 2, 3)}) == 3  # numbers mean something: dice-1 isn't dice-2
 
 
 def test_met_stops_fetching_once_find_has_enough(cfg, monkeypatch):
@@ -450,7 +451,36 @@ def test_a_folder_skips_a_file_it_cant_copy(cfg, tmp_path, monkeypatch):
     said = []
     out = clipart.add(cfg, str(pack), credit="me", licence="CC0", say=said.append)
     assert sorted(e["title"] for e in out) == ["a", "c"]
-    assert any("Permission denied" in s for s in said) and "2 pictures added" in said[-1] and "1 failed" in said[-1]
+    assert any("Permission denied" in s for s in said) and "2 pictures added" in said[-1] and "1 skipped" in said[-1]
+
+
+def test_a_folder_checks_every_file_for_an_owner(cfg, tmp_path):
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    for name in ("a.png", "z Getty.png"):  # the second sorts last: the first file's check isn't enough
+        (pack / name).write_bytes(b"png")
+    said = []
+    out = clipart.add(cfg, str(pack), credit="me", licence="CC0", say=said.append)
+    assert [e["title"] for e in out] == ["a"] and any("Getty" in s and "skip" in s for s in said)
+    with pytest.raises(ClipperError, match="licence"):  # a folder's one licence still refuses all of it
+        clipart.add(cfg, str(pack), credit="me", licence="CC BY-NC")
+
+
+def test_two_downloads_of_one_picture_dont_share_a_temp_file(tmp_path, monkeypatch):
+    import requests
+
+    parts = []
+
+    class Watching(FakeResponse):
+        def iter_content(self, size):
+            parts.extend(p.name for p in tmp_path.glob("*.part"))
+            yield b"img"
+
+    monkeypatch.setattr(requests, "get", lambda url, **kw: Watching())
+    REAL_DOWNLOAD("https://x/y.png", tmp_path / "commons-1", 1, 5)
+    REAL_DOWNLOAD("https://x/y.png", tmp_path / "commons-1", 1, 5)
+    assert len(parts) == 2 and parts[0] != parts[1] and all(p.startswith("commons-1.") for p in parts)
+    assert [p.name for p in tmp_path.iterdir()] == ["commons-1.png"]
 
 
 def test_cli_and_doctor(cfg, monkeypatch, capsys):

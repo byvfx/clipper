@@ -28,6 +28,7 @@ import json
 import re
 import shutil
 import time
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,7 +48,7 @@ MIME_EXT = {"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "ima
 ICON = re.compile(r"^([a-z0-9]+(?:-[a-z0-9]+)*):([a-z0-9]+(?:-[a-z0-9]+)*)$")  # an Iconify name, set:icon
 # One icon drawn in several weights or styles (ph:cow, ph:cow-bold, ph:cow-fill ...): a find keeps the first.
 VARIANT = re.compile(r"(-(bold|fill|filled|light|thin|duotone|duocolor|outline|outlined|regular|solid|sharp|"
-                     r"round|rounded|twotone|line|linear|broken|bulk|flat|\d+))+$")
+                     r"round|rounded|twotone|line|linear|broken|bulk|flat))+$")  # not numbers: dice-1 isn't dice-2
 PIXABAY_CACHE = ".pixabay_cache.json"  # Pixabay's API terms: keep each response 24 hours
 licence_code = broll.licence_code  # pd | cc0 | permissive | pixabay | cc-by | cc-by-sa | other
 
@@ -369,7 +370,7 @@ def download(url: str, stem: Path, max_mb: float, timeout: int) -> Path:
         if (size := int(r.headers.get("Content-Length") or 0)) > max_mb * 1e6:
             raise TooBig(f"{host}: {size / 1e6:.0f} MB, over [clipart] max_mb ({max_mb})")
         dst = stem.with_suffix(ext)
-        tmp = stem.with_suffix(ext + ".part")
+        tmp = stem.with_name(f"{stem.name}.{uuid.uuid4().hex[:12]}{ext}.part")  # its own: two finds may race
         got = 0
         try:
             with tmp.open("wb") as f:
@@ -532,19 +533,26 @@ def add(cfg: dict, target: str, tags: list[str] | None = None, credit: str = "",
         cands = [resolve(target, cfg)]
     else:
         raise ClipperError(f"{target}: not a web address, an Iconify name (set:icon), or a picture file or folder")
-    if why := refused(cands[0], cfg):  # one licence and credit for a whole folder
-        raise ClipperError(f"{cands[0]['title'][:60]!r}: {why}")
     if len(cands) == 1:
+        if why := refused(cands[0], cfg):
+            raise ClipperError(f"{cands[0]['title'][:60]!r}: {why}")
         out = [take(cfg, cands[0], tags, say=say)]
-    else:  # a folder: one unreadable file is said and skipped, the rest still go in
+    else:  # a folder: each file checked on its own (its name may name an owner); one refused or
+        # unreadable is said and skipped, the rest still go in
+        if (code := licence_code(licence)) not in cfg["clipart"]["licences"]:  # one licence for all of them
+            raise ClipperError(f"licence {licence} ({code}; [clipart] licences: {', '.join(cfg['clipart']['licences'])})")
         out, failed = [], 0
         for c in cands:
             try:
-                out.append(take(cfg, c, tags, say=say))
+                why = refused(c, cfg)
+                if not why:
+                    out.append(take(cfg, c, tags, say=say))
             except ClipperError as e:
+                why = str(e)
+            if why:
                 failed += 1
-                say(f"  {c['title'][:60]!r}: {e}")
-        say(f"{len(out)} pictures added from {target}" + (f", {failed} failed" if failed else ""))
+                say(f"  skip {c['title'][:60]!r}: {why}")
+        say(f"{len(out)} pictures added from {target}" + (f", {failed} skipped" if failed else ""))
     keys = {e["key"] for e in out}
     with jsonstate.update(_index(cfg), {}) as idx:  # added by hand: no longer dropped
         if keys & set(idx.get("dropped", [])):
