@@ -9,7 +9,7 @@ html,body{width:1280px;height:720px;overflow:hidden;background:#222}
 .cover{position:relative;width:1280px;height:720px;overflow:hidden;font-family:"Oswald";color:#1a1a1a}
 .cover>*{position:absolute}
 .panels{inset:0;width:100%;height:100%;z-index:0}
-.topstrip{left:-20px;right:-20px;top:0;height:58px;z-index:9;background:#ffe600;color:#1a1a1a;text-align:center;font:400 36px/52px "Kalam";
+.topstrip{left:-20px;right:-20px;top:0;height:64px;z-index:9;background:#ffe600;color:#1a1a1a;text-align:center;font:400 36px/50px "Kalam";filter:drop-shadow(0 4px 0 rgba(0,0,0,.25));
   clip-path:polygon(0 0,100% 0,100% 80%,96% 100%,92% 80%,88% 100%,84% 80%,80% 100%,76% 80%,72% 100%,68% 80%,64% 100%,60% 80%,56% 100%,52% 80%,48% 100%,44% 80%,40% 100%,36% 80%,32% 100%,28% 80%,24% 100%,20% 80%,16% 100%,12% 80%,8% 100%,4% 80%,0 100%)}
 .topstrip i{display:inline-block;width:12px;height:12px;border-radius:50%;background:#ff2d8a;margin:0 12px 4px;vertical-align:middle}
 .topstrip b{font-family:"Titan One";font-weight:400;color:#e8102e;font-size:34px;-webkit-text-stroke:1px #1a1a1a}
