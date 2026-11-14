@@ -30,14 +30,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
-import os
 import re
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-from . import jsonstate
+from . import config, jsonstate
 from .errors import ClipperError
 
 INDEX = "cast.json"
@@ -589,14 +588,7 @@ def _channel(cfg: dict, ch: str, say) -> list[dict]:
 
 def search_key(cfg: dict | None = None) -> str:
     """$BRAVE_API_KEY, else the file [paths] brave_key (secrets/brave_secret.txt); "" if neither."""
-    key = os.environ.get("BRAVE_API_KEY", "").strip()
-    path = (cfg or {}).get("paths", {}).get("brave_key")
-    if key or not path:
-        return key
-    try:
-        return Path(path).read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
+    return config.key(cfg, "BRAVE_API_KEY", "brave_key")
 
 
 def image_search(cfg: dict, person: str, data: dict, say=print) -> list[dict]:

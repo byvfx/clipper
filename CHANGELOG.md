@@ -8,6 +8,12 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-14: `clipper clipart find|add|list|keep|drop`, a clip art library beside the b-roll one:
+  Wikimedia Commons drawings and pictures, The Met's and the Cleveland Museum of Art's CC0 works,
+  emoji and icons through Iconify (Fluent Emoji, Noto, Tabler, Phosphor; logo sets never), and
+  Pixabay vectors with a free key. Public domain, CC0, permissive and Pixabay's licence by default;
+  each file keeps its source, credit and licence. `add` takes a folder too (a Kenney pack). API keys
+  for DVIDS, Brave and Pixabay are read by one `config.key`.
 - 11-13: command-line polish (#205): a stream argument takes `latest`, `latest:<show>` or a unique start
   of an id, and a mistyped one names the nearest; `--json` on `review list`, `schedule --list` and
   `shows`; `clipper config diff` lists what this install changes from the defaults, by layer; `clipper

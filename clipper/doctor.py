@@ -1030,6 +1030,30 @@ def check_broll(cfg: dict) -> None:
     ok("broll", f"{cfg['paths']['broll']}: {n['kept']} kept, {n['new']} new, {n['long']} long")
 
 
+def check_clipart(cfg: dict) -> None:
+    """The clip art library's settings; Pixabay is the one source with a key."""
+    from . import clipart
+
+    cc = cfg["clipart"]
+    bad = [s for s in cc["sources"] if s not in clipart.SOURCES]
+    if bad:
+        fail("clipart", f"[clipart] sources: unknown {', '.join(bad)}", f"use some of {', '.join(clipart.SOURCES)}")
+    bad = [c for c in cc["licences"] if c not in clipart.LICENCES]
+    if bad:
+        fail("clipart", f"[clipart] licences: unknown {', '.join(bad)}", f"use some of {', '.join(clipart.LICENCES)}")
+    if cc["pixabay_type"] not in ("vector", "illustration", "all"):
+        fail("clipart", f"[clipart] pixabay_type {cc['pixabay_type']!r}", "use vector, illustration or all")
+    if "pixabay" in cc["sources"] and not clipart.pixabay_key(cfg):
+        warn("clipart", f"no $PIXABAY_API_KEY or {cfg['paths']['pixabay_key']}: Pixabay is skipped",
+             f"optional: sign up at pixabay.com, copy the key from pixabay.com/api/docs into that file "
+             f"({wiki.page('Clip-art', 'sources')})")
+    if not cfg["paths"]["clipart"]:
+        return
+    lib = clipart.load(cfg)
+    n = {s: sum(e["status"] == s for e in lib["art"].values()) for s in clipart.STATUSES}
+    ok("clipart", f"{cfg['paths']['clipart']}: {n['kept']} kept, {n['new']} new")
+
+
 def check_doc(cfg: dict) -> None:
     """`clipper doc`, once a piece exists: Resolve's scripting module and the local Whisper."""
     import importlib.util
@@ -1279,6 +1303,7 @@ def main(cfg: dict, offline: bool = False, role: str = "all") -> int:
     if role in ("all", "gpu", "claude"):
         check_narrate(cfg)
         check_broll(cfg)
+        check_clipart(cfg)
         check_doc(cfg)
     if role in ("all", "serve"):
         check_tailnet(cfg, offline)

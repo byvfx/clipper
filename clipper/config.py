@@ -282,6 +282,18 @@ def user_env(name: str) -> str:
         return ""
 
 
+def key(cfg: dict | None, env: str, path_key: str) -> str:
+    """An API key: $env, else the first line of the file [paths] <path_key>; "" if neither
+    (a missing or empty file too)."""
+    if k := os.environ.get(env, "").strip():
+        return k
+    path = (cfg or {}).get("paths", {}).get(path_key)
+    try:
+        return Path(path).read_text(encoding="utf-8-sig").splitlines()[0].strip() if path else ""
+    except (OSError, IndexError):
+        return ""
+
+
 def find(path: str | Path | None = None) -> Path:
     """The config file: --config, $CLIPPER_CONFIG, ./clipper.toml, the user's CLIPPER_CONFIG."""
     if path or os.environ.get("CLIPPER_CONFIG"):

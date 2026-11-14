@@ -63,7 +63,7 @@ flowchart TB
 ### Features
 [Pre-shows](Pre-shows) and one-offs<br>
 [Speakers](Speakers) · [Faces](Faces)<br>
-[Covers](Covers) · [Cast library](Cast-library) · [B-roll](B-roll)<br>
+[Covers](Covers) · [Cast library](Cast-library) · [B-roll](B-roll) · [Clip art](Clip-art)<br>
 [Weekly issue](Weekly-issue)<br>
 [X posts](X-posts) · [TikTok](TikTok)<br>
 [News watcher](News-watcher)<br>

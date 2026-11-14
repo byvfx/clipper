@@ -302,6 +302,21 @@ def cmd_broll(cfg: dict, args: argparse.Namespace) -> None:
     return None
 
 
+def cmd_clipart(cfg: dict, args: argparse.Namespace) -> None:
+    from . import clipart
+
+    a = args.action
+    if a == "list":
+        return clipart.show_list(cfg, args.tag or "", args.source or "", args.status or "", args.json)
+    if a in ("keep", "drop"):
+        return clipart.set_status(cfg, args.ids, a)
+    if a == "find":
+        print(f"{clipart.find(cfg, args.query, args.source or list(cfg['clipart']['sources']), args.n)} picture(s) added")
+    elif a == "add":
+        clipart.add(cfg, args.target, args.tag or [], args.credit or "", args.licence)
+    return None
+
+
 def cmd_doc(cfg: dict, args: argparse.Namespace) -> None:
     from . import doc
 
@@ -1137,7 +1152,7 @@ COMMAND_GROUPS = [
     ('Pipeline (in run order)', ['fetch', 'preshow', 'transcribe', 'speakers', 'faces', 'signals', 'score', 'segments', 'cut', 'meta', 'thumbs', 'shorts', 'pick', 'run']),
     ('Review and publish', ['review', 'retake', 'schedule', 'upload', 'rumble', 'tiktok', 'x', 'analytics']),
     ('Services (long-running)', ['services', 'status', 'checkup', 'audit', 'record', 'worker', 'serve', 'bot', 'warroom', 'alert']),
-    ('Extras', ['weekly', 'cast', 'broll', 'doc', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
+    ('Extras', ['weekly', 'cast', 'broll', 'clipart', 'doc', 'people', 'news', 'receipts', 'archive', 'investigate', 'story', 'narrate', 'perform', 'modal',
                 'costs', 'compare', 'models']),
     ('Setup and checks', ['setup', 'doctor', 'config', 'shows', 'streams', 'backup', 'completion', 'cookies', 'codereview']),
 ]
@@ -1836,6 +1851,36 @@ def add_extras(sub) -> None:
     for act, what in (("keep", "keep these new clips"), ("drop", "delete these clips; their sources aren't found again")):
         r = bsub.add_parser(act, help=what)
         r.add_argument("ids", nargs="+", metavar="ID", help="the clips' ids (clipper broll list)")
+
+    p = sub.add_parser("clipart", help="free clip art, engravings, icons and emoji (Wikimedia Commons, The Met, the "
+                                       "Cleveland Museum of Art, Iconify, Pixabay), with each file's credit and licence")
+    asub = p.add_subparsers(dest="action", required=True, metavar="<action>")
+    p.set_defaults(fn=cmd_clipart)
+    art_sources = ["commons", "met", "cleveland", "iconify", "pixabay"]
+    r = asub.add_parser("find", help="search the sources; new pictures tagged with the search ([clipart] per_source each)")
+    r.add_argument("query", help='what to look for, e.g. "cow engraving"')
+    r.add_argument("--source", action="append", choices=art_sources,
+                   help="only these (repeatable; default [clipart] sources)")
+    r.add_argument("-n", type=int, help="most new pictures from each source (default [clipart] per_source)")
+    r = asub.add_parser("add", help="one picture (a source page's address or an Iconify name), or your own "
+                                    "picture file or folder of them")
+    r.add_argument("target", metavar="URL|SET:ICON|PATH",
+                   help="a Commons File: page, metmuseum.org/art/collection/search/..., clevelandart.org/art/..., "
+                        "a pixabay.com page, an Iconify name like fluent-emoji:cow-face, or a file or folder "
+                        "(with --credit; a folder's subfolders too)")
+    r.add_argument("--tag", action="append", help="a tag (repeatable)")
+    r.add_argument("--credit", help="a file or folder: who made it, as a description would credit it")
+    r.add_argument("--licence", default="public domain", help="a file or folder: its licence, e.g. CC0 "
+                                                              "(default: public domain)")
+    r = asub.add_parser("list", help="the library, newest first")
+    r.add_argument("--tag", help="only pictures with a tag containing this")
+    r.add_argument("--source", choices=[*art_sources, "file"], help="only pictures from this source")
+    r.add_argument("--status", choices=["new", "kept"], help="only pictures in this state")
+    r.add_argument("--json", action="store_true", help="as JSON, with each file's path")
+    for act, what in (("keep", "keep these new pictures"),
+                      ("drop", "delete these pictures; their sources aren't found again")):
+        r = asub.add_parser(act, help=what)
+        r.add_argument("ids", nargs="+", metavar="ID", help="the pictures' ids (clipper clipart list)")
 
     p = sub.add_parser("doc", help="a narrated mini-documentary: a hand-written plan -> narration -> a Resolve "
                                    "timeline -> a mastered render, a leak check and a publish kit")
