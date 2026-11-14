@@ -8,6 +8,11 @@ current state; the version is `clipper --version` (set in `clipper/__init__.py` 
 
 ### 2026-11
 
+- 11-13: the `archive transcribe` and `investigate facts` dry runs count what every call costs
+  beyond its content (a minute of GPU a transcribe call, from the subject's own Modal runs when it has
+  20; the prompt, schema and header a facts call repeats). Items with no length yet are said, not
+  priced. Back-tested on the 759-clip run: $10.87 vs $10.88 logged (was $0.01), facts $0.27 vs $0.26
+  (was $0.11) (#228).
 - 11-13: `clipper backup` zips the taste layer (config, hand-edit backups, schedule, people, faces,
   voices, layouts, cast photos, each stream's config and review state; secrets only when asked) into
   `[backup] folder`, and serve makes one every `[backup] every_days` (7). `clipper streams list` shows

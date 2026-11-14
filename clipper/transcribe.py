@@ -195,7 +195,7 @@ def modal_cost(gpu: str, wall: float, out: dict) -> dict:
     from .modal_app import GPU_PRICES
 
     price = GPU_PRICES.get(gpu or "L4", 0.0)
-    return {"gpu": out["gpu"], "call_s": round(wall, 1), **out["timings"],
+    return {"gpu": out["gpu"], "sku": gpu or "L4", "call_s": round(wall, 1), **out["timings"],
             "est_usd": round((wall + 30) / 3600 * price, 3)}
 
 

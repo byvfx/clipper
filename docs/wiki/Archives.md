@@ -25,6 +25,15 @@ gets most of the way there cheaply: Haiku turns the question into up to 8 search
 names, how Whisper misspells them), then reads the ~80 pooled windows and returns the ones
 that fit, strong or maybe, each with a quote, a reason and the link.
 
+The transcribe `--dry-run` prices the audio at the measured GPU speed plus a fixed cost for each
+call: the download into the container, the model load and the idle time Modal bills. That is
+about a minute a call (Jer's long videos 37 s, short Instagram clips 58 s, HEI downloads nearer
+4 minutes), and once a subject has 20 runs in `logs/modal_runs.jsonl` it uses that subject's own
+average. Many short items cost far more than their hours suggest: 759 clips totalling 20 h came
+to about $10.90, mostly per-call cost. An item listed without a length (an Instagram profile
+lists none before the download) isn't priced: the line says how many there are and what their
+calls alone cost at least.
+
 `check` downloads nothing and costs nothing: YouTube's oEmbed endpoint and Odysee's resolve say
 whether each item is alive, restricted (private, embedding off, blocked) or dead, kept in
 `links.json` with when it changed, and reruns report what died since. A dead link with a
