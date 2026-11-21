@@ -39,7 +39,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from . import jsonstate
+from . import config, jsonstate
 from .errors import ClipperError
 
 log = logging.getLogger("clipper.alerts")
@@ -82,7 +82,7 @@ class Alerts:
 
     def __init__(self, cfg: dict):
         rc = cfg["record"]
-        self.webhook = os.environ.get(rc["alert_webhook_env"], "").strip()
+        self.webhook = (config.getenv(rc["alert_webhook_env"]) or "").strip()
         self.channel = str(rc["alert_channel_id"] or "")
         self.cfg = cfg
         self.mention = rc["alert_mention"]

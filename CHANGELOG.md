@@ -10,6 +10,11 @@ Developing#releases.
 
 ## Unreleased
 
+- The Clippa names work beside the old ones (#286, the first step of the rename): a `clippa`
+  command in the venv, `clippa.toml` and `clippa.local.toml`, and `CLIPPA_*` for every `CLIPPER_*`
+  variable clipper reads (the new one wins when both are set; the deploy scripts under `deploy/`
+  still read only the old names). Nothing is renamed yet and the old names keep working;
+  `clipper doctor` lists the old-spelling variables still set.
 - War room: the live-show chips no longer wrap inside the top bar and spill over it on a laptop-wide
   window (four shows need about 1,500 px). They move to a row of their own when they don't fit, so
   the buttons stop jumping when a show goes live or the Health age ticks over.

@@ -252,7 +252,7 @@ def test_a_note_waits_for_the_next_stream_however_late(cfg, monkeypatch):
     assert news.apply_pending(cfg, old, say=lambda m: None) == 0
     monkeypatch.setenv("CLIPPER_SCORING_STREAM_CONTEXT", "set by hand")         # would hide the note
     monday = stream(cfg, "kick-1", started=news.now() + timedelta(days=3))
-    with pytest.raises(ClipperError, match="clipper.local.toml"):
+    with pytest.raises(ClipperError, match=r"set in \$CLIPPER_SCORING_STREAM_CONTEXT"):
         news.apply_pending(cfg, monday, say=lambda m: None)
     monkeypatch.delenv("CLIPPER_SCORING_STREAM_CONTEXT")
     assert news.apply_pending(cfg, monday, say=lambda m: None) == 1             # still queued, then taken

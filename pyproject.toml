@@ -45,6 +45,7 @@ discord = [
 
 [project.scripts]
 clipper = "clipper.cli:main"
+clippa = "clipper.cli:main"   # the new name (#286); both work
 
 # Tests and lint (`uv sync` installs this group; CI runs both, .github/workflows/check.yml).
 [dependency-groups]

@@ -92,7 +92,7 @@ def chunks(lines: list[str], size: int = 3900) -> list[str]:
 
 
 class CardButton(discord.ui.DynamicItem[discord.ui.Button],
-                 template=r"clipper:(?P<action>[a-z]+):(?P<ref>\S+)"):
+                 template=r"clipp(?:er|a):(?P<action>[a-z]+):(?P<ref>\S+)"):  # clippa: from #286 on
     """Every card button, also on cards posted before the bot (re)started."""
 
     def __init__(self, action: str, ref: str, label: str | None = None,

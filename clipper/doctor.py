@@ -121,9 +121,11 @@ def check_config(cfg: dict, role: str = "all") -> None:
         ok("config", f"{root['_file']}")
     else:
         fail("config", "no clipper.toml found", "clipper setup (or copy clipper.example.toml to clipper.toml)")
-    from .config import problems
+    from .config import old_env_in_use, problems
     for msg in problems(cfg):
         fail("config", msg, "fix the name (clipper/defaults.toml lists every setting) or remove it")
+    if old := old_env_in_use():  # #286: still read, so a note, not a warning, until the fallback goes
+        ok("config", f"old-spelling variables, still read (CLIPPA_* is the new one): {', '.join(old)}")
     if root.get("_local_file"):
         ok("config", f"this machine: {root['_local_file'].name} sets " + ", ".join(
             f"{s}.{k}" for s, v in root["_local"].items() for k in v))

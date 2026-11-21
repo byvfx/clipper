@@ -1,5 +1,8 @@
 """Config loading: defaults.toml < clipper.toml < clipper.local.toml < CLIPPER_<SECTION>_<KEY> env vars.
 
+Since #286 (pass 1) each name has a Clippa spelling that is read first: CLIPPA_* variables,
+clippa.toml and clippa.local.toml (ENV_PREFIXES, CONFIG_NAMES).
+
 The file is found via --config, then $CLIPPER_CONFIG, then ./clipper.toml, then (Windows)
 the user-scope CLIPPER_CONFIG a shell may not have inherited: the laptop's points at the one
 on the NAS share since 2026-11-05. Relative paths in [paths] resolve against the config
@@ -154,6 +157,53 @@ CHOICES = {
 SPECIAL_ENV = {"CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG", "CLIPPER_BOOTSTRAP", "CLIPPER_ALERT_WEBHOOK",
                "CLIPPER_DATA", "CLIPPER_TOML",  # these two: the NAS recorder's deploy (deploy/record)
                "CLIPPER_REPO"}  # the claude container's clone URL (deploy/claude)
+# The rename to Clippa (#286), pass 1: every CLIPPER_* variable also answers to CLIPPA_*
+# (the new spelling wins when both are set), and the config files may be clippa.toml and
+# clippa.local.toml. Clipper still writes the old names; `clipper doctor` lists the old ones set.
+ENV_PREFIXES = ("CLIPPA_", "CLIPPER_")
+CONFIG_NAMES = ("clippa.toml", "clipper.toml")
+
+
+def env_names(name: str) -> list[str]:
+    """Both spellings of a CLIPPER_* / CLIPPA_* variable, the new one first; any other name alone."""
+    for p in ENV_PREFIXES:
+        if name.startswith(p):
+            return [q + name[len(p):] for q in ENV_PREFIXES]
+    return [name]
+
+
+def env_lookup(name: str) -> tuple[str, str] | None:
+    """(the spelling that is set, its value) of a variable in either spelling; None if unset.
+    An empty spelling gives way to a non-empty one (a blank `CLIPPA_X=` line in an env file
+    mustn't hide a real CLIPPER_X); "" is the value only when every spelling set is empty."""
+    found = [(n, os.environ[n]) for n in env_names(name) if n in os.environ]
+    return next((f for f in found if f[1]), found[0] if found else None)
+
+
+def getenv(name: str, default: str | None = None) -> str | None:
+    """os.environ.get, but a CLIPPER_* name is read as CLIPPA_* first."""
+    hit = env_lookup(name)
+    return hit[1] if hit else default
+
+
+def _first_set(name: str) -> str:
+    """A path variable's value, "" when unset or empty (an empty one never meant "this file")."""
+    return getenv(name) or ""
+
+
+def spelling_in_use(name: str) -> str:
+    """The spelling to save a variable under: the new one when it is already set here or in the
+    user's saved environment (it is the one read), else `name` as given."""
+    return next((n for n in env_names(name)[:-1] if os.environ.get(n) or _registry(n)), name)
+
+
+def old_env_in_use() -> list[str]:
+    """CLIPPER_* variables set here, or saved for the Windows user where clipper still reads them
+    (the old spelling, still read until #286 drops it)."""
+    saved = {n for n in ("CLIPPER_CONFIG", "CLIPPER_LOCAL_CONFIG") if _registry(n)}
+    return sorted({n for n in os.environ if n.startswith("CLIPPER_")} | saved)
+
+
 SHOW_KEYS = ("channel", "channels")  # a [shows.<key>] table's own settings; the rest are sections
 
 
@@ -177,9 +227,12 @@ def problems(cfg: dict) -> list[str]:
     have (a typo, or a key since renamed), and CLIPPER_* variables that match no setting."""
     root = _root(cfg)
     out = list(root.get("_unknown", []))
-    names = {f"CLIPPER_{s}_{k}".upper() for s, v in _sections(root) for k in v}
-    out += [f"environment variable {n} matches no setting" for n in sorted(os.environ)
-            if n.startswith("CLIPPER_") and n not in names and n not in SPECIAL_ENV]
+    names = {f"{s}_{k}".upper() for s, v in _sections(root) for k in v}
+    special = {n.removeprefix("CLIPPER_") for n in SPECIAL_ENV}
+    for n in sorted(os.environ):
+        rest = next((n[len(p):] for p in ENV_PREFIXES if n.startswith(p)), None)
+        if rest is not None and rest not in names and rest not in special:
+            out.append(f"environment variable {n} matches no setting")
     # [notify] times: a typo here used to kill the bot's DM loop quietly, every minute.
     for key, pat, want in (("quiet_hours", _HM + "-" + _HM, "HH:MM-HH:MM"), ("digest_time", _HM, "HH:MM")):
         v = str((root.get("notify") or {}).get(key, "") or "").strip()
@@ -216,10 +269,9 @@ def _apply_env(cfg: dict, only: set[str] | None = None, local: dict | None = Non
             continue
         values.update(copy.deepcopy((local or {}).get(section, {})))
         for key, value in values.items():
-            name = f"CLIPPER_{section}_{key}".upper()
-            env = os.environ.get(name)
-            if env is not None:
-                values[key] = _coerce(env, value, name)
+            hit = env_lookup(f"CLIPPER_{section}_{key}".upper())
+            if hit is not None:
+                values[key] = _coerce(hit[1], value, hit[0])
 
 
 OPTIONAL_PATHS = {"prompts"}    # "" (unset) resolves to None, never to a folder
@@ -247,10 +299,21 @@ LOCAL_CONFIG = "clipper.local.toml"
 
 def local_path(cfg_path: str | Path | None = None) -> Path:
     """This machine's clipper.local.toml: $CLIPPER_LOCAL_CONFIG (or the user's saved one, as for
-    CLIPPER_CONFIG), else beside the config file."""
-    if os.environ.get("CLIPPER_LOCAL_CONFIG") or user_env("CLIPPER_LOCAL_CONFIG"):
-        return Path(os.environ.get("CLIPPER_LOCAL_CONFIG") or user_env("CLIPPER_LOCAL_CONFIG"))
-    return find(cfg_path).resolve().parent / LOCAL_CONFIG
+    CLIPPER_CONFIG), else beside the config file: clippa.local.toml or clipper.local.toml, whichever
+    is there (both: the new one), else the one named like the config file."""
+    if p := _first_set("CLIPPER_LOCAL_CONFIG") or user_env("CLIPPER_LOCAL_CONFIG"):
+        return Path(p)
+    cfg_file = find(cfg_path).resolve()
+    names = [f"{Path(n).stem}.local.toml" for n in CONFIG_NAMES]
+    there = next((cfg_file.parent / n for n in names if (cfg_file.parent / n).exists()), None)
+    if there:
+        return there
+    return cfg_file.parent / ("clippa.local.toml" if cfg_file.name == "clippa.toml" else LOCAL_CONFIG)
+
+
+def local_name(root: dict) -> str:
+    """The machine file's name as loaded (clippa.local.toml or clipper.local.toml), for labels."""
+    return root["_local_file"].name if root.get("_local_file") else LOCAL_CONFIG
 
 
 def _load_local(path: Path, cfg: dict, base: Path) -> dict:
@@ -269,9 +332,8 @@ def _load_local(path: Path, cfg: dict, base: Path) -> dict:
     return local
 
 
-def user_env(name: str) -> str:
-    """A Windows user-scope environment variable, read from the registry: agent and service
-    shells started without it don't inherit it. "" elsewhere or when unset."""
+def _registry(name: str) -> str:
+    """One Windows user-scope variable, exactly as named; "" elsewhere or when unset."""
     if sys.platform != "win32":
         return ""
     import winreg
@@ -281,6 +343,13 @@ def user_env(name: str) -> str:
             return str(winreg.QueryValueEx(key, name)[0])
     except OSError:
         return ""
+
+
+def user_env(name: str) -> str:
+    """A Windows user-scope environment variable, read from the registry: agent and service
+    shells started without it don't inherit it. "" elsewhere or when unset. A CLIPPER_* name is
+    looked for as CLIPPA_* first (an empty one is skipped)."""
+    return next((v for n in env_names(name) if (v := _registry(n))), "")
 
 
 def key(cfg: dict | None, env: str, path_key: str) -> str:
@@ -296,11 +365,12 @@ def key(cfg: dict | None, env: str, path_key: str) -> str:
 
 
 def find(path: str | Path | None = None) -> Path:
-    """The config file: --config, $CLIPPER_CONFIG, ./clipper.toml, the user's CLIPPER_CONFIG."""
-    if path or os.environ.get("CLIPPER_CONFIG"):
-        return Path(path or os.environ["CLIPPER_CONFIG"])
-    here = Path("clipper.toml")
-    return here if here.exists() else Path(user_env("CLIPPER_CONFIG") or here)
+    """The config file: --config, $CLIPPA_CONFIG or $CLIPPER_CONFIG, ./clippa.toml or ./clipper.toml,
+    the user's saved CLIPPA_CONFIG or CLIPPER_CONFIG."""
+    if p := path or _first_set("CLIPPER_CONFIG"):
+        return Path(p)
+    here = next((Path(n) for n in CONFIG_NAMES if Path(n).exists()), None)
+    return here or Path(user_env("CLIPPER_CONFIG") or "clipper.toml")
 
 
 def load(path: str | Path | None = None, use_local: bool = True) -> dict[str, dict[str, Any]]:
@@ -467,10 +537,9 @@ def explain(cfg: dict, name: str, sdir: Path | None = None) -> dict:
         if key in data.get(section, {}):
             layers.append((str(Path(sdir) / STREAM_CONFIG), data[section][key]))
     if key in root["_local"].get(section, {}):
-        layers.append((LOCAL_CONFIG, root["_local"][section][key]))
-    env = f"CLIPPER_{section}_{key}".upper()
-    if env in os.environ:
-        layers.append((f"${env}", os.environ[env]))
+        layers.append((local_name(root), root["_local"][section][key]))
+    if hit := env_lookup(f"CLIPPER_{section}_{key}".upper()):
+        layers.append((f"${hit[0]}", hit[1]))
     return {"name": name, "value": resolved[section][key], "show": show, "layers": layers}
 
 
@@ -487,13 +556,12 @@ def diff(cfg: dict, show: str = "") -> list[tuple[str, str, Any, Any]]:
         layers.append((Path(root["_file"]).name,
                        tomllib.loads(Path(root["_file"]).read_text(encoding="utf-8"))))
     layers += [(f"[shows.{k}]", s["overrides"]) for k, s in root["shows"].items() if not show or k == show]
-    layers.append((LOCAL_CONFIG, root["_local"]))
+    layers.append((local_name(root), root["_local"]))
     env: dict[str, dict] = {}
     for section, keys in DEFAULTS.items():
         for key, like in keys.items():
-            raw = os.environ.get(f"CLIPPER_{section}_{key}".upper())
-            if raw is not None:
-                env.setdefault(section, {})[key] = _coerce(raw, like, f"CLIPPER_{section}_{key}".upper())
+            if hit := env_lookup(f"CLIPPER_{section}_{key}".upper()):
+                env.setdefault(section, {})[key] = _coerce(hit[1], like, hit[0])
     layers.append(("environment", env))
     out = []
     for layer, data in layers:

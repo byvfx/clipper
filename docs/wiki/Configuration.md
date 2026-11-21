@@ -4,6 +4,16 @@ then environment variables named `CLIPPER_<SECTION>_<KEY>` (for example
 `CLIPPER_CUT_CLIP_CODEC=libx264`). That lets one shared `clipper.toml` serve every machine.
 `clipper.local.toml` and env vars win over show and stream overrides too.
 
+**The Clippa names (#286).** Every one of these also takes the new name: `clippa.toml` and
+`clippa.local.toml` beside it (when both spellings of a file are there, the new one is read),
+`CLIPPA_CONFIG`, `CLIPPA_LOCAL_CONFIG`, `CLIPPA_<SECTION>_<KEY>` and every other `CLIPPER_*`
+variable clipper itself reads (when both spellings are set, `CLIPPA_*` wins), and a `clippa`
+command in the venv beside `clipper`. Not yet: the deploy scripts and compose files under
+`deploy/` (`CLIPPER_DATA`, `CLIPPER_REPO`, `CLIPPER_TOML`, their `env.local` files) and the
+bootstrap's `clipper` command on PATH keep the old names until the rename's deploy step. The old
+names keep working for now; `clipper doctor` lists the old-spelling variables still set, so you
+can see what is left to move.
+
 Each Kick channel is a show: a `[shows.<key>]` table with its channels, show name, scoring
 context and Shorts layouts. A show's sub-tables override the base sections for that show.
 One stream can go further with its own `streams/<id>/config.toml` (same sections), for a big

@@ -655,14 +655,15 @@ def write_toml(path: Path, data: dict) -> None:
 def add_stream_context(cfg: dict, sdir: Path, text: str) -> None:
     """Append text to the stream's own [scoring] stream_context (streams/<id>/config.toml,
     copied first to config.toml.before_news_<time>); starts from the show's when it has none."""
-    from .config import STREAM_CONFIG, for_stream
+    from .config import STREAM_CONFIG, env_lookup, for_stream, local_name
 
     root = cfg.get("_root") or cfg
-    if os.environ.get("CLIPPER_SCORING_STREAM_CONTEXT") is not None or \
-            "stream_context" in ((root.get("_local") or {}).get("scoring") or {}):
-        raise ClipperError("[scoring] stream_context is set in clipper.local.toml or $CLIPPER_SCORING_STREAM_CONTEXT, "
-                           "which win over a stream's config.toml: take it out there, or the news note can't reach "
-                           "scoring (it stays queued)")
+    env = env_lookup("CLIPPER_SCORING_STREAM_CONTEXT")   # set at all (even empty), it wins
+    local = "stream_context" in ((root.get("_local") or {}).get("scoring") or {})
+    if env is not None or local:  # name the layer that is set, in the spelling it is set under (#286)
+        where = " and ".join(([local_name(root)] if local else []) + ([f"${env[0]}"] if env else []))
+        raise ClipperError(f"[scoring] stream_context is set in {where}, which wins over a stream's config.toml: "
+                           "take it out there, or the news note can't reach scoring (it stays queued)")
     path = sdir / STREAM_CONFIG
     data = tomllib.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     if path.exists():

@@ -140,6 +140,8 @@ SEQUENCE_KINDS = ("segment", "compilation")
 # Comments clipper adds to record a column change (Hold, Publish at, title); sync never
 # takes one of these as the reason for a decision.
 NOTE_PREFIX = "[clipper]"
+# Every prefix a bot note may start with: [clippa] from #286's pass 2 on, [clipper] before.
+NOTE_PREFIXES = ("[clipper]", "[clippa]")
 
 
 class Listing:
@@ -899,7 +901,7 @@ def decision_comment_entry(gazu, task: dict) -> tuple[str, str]:
     for c in comments:
         text = (c.get("text") or "").strip()
         if c.get("task_status_id") == task["task_status_id"] and text \
-                and not text.startswith(NOTE_PREFIX):
+                and not text.startswith(NOTE_PREFIXES):
             return c["id"], text
     return "", ""
 
